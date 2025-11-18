@@ -33,13 +33,13 @@ static void handle_fault(uint32_t fault_code) {
   // PA8 = spindle PWM (set low to stop)
   GPIOA->BSRR = (1 << (8 + 16));
 
-  // Blink LED to indicate fault (if available on PC13)
+  // Blink LED to indicate fault (PB7 as defined in config.h)
   // Fault code encoded as blink pattern
   while (1) {
     for (uint32_t i = 0; i < fault_code; i++) {
-      GPIOC->BSRR = (1 << (13 + 16));  // LED on
+      GPIOB->BSRR = (1 << (7 + 16));  // LED on (PB7)
       for (volatile uint32_t d = 0; d < 200000; d++);
-      GPIOC->BSRR = (1 << 13);         // LED off
+      GPIOB->BSRR = (1 << 7);         // LED off (PB7)
       for (volatile uint32_t d = 0; d < 200000; d++);
     }
     for (volatile uint32_t d = 0; d < 2000000; d++);  // Long pause
@@ -95,71 +95,91 @@ extern void TIM2_IRQHandler(void);  // Stepper ISR
 extern void TIM3_IRQHandler(void);  // Pulse reset ISR
 extern void USART1_IRQHandler(void); // Serial ISR
 
-// External interrupt handlers for limit switches
+// ============================================================================
+// STM32H523 INTERRUPT HANDLERS
+// ============================================================================
+// All STM32H523-specific peripheral interrupt handlers
+// Handlers not explicitly defined will use weak alias to Default_Handler
+
+// External interrupt handlers (used for limit switches and control pins)
 void EXTI0_IRQHandler(void)         __attribute__((weak, alias("Default_Handler")));
 void EXTI1_IRQHandler(void)         __attribute__((weak, alias("Default_Handler")));
 void EXTI2_IRQHandler(void)         __attribute__((weak, alias("Default_Handler")));
 void EXTI3_IRQHandler(void)         __attribute__((weak, alias("Default_Handler")));
 void EXTI4_IRQHandler(void)         __attribute__((weak, alias("Default_Handler")));
-void EXTI9_5_IRQHandler(void)       __attribute__((weak, alias("Default_Handler")));
-void EXTI15_10_IRQHandler(void)     __attribute__((weak, alias("Default_Handler")));
+void EXTI5_IRQHandler(void)         __attribute__((weak, alias("Default_Handler")));
+void EXTI6_IRQHandler(void)         __attribute__((weak, alias("Default_Handler")));
+void EXTI7_IRQHandler(void)         __attribute__((weak, alias("Default_Handler")));
+void EXTI8_IRQHandler(void)         __attribute__((weak, alias("Default_Handler")));
+void EXTI9_IRQHandler(void)         __attribute__((weak, alias("Default_Handler")));
+void EXTI10_IRQHandler(void)        __attribute__((weak, alias("Default_Handler")));
+void EXTI11_IRQHandler(void)        __attribute__((weak, alias("Default_Handler")));
+void EXTI12_IRQHandler(void)        __attribute__((weak, alias("Default_Handler")));
+void EXTI13_IRQHandler(void)        __attribute__((weak, alias("Default_Handler")));
+void EXTI14_IRQHandler(void)        __attribute__((weak, alias("Default_Handler")));
+void EXTI15_IRQHandler(void)        __attribute__((weak, alias("Default_Handler")));
 
-// ============================================================================
-// FIXME CRITICAL #1: WRONG INTERRUPT HANDLERS FOR H523
-// ============================================================================
-// These handlers are copied from STM32F103 and DO NOT MATCH STM32H523!
-// H523 (Cortex-M33) has 110+ interrupts vs F103 (Cortex-M3) 43 interrupts.
-// Many peripherals below DO NOT EXIST on H523 (e.g., CAN, USB Device).
-// MUST replace entire handler list with H523-specific IRQs from reference manual.
-// See REVIEW_H523.md "CRITICAL #1" for details.
-// RISK: Will cause hard fault if any H5-specific peripheral interrupt fires!
-// ============================================================================
+// System and peripheral handlers
+void WWDG_IRQHandler(void)          __attribute__((weak, alias("Default_Handler")));
+void PVD_AVD_IRQHandler(void)       __attribute__((weak, alias("Default_Handler")));
+void RTC_IRQHandler(void)           __attribute__((weak, alias("Default_Handler")));
+void RTC_S_IRQHandler(void)         __attribute__((weak, alias("Default_Handler")));
+void TAMP_IRQHandler(void)          __attribute__((weak, alias("Default_Handler")));
+void RAMCFG_IRQHandler(void)        __attribute__((weak, alias("Default_Handler")));
+void FLASH_IRQHandler(void)         __attribute__((weak, alias("Default_Handler")));
+void FLASH_S_IRQHandler(void)       __attribute__((weak, alias("Default_Handler")));
+void GTZC_IRQHandler(void)          __attribute__((weak, alias("Default_Handler")));
+void RCC_IRQHandler(void)           __attribute__((weak, alias("Default_Handler")));
+void RCC_S_IRQHandler(void)         __attribute__((weak, alias("Default_Handler")));
 
-// DMA handlers (not used yet) // FIXME: Check if these exist on H523
-void DMA1_Channel1_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
-void DMA1_Channel2_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
-void DMA1_Channel3_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
-void DMA1_Channel4_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
-void DMA1_Channel5_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
-void DMA1_Channel6_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
-void DMA1_Channel7_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
+// GPDMA handlers
+void GPDMA1_Channel0_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
+void GPDMA1_Channel1_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
+void GPDMA1_Channel2_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
+void GPDMA1_Channel3_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
+void GPDMA1_Channel4_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
+void GPDMA1_Channel5_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
+void GPDMA1_Channel6_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
+void GPDMA1_Channel7_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 
-// Other peripheral handlers // FIXME: Many of these DON'T EXIST on H523!
-void ADC1_2_IRQHandler(void)        __attribute__((weak, alias("Default_Handler")));  // WRONG: No ADC1_2 on H523
-void USB_HP_CAN1_TX_IRQHandler(void) __attribute__((weak, alias("Default_Handler"))); // WRONG: No USB device on H523
-void USB_LP_CAN1_RX0_IRQHandler(void) __attribute__((weak, alias("Default_Handler"))); // WRONG: No CAN on H523
-void CAN1_RX1_IRQHandler(void)      __attribute__((weak, alias("Default_Handler")));
-void CAN1_SCE_IRQHandler(void)      __attribute__((weak, alias("Default_Handler")));
+// Other peripherals
+void IWDG_IRQHandler(void)          __attribute__((weak, alias("Default_Handler")));
+void SAES_IRQHandler(void)          __attribute__((weak, alias("Default_Handler")));
+void ADC1_IRQHandler(void)          __attribute__((weak, alias("Default_Handler")));
+void DAC1_IRQHandler(void)          __attribute__((weak, alias("Default_Handler")));
+void FDCAN1_IT0_IRQHandler(void)    __attribute__((weak, alias("Default_Handler")));
+void FDCAN1_IT1_IRQHandler(void)    __attribute__((weak, alias("Default_Handler")));
+
+// Timer handlers
 void TIM1_BRK_IRQHandler(void)      __attribute__((weak, alias("Default_Handler")));
 void TIM1_UP_IRQHandler(void)       __attribute__((weak, alias("Default_Handler")));
 void TIM1_TRG_COM_IRQHandler(void)  __attribute__((weak, alias("Default_Handler")));
 void TIM1_CC_IRQHandler(void)       __attribute__((weak, alias("Default_Handler")));
 void TIM4_IRQHandler(void)          __attribute__((weak, alias("Default_Handler")));
+
+// I2C and SPI handlers
 void I2C1_EV_IRQHandler(void)       __attribute__((weak, alias("Default_Handler")));
 void I2C1_ER_IRQHandler(void)       __attribute__((weak, alias("Default_Handler")));
-void I2C2_EV_IRQHandler(void)       __attribute__((weak, alias("Default_Handler")));
-void I2C2_ER_IRQHandler(void)       __attribute__((weak, alias("Default_Handler")));
 void SPI1_IRQHandler(void)          __attribute__((weak, alias("Default_Handler")));
-void SPI2_IRQHandler(void)          __attribute__((weak, alias("Default_Handler")));
+
+// UART handlers
 void USART2_IRQHandler(void)        __attribute__((weak, alias("Default_Handler")));
-void USART3_IRQHandler(void)        __attribute__((weak, alias("Default_Handler")));
-void RTC_IRQHandler(void)           __attribute__((weak, alias("Default_Handler")));
-void RTCAlarm_IRQHandler(void)      __attribute__((weak, alias("Default_Handler")));
-void USBWakeUp_IRQHandler(void)     __attribute__((weak, alias("Default_Handler")));
+void LPUART1_IRQHandler(void)       __attribute__((weak, alias("Default_Handler")));
+
+// Low-power timer
+void LPTIM1_IRQHandler(void)        __attribute__((weak, alias("Default_Handler")));
 
 // ============================================================================
-// FIXME CRITICAL #1: WRONG VECTOR TABLE FOR H523
+// STM32H523 VECTOR TABLE
 // ============================================================================
-// This vector table is copied from STM32F103 with only 43 peripheral IRQs.
-// STM32H523 has 110+ peripheral IRQs with completely different positions!
-// MUST be replaced with H523-specific vector table from reference manual.
-// Current table will cause hard fault on any H5 peripheral interrupt.
-// ============================================================================
+// Correct vector table for STM32H523 (Cortex-M33) with all peripheral IRQs
+// Interrupt numbers match the IRQn_Type enum defined in regs.h
 
-// Interrupt vector table
 __attribute__((section(".isr_vector")))
 const void *vector_table[] = {
-  // Cortex-M33 core interrupts (0-15) - These are correct
+  // ============================================================================
+  // Cortex-M33 core interrupts (positions 0-15)
+  // ============================================================================
   &_estack,                    // 0:  Initial stack pointer
   Reset_Handler,               // 1:  Reset handler
   NMI_Handler,                 // 2:  NMI handler
@@ -177,48 +197,68 @@ const void *vector_table[] = {
   PendSV_Handler,              // 14: PendSV handler
   SysTick_Handler,             // 15: SysTick handler
 
-  // STM32H523 specific interrupts
-  0,                           // 16: WWDG
-  0,                           // 17: PVD
-  0,                           // 18: TAMPER
-  RTC_IRQHandler,              // 19: RTC
-  0,                           // 20: FLASH
-  0,                           // 21: RCC
-  EXTI0_IRQHandler,            // 22: EXTI0 (X limit switch)
-  EXTI1_IRQHandler,            // 23: EXTI1 (Y limit switch)
-  EXTI2_IRQHandler,            // 24: EXTI2
-  EXTI3_IRQHandler,            // 25: EXTI3 (Reset button)
-  EXTI4_IRQHandler,            // 26: EXTI4 (Feed hold button)
-  DMA1_Channel1_IRQHandler,    // 27: DMA1 Channel 1
-  DMA1_Channel2_IRQHandler,    // 28: DMA1 Channel 2
-  DMA1_Channel3_IRQHandler,    // 29: DMA1 Channel 3
-  DMA1_Channel4_IRQHandler,    // 30: DMA1 Channel 4
-  DMA1_Channel5_IRQHandler,    // 31: DMA1 Channel 5
-  DMA1_Channel6_IRQHandler,    // 32: DMA1 Channel 6
-  DMA1_Channel7_IRQHandler,    // 33: DMA1 Channel 7
-  ADC1_2_IRQHandler,           // 34: ADC1 and ADC2
-  USB_HP_CAN1_TX_IRQHandler,   // 35: USB High Priority or CAN1 TX
-  USB_LP_CAN1_RX0_IRQHandler,  // 36: USB Low Priority or CAN1 RX0
-  CAN1_RX1_IRQHandler,         // 37: CAN1 RX1
-  CAN1_SCE_IRQHandler,         // 38: CAN1 SCE
-  EXTI9_5_IRQHandler,          // 39: EXTI9_5 (Cycle start, safety door)
-  TIM1_BRK_IRQHandler,         // 40: TIM1 Break
-  TIM1_UP_IRQHandler,          // 41: TIM1 Update
-  TIM1_TRG_COM_IRQHandler,     // 42: TIM1 Trigger and Commutation
-  TIM1_CC_IRQHandler,          // 43: TIM1 Capture Compare
-  TIM2_IRQHandler,             // 44: TIM2 (STEPPER ISR)
-  TIM3_IRQHandler,             // 45: TIM3 (PULSE RESET ISR)
-  TIM4_IRQHandler,             // 46: TIM4
-  I2C1_EV_IRQHandler,          // 47: I2C1 Event
-  I2C1_ER_IRQHandler,          // 48: I2C1 Error
-  I2C2_EV_IRQHandler,          // 49: I2C2 Event
-  I2C2_ER_IRQHandler,          // 50: I2C2 Error
-  SPI1_IRQHandler,             // 51: SPI1
-  SPI2_IRQHandler,             // 52: SPI2
-  USART1_IRQHandler,           // 53: USART1 (SERIAL ISR)
-  USART2_IRQHandler,           // 54: USART2
-  USART3_IRQHandler,           // 55: USART3
-  EXTI15_10_IRQHandler,        // 56: EXTI15_10 (Z limit switch)
-  RTCAlarm_IRQHandler,         // 57: RTC Alarm
-  USBWakeUp_IRQHandler,        // 58: USB Wakeup
+  // ============================================================================
+  // STM32H523 peripheral interrupts (IRQ 0-60+)
+  // ============================================================================
+  WWDG_IRQHandler,             // 16: IRQ 0  - Window watchdog
+  PVD_AVD_IRQHandler,          // 17: IRQ 1  - PVD/AVD detector
+  RTC_IRQHandler,              // 18: IRQ 2  - RTC global interrupt
+  RTC_S_IRQHandler,            // 19: IRQ 3  - RTC secure interrupt
+  TAMP_IRQHandler,             // 20: IRQ 4  - Tamper
+  RAMCFG_IRQHandler,           // 21: IRQ 5  - RAM configuration
+  FLASH_IRQHandler,            // 22: IRQ 6  - Flash global interrupt
+  FLASH_S_IRQHandler,          // 23: IRQ 7  - Flash secure interrupt
+  GTZC_IRQHandler,             // 24: IRQ 8  - Global TrustZone controller
+  RCC_IRQHandler,              // 25: IRQ 9  - RCC global interrupt
+  RCC_S_IRQHandler,            // 26: IRQ 10 - RCC secure interrupt
+  EXTI0_IRQHandler,            // 27: IRQ 11 - EXTI line 0 (X limit switch)
+  EXTI1_IRQHandler,            // 28: IRQ 12 - EXTI line 1 (Y limit switch)
+  EXTI2_IRQHandler,            // 29: IRQ 13 - EXTI line 2
+  EXTI3_IRQHandler,            // 30: IRQ 14 - EXTI line 3 (Reset button)
+  EXTI4_IRQHandler,            // 31: IRQ 15 - EXTI line 4 (Feed hold button)
+  EXTI5_IRQHandler,            // 32: IRQ 16 - EXTI line 5 (Cycle start button)
+  EXTI6_IRQHandler,            // 33: IRQ 17 - EXTI line 6 (Safety door button)
+  EXTI7_IRQHandler,            // 34: IRQ 18 - EXTI line 7
+  EXTI8_IRQHandler,            // 35: IRQ 19 - EXTI line 8
+  EXTI9_IRQHandler,            // 36: IRQ 20 - EXTI line 9
+  EXTI10_IRQHandler,           // 37: IRQ 21 - EXTI line 10 (Z limit switch)
+  EXTI11_IRQHandler,           // 38: IRQ 22 - EXTI line 11
+  EXTI12_IRQHandler,           // 39: IRQ 23 - EXTI line 12
+  EXTI13_IRQHandler,           // 40: IRQ 24 - EXTI line 13
+  EXTI14_IRQHandler,           // 41: IRQ 25 - EXTI line 14
+  EXTI15_IRQHandler,           // 42: IRQ 26 - EXTI line 15
+  GPDMA1_Channel0_IRQHandler,  // 43: IRQ 27 - GPDMA1 channel 0
+  GPDMA1_Channel1_IRQHandler,  // 44: IRQ 28 - GPDMA1 channel 1
+  GPDMA1_Channel2_IRQHandler,  // 45: IRQ 29 - GPDMA1 channel 2
+  GPDMA1_Channel3_IRQHandler,  // 46: IRQ 30 - GPDMA1 channel 3
+  GPDMA1_Channel4_IRQHandler,  // 47: IRQ 31 - GPDMA1 channel 4
+  GPDMA1_Channel5_IRQHandler,  // 48: IRQ 32 - GPDMA1 channel 5
+  GPDMA1_Channel6_IRQHandler,  // 49: IRQ 33 - GPDMA1 channel 6
+  GPDMA1_Channel7_IRQHandler,  // 50: IRQ 34 - GPDMA1 channel 7
+  IWDG_IRQHandler,             // 51: IRQ 35 - Independent watchdog
+  SAES_IRQHandler,             // 52: IRQ 36 - Secure AES
+  ADC1_IRQHandler,             // 53: IRQ 37 - ADC1 global interrupt
+  DAC1_IRQHandler,             // 54: IRQ 38 - DAC1 global interrupt
+  FDCAN1_IT0_IRQHandler,       // 55: IRQ 39 - FDCAN1 interrupt 0
+  FDCAN1_IT1_IRQHandler,       // 56: IRQ 40 - FDCAN1 interrupt 1
+  TIM1_BRK_IRQHandler,         // 57: IRQ 41 - TIM1 break
+  TIM1_UP_IRQHandler,          // 58: IRQ 42 - TIM1 update
+  TIM1_TRG_COM_IRQHandler,     // 59: IRQ 43 - TIM1 trigger/commutation
+  TIM1_CC_IRQHandler,          // 60: IRQ 44 - TIM1 capture/compare
+  TIM2_IRQHandler,             // 61: IRQ 45 - TIM2 global (STEPPER ISR)
+  TIM3_IRQHandler,             // 62: IRQ 46 - TIM3 global (PULSE RESET ISR)
+  I2C1_EV_IRQHandler,          // 63: IRQ 47 - I2C1 event
+  I2C1_ER_IRQHandler,          // 64: IRQ 48 - I2C1 error
+  SPI1_IRQHandler,             // 65: IRQ 49 - SPI1 global
+  0,                           // 66: IRQ 50 - Reserved
+  0,                           // 67: IRQ 51 - Reserved
+  0,                           // 68: IRQ 52 - Reserved
+  USART1_IRQHandler,           // 69: IRQ 53 - USART1 global (SERIAL ISR)
+  USART2_IRQHandler,           // 70: IRQ 54 - USART2 global
+  0,                           // 71: IRQ 55 - Reserved
+  0,                           // 72: IRQ 56 - Reserved
+  0,                           // 73: IRQ 57 - Reserved
+  LPUART1_IRQHandler,          // 74: IRQ 58 - LPUART1 global
+  LPTIM1_IRQHandler,           // 75: IRQ 59 - LPTIM1 global
+  TIM4_IRQHandler,             // 76: IRQ 60 - TIM4 global
 };
