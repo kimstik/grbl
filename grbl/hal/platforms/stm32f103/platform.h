@@ -52,7 +52,7 @@
 
 // REVIEW: CRITICAL #2 - Use minimal register definitions to avoid CMSIS dependency
 // This allows GRBL to build standalone without external CMSIS pack
-#include "stm32f103_minimal.h"
+#include "regs.h"
 
 // ============================================================================
 // PIN MAPPING - GPIO DEFINITIONS

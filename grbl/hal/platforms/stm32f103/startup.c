@@ -1,12 +1,12 @@
 /*
- * startup_stm32f103.c - Minimal startup code for STM32F103
- * Part of Grbl
- *
- * Copyright (c) 2025 kimstik
+  startup.c - Startup code for STM32F103
+  Part of Grbl
+
+  Copyright (c) 2025 kimstik
   License: MIT
- *
- * Interrupt vector table and reset handler for STM32F103C8T6.
- */
+
+  Interrupt vector table and reset handler for STM32F103C8T6.
+*/
 
 #include <stdint.h>
 #include "platform.h"

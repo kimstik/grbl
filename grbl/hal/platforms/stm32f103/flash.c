@@ -10,7 +10,7 @@
 
 #include "../stm32_common/stm32_flash.h"
 #include "../stm32_common/stm32_timing.h"
-#include "stm32f103_minimal.h"
+#include "regs.h"
 #include "config.h"
 
 // Flash unlock/lock keys
