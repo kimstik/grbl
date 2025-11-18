@@ -440,6 +440,12 @@ uint64_t hal_micros(void);
 #define HAL_MILLIS()                            hal_millis()
 #define HAL_MICROS()                            hal_micros()
 
+// Watchdog timer (optional, enable with -DENABLE_WATCHDOG)
+void hal_watchdog_init(void);
+void hal_watchdog_refresh(void);
+
+#define HAL_WATCHDOG_REFRESH()                  hal_watchdog_refresh()
+
 // ============================================================================
 // HAL NVMEM MACROS (Flash emulation)
 // ============================================================================

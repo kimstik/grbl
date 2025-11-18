@@ -352,4 +352,18 @@ static inline void NVIC_SetPriority(IRQn_Type IRQn, uint32_t priority) {
   NVIC->IP[IRQn] = (priority << 4);
 }
 
+// ============================================================================
+// IWDG - Independent Watchdog
+// ============================================================================
+
+typedef struct {
+  volatile uint32_t KR;   // Key register
+  volatile uint32_t PR;   // Prescaler register
+  volatile uint32_t RLR;  // Reload register
+  volatile uint32_t SR;   // Status register
+} IWDG_TypeDef;
+
+#define IWDG_BASE   0x40003000
+#define IWDG        ((IWDG_TypeDef*)IWDG_BASE)
+
 #endif // STM32F103_MINIMAL_H

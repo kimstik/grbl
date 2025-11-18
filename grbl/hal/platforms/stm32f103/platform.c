@@ -447,6 +447,50 @@ void hal_nvmem_flush(void) {
 }
 
 // ============================================================================
+// WATCHDOG TIMER (Independent Watchdog - IWDG)
+// ============================================================================
+
+// REVIEW: ROBUSTNESS - Independent watchdog for system reliability
+// Timeout: ~1.6 seconds (critical for CNC safety)
+// Uses internal 40kHz RC oscillator, independent from main clock
+//
+// NOTE: Watchdog is DISABLED by default for debugging convenience
+// To enable in production: add -DENABLE_WATCHDOG to CFLAGS in Makefile
+
+#ifdef ENABLE_WATCHDOG
+
+void hal_watchdog_init(void) {
+  // Start IWDG
+  IWDG->KR = 0xCCCC;  // Start watchdog
+
+  // Wait for register access
+  IWDG->KR = 0x5555;  // Enable register access
+
+  // Configure prescaler and reload value
+  // 40kHz / 64 = 625Hz, reload = 1000 → ~1.6 second timeout
+  IWDG->PR = 0x04;    // Prescaler /64
+  IWDG->RLR = 1000;   // Reload value
+
+  // Wait for registers to update
+  while (IWDG->SR);
+
+  // Refresh to start counting
+  IWDG->KR = 0xAAAA;  // Refresh watchdog
+}
+
+void hal_watchdog_refresh(void) {
+  IWDG->KR = 0xAAAA;  // Refresh watchdog (pet the dog)
+}
+
+#else
+
+// Watchdog disabled for debugging
+void hal_watchdog_init(void) { }
+void hal_watchdog_refresh(void) { }
+
+#endif // ENABLE_WATCHDOG
+
+// ============================================================================
 // SYSTEM INITIALIZATION
 // ============================================================================
 
@@ -458,6 +502,9 @@ void hal_system_init(void) {
   CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
   DWT->CYCCNT = 0;
   DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+
+  // Initialize watchdog (disabled by default, enable with -DENABLE_WATCHDOG)
+  hal_watchdog_init();
 
   // Initialize GPIO
   hal_gpio_init();
