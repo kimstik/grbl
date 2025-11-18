@@ -18,9 +18,35 @@ extern uint32_t _sbss, _ebss;
 // Main function
 extern int main(void);
 
+// REVIEW: ERROR HANDLING - Improved fault handlers for debugging and safety
+// Fault handler helper - safe shutdown and indicate fault
+static void handle_fault(uint32_t fault_code) {
+  // Disable interrupts to prevent further issues
+  __disable_irq();
+
+  // Try to safe the system - turn off outputs
+  // PA4-6 = stepper enable (set high to disable)
+  GPIOA->BSRR = (1 << 4) | (1 << 5) | (1 << 6);
+
+  // PA8 = spindle PWM (set low to stop)
+  GPIOA->BSRR = (1 << (8 + 16));
+
+  // Blink LED to indicate fault (if available on PC13)
+  // Fault code encoded as blink pattern
+  while (1) {
+    for (uint32_t i = 0; i < fault_code; i++) {
+      GPIOC->BSRR = (1 << (13 + 16));  // LED on
+      for (volatile uint32_t d = 0; d < 200000; d++);
+      GPIOC->BSRR = (1 << 13);         // LED off
+      for (volatile uint32_t d = 0; d < 200000; d++);
+    }
+    for (volatile uint32_t d = 0; d < 2000000; d++);  // Long pause
+  }
+}
+
 // Default handler (infinite loop)
 void Default_Handler(void) {
-  while (1);
+  handle_fault(9);  // Fault code 9 = unhandled interrupt
 }
 
 // Reset handler - copies data, clears BSS, calls main
@@ -47,12 +73,14 @@ void Reset_Handler(void) {
   while (1);
 }
 
-// Weak aliases to Default_Handler
+// Critical fault handlers with distinct codes
+void HardFault_Handler(void)  { handle_fault(1); }  // HardFault = 1 blink
+void MemManage_Handler(void)  { handle_fault(2); }  // MemManage = 2 blinks
+void BusFault_Handler(void)   { handle_fault(3); }  // BusFault = 3 blinks
+void UsageFault_Handler(void) { handle_fault(4); }  // UsageFault = 4 blinks
+
+// Other handlers - less critical, use default
 void NMI_Handler(void)              __attribute__((weak, alias("Default_Handler")));
-void HardFault_Handler(void)        __attribute__((weak, alias("Default_Handler")));
-void MemManage_Handler(void)        __attribute__((weak, alias("Default_Handler")));
-void BusFault_Handler(void)         __attribute__((weak, alias("Default_Handler")));
-void UsageFault_Handler(void)       __attribute__((weak, alias("Default_Handler")));
 void SVC_Handler(void)              __attribute__((weak, alias("Default_Handler")));
 void DebugMon_Handler(void)         __attribute__((weak, alias("Default_Handler")));
 void PendSV_Handler(void)           __attribute__((weak, alias("Default_Handler")));

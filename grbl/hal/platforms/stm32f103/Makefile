@@ -5,6 +5,10 @@
 #
 #  STM32F103C8T6: ARM Cortex-M3, 72MHz, 20KB RAM, 64KB Flash
 
+# Build configuration (make BUILD=DEBUG or BUILD=RELEASE)
+# Default is DEBUG for development convenience
+BUILD ?= DEBUG
+
 # Device settings
 DEVICE     = STM32F103xB
 CPU        = cortex-m3
@@ -19,7 +23,7 @@ GDB        = $(PREFIX)gdb
 
 # Paths (Makefile is in grbl/hal/platforms/stm32f103/)
 GRBL_DIR   = ../../..
-BUILD_DIR  = $(GRBL_DIR)/../build_stm32
+BUILD_DIR  = $(GRBL_DIR)/../build_stm32_$(BUILD)
 PLATFORM_DIR = .
 
 SOURCES = main.c motion_control.c gcode.c spindle_control.c coolant_control.c serial.c \
@@ -29,13 +33,23 @@ SOURCES = main.c motion_control.c gcode.c spindle_control.c coolant_control.c se
 
 OBJECTS = $(addprefix $(BUILD_DIR)/,$(notdir $(SOURCES:.c=.o)))
 
-# Compiler flags
+# Base compiler flags
 CFLAGS  = -mcpu=$(CPU) -mthumb
 CFLAGS += -DPLATFORM_STM32F103 -DF_CPU=$(CLOCK)
 CFLAGS += -Wall -Wextra
-CFLAGS += -Os -g3
 CFLAGS += -ffunction-sections -fdata-sections
 CFLAGS += -I$(GRBL_DIR) -I$(PLATFORM_DIR)
+
+# Build-specific flags
+ifeq ($(BUILD),RELEASE)
+  CFLAGS += -Os -g0              # Optimize for size, no debug symbols
+  CFLAGS += -DENABLE_WATCHDOG    # Enable watchdog in release builds
+  CFLAGS += -DNDEBUG             # Disable assertions
+else
+  CFLAGS += -O0 -g3              # No optimization, full debug symbols
+  # Watchdog disabled by default in debug builds (enable manually if needed)
+  # CFLAGS += -DENABLE_WATCHDOG
+endif
 
 # Linker flags
 LDFLAGS  = -mcpu=$(CPU) -mthumb
@@ -95,11 +109,34 @@ flash-openocd: $(BUILD_DIR)/grbl_stm32.hex
 debug: $(BUILD_DIR)/grbl_stm32.elf
 	$(GDB) $<
 
-# Clean
+# Clean (clean current build or clean-all for both DEBUG and RELEASE)
 clean:
 	rm -rf $(BUILD_DIR)
 
-.PHONY: all clean flash flash-openocd debug
+clean-all:
+	rm -rf $(GRBL_DIR)/../build_stm32_DEBUG $(GRBL_DIR)/../build_stm32_RELEASE
+
+# Help
+help:
+	@echo "GRBL STM32F103 Build System"
+	@echo ""
+	@echo "Usage:"
+	@echo "  make              - Build DEBUG version (default)"
+	@echo "  make BUILD=DEBUG  - Build with debugging symbols, no optimization"
+	@echo "  make BUILD=RELEASE - Build optimized for production (watchdog enabled)"
+	@echo ""
+	@echo "Other targets:"
+	@echo "  make flash        - Flash using st-link"
+	@echo "  make flash-openocd - Flash using OpenOCD"
+	@echo "  make debug        - Start GDB debugger"
+	@echo "  make clean        - Clean current build"
+	@echo "  make clean-all    - Clean all builds (DEBUG and RELEASE)"
+	@echo ""
+	@echo "Build configuration:"
+	@echo "  Current BUILD = $(BUILD)"
+	@echo "  Output directory = $(BUILD_DIR)"
+
+.PHONY: all clean clean-all flash flash-openocd debug help
 
 # Include dependencies
 -include $(BUILD_DIR)/*.d
