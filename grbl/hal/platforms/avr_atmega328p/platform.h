@@ -191,23 +191,21 @@ static inline uint32_t hal_micros(void) {
 #endif
 
 // ----------------------------------------------------------------------------
-// TIMER2: Spindle PWM (when VARIABLE_SPINDLE is defined)
+// TIMER2: Spindle PWM
 // ----------------------------------------------------------------------------
+// Note: Always defined (hardware registers always exist)
+// Actual usage guarded by VARIABLE_SPINDLE in spindle_control.c
 
-#ifdef VARIABLE_SPINDLE
+#define HAL_TIMER_SPINDLE_PWM_INIT() \
+  TCCR2A = ((1<<WGM20) | (1<<WGM21)); \
+  TCCR2B = (1<<CS22)
 
-  #define HAL_TIMER_SPINDLE_PWM_INIT() \
-    TCCR2A = ((1<<WGM20) | (1<<WGM21)); \
-    TCCR2B = (1<<CS22)
+#define HAL_TIMER_SPINDLE_PWM_SET_DUTY(duty)  (OCR2A = (duty))
+#define HAL_TIMER_SPINDLE_PWM_GET_DUTY()      (OCR2A)
 
-  #define HAL_TIMER_SPINDLE_PWM_SET_DUTY(duty)  (OCR2A = (duty))
-  #define HAL_TIMER_SPINDLE_PWM_GET_DUTY()      (OCR2A)
-
-  #define HAL_TIMER_SPINDLE_PWM_ENABLE()        (TCCR2A |= (1<<COM2A1))
-  #define HAL_TIMER_SPINDLE_PWM_DISABLE()       (TCCR2A &= ~(1<<COM2A1))
-  #define HAL_TIMER_SPINDLE_PWM_IS_ENABLED()    (TCCR2A & (1<<COM2A1))
-
-#endif // VARIABLE_SPINDLE
+#define HAL_TIMER_SPINDLE_PWM_ENABLE()        (TCCR2A |= (1<<COM2A1))
+#define HAL_TIMER_SPINDLE_PWM_DISABLE()       (TCCR2A &= ~(1<<COM2A1))
+#define HAL_TIMER_SPINDLE_PWM_IS_ENABLED()    (TCCR2A & (1<<COM2A1))
 
 // ============================================================================
 // HAL SERIAL/UART MACROS (ZERO OVERHEAD - expand to original AVR code)
@@ -287,10 +285,6 @@ static inline uint32_t hal_micros(void) {
 #define HAL_NVMEM_READ_DWORD(addr)              eeprom_read_dword((uint32_t*)(addr))
 #define HAL_NVMEM_WRITE_DWORD(addr, value)      eeprom_write_dword((uint32_t*)(addr), (value))
 
-// ============================================================================
-// CPU MAP (AVR pin definitions)
-// ============================================================================
-// Include AVR-specific CPU mapping (moved here from grbl/cpu_map.h)
-#include "cpu_map.h"
+// Note: cpu_map.h is included from grbl.h AFTER config.h to get VARIABLE_SPINDLE
 
 #endif // PLATFORM_AVR_ATMEGA328P_H
