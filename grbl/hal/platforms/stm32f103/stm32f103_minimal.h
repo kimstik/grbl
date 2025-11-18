@@ -1,8 +1,9 @@
 /*
   stm32f103_minimal.h - Minimal STM32F103 register definitions
-  Part of Grbl HAL
+  Part of Grbl
 
-  Copyright (c) 2025 GRBL HAL Contributors
+  Copyright (c) 2025 kimstik
+  License: MIT
 
   Minimal register definitions for STM32F103C8T6 to avoid CMSIS dependency.
   Includes only registers needed for GRBL operation.

@@ -1,8 +1,9 @@
 /*
   platform.h - STM32F103 platform configuration
-  Part of Grbl HAL
+  Part of Grbl
 
-  Copyright (c) 2025 GRBL HAL Contributors
+  Copyright (c) 2025 kimstik
+  License: MIT
 
   This file provides platform-specific definitions for STM32F103 (Blue Pill).
   ARM Cortex-M3, 72 MHz, 20KB RAM, 64-128KB Flash
