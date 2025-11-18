@@ -217,13 +217,16 @@
 #define SPINDLE_DIRECTION_PIN   13
 #define SPINDLE_DIRECTION_BIT   13
 
+// AVR compatibility: DDR (Data Direction Register) = PORT for STM32
+#define SPINDLE_PWM_DDR         SPINDLE_PWM_PORT
+#define SPINDLE_DIRECTION_DDR   SPINDLE_DIRECTION_PORT
+
 // PWM resolution (16-bit timer)
-#ifdef VARIABLE_SPINDLE
-  #define SPINDLE_PWM_MAX_VALUE     65535  // 16-bit PWM
-  #define SPINDLE_PWM_MIN_VALUE     1
-  #define SPINDLE_PWM_OFF_VALUE     0
-  #define SPINDLE_PWM_RANGE         (SPINDLE_PWM_MAX_VALUE - SPINDLE_PWM_MIN_VALUE)
-#endif
+// Always define for compatibility (spindle_control.c uses these unconditionally)
+#define SPINDLE_PWM_MAX_VALUE     65535  // 16-bit PWM
+#define SPINDLE_PWM_MIN_VALUE     1
+#define SPINDLE_PWM_OFF_VALUE     0
+#define SPINDLE_PWM_RANGE         (SPINDLE_PWM_MAX_VALUE - SPINDLE_PWM_MIN_VALUE)
 
 // --------------------------------------------------------------------------
 // COOLANT PINS (GPIOC: PC13, PC14)
@@ -237,6 +240,12 @@
   #define COOLANT_MIST_PORT     GPIOC
   #define COOLANT_MIST_PIN      14
   #define COOLANT_MIST_BIT      14
+#endif
+
+// AVR compatibility: DDR macros
+#define COOLANT_FLOOD_DDR       COOLANT_FLOOD_PORT
+#ifdef ENABLE_M7
+  #define COOLANT_MIST_DDR      COOLANT_MIST_PORT
 #endif
 
 // ============================================================================
@@ -276,10 +285,8 @@
 // ============================================================================
 // PLATFORM INFO STRUCTURE
 // ============================================================================
-
-extern const hal_platform_info_t stm32_platform_info;
-
-const hal_platform_info_t* hal_platform_get_info(void);
+// Note: hal_platform_info_t is defined in hal_system.h
+// Declarations are provided by HAL headers
 
 // ============================================================================
 // HAL GPIO MACROS
@@ -295,16 +302,13 @@ const hal_platform_info_t* hal_platform_get_info(void);
 #define HAL_GPIO_WRITE_DIRECT(port, value)      ((port)->ODR = (value))
 
 // GPIO direction configuration (via CRL/CRH registers)
-// For STM32, we need functions not macros
-void hal_gpio_set_output(GPIO_TypeDef* port, uint32_t mask);
-void hal_gpio_set_input(GPIO_TypeDef* port, uint32_t mask);
-
+// Note: Function declarations are in hal_gpio.h
+// Platform provides optimized macros:
 #define HAL_GPIO_SET_OUTPUT(port, mask)         hal_gpio_set_output((port), (mask))
 #define HAL_GPIO_SET_INPUT(port, mask)          hal_gpio_set_input((port), (mask))
 
 // Pull-up resistor control (STM32 uses CRL/CRH config)
-void hal_gpio_pullup_enable(GPIO_TypeDef* port, uint32_t mask);
-void hal_gpio_pullup_disable(GPIO_TypeDef* port, uint32_t mask);
+// Note: Function declarations are in hal_gpio.h
 
 #define HAL_GPIO_PULLUP_ENABLE(port, mask)      hal_gpio_pullup_enable((port), (mask))
 #define HAL_GPIO_PULLUP_DISABLE(port, mask)     hal_gpio_pullup_disable((port), (mask))
@@ -443,20 +447,14 @@ uint64_t hal_micros(void);
 #define HAL_MICROS()                            hal_micros()
 
 // Watchdog timer (optional, enable with -DENABLE_WATCHDOG)
-void hal_watchdog_init(void);
-void hal_watchdog_refresh(void);
-
+// Note: Function declarations in hal_system.h
 #define HAL_WATCHDOG_REFRESH()                  hal_watchdog_refresh()
 
 // ============================================================================
 // HAL NVMEM MACROS (Flash emulation)
 // ============================================================================
-
-// Implemented in hal/hal_nvmem.h, but functions are platform-specific
-unsigned char hal_nvmem_read_byte(unsigned int addr);
-void hal_nvmem_write_byte(unsigned int addr, unsigned char data);
-
-// Map to standard eeprom function names
+// Note: Function declarations in hal_nvmem.h
+// Map to standard eeprom function names for compatibility
 #define eeprom_get_char(addr)                   hal_nvmem_read_byte(addr)
 #define eeprom_put_char(addr, data)             hal_nvmem_write_byte(addr, data)
 
@@ -478,23 +476,8 @@ void hal_nvmem_init(void);
 void hal_nvmem_flush(void);  // Flush dirty cache to flash
 
 // ============================================================================
-// PLATFORM INFO STRUCTURE
+// PLATFORM INFO
 // ============================================================================
-
-typedef struct {
-  const char* platform_name;
-  const char* cpu_name;
-  const char* arch_name;
-  uint32_t cpu_freq;
-  uint32_t ram_size;
-  uint32_t flash_size;
-  uint8_t has_fpu;
-  uint8_t has_dma;
-  uint8_t has_usb;
-  uint8_t has_hw_eeprom;
-} hal_platform_info_t;
-
-extern const hal_platform_info_t stm32_platform_info;
-const hal_platform_info_t* hal_platform_get_info(void);
+// Note: hal_platform_info_t typedef and declarations are in hal_system.h
 
 #endif // PLATFORM_STM32F103_H

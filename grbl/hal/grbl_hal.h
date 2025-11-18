@@ -37,8 +37,37 @@
 #ifndef GRBL_HAL_H
 #define GRBL_HAL_H
 
-#include <stdint.h>
-#include <stdbool.h>
+// ============================================================================
+// STANDARD LIBRARY INCLUDES (platform-specific)
+// ============================================================================
+
+#if defined(PLATFORM_STM32F103) || defined(PLATFORM_STM32H523) || defined(PLATFORM_RP2040) || defined(PLATFORM_RP2350)
+  // ARM platforms: Include only standard C libraries
+  #include <stdint.h>
+  #include <stdbool.h>
+  #include <string.h>
+  #include <stdlib.h>
+  #include <math.h>
+  #include <inttypes.h>
+
+  // Define AVR compatibility macros (to avoid modifying original code)
+  #define sei()  HAL_INTERRUPTS_ENABLE()
+  #define cli()  HAL_INTERRUPTS_DISABLE()
+
+#else
+  // AVR platform: Include AVR-specific libraries
+  #include <avr/io.h>
+  #include <avr/pgmspace.h>
+  #include <avr/interrupt.h>
+  #include <avr/wdt.h>
+  #include <util/delay.h>
+  #include <math.h>
+  #include <inttypes.h>
+  #include <string.h>
+  #include <stdlib.h>
+  #include <stdint.h>
+  #include <stdbool.h>
+#endif
 
 // ============================================================================
 // PLATFORM AUTO-DETECTION
@@ -47,7 +76,33 @@
 // Platform can be specified via -DPLATFORM_xxx in Makefile
 // Or auto-detected from compiler defines
 
-#if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega328__)
+// Check explicit platform defines first (from Makefile)
+#if defined(PLATFORM_STM32F103)
+  #define PLATFORM_NAME "STM32F103"
+
+#elif defined(PLATFORM_STM32H523)
+  #define PLATFORM_NAME "STM32H523"
+
+#elif defined(PLATFORM_STM32F411)
+  #define PLATFORM_NAME "STM32F411"
+
+#elif defined(PLATFORM_RP2040)
+  #define PLATFORM_NAME "RP2040"
+
+#elif defined(PLATFORM_RP2350)
+  #define PLATFORM_NAME "RP2350"
+
+#elif defined(PLATFORM_SAMD21)
+  #define PLATFORM_NAME "SAMD21"
+
+#elif defined(PLATFORM_CH32V006)
+  #define PLATFORM_NAME "CH32V006"
+
+#elif defined(PLATFORM_HC32F460)
+  #define PLATFORM_NAME "HC32F460"
+
+// Auto-detection from compiler defines
+#elif defined(__AVR_ATmega328P__) || defined(__AVR_ATmega328__)
   #define PLATFORM_AVR_ATMEGA328P
   #define PLATFORM_NAME "AVR ATmega328P"
 
