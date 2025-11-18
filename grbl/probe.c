@@ -19,7 +19,7 @@
 */
 
 #include "grbl.h"
-#include "hal/grbl_hal.h"
+#include "hal.h"
 
 
 // Inverts the probe pin state depending on user settings and probing cycle mode.

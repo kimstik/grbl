@@ -20,7 +20,7 @@
 */
 
 #include "grbl.h"
-#include "hal/grbl_hal.h"
+#include "hal.h"
 
 #define RX_RING_BUFFER (RX_BUFFER_SIZE+1)
 #define TX_RING_BUFFER (TX_BUFFER_SIZE+1)

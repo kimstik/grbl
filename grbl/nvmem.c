@@ -20,7 +20,7 @@
 */
 
 #include "grbl.h"
-#include "hal/grbl_hal.h"
+#include "hal.h"
 
 // ============================================================================
 // Original GRBL EEPROM functions (from Atmel AVR103 app note)

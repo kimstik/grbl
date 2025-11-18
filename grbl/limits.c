@@ -20,7 +20,7 @@
 */
 
 #include "grbl.h"
-#include "hal/grbl_hal.h"
+#include "hal.h"
 
 
 // Homing axis search distance multiplier. Computed by this value times the cycle travel.
