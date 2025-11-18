@@ -61,7 +61,7 @@ LDFLAGS  = -mcpu=$(CPU) -mthumb $(FPU)
 LDFLAGS += -Wl,--gc-sections
 LDFLAGS += -Wl,-Map=$(BUILD_DIR)/grbl_h523.map
 LDFLAGS += -specs=nano.specs -specs=nosys.specs
-LDFLAGS += -T stm32h523.ld
+LDFLAGS += -T script.ld
 LDFLAGS += -lm
 
 # Targets
