@@ -320,17 +320,41 @@ See `flash.c` for implementation details.
 
 ---
 
-## Security Features (Not Used in GRBL)
+## Security Features (Available for Advanced Use Cases)
 
-STM32H523 has advanced security features (available if needed):
-- ✅ TrustZone (secure/non-secure memory regions)
-- ✅ Secure Boot with RoT (Root of Trust)
-- ✅ AES-256 hardware encryption
-- ✅ SHA-256 hardware hashing
-- ✅ PKA (Public Key Accelerator) for RSA/ECC
-- ✅ SAES (Secure AES) for TrustZone secure world
+STM32H523 includes advanced security features that can be utilized:
 
-**GRBL Status**: Not implemented (overkill for CNC controller)
+### Hardware Security Modules:
+- ✅ **TrustZone**: Secure/non-secure memory isolation (ARMv8-M)
+- ✅ **Secure Boot with RoT**: Root of Trust for firmware verification
+- ✅ **AES-256**: Hardware encryption accelerator (up to 1 Gbps)
+- ✅ **SHA-256**: Hardware hashing for integrity verification
+- ✅ **PKA**: Public Key Accelerator for RSA/ECC cryptography
+- ✅ **SAES**: Secure AES in TrustZone secure world
+- ✅ **HASH**: Dedicated hash processor (SHA-1, SHA-224, SHA-256)
+- ✅ **RNG**: True Random Number Generator (certified)
+
+### Potential GRBL Use Cases:
+- **Secure Firmware Updates**: Verify firmware integrity before flashing
+- **Protected Configuration**: Encrypt machine calibration data and parameters
+- **Access Control**: Multi-user access with authentication
+- **Industrial Compliance**: Meet security requirements (IEC 62443, etc.)
+- **IP Protection**: Encrypt proprietary G-code or toolpath data
+- **Remote Monitoring**: Secure communication with cloud/monitoring systems
+
+### Current Implementation Status:
+Currently not implemented in basic GRBL HAL, but **all hardware is available** and can be added:
+- Register definitions for all security peripherals already in `regs.h`
+- Can be enabled through STM32CubeMX or manually
+- Example applications available from ST
+- No impact on non-secure code (zero overhead if unused)
+
+### Future Enhancements:
+Consider implementing for industrial/commercial applications:
+1. Secure boot to prevent unauthorized firmware
+2. Encrypted NVMEM for protected machine parameters
+3. Authenticated remote control (IoT/Industry 4.0)
+4. Hardware-accelerated HTTPS for web interface
 
 ---
 
@@ -346,15 +370,3 @@ STM32H523 has advanced security features (available if needed):
 - **STM32H5 Examples**: https://github.com/STMicroelectronics/STM32CubeH5
 
 ---
-
-## Revision History
-
-- **2025-11-18**: Platform 100% complete, all critical issues fixed (commit d08b524)
-- **2025-11-17**: Deep code review completed (REVIEW_H523.md)
-- **2025-11-15**: Initial HAL implementation (72% complete)
-- **2025-11-12**: Platform planning started
-
----
-
-**Maintained by**: GRBL HAL project
-**License**: MIT

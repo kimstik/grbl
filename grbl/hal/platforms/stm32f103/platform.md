@@ -241,14 +241,3 @@ Peripherals:
 **Optimization Level**: `-Os -flto`
 
 ---
-
-## Revision History
-
-- **2025-11-18**: Platform 100% complete, production ready
-- **2025-11-15**: Initial HAL implementation
-- **2025-11-10**: Platform planning started
-
----
-
-**Maintained by**: GRBL HAL project
-**License**: MIT
