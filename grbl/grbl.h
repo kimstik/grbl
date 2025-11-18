@@ -36,6 +36,11 @@
 #include "system.h"
 #include "defaults.h"
 
+// AVR CPU map (must be included AFTER config.h to get VARIABLE_SPINDLE)
+#if !defined(PLATFORM_STM32F103) && !defined(PLATFORM_STM32H523) && !defined(PLATFORM_RP2040) && !defined(PLATFORM_RP2350)
+  #include "hal/platforms/avr_atmega328p/cpu_map.h"
+#endif
+
 #include "planner.h"
 #include "coolant_control.h"
 #include "nvmem.h"
