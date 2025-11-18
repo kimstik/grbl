@@ -1,5 +1,5 @@
 /*
-  stm32f103_minimal.h - Minimal STM32F103 register definitions
+  regs.h - STM32F103 register definitions
   Part of Grbl
 
   Copyright (c) 2025 kimstik
@@ -7,12 +7,10 @@
 
   Minimal register definitions for STM32F103C8T6 to avoid CMSIS dependency.
   Includes only registers needed for GRBL operation.
-
-  REVIEW: CRITICAL #2 - Provides minimal register definitions without CMSIS
 */
 
-#ifndef STM32F103_MINIMAL_H
-#define STM32F103_MINIMAL_H
+#ifndef STM32F103_REGS_H
+#define STM32F103_REGS_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -367,4 +365,4 @@ typedef struct {
 #define IWDG_BASE   0x40003000
 #define IWDG        ((IWDG_TypeDef*)IWDG_BASE)
 
-#endif // STM32F103_MINIMAL_H
+#endif // STM32F103_REGS_H
