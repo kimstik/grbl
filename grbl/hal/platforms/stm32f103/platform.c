@@ -325,33 +325,38 @@ void hal_delay_ms(uint32_t ms) {
 }
 
 void hal_delay_us(uint32_t us) {
-  // Use cycle counting for microsecond delays
-  // 72 cycles per microsecond at 72 MHz
-  uint32_t cycles = us * 72;
+  // REVIEW: MEDIUM #8 - Use DWT cycle counter for accurate microsecond delays
+  // DWT->CYCCNT is a free-running 32-bit counter incremented every CPU cycle
+  uint32_t start = DWT->CYCCNT;
+  uint32_t cycles = us * 72;  // 72 MHz = 72 cycles per microsecond
 
-  // Simple cycle delay (not perfectly accurate but good enough)
-  for (uint32_t i = 0; i < cycles / 4; i++) {
-    __NOP();
-  }
+  while ((DWT->CYCCNT - start) < cycles);
 }
 
 // ============================================================================
 // NVMEM (Flash Emulation) FUNCTIONS
 // ============================================================================
 
-// Simple flash emulation using last 2KB of flash
-// Real implementation would need wear leveling, but this is functional
+// REVIEW: HIGH #4 - Implemented proper flash write with persistence
+// Flash emulation using last 2KB of flash (pages at 0x0800F800-0x0800FFFF)
+// Writes are batched and flushed to reduce flash wear
 
 static uint8_t nvmem_cache[HAL_NVMEM_FLASH_SIZE];
 static bool nvmem_initialized = false;
+static bool nvmem_dirty = false;
+
+// Flash unlock/lock keys
+#define FLASH_KEY1  0x45670123
+#define FLASH_KEY2  0xCDEF89AB
 
 void hal_nvmem_init(void) {
-  // Read entire flash page into cache
+  // Read entire flash pages into cache
   const uint8_t* flash_base = (const uint8_t*)HAL_NVMEM_FLASH_START;
   for (uint32_t i = 0; i < HAL_NVMEM_FLASH_SIZE; i++) {
     nvmem_cache[i] = flash_base[i];
   }
   nvmem_initialized = true;
+  nvmem_dirty = false;
 }
 
 unsigned char hal_nvmem_read_byte(unsigned int addr) {
@@ -375,14 +380,70 @@ void hal_nvmem_write_byte(unsigned int addr, unsigned char data) {
     return;
   }
 
-  // Update cache
-  nvmem_cache[addr] = data;
+  // Update cache and mark as dirty
+  if (nvmem_cache[addr] != data) {
+    nvmem_cache[addr] = data;
+    nvmem_dirty = true;
+  }
+}
 
-  // Write to flash (simplified - needs erase first in real implementation)
-  // For now, just update cache. Full implementation would:
-  // 1. Erase flash page
-  // 2. Write entire cache back to flash
-  // This is deferred for simplicity - settings won't persist across resets yet
+// Flush cache to flash - called after settings write
+void hal_nvmem_flush(void) {
+  if (!nvmem_dirty) {
+    return;  // Nothing to write
+  }
+
+  // Unlock flash
+  FLASH->KEYR = FLASH_KEY1;
+  FLASH->KEYR = FLASH_KEY2;
+
+  // Erase both pages (2 x 1KB = 2KB total)
+  for (uint32_t page = 0; page < 2; page++) {
+    uint32_t page_addr = HAL_NVMEM_FLASH_START + (page * HAL_NVMEM_FLASH_PAGE_SIZE);
+
+    // Wait for any ongoing operation
+    while (FLASH->SR & FLASH_SR_BSY);
+
+    // Set page erase bit
+    FLASH->CR = FLASH_CR_PER;
+    FLASH->AR = page_addr;
+    FLASH->CR |= FLASH_CR_STRT;
+
+    // Wait for erase to complete
+    while (FLASH->SR & FLASH_SR_BSY);
+
+    // Clear PER bit
+    FLASH->CR &= ~FLASH_CR_PER;
+  }
+
+  // Write cache back to flash (half-word at a time)
+  for (uint32_t i = 0; i < HAL_NVMEM_FLASH_SIZE; i += 2) {
+    // Combine two bytes into half-word (little-endian)
+    uint16_t half_word = nvmem_cache[i];
+    if (i + 1 < HAL_NVMEM_FLASH_SIZE) {
+      half_word |= (nvmem_cache[i + 1] << 8);
+    }
+
+    // Wait for any ongoing operation
+    while (FLASH->SR & FLASH_SR_BSY);
+
+    // Set programming bit
+    FLASH->CR = FLASH_CR_PG;
+
+    // Write half-word
+    *(volatile uint16_t*)(HAL_NVMEM_FLASH_START + i) = half_word;
+
+    // Wait for write to complete
+    while (FLASH->SR & FLASH_SR_BSY);
+
+    // Clear PG bit
+    FLASH->CR &= ~FLASH_CR_PG;
+  }
+
+  // Lock flash
+  FLASH->CR = FLASH_CR_LOCK;
+
+  nvmem_dirty = false;
 }
 
 // ============================================================================
@@ -392,6 +453,11 @@ void hal_nvmem_write_byte(unsigned int addr, unsigned char data) {
 void hal_system_init(void) {
   // Configure system clock
   hal_clock_config();
+
+  // Enable DWT cycle counter for accurate microsecond delays
+  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+  DWT->CYCCNT = 0;
+  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
 
   // Initialize GPIO
   hal_gpio_init();

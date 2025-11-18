@@ -46,18 +46,12 @@
 #define HAL_TIMER_RESOLUTION_NS   13      // 13.9 ns @ 72 MHz
 
 // ============================================================================
-// STM32 HAL INCLUDES
+// STM32 REGISTER DEFINITIONS
 // ============================================================================
 
-// Option 1: Use STM32 HAL library
-#ifdef USE_HAL_DRIVER
-  #include "stm32f1xx.h"
-  #include "stm32f1xx_hal.h"
-#else
-  // Option 2: Use CMSIS only (smaller, faster)
-  #include "stm32f103xb.h"
-  #include "core_cm3.h"
-#endif
+// REVIEW: CRITICAL #2 - Use minimal register definitions to avoid CMSIS dependency
+// This allows GRBL to build standalone without external CMSIS pack
+#include "stm32f103_minimal.h"
 
 // ============================================================================
 // PIN MAPPING - GPIO DEFINITIONS
@@ -473,6 +467,7 @@ void hal_gpio_init(void);
 
 // NVMEM (Flash emulation) functions
 void hal_nvmem_init(void);
+void hal_nvmem_flush(void);  // Flush dirty cache to flash
 
 // ============================================================================
 // PLATFORM INFO STRUCTURE
