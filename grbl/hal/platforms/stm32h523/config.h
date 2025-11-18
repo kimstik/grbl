@@ -3,8 +3,8 @@
   Part of Grbl
 
   Copyright (c) 2025 kimstik
-  License: MIT
   Intelligence assisted
+  License: MIT
 
   STM32H523CBT6: 250MHz Cortex-M33, 32KB RAM, 128KB Flash
 */

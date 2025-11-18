@@ -3,8 +3,8 @@
   Part of Grbl
 
   Copyright (c) 2025 kimstik
-  License: MIT
   Intelligence assisted
+  License: MIT
 
   Platform-independent configuration interface for STM32 MCUs.
   Each platform (F103/F411/H5) provides its own configuration.

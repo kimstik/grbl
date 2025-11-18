@@ -1,12 +1,12 @@
 /*
-  startup.c - Startup code for STM32F103
+  startup.c - Startup code for STM32H523
   Part of Grbl
 
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
 
-  Interrupt vector table and reset handler for STM32F103C8T6.
+  Interrupt vector table and reset handler for STM32H523C8T6.
 */
 
 #include <stdint.h>
@@ -139,7 +139,7 @@ void USBWakeUp_IRQHandler(void)     __attribute__((weak, alias("Default_Handler"
 // Interrupt vector table
 __attribute__((section(".isr_vector")))
 const void *vector_table[] = {
-  // Cortex-M3 core interrupts
+  // Cortex-M33 core interrupts
   &_estack,                    // 0:  Initial stack pointer
   Reset_Handler,               // 1:  Reset handler
   NMI_Handler,                 // 2:  NMI handler
@@ -157,7 +157,7 @@ const void *vector_table[] = {
   PendSV_Handler,              // 14: PendSV handler
   SysTick_Handler,             // 15: SysTick handler
 
-  // STM32F103 specific interrupts
+  // STM32H523 specific interrupts
   0,                           // 16: WWDG
   0,                           // 17: PVD
   0,                           // 18: TAMPER
