@@ -1,0 +1,100 @@
+#  Makefile for GRBL on STM32F103 (Blue Pill)
+#  Part of Grbl
+#
+#  Copyright (c) 2025 Grbl HAL Contributors
+#
+#  STM32F103C8T6: ARM Cortex-M3, 72MHz, 20KB RAM, 64KB Flash
+
+# Device settings
+DEVICE     = STM32F103xB
+CPU        = cortex-m3
+CLOCK      = 72000000
+
+# Toolchain
+PREFIX     = arm-none-eabi-
+CC         = $(PREFIX)gcc
+OBJCOPY    = $(PREFIX)objcopy
+SIZE       = $(PREFIX)size
+GDB        = $(PREFIX)gdb
+
+# Source files (same as AVR but add platform.c)
+SOURCE_DIR = grbl
+BUILD_DIR  = build_stm32
+
+SOURCES = main.c motion_control.c gcode.c spindle_control.c coolant_control.c serial.c \
+          protocol.c stepper.c nvmem.c settings.c planner.c nuts_bolts.c limits.c jog.c \
+          print.c probe.c report.c system.c \
+          hal/platforms/stm32f103/platform.c \
+          hal/platforms/stm32f103/startup_stm32f103.c
+
+OBJECTS = $(addprefix $(BUILD_DIR)/,$(notdir $(SOURCES:.c=.o)))
+
+# Compiler flags
+CFLAGS  = -mcpu=$(CPU) -mthumb
+CFLAGS += -DSTM32F103xB -DUSE_STDPERIPH_DRIVER
+CFLAGS += -DF_CPU=$(CLOCK)
+CFLAGS += -Wall -Wextra
+CFLAGS += -Os -g3
+CFLAGS += -ffunction-sections -fdata-sections
+CFLAGS += -I. -I$(SOURCE_DIR)
+
+# Linker flags
+LDFLAGS  = -mcpu=$(CPU) -mthumb
+LDFLAGS += -Wl,--gc-sections
+LDFLAGS += -Wl,-Map=$(BUILD_DIR)/grbl_stm32.map
+LDFLAGS += -specs=nano.specs -specs=nosys.specs
+LDFLAGS += -T stm32f103c8.ld
+LDFLAGS += -lm
+
+# Targets
+all: $(BUILD_DIR) grbl_stm32.hex grbl_stm32.bin
+
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
+
+# Compile C files
+$(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+# Compile platform.c from HAL directory
+$(BUILD_DIR)/platform.o: $(SOURCE_DIR)/hal/platforms/stm32f103/platform.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+# Compile startup code
+$(BUILD_DIR)/startup_stm32f103.o: $(SOURCE_DIR)/hal/platforms/stm32f103/startup_stm32f103.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+# Link
+$(BUILD_DIR)/grbl_stm32.elf: $(OBJECTS)
+	$(CC) $(LDFLAGS) -o $@ $(OBJECTS)
+	$(SIZE) --format=berkeley $@
+
+# Create hex file
+grbl_stm32.hex: $(BUILD_DIR)/grbl_stm32.elf
+	$(OBJCOPY) -O ihex $< $@
+
+# Create binary file
+grbl_stm32.bin: $(BUILD_DIR)/grbl_stm32.elf
+	$(OBJCOPY) -O binary $< $@
+
+# Flash using st-link
+flash: grbl_stm32.bin
+	st-flash write grbl_stm32.bin 0x8000000
+
+# Flash using openocd
+flash-openocd: grbl_stm32.hex
+	openocd -f interface/stlink.cfg -f target/stm32f1x.cfg \
+	        -c "program grbl_stm32.hex verify reset exit"
+
+# Debug with gdb
+debug:
+	$(GDB) $(BUILD_DIR)/grbl_stm32.elf
+
+# Clean
+clean:
+	rm -rf $(BUILD_DIR) grbl_stm32.hex grbl_stm32.bin
+
+.PHONY: all clean flash flash-openocd debug
+
+# Include dependencies
+-include $(BUILD_DIR)/*.d
