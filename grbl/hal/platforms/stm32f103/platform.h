@@ -486,9 +486,4 @@ void hal_nvmem_flush(void);  // Flush dirty cache to flash
 // ============================================================================
 // Note: hal_platform_info_t typedef and declarations are in hal_system.h
 
-// ============================================================================
-// CPU MAP compatibility stub (for grbl.h include)
-// ============================================================================
-#include "cpu_map.h"
-
 #endif // PLATFORM_STM32F103_H

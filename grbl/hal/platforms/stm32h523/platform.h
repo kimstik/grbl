@@ -497,9 +497,4 @@ typedef struct {
 extern const hal_platform_info_t stm32_platform_info;
 const hal_platform_info_t* hal_platform_get_info(void);
 
-// ============================================================================
-// CPU MAP compatibility stub (for grbl.h include)
-// ============================================================================
-#include "cpu_map.h"
-
 #endif // PLATFORM_STM32H523_H

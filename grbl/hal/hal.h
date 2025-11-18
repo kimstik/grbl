@@ -53,6 +53,7 @@
   // Define AVR compatibility macros (to avoid modifying original code)
   #define sei()  HAL_INTERRUPTS_ENABLE()
   #define cli()  HAL_INTERRUPTS_DISABLE()
+  #define __flash const  // AVR __flash (program memory) -> ARM const (in flash anyway)
 
 #else
   // AVR platform: Include AVR-specific libraries

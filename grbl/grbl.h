@@ -35,7 +35,6 @@
 #include "settings.h"
 #include "system.h"
 #include "defaults.h"
-#include "cpu_map.h"
 
 #include "planner.h"
 #include "coolant_control.h"
