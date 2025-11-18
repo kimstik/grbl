@@ -27,7 +27,7 @@
 
 // Include HAL (Hardware Abstraction Layer) FIRST
 // HAL will include platform-specific headers and libraries
-#include "hal/grbl_hal.h"
+#include "hal.h"
 
 // Define the Grbl system include files. NOTE: Do not alter organization.
 #include "config.h"
