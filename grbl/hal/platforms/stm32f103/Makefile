@@ -56,7 +56,7 @@ LDFLAGS  = -mcpu=$(CPU) -mthumb
 LDFLAGS += -Wl,--gc-sections
 LDFLAGS += -Wl,-Map=$(BUILD_DIR)/grbl_stm32.map
 LDFLAGS += -specs=nano.specs -specs=nosys.specs
-LDFLAGS += -T stm32f103c8.ld
+LDFLAGS += -T script.ld
 LDFLAGS += -lm
 
 # Targets
