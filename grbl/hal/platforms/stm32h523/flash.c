@@ -3,8 +3,8 @@
   Part of Grbl
 
   Copyright (c) 2025 kimstik
-  License: MIT
   Intelligence assisted
+  License: MIT
 
   Flash controller for STM32H5 family (H523, H533, H563).
   Uses 8KB pages, dual-bank architecture.

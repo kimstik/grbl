@@ -3,8 +3,8 @@
   Part of Grbl
 
   Copyright (c) 2025 kimstik
-  License: MIT
   Intelligence assisted
+  License: MIT
 
   Minimal register definitions for STM32F103C8T6 to avoid CMSIS dependency.
   Includes only registers needed for GRBL operation.

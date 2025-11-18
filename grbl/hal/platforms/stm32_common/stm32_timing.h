@@ -3,8 +3,8 @@
   Part of Grbl
 
   Copyright (c) 2025 kimstik
-  License: MIT
   Intelligence assisted
+  License: MIT
 
   SysTick-based millisecond counter and DWT cycle counter for microsecond delays.
   Works on all Cortex-M3/M4/M7/M33 cores.

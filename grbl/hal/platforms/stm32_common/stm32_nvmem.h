@@ -3,8 +3,8 @@
   Part of Grbl
 
   Copyright (c) 2025 kimstik
-  License: MIT
   Intelligence assisted
+  License: MIT
 
   Platform-independent flash emulation using configuration from stm32_platform.h
 */

@@ -3,8 +3,8 @@
   Part of Grbl
 
   Copyright (c) 2025 kimstik
-  License: MIT
   Intelligence assisted
+  License: MIT
 
   Interrupt vector table and reset handler for STM32F103C8T6.
 */

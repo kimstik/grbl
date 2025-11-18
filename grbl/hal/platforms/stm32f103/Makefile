@@ -29,7 +29,7 @@ PLATFORM_DIR = .
 SOURCES = main.c motion_control.c gcode.c spindle_control.c coolant_control.c serial.c \
           protocol.c stepper.c nvmem.c settings.c planner.c nuts_bolts.c limits.c jog.c \
           print.c probe.c report.c system.c \
-          platform.c startup_stm32f103.c exti_handlers.c
+          platform.c startup_stm32f103.c handlers.c
 
 OBJECTS = $(addprefix $(BUILD_DIR)/,$(notdir $(SOURCES:.c=.o)))
 
@@ -76,7 +76,7 @@ $(BUILD_DIR)/platform.o: platform.c | $(BUILD_DIR)
 $(BUILD_DIR)/startup_stm32f103.o: startup_stm32f103.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
-$(BUILD_DIR)/exti_handlers.o: exti_handlers.c | $(BUILD_DIR)
+$(BUILD_DIR)/exti_handlers.o: handlers.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 # Link
