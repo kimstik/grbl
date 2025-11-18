@@ -38,7 +38,7 @@
 #define STM32H523_GPIO_MODEL        2       // H5 uses MODER/OTYPER (like F4)
 
 // ============================================================================
-// PIN MAPPING (Nucleo-H523 compatible)
+// PIN MAPPING (Black Pill H5 compatible)
 // ============================================================================
 
 // Stepper motors (GPIOA)
@@ -74,8 +74,8 @@
 #define SERIAL_TX_PIN       9   // PA9 (or PB6 alternate)
 #define SERIAL_RX_PIN       10  // PA10 (or PB7 alternate)
 
-// LED (built-in on Nucleo)
-#define LED_PIN             7   // PB7 (green LED on Nucleo-H523)
+// LED (built-in on board)
+#define LED_PIN             7   // PB7 (green LED on Black Pill H5)
 
 // Probe
 #define PROBE_PIN           15  // PC15
