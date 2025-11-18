@@ -4,6 +4,7 @@
 
   Copyright (c) 2025 kimstik
   License: MIT
+  Intelligence assisted
 
   SysTick-based millisecond counter and DWT cycle counter for microsecond delays.
   Works on all Cortex-M3/M4/M7/M33 cores.
