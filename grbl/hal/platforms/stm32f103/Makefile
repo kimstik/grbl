@@ -17,26 +17,25 @@ OBJCOPY    = $(PREFIX)objcopy
 SIZE       = $(PREFIX)size
 GDB        = $(PREFIX)gdb
 
-# Source files (same as AVR but add platform.c)
-SOURCE_DIR = grbl
-BUILD_DIR  = build_stm32
+# Paths (Makefile is in grbl/hal/platforms/stm32f103/)
+GRBL_DIR   = ../../..
+BUILD_DIR  = $(GRBL_DIR)/../build_stm32
+PLATFORM_DIR = .
 
 SOURCES = main.c motion_control.c gcode.c spindle_control.c coolant_control.c serial.c \
           protocol.c stepper.c nvmem.c settings.c planner.c nuts_bolts.c limits.c jog.c \
           print.c probe.c report.c system.c \
-          hal/platforms/stm32f103/platform.c \
-          hal/platforms/stm32f103/startup_stm32f103.c
+          platform.c startup_stm32f103.c exti_handlers.c
 
 OBJECTS = $(addprefix $(BUILD_DIR)/,$(notdir $(SOURCES:.c=.o)))
 
 # Compiler flags
 CFLAGS  = -mcpu=$(CPU) -mthumb
-CFLAGS += -DSTM32F103xB -DUSE_STDPERIPH_DRIVER
-CFLAGS += -DF_CPU=$(CLOCK)
+CFLAGS += -DPLATFORM_STM32F103 -DF_CPU=$(CLOCK)
 CFLAGS += -Wall -Wextra
 CFLAGS += -Os -g3
 CFLAGS += -ffunction-sections -fdata-sections
-CFLAGS += -I. -I$(SOURCE_DIR)
+CFLAGS += -I$(GRBL_DIR) -I$(PLATFORM_DIR)
 
 # Linker flags
 LDFLAGS  = -mcpu=$(CPU) -mthumb
@@ -52,16 +51,18 @@ all: $(BUILD_DIR) grbl_stm32.hex grbl_stm32.bin
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-# Compile C files
-$(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.c | $(BUILD_DIR)
+# Compile GRBL core files
+$(BUILD_DIR)/%.o: $(GRBL_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
-# Compile platform.c from HAL directory
-$(BUILD_DIR)/platform.o: $(SOURCE_DIR)/hal/platforms/stm32f103/platform.c | $(BUILD_DIR)
+# Compile platform-specific files (from current directory)
+$(BUILD_DIR)/platform.o: platform.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
-# Compile startup code
-$(BUILD_DIR)/startup_stm32f103.o: $(SOURCE_DIR)/hal/platforms/stm32f103/startup_stm32f103.c | $(BUILD_DIR)
+$(BUILD_DIR)/startup_stm32f103.o: startup_stm32f103.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+$(BUILD_DIR)/exti_handlers.o: exti_handlers.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 # Link
@@ -70,29 +71,33 @@ $(BUILD_DIR)/grbl_stm32.elf: $(OBJECTS)
 	$(SIZE) --format=berkeley $@
 
 # Create hex file
-grbl_stm32.hex: $(BUILD_DIR)/grbl_stm32.elf
+$(BUILD_DIR)/grbl_stm32.hex: $(BUILD_DIR)/grbl_stm32.elf
 	$(OBJCOPY) -O ihex $< $@
 
 # Create binary file
-grbl_stm32.bin: $(BUILD_DIR)/grbl_stm32.elf
+$(BUILD_DIR)/grbl_stm32.bin: $(BUILD_DIR)/grbl_stm32.elf
 	$(OBJCOPY) -O binary $< $@
 
+# Convenience targets
+grbl_stm32.hex: $(BUILD_DIR)/grbl_stm32.hex
+grbl_stm32.bin: $(BUILD_DIR)/grbl_stm32.bin
+
 # Flash using st-link
-flash: grbl_stm32.bin
-	st-flash write grbl_stm32.bin 0x8000000
+flash: $(BUILD_DIR)/grbl_stm32.bin
+	st-flash write $< 0x8000000
 
 # Flash using openocd
-flash-openocd: grbl_stm32.hex
+flash-openocd: $(BUILD_DIR)/grbl_stm32.hex
 	openocd -f interface/stlink.cfg -f target/stm32f1x.cfg \
-	        -c "program grbl_stm32.hex verify reset exit"
+	        -c "program $< verify reset exit"
 
 # Debug with gdb
-debug:
-	$(GDB) $(BUILD_DIR)/grbl_stm32.elf
+debug: $(BUILD_DIR)/grbl_stm32.elf
+	$(GDB) $<
 
 # Clean
 clean:
-	rm -rf $(BUILD_DIR) grbl_stm32.hex grbl_stm32.bin
+	rm -rf $(BUILD_DIR)
 
 .PHONY: all clean flash flash-openocd debug
 
