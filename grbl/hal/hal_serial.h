@@ -177,19 +177,20 @@
   Buffer implementation remains in serial.c, uses HAL macros for hardware.
 */
 
-// Ring buffer indices (extern, defined in serial.c)
-extern volatile uint8_t serial_rx_buffer_head;
-extern volatile uint8_t serial_rx_buffer_tail;
-extern volatile uint8_t serial_tx_buffer_head;
-extern volatile uint8_t serial_tx_buffer_tail;
+// Ring buffer size (defined in serial.c)
+#define RX_RING_BUFFER (RX_BUFFER_SIZE+1)
+#define TX_RING_BUFFER (TX_BUFFER_SIZE+1)
 
 // Ring buffer arrays (extern, defined in serial.c)
-extern uint8_t serial_rx_buffer[RX_BUFFER_SIZE];
-extern uint8_t serial_tx_buffer[TX_BUFFER_SIZE];
+extern uint8_t serial_rx_buffer[RX_RING_BUFFER];
+extern uint8_t serial_tx_buffer[TX_RING_BUFFER];
 
-// Ring buffer size (must be power of 2 for efficient modulo)
-#define RX_RING_BUFFER (RX_BUFFER_SIZE)
-#define TX_RING_BUFFER (TX_BUFFER_SIZE)
+// Ring buffer indices (extern, defined in serial.c)
+// NOTE: Only _tail variables are volatile (modified in ISR)
+extern uint8_t serial_rx_buffer_head;
+extern volatile uint8_t serial_rx_buffer_tail;
+extern uint8_t serial_tx_buffer_head;
+extern volatile uint8_t serial_tx_buffer_tail;
 
 // ============================================================================
 // COMMON SERIAL FUNCTIONS (all platforms)
