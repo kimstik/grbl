@@ -52,7 +52,7 @@ CFLAGS  = -mcpu=$(CPU) -mthumb $(FPU)
 CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)
 CFLAGS += -Wall -Wextra
 CFLAGS += -ffunction-sections -fdata-sections
-CFLAGS += -I$(GRBL_DIR) -I$(PLATFORM_DIR) -I../stm32_common
+CFLAGS += -I$(GRBL_DIR) -I$(GRBL_DIR)/hal -I$(PLATFORM_DIR) -I../stm32_common
 
 # Build-specific flags
 ifeq ($(BUILD),RELEASE)
