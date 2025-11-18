@@ -20,6 +20,7 @@
 */
 
 #include "grbl.h"
+#include "hal/grbl_hal.h"
 
 #define RX_RING_BUFFER (RX_BUFFER_SIZE+1)
 #define TX_RING_BUFFER (TX_BUFFER_SIZE+1)
@@ -64,21 +65,7 @@ uint8_t serial_get_tx_buffer_count()
 
 void serial_init()
 {
-  // Set baud rate
-  #if BAUD_RATE < 57600
-    uint16_t UBRR0_value = ((F_CPU / (8L * BAUD_RATE)) - 1)/2 ;
-    UCSR0A &= ~(1 << U2X0); // baud doubler off  - Only needed on Uno XXX
-  #else
-    uint16_t UBRR0_value = ((F_CPU / (4L * BAUD_RATE)) - 1)/2;
-    UCSR0A |= (1 << U2X0);  // baud doubler on for high baud rates, i.e. 115200
-  #endif
-  UBRR0H = UBRR0_value >> 8;
-  UBRR0L = UBRR0_value;
-
-  // enable rx, tx, and interrupt on complete reception of a byte
-  UCSR0B |= (1<<RXEN0 | 1<<TXEN0 | 1<<RXCIE0);
-
-  // defaults to 8-bit, no parity, 1 stop bit
+  HAL_SERIAL_INIT();
 }
 
 
@@ -99,17 +86,17 @@ void serial_write(uint8_t data) {
   serial_tx_buffer_head = next_head;
 
   // Enable Data Register Empty Interrupt to make sure tx-streaming is running
-  UCSR0B |=  (1 << UDRIE0);
+  HAL_SERIAL_TX_INTERRUPT_ENABLE();
 }
 
 
 // Data Register Empty Interrupt handler
-ISR(SERIAL_UDRE)
+HAL_SERIAL_TX_ISR()
 {
   uint8_t tail = serial_tx_buffer_tail; // Temporary serial_tx_buffer_tail (to optimize for volatile)
 
   // Send a byte from the buffer
-  UDR0 = serial_tx_buffer[tail];
+  HAL_SERIAL_WRITE_DATA(serial_tx_buffer[tail]);
 
   // Update tail position
   tail++;
@@ -118,7 +105,7 @@ ISR(SERIAL_UDRE)
   serial_tx_buffer_tail = tail;
 
   // Turn off Data Register Empty Interrupt to stop tx-streaming if this concludes the transfer
-  if (tail == serial_tx_buffer_head) { UCSR0B &= ~(1 << UDRIE0); }
+  if (tail == serial_tx_buffer_head) { HAL_SERIAL_TX_INTERRUPT_DISABLE(); }
 }
 
 
@@ -140,9 +127,9 @@ uint8_t serial_read()
 }
 
 
-ISR(SERIAL_RX)
+HAL_SERIAL_RX_ISR()
 {
-  uint8_t data = UDR0;
+  uint8_t data = HAL_SERIAL_READ_DATA();
   uint8_t next_head;
 
   // Pick off realtime command characters directly from the serial stream. These characters are
@@ -162,7 +149,11 @@ ISR(SERIAL_RX)
             }
             break; 
           #ifdef DEBUG
-            case CMD_DEBUG_REPORT: {uint8_t sreg = SREG; cli(); bit_true(sys_rt_exec_debug,EXEC_DEBUG_REPORT); SREG = sreg;} break;
+            case CMD_DEBUG_REPORT: {
+              HAL_CRITICAL_SECTION_BEGIN();
+              bit_true(sys_rt_exec_debug,EXEC_DEBUG_REPORT);
+              HAL_CRITICAL_SECTION_END();
+            } break;
           #endif
           case CMD_FEED_OVR_RESET: system_set_exec_motion_override_flag(EXEC_FEED_OVR_RESET); break;
           case CMD_FEED_OVR_COARSE_PLUS: system_set_exec_motion_override_flag(EXEC_FEED_OVR_COARSE_PLUS); break;

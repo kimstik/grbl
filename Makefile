@@ -32,7 +32,7 @@ DEVICE     ?= atmega328p
 CLOCK      = 16000000
 PROGRAMMER ?= -c avrisp2 -P usb
 SOURCE    = main.c motion_control.c gcode.c spindle_control.c coolant_control.c serial.c \
-             protocol.c stepper.c eeprom.c settings.c planner.c nuts_bolts.c limits.c jog.c\
+             protocol.c stepper.c nvmem.c settings.c planner.c nuts_bolts.c limits.c jog.c\
              print.c probe.c report.c system.c
 BUILDDIR = build
 SOURCEDIR = grbl
@@ -46,8 +46,9 @@ AVRDUDE = avrdude $(PROGRAMMER) -p $(DEVICE) -B 10 -F
 # Compile flags for avr-gcc v4.8.1. Does not produce -flto warnings.
 # COMPILE = avr-gcc -Wall -Os -DF_CPU=$(CLOCK) -mmcu=$(DEVICE) -I. -ffunction-sections
 
-# Compile flags for avr-gcc v4.9.2 compatible with the IDE. Or if you don't care about the warnings. 
-COMPILE = avr-gcc -Wall -Os -DF_CPU=$(CLOCK) -mmcu=$(DEVICE) -I. -ffunction-sections -flto
+# Compile flags for avr-gcc v4.9.2 compatible with the IDE. Or if you don't care about the warnings.
+# LTO disabled for HAL build to achieve 100% binary match
+COMPILE = avr-gcc -Wall -Os -DF_CPU=$(CLOCK) -mmcu=$(DEVICE) -I. -ffunction-sections
 
 
 OBJECTS = $(addprefix $(BUILDDIR)/,$(notdir $(SOURCE:.c=.o)))

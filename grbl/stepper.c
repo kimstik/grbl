@@ -20,6 +20,7 @@
 */
 
 #include "grbl.h"
+#include "hal/grbl_hal.h"
 
 
 // Some useful constants.
@@ -224,8 +225,11 @@ static st_prep_t prep;
 void st_wake_up()
 {
   // Enable stepper drivers.
-  if (bit_istrue(settings.flags,BITFLAG_INVERT_ST_ENABLE)) { STEPPERS_DISABLE_PORT |= (1<<STEPPERS_DISABLE_BIT); }
-  else { STEPPERS_DISABLE_PORT &= ~(1<<STEPPERS_DISABLE_BIT); }
+  if (bit_istrue(settings.flags,BITFLAG_INVERT_ST_ENABLE)) {
+    HAL_GPIO_SET_BITS(STEPPERS_DISABLE_PORT, (1<<STEPPERS_DISABLE_BIT));
+  } else {
+    HAL_GPIO_CLEAR_BITS(STEPPERS_DISABLE_PORT, (1<<STEPPERS_DISABLE_BIT));
+  }
 
   // Initialize stepper output bits to ensure first ISR call does not step.
   st.step_outbits = step_port_invert_mask;
@@ -235,14 +239,14 @@ void st_wake_up()
     // Set total step pulse time after direction pin set. Ad hoc computation from oscilloscope.
     st.step_pulse_time = -(((settings.pulse_microseconds+STEP_PULSE_DELAY-2)*TICKS_PER_MICROSECOND) >> 3);
     // Set delay between direction pin write and step command.
-    OCR0A = -(((settings.pulse_microseconds)*TICKS_PER_MICROSECOND) >> 3);
+    HAL_TIMER_PULSE_RESET_SET_COMPARE(-(((settings.pulse_microseconds)*TICKS_PER_MICROSECOND) >> 3));
   #else // Normal operation
     // Set step pulse time. Ad hoc computation from oscilloscope. Uses two's complement.
     st.step_pulse_time = -(((settings.pulse_microseconds-2)*TICKS_PER_MICROSECOND) >> 3);
   #endif
 
   // Enable Stepper Driver Interrupt
-  TIMSK1 |= (1<<OCIE1A);
+  HAL_TIMER_STEPPER_INTERRUPT_ENABLE();
 }
 
 
@@ -250,8 +254,8 @@ void st_wake_up()
 void st_go_idle()
 {
   // Disable Stepper Driver Interrupt. Allow Stepper Port Reset Interrupt to finish, if active.
-  TIMSK1 &= ~(1<<OCIE1A); // Disable Timer1 interrupt
-  TCCR1B = (TCCR1B & ~((1<<CS12) | (1<<CS11))) | (1<<CS10); // Reset clock to no prescaling.
+  HAL_TIMER_STEPPER_INTERRUPT_DISABLE();
+  HAL_TIMER_STEPPER_RESET_PRESCALER();
   busy = false;
 
   // Set stepper driver idle state, disabled or enabled, depending on settings and circumstances.
@@ -263,8 +267,11 @@ void st_go_idle()
     pin_state = true; // Override. Disable steppers.
   }
   if (bit_istrue(settings.flags,BITFLAG_INVERT_ST_ENABLE)) { pin_state = !pin_state; } // Apply pin invert.
-  if (pin_state) { STEPPERS_DISABLE_PORT |= (1<<STEPPERS_DISABLE_BIT); }
-  else { STEPPERS_DISABLE_PORT &= ~(1<<STEPPERS_DISABLE_BIT); }
+  if (pin_state) {
+    HAL_GPIO_SET_BITS(STEPPERS_DISABLE_PORT, (1<<STEPPERS_DISABLE_BIT));
+  } else {
+    HAL_GPIO_CLEAR_BITS(STEPPERS_DISABLE_PORT, (1<<STEPPERS_DISABLE_BIT));
+  }
 }
 
 
@@ -316,33 +323,33 @@ void st_go_idle()
 // TODO: Replace direct updating of the int32 position counters in the ISR somehow. Perhaps use smaller
 // int8 variables and update position counters only when a segment completes. This can get complicated
 // with probing and homing cycles that require true real-time positions.
-ISR(TIMER1_COMPA_vect)
+HAL_TIMER_STEPPER_ISR()
 {
   if (busy) { return; } // The busy-flag is used to avoid reentering this interrupt
 
   // Set the direction pins a couple of nanoseconds before we step the steppers
-  DIRECTION_PORT = (DIRECTION_PORT & ~DIRECTION_MASK) | (st.dir_outbits & DIRECTION_MASK);
+  HAL_GPIO_WRITE_PORT(DIRECTION_PORT, DIRECTION_MASK, (st.dir_outbits & DIRECTION_MASK));
   #ifdef ENABLE_DUAL_AXIS
-    DIRECTION_PORT_DUAL = (DIRECTION_PORT_DUAL & ~DIRECTION_MASK_DUAL) | (st.dir_outbits_dual & DIRECTION_MASK_DUAL);
+    HAL_GPIO_WRITE_PORT(DIRECTION_PORT_DUAL, DIRECTION_MASK_DUAL, (st.dir_outbits_dual & DIRECTION_MASK_DUAL));
   #endif
 
   // Then pulse the stepping pins
   #ifdef STEP_PULSE_DELAY
-    st.step_bits = (STEP_PORT & ~STEP_MASK) | st.step_outbits; // Store out_bits to prevent overwriting.
+    st.step_bits = HAL_GPIO_READ_PORT(STEP_PORT, STEP_MASK) | st.step_outbits; // Store out_bits to prevent overwriting.
     #ifdef ENABLE_DUAL_AXIS
-      st.step_bits_dual = (STEP_PORT_DUAL & ~STEP_MASK_DUAL) | st.step_outbits_dual;
+      st.step_bits_dual = HAL_GPIO_READ_PORT(STEP_PORT_DUAL, STEP_MASK_DUAL) | st.step_outbits_dual;
     #endif
   #else  // Normal operation
-    STEP_PORT = (STEP_PORT & ~STEP_MASK) | st.step_outbits;
+    HAL_GPIO_WRITE_PORT(STEP_PORT, STEP_MASK, st.step_outbits);
     #ifdef ENABLE_DUAL_AXIS
-      STEP_PORT_DUAL = (STEP_PORT_DUAL & ~STEP_MASK_DUAL) | st.step_outbits_dual;
+      HAL_GPIO_WRITE_PORT(STEP_PORT_DUAL, STEP_MASK_DUAL, st.step_outbits_dual);
     #endif
   #endif
 
   // Enable step pulse reset timer so that The Stepper Port Reset Interrupt can reset the signal after
   // exactly settings.pulse_microseconds microseconds, independent of the main Timer1 prescaler.
-  TCNT0 = st.step_pulse_time; // Reload Timer0 counter
-  TCCR0B = (1<<CS01); // Begin Timer0. Full speed, 1/8 prescaler
+  HAL_TIMER_PULSE_RESET_SET_COUNT(st.step_pulse_time);
+  HAL_TIMER_PULSE_RESET_START();
 
   busy = true;
   sei(); // Re-enable interrupts to allow Stepper Port Reset Interrupt to fire on-time.
@@ -357,11 +364,11 @@ ISR(TIMER1_COMPA_vect)
 
       #ifndef ADAPTIVE_MULTI_AXIS_STEP_SMOOTHING
         // With AMASS is disabled, set timer prescaler for segments with slow step frequencies (< 250Hz).
-        TCCR1B = (TCCR1B & ~(0x07<<CS10)) | (st.exec_segment->prescaler<<CS10);
+        HAL_TIMER_STEPPER_SET_PRESCALER(st.exec_segment->prescaler);
       #endif
 
       // Initialize step segment timing per step and load number of steps to execute.
-      OCR1A = st.exec_segment->cycles_per_tick;
+      HAL_TIMER_STEPPER_SET_PERIOD(st.exec_segment->cycles_per_tick);
       st.step_count = st.exec_segment->n_step; // NOTE: Can sometimes be zero when moving slow.
       // If the new segment starts a new planner block, initialize stepper variables and counters.
       // NOTE: When the segment data index changes, this indicates a new planner block.
@@ -486,14 +493,14 @@ ISR(TIMER1_COMPA_vect)
 // This interrupt is enabled by ISR_TIMER1_COMPAREA when it sets the motor port bits to execute
 // a step. This ISR resets the motor port after a short period (settings.pulse_microseconds)
 // completing one step cycle.
-ISR(TIMER0_OVF_vect)
+HAL_TIMER_PULSE_RESET_ISR()
 {
   // Reset stepping pins (leave the direction pins)
-  STEP_PORT = (STEP_PORT & ~STEP_MASK) | (step_port_invert_mask & STEP_MASK);
+  HAL_GPIO_WRITE_PORT(STEP_PORT, STEP_MASK, (step_port_invert_mask & STEP_MASK));
   #ifdef ENABLE_DUAL_AXIS
-    STEP_PORT_DUAL = (STEP_PORT_DUAL & ~STEP_MASK_DUAL) | (step_port_invert_mask_dual & STEP_MASK_DUAL);
+    HAL_GPIO_WRITE_PORT(STEP_PORT_DUAL, STEP_MASK_DUAL, (step_port_invert_mask_dual & STEP_MASK_DUAL));
   #endif
-  TCCR0B = 0; // Disable Timer0 to prevent re-entering this interrupt when it's not needed.
+  HAL_TIMER_PULSE_RESET_STOP();
 }
 #ifdef STEP_PULSE_DELAY
   // This interrupt is used only when STEP_PULSE_DELAY is enabled. Here, the step pulse is
@@ -501,11 +508,11 @@ ISR(TIMER0_OVF_vect)
   // will then trigger after the appropriate settings.pulse_microseconds, as in normal operation.
   // The new timing between direction, step pulse, and step complete events are setup in the
   // st_wake_up() routine.
-  ISR(TIMER0_COMPA_vect)
+  HAL_TIMER_PULSE_DELAY_ISR()
   {
-    STEP_PORT = st.step_bits; // Begin step pulse.
+    HAL_GPIO_WRITE_DIRECT(STEP_PORT, st.step_bits);
     #ifdef ENABLE_DUAL_AXIS
-      STEP_PORT_DUAL = st.step_bits_dual;
+      HAL_GPIO_WRITE_DIRECT(STEP_PORT_DUAL, st.step_bits_dual);
     #endif
   }
 #endif
@@ -551,13 +558,13 @@ void st_reset()
   st.dir_outbits = dir_port_invert_mask; // Initialize direction bits to default.
 
   // Initialize step and direction port pins.
-  STEP_PORT = (STEP_PORT & ~STEP_MASK) | step_port_invert_mask;
-  DIRECTION_PORT = (DIRECTION_PORT & ~DIRECTION_MASK) | dir_port_invert_mask;
-  
+  HAL_GPIO_WRITE_PORT(STEP_PORT, STEP_MASK, step_port_invert_mask);
+  HAL_GPIO_WRITE_PORT(DIRECTION_PORT, DIRECTION_MASK, dir_port_invert_mask);
+
   #ifdef ENABLE_DUAL_AXIS
     st.dir_outbits_dual = dir_port_invert_mask_dual;
-    STEP_PORT_DUAL = (STEP_PORT_DUAL & ~STEP_MASK_DUAL) | step_port_invert_mask_dual;
-    DIRECTION_PORT_DUAL = (DIRECTION_PORT_DUAL & ~DIRECTION_MASK_DUAL) | dir_port_invert_mask_dual;
+    HAL_GPIO_WRITE_PORT(STEP_PORT_DUAL, STEP_MASK_DUAL, step_port_invert_mask_dual);
+    HAL_GPIO_WRITE_PORT(DIRECTION_PORT_DUAL, DIRECTION_MASK_DUAL, dir_port_invert_mask_dual);
   #endif
 }
 
@@ -566,30 +573,22 @@ void st_reset()
 void stepper_init()
 {
   // Configure step and direction interface pins
-  STEP_DDR |= STEP_MASK;
-  STEPPERS_DISABLE_DDR |= 1<<STEPPERS_DISABLE_BIT;
-  DIRECTION_DDR |= DIRECTION_MASK;
-  
+  HAL_GPIO_SET_OUTPUT(STEP_DDR, STEP_MASK);
+  HAL_GPIO_SET_OUTPUT(STEPPERS_DISABLE_DDR, (1<<STEPPERS_DISABLE_BIT));
+  HAL_GPIO_SET_OUTPUT(DIRECTION_DDR, DIRECTION_MASK);
+
   #ifdef ENABLE_DUAL_AXIS
-    STEP_DDR_DUAL |= STEP_MASK_DUAL;
-    DIRECTION_DDR_DUAL |= DIRECTION_MASK_DUAL;
+    HAL_GPIO_SET_OUTPUT(STEP_DDR_DUAL, STEP_MASK_DUAL);
+    HAL_GPIO_SET_OUTPUT(DIRECTION_DDR_DUAL, DIRECTION_MASK_DUAL);
   #endif
 
   // Configure Timer 1: Stepper Driver Interrupt
-  TCCR1B &= ~(1<<WGM13); // waveform generation = 0100 = CTC
-  TCCR1B |=  (1<<WGM12);
-  TCCR1A &= ~((1<<WGM11) | (1<<WGM10));
-  TCCR1A &= ~((1<<COM1A1) | (1<<COM1A0) | (1<<COM1B1) | (1<<COM1B0)); // Disconnect OC1 output
-  // TCCR1B = (TCCR1B & ~((1<<CS12) | (1<<CS11))) | (1<<CS10); // Set in st_go_idle().
-  // TIMSK1 &= ~(1<<OCIE1A);  // Set in st_go_idle().
+  HAL_TIMER_STEPPER_INIT();
 
   // Configure Timer 0: Stepper Port Reset Interrupt
-  TIMSK0 &= ~((1<<OCIE0B) | (1<<OCIE0A) | (1<<TOIE0)); // Disconnect OC0 outputs and OVF interrupt.
-  TCCR0A = 0; // Normal operation
-  TCCR0B = 0; // Disable Timer0 until needed
-  TIMSK0 |= (1<<TOIE0); // Enable Timer0 overflow interrupt
+  HAL_TIMER_PULSE_RESET_INIT();
   #ifdef STEP_PULSE_DELAY
-    TIMSK0 |= (1<<OCIE0A); // Enable Timer0 Compare Match A interrupt
+    HAL_TIMER_PULSE_DELAY_INIT();
   #endif
 }
 
