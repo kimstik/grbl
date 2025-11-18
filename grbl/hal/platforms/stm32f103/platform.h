@@ -286,20 +286,208 @@ extern const hal_platform_info_t stm32_platform_info;
 const hal_platform_info_t* hal_platform_get_info(void);
 
 // ============================================================================
+// HAL GPIO MACROS
+// ============================================================================
+
+// Basic GPIO operations (optimized for STM32 BSRR register)
+#define HAL_GPIO_SET_BITS(port, mask)           ((port)->BSRR = (mask))
+#define HAL_GPIO_CLEAR_BITS(port, mask)         ((port)->BSRR = ((uint32_t)(mask) << 16))
+#define HAL_GPIO_TOGGLE_BITS(port, mask)        ((port)->ODR ^= (mask))
+#define HAL_GPIO_WRITE_PORT(port, mask, value)  ((port)->BSRR = (((port)->ODR & (mask)) << 16) | ((value) & (mask)))
+#define HAL_GPIO_READ_PORT(port, mask)          ((port)->ODR & (mask))
+#define HAL_GPIO_READ_PIN(pin, mask)            ((pin)->IDR & (mask))
+#define HAL_GPIO_WRITE_DIRECT(port, value)      ((port)->ODR = (value))
+
+// GPIO direction configuration (via CRL/CRH registers)
+// For STM32, we need functions not macros
+void hal_gpio_set_output(GPIO_TypeDef* port, uint32_t mask);
+void hal_gpio_set_input(GPIO_TypeDef* port, uint32_t mask);
+
+#define HAL_GPIO_SET_OUTPUT(port, mask)         hal_gpio_set_output((port), (mask))
+#define HAL_GPIO_SET_INPUT(port, mask)          hal_gpio_set_input((port), (mask))
+
+// Pull-up resistor control (STM32 uses CRL/CRH config)
+void hal_gpio_pullup_enable(GPIO_TypeDef* port, uint32_t mask);
+void hal_gpio_pullup_disable(GPIO_TypeDef* port, uint32_t mask);
+
+#define HAL_GPIO_PULLUP_ENABLE(port, mask)      hal_gpio_pullup_enable((port), (mask))
+#define HAL_GPIO_PULLUP_DISABLE(port, mask)     hal_gpio_pullup_disable((port), (mask))
+
+// EXTI interrupt configuration
+void hal_gpio_interrupt_enable(GPIO_TypeDef* port, uint32_t mask);
+void hal_gpio_interrupt_disable(GPIO_TypeDef* port, uint32_t mask);
+
+#define HAL_GPIO_INTERRUPT_ENABLE(port, pcie, mask)   hal_gpio_interrupt_enable((port), (mask))
+#define HAL_GPIO_INTERRUPT_DISABLE(port, pcie, mask)  hal_gpio_interrupt_disable((port), (mask))
+
+// ============================================================================
+// HAL TIMER MACROS
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// TIM2: Stepper Driver Interrupt (32-bit timer for high resolution)
+// ----------------------------------------------------------------------------
+
+#define HAL_TIMER_STEPPER_ISR()                 void TIM2_IRQHandler(void)
+
+void hal_timer_stepper_init(void);
+#define HAL_TIMER_STEPPER_INIT()                hal_timer_stepper_init()
+
+#define HAL_TIMER_STEPPER_SET_PERIOD(cycles)    (TIM2->ARR = (cycles))
+#define HAL_TIMER_STEPPER_GET_PERIOD()          (TIM2->ARR)
+#define HAL_TIMER_STEPPER_GET_COUNT()           (TIM2->CNT)
+
+void hal_timer_stepper_set_prescaler(uint16_t prescaler);
+#define HAL_TIMER_STEPPER_SET_PRESCALER(prescaler)  hal_timer_stepper_set_prescaler(prescaler)
+#define HAL_TIMER_STEPPER_RESET_PRESCALER()         hal_timer_stepper_set_prescaler(0)
+
+#define HAL_TIMER_STEPPER_INTERRUPT_ENABLE()    (TIM2->DIER |= TIM_DIER_UIE)
+#define HAL_TIMER_STEPPER_INTERRUPT_DISABLE()   (TIM2->DIER &= ~TIM_DIER_UIE)
+
+// Clear interrupt flag in ISR
+#define HAL_TIMER_STEPPER_CLEAR_FLAG()          (TIM2->SR = ~TIM_SR_UIF)
+
+// ----------------------------------------------------------------------------
+// TIM3: Step Pulse Reset Interrupt
+// ----------------------------------------------------------------------------
+
+#define HAL_TIMER_PULSE_RESET_ISR()             void TIM3_IRQHandler(void)
+
+void hal_timer_pulse_reset_init(void);
+#define HAL_TIMER_PULSE_RESET_INIT()            hal_timer_pulse_reset_init()
+
+#define HAL_TIMER_PULSE_RESET_SET_COUNT(count)  (TIM3->CNT = (count))
+#define HAL_TIMER_PULSE_RESET_SET_COMPARE(val)  (TIM3->ARR = (val))
+#define HAL_TIMER_PULSE_RESET_START()           (TIM3->CR1 |= TIM_CR1_CEN)
+#define HAL_TIMER_PULSE_RESET_STOP()            (TIM3->CR1 &= ~TIM_CR1_CEN)
+
+// Clear interrupt flag
+#define HAL_TIMER_PULSE_RESET_CLEAR_FLAG()      (TIM3->SR = ~TIM_SR_UIF)
+
+// Step pulse delay (if STEP_PULSE_DELAY is defined)
+#ifdef STEP_PULSE_DELAY
+  #define HAL_TIMER_PULSE_DELAY_ISR()           void TIM4_IRQHandler(void)
+  void hal_timer_pulse_delay_init(void);
+  #define HAL_TIMER_PULSE_DELAY_INIT()          hal_timer_pulse_delay_init()
+#endif
+
+// ----------------------------------------------------------------------------
+// TIM1: Spindle PWM (16-bit advanced timer with PWM on CH1)
+// ----------------------------------------------------------------------------
+
+#ifdef VARIABLE_SPINDLE
+
+void hal_timer_spindle_pwm_init(void);
+#define HAL_TIMER_SPINDLE_PWM_INIT()            hal_timer_spindle_pwm_init()
+
+#define HAL_TIMER_SPINDLE_PWM_SET_DUTY(duty)    (TIM1->CCR1 = (duty))
+#define HAL_TIMER_SPINDLE_PWM_GET_DUTY()        (TIM1->CCR1)
+
+#define HAL_TIMER_SPINDLE_PWM_ENABLE()          (TIM1->CCER |= TIM_CCER_CC1E)
+#define HAL_TIMER_SPINDLE_PWM_DISABLE()         (TIM1->CCER &= ~TIM_CCER_CC1E)
+#define HAL_TIMER_SPINDLE_PWM_IS_ENABLED()      (TIM1->CCER & TIM_CCER_CC1E)
+
+#endif // VARIABLE_SPINDLE
+
+// ============================================================================
+// HAL SERIAL/UART MACROS
+// ============================================================================
+
+#define HAL_SERIAL_RX_BUFFER_SIZE               128
+#define HAL_SERIAL_TX_BUFFER_SIZE               64
+
+// Serial ISR definitions
+#define HAL_SERIAL_RX_ISR()                     void USART1_IRQHandler(void)
+#define HAL_SERIAL_TX_ISR()                     void USART1_IRQHandler(void)
+
+// Serial initialization
+void hal_serial_init(uint32_t baud_rate);
+#define HAL_SERIAL_INIT()                       hal_serial_init(BAUD_RATE)
+
+// Serial data register access
+#define HAL_SERIAL_WRITE_DATA(data)             (USART1->DR = (data))
+#define HAL_SERIAL_READ_DATA()                  (USART1->DR)
+
+// Serial interrupt control
+#define HAL_SERIAL_TX_INTERRUPT_ENABLE()        (USART1->CR1 |= USART_CR1_TXEIE)
+#define HAL_SERIAL_TX_INTERRUPT_DISABLE()       (USART1->CR1 &= ~USART_CR1_TXEIE)
+
+// Serial status flags
+#define HAL_SERIAL_RX_READY()                   (USART1->SR & USART_SR_RXNE)
+#define HAL_SERIAL_TX_READY()                   (USART1->SR & USART_SR_TXE)
+
+// ============================================================================
+// HAL SYSTEM MACROS
+// ============================================================================
+
+// Interrupt control
+#define HAL_ENABLE_INTERRUPTS()                 __enable_irq()
+#define HAL_DISABLE_INTERRUPTS()                __disable_irq()
+
+// Critical section
+#define HAL_CRITICAL_SECTION_START()            uint32_t __primask = __get_PRIMASK(); __disable_irq()
+#define HAL_CRITICAL_SECTION_END()              __set_PRIMASK(__primask)
+
+// Delay functions
+void hal_delay_ms(uint32_t ms);
+void hal_delay_us(uint32_t us);
+
+#define HAL_DELAY_MS(ms)                        hal_delay_ms(ms)
+#define HAL_DELAY_US(us)                        hal_delay_us(us)
+
+// System time (milliseconds since boot)
+uint32_t hal_millis(void);
+uint64_t hal_micros(void);
+
+#define HAL_MILLIS()                            hal_millis()
+#define HAL_MICROS()                            hal_micros()
+
+// ============================================================================
+// HAL NVMEM MACROS (Flash emulation)
+// ============================================================================
+
+// Implemented in hal/hal_nvmem.h, but functions are platform-specific
+unsigned char hal_nvmem_read_byte(unsigned int addr);
+void hal_nvmem_write_byte(unsigned int addr, unsigned char data);
+
+// Map to standard eeprom function names
+#define eeprom_get_char(addr)                   hal_nvmem_read_byte(addr)
+#define eeprom_put_char(addr, data)             hal_nvmem_write_byte(addr, data)
+
+// ============================================================================
 // PLATFORM-SPECIFIC FUNCTIONS
 // ============================================================================
 
 // Platform initialization
 void hal_system_init(void);
 
-// Clock configuration
+// Clock configuration (HSE 8MHz → PLL 72MHz)
 void hal_clock_config(void);
 
-// GPIO initialization
+// GPIO initialization (all pins for GRBL)
 void hal_gpio_init(void);
 
-// Timer functions (implemented in hal_impl.c)
-uint32_t hal_millis(void);
-uint64_t hal_micros(void);
+// NVMEM (Flash emulation) functions
+void hal_nvmem_init(void);
+
+// ============================================================================
+// PLATFORM INFO STRUCTURE
+// ============================================================================
+
+typedef struct {
+  const char* platform_name;
+  const char* cpu_name;
+  const char* arch_name;
+  uint32_t cpu_freq;
+  uint32_t ram_size;
+  uint32_t flash_size;
+  uint8_t has_fpu;
+  uint8_t has_dma;
+  uint8_t has_usb;
+  uint8_t has_hw_eeprom;
+} hal_platform_info_t;
+
+extern const hal_platform_info_t stm32_platform_info;
+const hal_platform_info_t* hal_platform_get_info(void);
 
 #endif // PLATFORM_STM32F103_H
