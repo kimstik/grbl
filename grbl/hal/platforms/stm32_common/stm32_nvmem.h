@@ -4,6 +4,7 @@
 
   Copyright (c) 2025 kimstik
   License: MIT
+  Intelligence assisted
 
   Platform-independent flash emulation using configuration from stm32_platform.h
 */

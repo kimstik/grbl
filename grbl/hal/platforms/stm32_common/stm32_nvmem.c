@@ -4,6 +4,7 @@
 
   Copyright (c) 2025 kimstik
   License: MIT
+  Intelligence assisted
 
   Uses platform configuration to support different flash geometries.
 */

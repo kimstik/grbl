@@ -4,6 +4,7 @@
 
   Copyright (c) 2025 kimstik
   License: MIT
+  Intelligence assisted
 
   STM32F103 (Blue Pill) implementation of HAL functions.
   ARM Cortex-M3, 72 MHz, 20KB RAM, 64-128KB Flash

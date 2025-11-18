@@ -4,6 +4,7 @@
 
   Copyright (c) 2025 kimstik
   License: MIT
+  Intelligence assisted
 
   IWDG uses internal 40kHz RC oscillator, independent from main clock.
   Identical API across all STM32 families (F1/F4/H5).
