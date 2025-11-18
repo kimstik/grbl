@@ -45,9 +45,13 @@
 #include "system.h"
 #include "defaults.h"
 #include "cpu_map.h"
+
+// Include HAL (Hardware Abstraction Layer) after cpu_map.h defines CPU_MAP
+#include "hal/grbl_hal.h"
+
 #include "planner.h"
 #include "coolant_control.h"
-#include "eeprom.h"
+#include "nvmem.h"
 #include "gcode.h"
 #include "limits.h"
 #include "motion_control.h"

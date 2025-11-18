@@ -20,6 +20,7 @@
 */
 
 #include "grbl.h"
+#include "hal/grbl_hal.h"
 
 
 // Homing axis search distance multiplier. Computed by this value times the cycle travel.
@@ -40,25 +41,22 @@
 
 void limits_init()
 {
-  LIMIT_DDR &= ~(LIMIT_MASK); // Set as input pins
+  HAL_GPIO_SET_INPUT(LIMIT_DDR, LIMIT_MASK);
 
   #ifdef DISABLE_LIMIT_PIN_PULL_UP
-    LIMIT_PORT &= ~(LIMIT_MASK); // Normal low operation. Requires external pull-down.
+    HAL_GPIO_PULLUP_DISABLE(LIMIT_PORT, LIMIT_MASK);
   #else
-    LIMIT_PORT |= (LIMIT_MASK);  // Enable internal pull-up resistors. Normal high operation.
+    HAL_GPIO_PULLUP_ENABLE(LIMIT_PORT, LIMIT_MASK);
   #endif
 
   if (bit_istrue(settings.flags,BITFLAG_HARD_LIMIT_ENABLE)) {
-    LIMIT_PCMSK |= LIMIT_MASK; // Enable specific pins of the Pin Change Interrupt
-    PCICR |= (1 << LIMIT_INT); // Enable Pin Change Interrupt
+    HAL_GPIO_INTERRUPT_ENABLE(LIMIT_PCMSK, LIMIT_INT, LIMIT_MASK);
   } else {
     limits_disable();
   }
 
   #ifdef ENABLE_SOFTWARE_DEBOUNCE
-    MCUSR &= ~(1<<WDRF);
-    WDTCSR |= (1<<WDCE) | (1<<WDE);
-    WDTCSR = (1<<WDP0); // Set time-out at ~32msec.
+    HAL_WATCHDOG_INIT(32); // Set time-out at ~32msec.
   #endif
 }
 
@@ -66,8 +64,7 @@ void limits_init()
 // Disables hard limits.
 void limits_disable()
 {
-  LIMIT_PCMSK &= ~LIMIT_MASK;  // Disable specific pins of the Pin Change Interrupt
-  PCICR &= ~(1 << LIMIT_INT);  // Disable Pin Change Interrupt
+  HAL_GPIO_INTERRUPT_DISABLE(LIMIT_PCMSK, LIMIT_INT, LIMIT_MASK);
 }
 
 
@@ -77,7 +74,7 @@ void limits_disable()
 uint8_t limits_get_state()
 {
   uint8_t limit_state = 0;
-  uint8_t pin = (LIMIT_PIN & LIMIT_MASK);
+  uint8_t pin = HAL_GPIO_READ_PORT(LIMIT_PIN, LIMIT_MASK);
   #ifdef INVERT_LIMIT_PIN_MASK
     pin ^= INVERT_LIMIT_PIN_MASK;
   #endif
@@ -107,7 +104,7 @@ uint8_t limits_get_state()
 // special pinout for an e-stop, but it is generally recommended to just directly connect
 // your e-stop switch to the Arduino reset pin, since it is the most correct way to do this.
 #ifndef ENABLE_SOFTWARE_DEBOUNCE
-  ISR(LIMIT_INT_vect) // DEFAULT: Limit pin change interrupt process.
+  HAL_GPIO_IRQ_HANDLER(LIMIT_INT)
   {
     // Ignore limit switches if already in an alarm state or in-process of executing an alarm.
     // When in the alarm state, Grbl should have been reset or will force a reset, so any pending
@@ -130,11 +127,11 @@ uint8_t limits_get_state()
     }
   }
 #else // OPTIONAL: Software debounce limit pin routine.
-  // Upon limit pin change, enable watchdog timer to create a short delay. 
-  ISR(LIMIT_INT_vect) { if (!(WDTCSR & (1<<WDIE))) { WDTCSR |= (1<<WDIE); } }
-  ISR(WDT_vect) // Watchdog timer ISR
+  // Upon limit pin change, enable watchdog timer to create a short delay.
+  HAL_GPIO_IRQ_HANDLER(LIMIT_INT) { HAL_WATCHDOG_ENABLE_INTERRUPT(); }
+  HAL_WATCHDOG_ISR()
   {
-    WDTCSR &= ~(1<<WDIE); // Disable watchdog timer. 
+    HAL_WATCHDOG_DISABLE_INTERRUPT(); 
     if (sys.state != STATE_ALARM) {  // Ignore if already in alarm state. 
       if (!(sys_rt_exec_alarm)) {
         // Check limit pin state. 
