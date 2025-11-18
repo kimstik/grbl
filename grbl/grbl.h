@@ -25,9 +25,18 @@
 #define GRBL_VERSION "1.1h"
 #define GRBL_VERSION_BUILD "20190830"
 
-// Include HAL (Hardware Abstraction Layer) FIRST
-// HAL will include platform-specific headers and libraries
-#include "hal.h"
+// Define standard libraries used by Grbl.
+#include <avr/io.h>
+#include <avr/pgmspace.h>
+#include <avr/interrupt.h>
+#include <avr/wdt.h>
+#include <util/delay.h>
+#include <math.h>
+#include <inttypes.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdbool.h>
 
 // Define the Grbl system include files. NOTE: Do not alter organization.
 #include "config.h"
@@ -35,11 +44,10 @@
 #include "settings.h"
 #include "system.h"
 #include "defaults.h"
+#include "cpu_map.h"
 
-// AVR CPU map (must be included AFTER config.h to get VARIABLE_SPINDLE)
-#if !defined(PLATFORM_STM32F103) && !defined(PLATFORM_STM32H523) && !defined(PLATFORM_RP2040) && !defined(PLATFORM_RP2350)
-  #include "hal/platforms/avr_atmega328p/cpu_map.h"
-#endif
+// Include HAL (Hardware Abstraction Layer) after cpu_map.h defines CPU_MAP
+#include "hal.h"
 
 #include "planner.h"
 #include "coolant_control.h"
