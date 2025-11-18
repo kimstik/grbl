@@ -1,8 +1,9 @@
 /*
   platform.c - STM32F103 platform implementation
-  Part of Grbl HAL
+  Part of Grbl
 
-  Copyright (c) 2025 GRBL HAL Contributors
+  Copyright (c) 2025 kimstik
+  License: MIT
 
   STM32F103 (Blue Pill) implementation of HAL functions.
   ARM Cortex-M3, 72 MHz, 20KB RAM, 64-128KB Flash
@@ -10,6 +11,7 @@
 
 #include "../../grbl_hal.h"
 #include "platform.h"
+#include "config.h"
 
 // ============================================================================
 // PLATFORM INFO
@@ -514,3 +516,28 @@ void hal_system_init(void) {
 
   // Timers and UART are initialized when needed
 }
+
+// ============================================================================
+// PLATFORM CONFIGURATION INSTANCE
+// ============================================================================
+
+const stm32_platform_config_t stm32_config = {
+  // Clock configuration
+  .cpu_freq               = STM32F103_CPU_FREQ,
+  .apb1_freq              = STM32F103_APB1_FREQ,
+  .apb2_freq              = STM32F103_APB2_FREQ,
+
+  // Flash parameters (for NVMEM emulation)
+  .flash_page_size        = STM32F103_FLASH_PAGE_SIZE,
+  .flash_base_addr        = STM32F103_FLASH_BASE_ADDR,
+  .flash_num_pages        = STM32F103_FLASH_NUM_PAGES,
+
+  // Memory sizes
+  .ram_size               = STM32F103_RAM_SIZE,
+  .flash_size             = STM32F103_FLASH_SIZE,
+
+  // Hardware capabilities
+  .has_fpu                = STM32F103_HAS_FPU,
+  .has_32bit_timers       = STM32F103_HAS_32BIT_TIMERS,
+  .gpio_model             = STM32F103_GPIO_MODEL,
+};
