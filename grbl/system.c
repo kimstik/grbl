@@ -19,7 +19,7 @@
 */
 
 #include "grbl.h"
-#include "hal/grbl_hal.h"
+#include "hal.h"
 
 
 void system_init()

@@ -159,6 +159,12 @@
 #define Z_LIMIT_BIT         10
 #define LIMIT_MASK          ((1<<X_LIMIT_PIN)|(1<<Y_LIMIT_PIN)|(1<<Z_LIMIT_PIN))
 
+// AVR compatibility: DDR (Data Direction Register) macros
+#define STEP_DDR                STEP_PORT
+#define DIRECTION_DDR           DIRECTION_PORT
+#define STEPPERS_DISABLE_DDR    STEPPERS_DISABLE_PORT
+#define LIMIT_DDR               LIMIT_PORT
+
 // EXTI lines for limit switches
 #define LIMIT_EXTI_LINE_X   EXTI_Line0
 #define LIMIT_EXTI_LINE_Y   EXTI_Line1

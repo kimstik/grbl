@@ -35,17 +35,7 @@
 #include "settings.h"
 #include "system.h"
 #include "defaults.h"
-
-// cpu_map.h is only for AVR (HAL provides this for other platforms)
-#ifndef PLATFORM_STM32F103
-  #ifndef PLATFORM_STM32H523
-    #ifndef PLATFORM_RP2040
-      #ifndef PLATFORM_RP2350
-        #include "cpu_map.h"
-      #endif
-    #endif
-  #endif
-#endif
+#include "cpu_map.h"
 
 #include "planner.h"
 #include "coolant_control.h"

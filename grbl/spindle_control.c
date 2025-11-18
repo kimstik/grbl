@@ -20,7 +20,7 @@
 */
 
 #include "grbl.h"
-#include "hal/grbl_hal.h"
+#include "hal.h"
 
 
 #ifdef VARIABLE_SPINDLE

@@ -287,4 +287,10 @@ static inline uint32_t hal_micros(void) {
 #define HAL_NVMEM_READ_DWORD(addr)              eeprom_read_dword((uint32_t*)(addr))
 #define HAL_NVMEM_WRITE_DWORD(addr, value)      eeprom_write_dword((uint32_t*)(addr), (value))
 
+// ============================================================================
+// CPU MAP (AVR pin definitions)
+// ============================================================================
+// Include AVR-specific CPU mapping (moved here from grbl/cpu_map.h)
+#include "cpu_map.h"
+
 #endif // PLATFORM_AVR_ATMEGA328P_H
