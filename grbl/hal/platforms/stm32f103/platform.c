@@ -143,13 +143,38 @@ void hal_gpio_pullup_disable(GPIO_TypeDef* port, uint32_t mask) {
 }
 
 void hal_gpio_interrupt_enable(GPIO_TypeDef* port, uint32_t mask) {
-  // Enable EXTI interrupt for pins
-  // This is simplified - real implementation needs AFIO config
+  // REVIEW: HIGH #5 - Added AFIO configuration for proper EXTI mapping
+  // Enable AFIO clock (should already be enabled in hal_gpio_init)
+  RCC->APB2ENR |= RCC_APB2ENR_AFIOEN;
+
+  // Determine port number for AFIO_EXTICR (A=0, B=1, C=2, D=3)
+  uint8_t port_num = 0;
+  if (port == GPIOB) port_num = 1;
+  else if (port == GPIOC) port_num = 2;
+  else if (port == GPIOD) port_num = 3;
+
   for (uint8_t pin = 0; pin < 16; pin++) {
     if (mask & (1 << pin)) {
+      // Configure AFIO_EXTICRx to map this port to EXTI line
+      uint8_t reg_idx = pin / 4;        // EXTICR1-4 (0-3)
+      uint8_t bit_pos = (pin % 4) * 4;  // Bits 0,4,8,12 within register
+
+      AFIO->EXTICR[reg_idx] &= ~(0xF << bit_pos);
+      AFIO->EXTICR[reg_idx] |= (port_num << bit_pos);
+
+      // Configure EXTI line
       EXTI->IMR |= (1 << pin);   // Unmask interrupt
       EXTI->RTSR |= (1 << pin);  // Rising edge trigger
       EXTI->FTSR |= (1 << pin);  // Falling edge trigger
+
+      // Enable NVIC interrupt for this EXTI line
+      if (pin <= 4) {
+        NVIC_EnableIRQ(EXTI0_IRQn + pin);
+      } else if (pin <= 9) {
+        NVIC_EnableIRQ(EXTI9_5_IRQn);
+      } else {
+        NVIC_EnableIRQ(EXTI15_10_IRQn);
+      }
     }
   }
 }

@@ -345,7 +345,9 @@ void hal_timer_stepper_set_prescaler(uint16_t prescaler);
 #define HAL_TIMER_STEPPER_INTERRUPT_DISABLE()   (TIM2->DIER &= ~TIM_DIER_UIE)
 
 // Clear interrupt flag in ISR
-#define HAL_TIMER_STEPPER_CLEAR_FLAG()          (TIM2->SR = ~TIM_SR_UIF)
+// FIXED: Was (TIM2->SR = ~TIM_SR_UIF) which SETS all other flags causing interrupt storm!
+// REVIEW: CRITICAL #3 - Timer interrupt flag clearing bug
+#define HAL_TIMER_STEPPER_CLEAR_FLAG()          (TIM2->SR = 0)
 
 // ----------------------------------------------------------------------------
 // TIM3: Step Pulse Reset Interrupt
@@ -362,7 +364,9 @@ void hal_timer_pulse_reset_init(void);
 #define HAL_TIMER_PULSE_RESET_STOP()            (TIM3->CR1 &= ~TIM_CR1_CEN)
 
 // Clear interrupt flag
-#define HAL_TIMER_PULSE_RESET_CLEAR_FLAG()      (TIM3->SR = ~TIM_SR_UIF)
+// FIXED: Was (TIM3->SR = ~TIM_SR_UIF) - same interrupt storm bug as TIM2
+// REVIEW: CRITICAL #3 - Timer interrupt flag clearing bug
+#define HAL_TIMER_PULSE_RESET_CLEAR_FLAG()      (TIM3->SR = 0)
 
 // Step pulse delay (if STEP_PULSE_DELAY is defined)
 #ifdef STEP_PULSE_DELAY

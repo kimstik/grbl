@@ -22,6 +22,13 @@
 #include "grbl.h"
 #include "hal/grbl_hal.h"
 
+// ============================================================================
+// Original GRBL EEPROM functions (from Atmel AVR103 app note)
+// These are ONLY for AVR - other platforms use hal_nvmem_read/write_byte
+// ============================================================================
+
+#ifdef PLATFORM_AVR_ATMEGA328P
+
 // EEPROM bit compatibility for older AVR devices
 #ifndef EEPE
   #define EEPE  EEWE
@@ -34,10 +41,6 @@
 #endif
 
 #define EEPROM_IGNORE_SELFPROG  // Remove SPM flag polling to reduce code size
-
-// ============================================================================
-// Original GRBL EEPROM functions (from Atmel AVR103 app note)
-// ============================================================================
 
 unsigned char eeprom_get_char(unsigned int addr)
 {
@@ -99,6 +102,8 @@ void eeprom_put_char(unsigned int addr, unsigned char new_value)
 
   sei();  // Restore interrupt flag state
 }
+
+#endif // PLATFORM_AVR_ATMEGA328P
 
 // ============================================================================
 // Extensions added as part of Grbl
