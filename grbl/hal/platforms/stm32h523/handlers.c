@@ -1,13 +1,20 @@
 /*
-  exti_handlers.c - External interrupt handlers for STM32H523
-  Part of Grbl HAL
+  handlers.c - External interrupt handlers for STM32H523
+  Part of Grbl
 
-  Copyright (c) 2025 GRBL HAL Contributors
+  Copyright (c) 2025 kimstik
+  Intelligence assisted
+  License: MIT
 
-  REVIEW: MEDIUM #7 - EXTI interrupt handlers for limit switches and control pins
+  EXTI interrupt handlers for limit switches and control pins.
+
+  FIXME CRITICAL: EXTI register definitions missing in regs.h
+  This code will not compile until EXTI_TypeDef is added to regs.h.
+  See REVIEW_H523.md "CRITICAL #2" for solution.
 */
 
 #include "platform.h"
+#include "regs.h"  // FIXME: Add EXTI definitions here
 
 // Forward declarations of GRBL interrupt handlers
 extern void limits_isr(void);     // Defined in limits.c

@@ -6,7 +6,7 @@
   Intelligence assisted
   License: MIT
 
-  STM32H523 (Nucleo-H523): 250MHz Cortex-M33, 32KB RAM, 128KB Flash
+  STM32H523 (Black Pill H5): 250MHz Cortex-M33, 32KB RAM, 128KB Flash
 */
 
 #include "../../grbl_hal.h"
@@ -67,9 +67,13 @@ const stm32_platform_config_t stm32_config = {
 // ============================================================================
 
 void hal_clock_config(void) {
-  // TODO: H5 clock configuration
-  // HSE 8MHz → PLL → 250MHz CPU
-  // For now, assumes default clock from bootloader
+  // FIXME HIGH #3: Clock configuration not implemented
+  // Current: Running at bootloader clock (probably HSI 64MHz)
+  // Required: Configure HSE (8MHz) → PLL → 250MHz CPU
+  //           Configure APB1/2/3 prescalers (125 MHz)
+  //           Enable flash wait states (5WS @ 250MHz)
+  // Impact: System may not run at full 250MHz performance
+  // See REVIEW_H523.md "HIGH #3" for implementation details
 
   // Configure SysTick for 1ms interrupts
   // Will be done by stm32_timing_init()
@@ -127,17 +131,30 @@ void hal_gpio_pullup_disable(GPIO_TypeDef* port, uint32_t mask) {
 }
 
 void hal_gpio_interrupt_enable(GPIO_TypeDef* port, uint32_t mask) {
-  // TODO: EXTI configuration for H5
-  // Similar to F103 but may have different registers
+  // FIXME HIGH #2: EXTI configuration not implemented
+  // Required: 1. Map GPIO pins to EXTI lines
+  //           2. Configure EXTI for falling edge (limit switches)
+  //           3. Enable NVIC interrupts (EXTI0, EXTI1, EXTI3, EXTI4, etc.)
+  // Impact: Limit switches and control buttons won't work
+  // See REVIEW_H523.md "HIGH #2" for implementation
+  // Note: H5 EXTI may differ from F1 (check reference manual)
 }
 
 void hal_gpio_interrupt_disable(GPIO_TypeDef* port, uint32_t mask) {
-  // TODO: EXTI disable
+  // FIXME HIGH #2: EXTI disable not implemented
+  // TODO: Clear EXTI configuration for specified pins
 }
 
 void hal_gpio_init(void) {
-  // TODO: Enable GPIO clocks and configure pins
-  // RCC->AHB2ENR for GPIOA/B/C on H5
+  // FIXME HIGH #1: GPIO initialization not implemented
+  // Required: 1. Enable RCC clocks for GPIOA, GPIOB, GPIOC
+  //           2. Configure stepper pins (PA0-6) as outputs
+  //           3. Configure limit switches (PB0,1,10) as inputs with pullup
+  //           4. Configure control pins (PB3-6) as inputs
+  // Impact: GPIO operations will fail, hardware won't function
+  // Workaround: Bootloader may leave clocks enabled
+  // Note: Use RCC->AHB2ENR (or check correct register for H5)
+  // See REVIEW_H523.md "HIGH #1" for implementation
 }
 
 // ============================================================================

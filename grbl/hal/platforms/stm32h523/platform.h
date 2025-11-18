@@ -1,13 +1,13 @@
 /*
-  platform.h - STM32H523 platform configuration
+  platform.h - STM32H523 platform HAL interface
   Part of Grbl
 
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
 
-  This file provides platform-specific definitions for STM32H523 (Blue Pill).
-  ARM Cortex-M3, 72 MHz, 20KB RAM, 64-128KB Flash
+  Platform-specific HAL interface for STM32H523 (Black Pill H5).
+  ARM Cortex-M33, 250 MHz, 32KB RAM, 128KB Flash
 */
 
 #ifndef PLATFORM_STM32H523_H

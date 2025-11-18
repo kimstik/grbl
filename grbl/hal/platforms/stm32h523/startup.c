@@ -104,7 +104,18 @@ void EXTI4_IRQHandler(void)         __attribute__((weak, alias("Default_Handler"
 void EXTI9_5_IRQHandler(void)       __attribute__((weak, alias("Default_Handler")));
 void EXTI15_10_IRQHandler(void)     __attribute__((weak, alias("Default_Handler")));
 
-// DMA handlers (not used yet)
+// ============================================================================
+// FIXME CRITICAL #1: WRONG INTERRUPT HANDLERS FOR H523
+// ============================================================================
+// These handlers are copied from STM32F103 and DO NOT MATCH STM32H523!
+// H523 (Cortex-M33) has 110+ interrupts vs F103 (Cortex-M3) 43 interrupts.
+// Many peripherals below DO NOT EXIST on H523 (e.g., CAN, USB Device).
+// MUST replace entire handler list with H523-specific IRQs from reference manual.
+// See REVIEW_H523.md "CRITICAL #1" for details.
+// RISK: Will cause hard fault if any H5-specific peripheral interrupt fires!
+// ============================================================================
+
+// DMA handlers (not used yet) // FIXME: Check if these exist on H523
 void DMA1_Channel1_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void DMA1_Channel2_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void DMA1_Channel3_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
@@ -113,10 +124,10 @@ void DMA1_Channel5_IRQHandler(void) __attribute__((weak, alias("Default_Handler"
 void DMA1_Channel6_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void DMA1_Channel7_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 
-// Other peripheral handlers
-void ADC1_2_IRQHandler(void)        __attribute__((weak, alias("Default_Handler")));
-void USB_HP_CAN1_TX_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
-void USB_LP_CAN1_RX0_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
+// Other peripheral handlers // FIXME: Many of these DON'T EXIST on H523!
+void ADC1_2_IRQHandler(void)        __attribute__((weak, alias("Default_Handler")));  // WRONG: No ADC1_2 on H523
+void USB_HP_CAN1_TX_IRQHandler(void) __attribute__((weak, alias("Default_Handler"))); // WRONG: No USB device on H523
+void USB_LP_CAN1_RX0_IRQHandler(void) __attribute__((weak, alias("Default_Handler"))); // WRONG: No CAN on H523
 void CAN1_RX1_IRQHandler(void)      __attribute__((weak, alias("Default_Handler")));
 void CAN1_SCE_IRQHandler(void)      __attribute__((weak, alias("Default_Handler")));
 void TIM1_BRK_IRQHandler(void)      __attribute__((weak, alias("Default_Handler")));
@@ -136,10 +147,19 @@ void RTC_IRQHandler(void)           __attribute__((weak, alias("Default_Handler"
 void RTCAlarm_IRQHandler(void)      __attribute__((weak, alias("Default_Handler")));
 void USBWakeUp_IRQHandler(void)     __attribute__((weak, alias("Default_Handler")));
 
+// ============================================================================
+// FIXME CRITICAL #1: WRONG VECTOR TABLE FOR H523
+// ============================================================================
+// This vector table is copied from STM32F103 with only 43 peripheral IRQs.
+// STM32H523 has 110+ peripheral IRQs with completely different positions!
+// MUST be replaced with H523-specific vector table from reference manual.
+// Current table will cause hard fault on any H5 peripheral interrupt.
+// ============================================================================
+
 // Interrupt vector table
 __attribute__((section(".isr_vector")))
 const void *vector_table[] = {
-  // Cortex-M33 core interrupts
+  // Cortex-M33 core interrupts (0-15) - These are correct
   &_estack,                    // 0:  Initial stack pointer
   Reset_Handler,               // 1:  Reset handler
   NMI_Handler,                 // 2:  NMI handler

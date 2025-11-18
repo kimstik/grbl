@@ -1,13 +1,16 @@
 /*
-  exti_handlers.c - External interrupt handlers for STM32F103
-  Part of Grbl HAL
+  handlers.c - External interrupt handlers for STM32F103
+  Part of Grbl
 
-  Copyright (c) 2025 GRBL HAL Contributors
+  Copyright (c) 2025 kimstik
+  Intelligence assisted
+  License: MIT
 
-  REVIEW: MEDIUM #7 - EXTI interrupt handlers for limit switches and control pins
+  EXTI interrupt handlers for limit switches and control pins (Blue Pill).
 */
 
 #include "platform.h"
+#include "regs.h"
 
 // Forward declarations of GRBL interrupt handlers
 extern void limits_isr(void);     // Defined in limits.c
