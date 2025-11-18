@@ -18,7 +18,12 @@
 BUILD ?= DEBUG
 
 # Toolchain
-PREFIX     = arm-none-eabi-
+TOOLCHAIN_PATH ?=
+ifdef TOOLCHAIN_PATH
+  PREFIX     = $(TOOLCHAIN_PATH)/arm-none-eabi-
+else
+  PREFIX     = arm-none-eabi-
+endif
 CC         = $(PREFIX)gcc
 OBJCOPY    = $(PREFIX)objcopy
 SIZE       = $(PREFIX)size

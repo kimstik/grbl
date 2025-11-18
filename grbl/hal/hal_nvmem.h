@@ -171,9 +171,9 @@
   #define eeprom_get_char(addr)         HAL_NVMEM_READ_BYTE(addr)
   #define eeprom_put_char(addr, val)    HAL_NVMEM_WRITE_BYTE(addr, val)
 #else
-  // For other platforms: declare functions
-  void memcpy_from_nvmem_with_checksum(uint8_t *dest, uint32_t source, uint32_t size);
-  bool nvmem_write_check(uint32_t destination, uint8_t *source, uint32_t size);
+  // For other platforms: declare functions (match original signatures for compatibility)
+  int memcpy_from_nvmem_with_checksum(char *destination, unsigned int source, unsigned int size);
+  bool nvmem_write_check(unsigned int destination, char *source, unsigned int size);
 
   // Legacy function names (for compatibility)
   #define eeprom_get_char(addr)         HAL_NVMEM_READ_BYTE(addr)
