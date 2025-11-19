@@ -45,8 +45,8 @@
 #include "system.h"
 #include "defaults.h"
 
-// Include HAL (Hardware Abstraction Layer)
-#include "hal.h"
+// Include Platform Abstraction Layer
+#include "platform/hal.h"
 
 // cpu_map.h - each platform provides its own (AVR: full map, others: stub)
 // Use <> to search include paths: non-AVR platforms find dummy/cpu_map.h first

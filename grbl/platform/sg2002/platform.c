@@ -9,7 +9,7 @@
   Sophgo SG2002 (RISC-V C906) HAL implementation
 */
 
-#include "../../hal/hal.h"
+#include "../hal.h"
 #include "platform.h"
 #include "config.h"
 

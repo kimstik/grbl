@@ -10,7 +10,7 @@
   ARM Cortex-M3, 72 MHz, 20KB RAM, 64-128KB Flash
 */
 
-#include "../../hal/hal.h"
+#include "../hal.h"
 #include "platform.h"
 #include "config.h"
 
