@@ -49,7 +49,8 @@
 #include "hal.h"
 
 // cpu_map.h - each platform provides its own (AVR: full map, others: stub)
-#include "cpu_map.h"
+// Use <> to search include paths: non-AVR platforms find dummy/cpu_map.h first
+#include <cpu_map.h>
 
 #include "planner.h"
 #include "coolant_control.h"

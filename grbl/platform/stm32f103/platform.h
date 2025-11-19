@@ -230,6 +230,7 @@ typedef GPIO_TypeDef* hal_gpio_port_t;
 
 // AVR compatibility: DDR (Data Direction Register) = PORT for STM32
 #define SPINDLE_PWM_DDR         SPINDLE_PWM_PORT
+#define SPINDLE_ENABLE_DDR      SPINDLE_ENABLE_PORT
 #define SPINDLE_DIRECTION_DDR   SPINDLE_DIRECTION_PORT
 
 // PWM resolution (16-bit timer)
@@ -494,10 +495,34 @@ void hal_nvmem_flush(void);  // Flush dirty cache to flash
 // Note: hal_platform_info_t typedef and declarations are in hal_system.h
 
 // ============================================================================
-// AVR COMPATIBILITY
+// AVR COMPATIBILITY - cpu_map.h stubs
 // ============================================================================
-// Include cpu_map.h stub AFTER all HAL macros are defined
-// This allows cpu_map.h to override some macros with no-ops
-#include "cpu_map.h"
+// These are used by core GRBL code (limits.c, probe.c, system.c)
+// Platform-specific values override dummy/cpu_map.h defaults via #ifndef
+
+// Map AVR pin definitions to STM32 GPIO ports
+#define LIMIT_DDR     0      // Not used on STM32 (DDR is for AVR only)
+#define LIMIT_PORT    0      // Not used on STM32 (PORT is for AVR pullup)
+#define LIMIT_PCMSK   0      // Not used on STM32
+#define LIMIT_INT     0      // Not used on STM32
+#undef LIMIT_PIN
+#define LIMIT_PIN     GPIOB  // Used for reading limit switches (redefine as PORT)
+// LIMIT_MASK already defined above (uses pin numbers)
+
+#define CONTROL_DDR   0      // Not used on STM32
+#define CONTROL_PORT  0      // Not used on STM32
+#define CONTROL_PCMSK 0      // Not used on STM32
+#define CONTROL_INT   0      // Not used on STM32
+#undef CONTROL_PIN
+#define CONTROL_PIN   GPIOB  // Used for reading control pins (redefine as PORT)
+#undef CONTROL_MASK
+#define CONTROL_MASK  ((1<<3)|(1<<4)|(1<<5)|(1<<6))  // PB3-PB6 (bits, not pins)
+
+#define PROBE_DDR     0      // Not used on STM32
+#define PROBE_PORT    0      // Not used on STM32
+#undef PROBE_PIN
+#define PROBE_PIN     GPIOC  // Used for reading probe pin (redefine as PORT)
+#undef PROBE_MASK
+#define PROBE_MASK    (1<<PROBE_BIT)  // Redefine using BIT instead of PIN
 
 #endif // PLATFORM_STM32F103_H

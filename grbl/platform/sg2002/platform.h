@@ -238,4 +238,30 @@ uint32_t hal_platform_get_cpu_freq(void);
 
 void hal_platform_init(void);
 
+// ============================================================================
+// AVR COMPATIBILITY - cpu_map.h stubs
+// ============================================================================
+// These are used by core GRBL code (limits.c, probe.c, system.c)
+// Platform-specific values override dummy/cpu_map.h defaults via #ifndef
+
+// Map AVR pin definitions to SG2002 GPIO ports
+#define LIMIT_DDR     0        // Not used on SG2002
+#define LIMIT_PORT    0        // Not used on SG2002
+#define LIMIT_PCMSK   0        // Not used on SG2002
+#define LIMIT_INT     0        // Not used on SG2002
+#define LIMIT_PIN     GPIO1    // GPIO1 for limit switches
+// LIMIT_MASK already defined above
+
+#define CONTROL_DDR   0        // Not used on SG2002
+#define CONTROL_PORT  0        // Not used on SG2002
+#define CONTROL_PCMSK 0        // Not used on SG2002
+#define CONTROL_INT   0        // Not used on SG2002
+#define CONTROL_PIN   GPIO1    // GPIO1 for control pins
+// CONTROL_MASK already defined above
+
+#define PROBE_DDR     0        // Not used on SG2002
+#define PROBE_PORT    0        // Not used on SG2002
+#define PROBE_PIN     GPIO2    // GPIO2 for probe pin
+// PROBE_MASK already defined above
+
 #endif // SG2002_PLATFORM_H
