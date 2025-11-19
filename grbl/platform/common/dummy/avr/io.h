@@ -7,4 +7,8 @@
   #define __flash const
 #endif
 
+// AVR interrupt functions compatibility
+#define sei()  __enable_irq()
+#define cli()  __disable_irq()
+
 #endif
