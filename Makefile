@@ -103,5 +103,20 @@ disasm:	main.elf
 cpp:
 	$(COMPILE) -E $(SOURCEDIR)/main.c
 
+# Validate AVR build integrity (check MD5 against reference)
+validate: grbl.hex
+	@echo "Validating AVR build integrity..."
+	@ACTUAL_MD5=$$(md5sum grbl.hex | awk '{print $$1}'); \
+	EXPECTED_MD5=79af184e67b27defd27a39309ac53563; \
+	if [ "$$ACTUAL_MD5" = "$$EXPECTED_MD5" ]; then \
+		echo "✓ Build validation PASSED (MD5: $$ACTUAL_MD5)"; \
+		exit 0; \
+	else \
+		echo "✗ Build validation FAILED"; \
+		echo "  Expected MD5: $$EXPECTED_MD5"; \
+		echo "  Actual MD5:   $$ACTUAL_MD5"; \
+		exit 1; \
+	fi
+
 # include generated header dependencies
 -include $(BUILDDIR)/$(OBJECTS:.o=.d)
