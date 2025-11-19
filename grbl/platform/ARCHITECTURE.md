@@ -23,7 +23,7 @@ grbl/
 │   ├── hal_nvmem.h                # NVMEM/EEPROM abstraction
 │   ├── hal_system.h               # System functions (reset, delay, etc.)
 │   └── platforms/
-│       ├── avr_atmega328p/        # AVR ATmega328P (Arduino Uno)
+│       ├── atmega328p/        # AVR ATmega328P (Arduino Uno)
 │       │   ├── platform.h         # Platform configuration
 │       │   ├── cpu_map.h          # Pin definitions (original GRBL file, moved here)
 │       │   └── Makefile           # AVR build system
@@ -92,7 +92,7 @@ The include order is critical for proper abstraction:
 #elif defined(PLATFORM_STM32H523)
   #include "platforms/stm32h523/platform.h"
 #else
-  #include "platforms/avr_atmega328p/platform.h"
+  #include "platforms/atmega328p/platform.h"
 #endif
 
 // Include HAL subsystem headers (GPIO, Timer, Serial, etc.)
@@ -199,7 +199,7 @@ STM32 platform.h:
 
 ### AVR (cpu_map.h)
 
-Original GRBL pin definitions remain in `cpu_map.h` (moved to `hal/platforms/avr_atmega328p/cpu_map.h`):
+Original GRBL pin definitions remain in `cpu_map.h` (moved to `hal/platforms/atmega328p/cpu_map.h`):
 
 ```c
 #define X_STEP_BIT    0
@@ -330,7 +330,7 @@ void hal_nvmem_write_byte(uint16_t addr, uint8_t value) {
 
 ### AVR
 ```makefile
-PLATFORM_AVR_ATMEGA328P = avr_atmega328p
+PLATFORM_AVR_ATMEGA328P = atmega328p
 
 MCU = atmega328p
 F_CPU = 16000000UL
