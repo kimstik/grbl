@@ -15,5 +15,9 @@ CLOCK          = 72000000
 FPU            =
 OPENOCD_TARGET = stm32f1x.cfg
 
+# AVR stubs (temporary workaround for grbl.h AVR includes)
+# Platform dir must be first to override cpu_map.h
+CFLAGS_EXTRA   = -I. -I./avr_stubs
+
 # Include common build rules
 include ../stm32_common/common.mk
