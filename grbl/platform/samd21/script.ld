@@ -1,0 +1,124 @@
+/*
+  script.ld - SAMD21G18A linker script
+  Part of Grbl
+
+  Copyright (c) 2025 kimstik
+  Intelligence assisted
+  License: MIT
+
+  Memory layout for SAMD21G18A:
+  - Flash: 256 KB (0x00000000 - 0x0003FFFF)
+  - RAM:    32 KB (0x20000000 - 0x20007FFF)
+*/
+
+/* Entry point */
+ENTRY(Reset_Handler)
+
+/* Stack size */
+_stack_size = 0x1000;  /* 4KB stack */
+
+/* Memory regions */
+MEMORY
+{
+  FLASH (rx)  : ORIGIN = 0x00000000, LENGTH = 256K
+  RAM   (rwx) : ORIGIN = 0x20000000, LENGTH = 32K
+}
+
+/* Section definitions */
+SECTIONS
+{
+  /* Vector table and code */
+  .text :
+  {
+    KEEP(*(.isr_vector))    /* Vector table must be first */
+    *(.text)                /* Program code */
+    *(.text*)
+    *(.rodata)              /* Read-only data */
+    *(.rodata*)
+    *(.glue_7)              /* ARM/Thumb interworking */
+    *(.glue_7t)
+    KEEP(*(.init))
+    KEEP(*(.fini))
+    . = ALIGN(4);
+    _etext = .;             /* End of code section */
+  } > FLASH
+
+  /* ARM exception handling */
+  .ARM.extab :
+  {
+    *(.ARM.extab* .gnu.linkonce.armextab.*)
+  } > FLASH
+
+  .ARM.exidx :
+  {
+    __exidx_start = .;
+    *(.ARM.exidx* .gnu.linkonce.armexidx.*)
+    __exidx_end = .;
+  } > FLASH
+
+  /* Initialized data (copied from Flash to RAM at startup) */
+  .data :
+  {
+    . = ALIGN(4);
+    _sdata = .;             /* Start of .data in RAM */
+    *(.data)
+    *(.data*)
+    . = ALIGN(4);
+    _edata = .;             /* End of .data in RAM */
+  } > RAM AT> FLASH
+
+  /* Address in Flash where .data is stored */
+  _sidata = LOADADDR(.data);
+
+  /* Uninitialized data (zero-initialized at startup) */
+  .bss :
+  {
+    . = ALIGN(4);
+    _sbss = .;              /* Start of .bss */
+    *(.bss)
+    *(.bss*)
+    *(COMMON)
+    . = ALIGN(4);
+    _ebss = .;              /* End of .bss */
+  } > RAM
+
+  /* Stack (grows downward from end of RAM) */
+  .stack :
+  {
+    . = ALIGN(8);
+    _sstack = .;
+    . = . + _stack_size;
+    . = ALIGN(8);
+    _estack = .;
+  } > RAM
+
+  /* Remove debug information */
+  /DISCARD/ :
+  {
+    libc.a ( * )
+    libm.a ( * )
+    libgcc.a ( * )
+  }
+
+  /* Debugging sections */
+  .stab          0 : { *(.stab) }
+  .stabstr       0 : { *(.stabstr) }
+  .stab.excl     0 : { *(.stab.excl) }
+  .stab.exclstr  0 : { *(.stab.exclstr) }
+  .stab.index    0 : { *(.stab.index) }
+  .stab.indexstr 0 : { *(.stab.indexstr) }
+  .comment       0 : { *(.comment) }
+
+  /* DWARF debug sections */
+  .debug_abbrev     0 : { *(.debug_abbrev) }
+  .debug_info       0 : { *(.debug_info .gnu.linkonce.wi.*) }
+  .debug_line       0 : { *(.debug_line) }
+  .debug_frame      0 : { *(.debug_frame) }
+  .debug_str        0 : { *(.debug_str) }
+  .debug_loc        0 : { *(.debug_loc) }
+  .debug_macinfo    0 : { *(.debug_macinfo) }
+  .debug_ranges     0 : { *(.debug_ranges) }
+  .debug_pubtypes   0 : { *(.debug_pubtypes) }
+  .debug_pubnames   0 : { *(.debug_pubnames) }
+  .debug_aranges    0 : { *(.debug_aranges) }
+}
