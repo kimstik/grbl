@@ -26,8 +26,8 @@ void uart0_tx_handler(void) {
 }
 
 void timer0_ch0_handler(void) {
-  // Clear timer interrupt
-  TIMER0->TIMER[0].EOI;
+  // Clear timer interrupt by reading EOI register
+  (void)TIMER0->TIMER[0].EOI;
 
   // This will call GRBL stepper ISR
   // Stepper interrupt handler is defined in stepper.c via HAL_TIMER_STEPPER_ISR()

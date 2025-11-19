@@ -67,8 +67,25 @@ void trap_handler(void) {
     // Interrupt
     unsigned long irq = mcause & 0x7FFFFFFF;
 
-    // Handle timer interrupt (IRQ 7 = machine timer)
-    if (irq == 7) {
+    // Machine external interrupt (IRQ 11) - PLIC interrupts
+    if (irq == 11) {
+      // Claim the interrupt from PLIC
+      volatile uint32_t *plic_claim = (volatile uint32_t*)PLIC_CLAIM_BASE;
+      uint32_t plic_irq = *plic_claim;
+
+      // Dispatch to appropriate handler based on PLIC interrupt number
+      if (plic_irq == IRQ_TIMER0) {
+        timer0_ch0_handler();
+      } else if (plic_irq == IRQ_UART0) {
+        uart0_rx_handler();  // UART RX/TX share same IRQ in some implementations
+      }
+      // Add more handlers as needed (GPIO, etc.)
+
+      // Complete the interrupt by writing back to PLIC claim register
+      *plic_claim = plic_irq;
+    }
+    // Machine timer interrupt (IRQ 7) - if using mtime/mtimecmp
+    else if (irq == 7) {
       timer0_ch0_handler();
     }
   } else {

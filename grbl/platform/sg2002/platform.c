@@ -11,6 +11,7 @@
 
 #include "../../hal/hal.h"
 #include "platform.h"
+#include "config.h"
 
 // ============================================================================
 // PLATFORM INFO
@@ -92,9 +93,8 @@ void hal_gpio_init(void) {
 
 void hal_serial_init(uint32_t baud_rate) {
   // Calculate divisor for baud rate
-  // UART clock = APB clock (assuming 100MHz for SG2002)
-  uint32_t uart_clk = 100000000;  // 100 MHz
-  uint32_t divisor = uart_clk / (16 * baud_rate);
+  // UART clock from SG2002 configuration
+  uint32_t divisor = SG2002_UART_CLK / (16 * baud_rate);
 
   // Enable divisor latch access
   HAL_SERIAL_UART->LCR = UART_LCR_DLAB;
@@ -198,6 +198,32 @@ void hal_system_reset(void) {
 }
 
 // ============================================================================
+// PLIC (Platform-Level Interrupt Controller) FUNCTIONS
+// ============================================================================
+
+static void hal_plic_init(void) {
+  volatile uint32_t *plic_priority = (volatile uint32_t*)PLIC_PRIORITY_BASE;
+  volatile uint32_t *plic_enable = (volatile uint32_t*)PLIC_ENABLE_BASE;
+  volatile uint32_t *plic_threshold = (volatile uint32_t*)PLIC_THRESHOLD_BASE;
+
+  // Set interrupt priorities (1-7, 0=disabled)
+  plic_priority[IRQ_UART0] = 5;
+  plic_priority[IRQ_TIMER0] = 7;  // Highest priority for stepper timer
+  plic_priority[IRQ_GPIO0] = 4;
+  plic_priority[IRQ_GPIO1] = 4;
+
+  // Enable interrupts in PLIC
+  // Enable bits are organized in 32-bit words
+  plic_enable[IRQ_UART0 / 32] |= (1 << (IRQ_UART0 % 32));
+  plic_enable[IRQ_TIMER0 / 32] |= (1 << (IRQ_TIMER0 % 32));
+  plic_enable[IRQ_GPIO0 / 32] |= (1 << (IRQ_GPIO0 % 32));
+  plic_enable[IRQ_GPIO1 / 32] |= (1 << (IRQ_GPIO1 % 32));
+
+  // Set priority threshold to 0 (allow all priorities)
+  *plic_threshold = 0;
+}
+
+// ============================================================================
 // PLATFORM INITIALIZATION
 // ============================================================================
 
@@ -208,7 +234,10 @@ void hal_platform_init(void) {
   // Initialize NVMEM
   hal_nvmem_init();
 
-  // Enable machine external interrupts
+  // Initialize PLIC (Platform-Level Interrupt Controller)
+  hal_plic_init();
+
+  // Enable machine external interrupts (for PLIC)
   set_csr(mie, MIE_MEIE);
 
   // Enable global interrupts

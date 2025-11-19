@@ -51,7 +51,7 @@ typedef struct {
   volatile uint32_t IIR_FCR;      // 0x08: Interrupt ID/FIFO Control
   volatile uint32_t LCR;          // 0x0C: Line Control
   volatile uint32_t MCR;          // 0x10: Modem Control
-  volatile uint32__t LSR;          // 0x14: Line Status
+  volatile uint32_t LSR;          // 0x14: Line Status
   volatile uint32_t MSR;          // 0x18: Modem Status
   volatile uint32_t SCR;          // 0x1C: Scratch
   uint32_t RESERVED0[4];
