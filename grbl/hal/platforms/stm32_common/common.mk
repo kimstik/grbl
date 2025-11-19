@@ -58,6 +58,7 @@ CFLAGS += $(CFLAGS_EXTRA) -I$(PLATFORM_DIR) -I../stm32_common -I$(GRBL_DIR)/hal 
 # Build-specific flags
 ifeq ($(BUILD),RELEASE)
   CFLAGS += -Os -g0
+  CFLAGS += -flto -fno-fat-lto-objects
   CFLAGS += -DENABLE_WATCHDOG
   CFLAGS += -DNDEBUG
 else
@@ -70,6 +71,11 @@ LDFLAGS += -Wl,--gc-sections
 LDFLAGS += -Wl,-Map=$(BUILD_DIR)/grbl_$(PLATFORM_NAME).map
 LDFLAGS += -specs=nano.specs -specs=nosys.specs
 LDFLAGS += -T script.ld
+
+# LTO for release builds
+ifeq ($(BUILD),RELEASE)
+  LDFLAGS += -flto -Os
+endif
 
 # Libraries (must come after objects in link command)
 LIBS = -lm
