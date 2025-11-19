@@ -15,6 +15,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "regs.h"
+#include "config.h"
 
 // Define platform identifier
 #define PLATFORM_SG2002 1
@@ -219,9 +220,9 @@ void hal_nvmem_write_byte(uint32_t addr, uint8_t data);
 // CPU frequency (700 MHz)
 #define F_CPU  700000000UL
 
-// Timer tick frequency
+// Timer tick frequency (timer runs at 100MHz, not F_CPU)
 #define TIMER_PRESCALER  1
-#define TIMER_TICKS_PER_MICROSECOND  (F_CPU / 1000000UL / TIMER_PRESCALER)
+#define TIMER_TICKS_PER_MICROSECOND  (SG2002_TIMER_CLK / 1000000UL / TIMER_PRESCALER)
 
 // Stepper pulse timing (microseconds)
 #define STEP_PULSE_DELAY  10  // 10us step pulse
