@@ -16,7 +16,9 @@
 // PLATFORM IDENTIFICATION
 // ============================================================================
 
-#define PLATFORM_NAME     "SAMD21G18A"
+// PLATFORM_NAME is defined in hal.h as "SAMD21"
+// Board-specific name for reference
+#define PLATFORM_BOARD_NAME     "SAMD21G18A"
 #define PLATFORM_CPU      "ARM Cortex-M0+"
 #define PLATFORM_ARCH     "ARM"
 
@@ -106,7 +108,8 @@
 // --------------------------------------------------------------------------
 
 #define STEP_PORT           PORT_GROUPA
-#define STEP_PORT_ID        ((hal_gpio_port_t)&PORT->Group[0])
+#define STEP_PORT_ID        ((hal_gpio_port_t)PORT_GROUPA)
+#define STEP_DDR            STEP_PORT_ID  // DDR alias for AVR compatibility
 #define X_STEP_PIN          2
 #define Y_STEP_PIN          4
 #define Z_STEP_PIN          5
@@ -120,7 +123,8 @@
 // --------------------------------------------------------------------------
 
 #define DIRECTION_PORT      PORT_GROUPA
-#define DIRECTION_PORT_ID   ((hal_gpio_port_t)&PORT->Group[0])
+#define DIRECTION_PORT_ID   ((hal_gpio_port_t)PORT_GROUPA)
+#define DIRECTION_DDR       DIRECTION_PORT_ID  // DDR alias for AVR compatibility
 #define X_DIRECTION_PIN     6
 #define Y_DIRECTION_PIN     7
 #define Z_DIRECTION_PIN     8
@@ -134,7 +138,8 @@
 // --------------------------------------------------------------------------
 
 #define STEPPERS_DISABLE_PORT   PORT_GROUPA
-#define STEPPERS_DISABLE_PORT_ID ((hal_gpio_port_t)&PORT->Group[0])
+#define STEPPERS_DISABLE_PORT_ID ((hal_gpio_port_t)PORT_GROUPA)
+#define STEPPERS_DISABLE_DDR    STEPPERS_DISABLE_PORT_ID  // DDR alias for AVR compatibility
 #define STEPPERS_DISABLE_PIN    9
 #define STEPPERS_DISABLE_BIT    9
 #define STEPPERS_DISABLE_MASK   (1<<STEPPERS_DISABLE_PIN)
@@ -144,17 +149,17 @@
 // --------------------------------------------------------------------------
 
 #define X_LIMIT_PORT        PORT_GROUPA
-#define X_LIMIT_PORT_ID     ((hal_gpio_port_t)&PORT->Group[0])
+#define X_LIMIT_PORT_ID     ((hal_gpio_port_t)PORT_GROUPA)
 #define X_LIMIT_PIN         10
 #define X_LIMIT_BIT         10
 
 #define Y_LIMIT_PORT        PORT_GROUPA
-#define Y_LIMIT_PORT_ID     ((hal_gpio_port_t)&PORT->Group[0])
+#define Y_LIMIT_PORT_ID     ((hal_gpio_port_t)PORT_GROUPA)
 #define Y_LIMIT_PIN         11
 #define Y_LIMIT_BIT         11
 
 #define Z_LIMIT_PORT        PORT_GROUPB
-#define Z_LIMIT_PORT_ID     ((hal_gpio_port_t)&PORT->Group[1])
+#define Z_LIMIT_PORT_ID     ((hal_gpio_port_t)PORT_GROUPB)
 #define Z_LIMIT_PIN         10
 #define Z_LIMIT_BIT         10
 
@@ -167,22 +172,22 @@
 // --------------------------------------------------------------------------
 
 #define CONTROL_RESET_PORT        PORT_GROUPB
-#define CONTROL_RESET_PORT_ID     ((hal_gpio_port_t)&PORT->Group[1])
+#define CONTROL_RESET_PORT_ID     ((hal_gpio_port_t)PORT_GROUPB)
 #define CONTROL_RESET_PIN         11
 #define CONTROL_RESET_BIT         11
 
 #define CONTROL_FEED_HOLD_PORT    PORT_GROUPA
-#define CONTROL_FEED_HOLD_PORT_ID ((hal_gpio_port_t)&PORT->Group[0])
+#define CONTROL_FEED_HOLD_PORT_ID ((hal_gpio_port_t)PORT_GROUPA)
 #define CONTROL_FEED_HOLD_PIN     12
 #define CONTROL_FEED_HOLD_BIT     12
 
 #define CONTROL_CYCLE_START_PORT  PORT_GROUPA
-#define CONTROL_CYCLE_START_PORT_ID ((hal_gpio_port_t)&PORT->Group[0])
+#define CONTROL_CYCLE_START_PORT_ID ((hal_gpio_port_t)PORT_GROUPA)
 #define CONTROL_CYCLE_START_PIN   13
 #define CONTROL_CYCLE_START_BIT   13
 
 #define CONTROL_SAFETY_DOOR_PORT  PORT_GROUPA
-#define CONTROL_SAFETY_DOOR_PORT_ID ((hal_gpio_port_t)&PORT->Group[0])
+#define CONTROL_SAFETY_DOOR_PORT_ID ((hal_gpio_port_t)PORT_GROUPA)
 #define CONTROL_SAFETY_DOOR_PIN   14
 #define CONTROL_SAFETY_DOOR_BIT   14
 
@@ -195,7 +200,7 @@
 // --------------------------------------------------------------------------
 
 #define PROBE_PORT          PORT_GROUPA
-#define PROBE_PORT_ID       ((hal_gpio_port_t)&PORT->Group[0])
+#define PROBE_PORT_ID       ((hal_gpio_port_t)PORT_GROUPA)
 #define PROBE_PIN           20
 #define PROBE_BIT           20
 #define PROBE_MASK          (1<<PROBE_PIN)
@@ -288,14 +293,6 @@
   #define USB_VID               0x2341
   #define USB_PID               0x804D
 #endif
-
-// ============================================================================
-// PLATFORM INFO STRUCTURE
-// ============================================================================
-
-extern const hal_platform_info_t samd21_platform_info;
-
-const hal_platform_info_t* hal_platform_get_info(void);
 
 // ============================================================================
 // PLATFORM-SPECIFIC FUNCTIONS
