@@ -44,10 +44,14 @@
 #include "settings.h"
 #include "system.h"
 #include "defaults.h"
-#include "cpu_map.h"
 
-// Include HAL (Hardware Abstraction Layer) after cpu_map.h defines CPU_MAP
+// Include HAL (Hardware Abstraction Layer)
 #include "hal.h"
+
+// cpu_map.h only for AVR - STM32 defines pins in platform.h
+#if !defined(PLATFORM_STM32F103) && !defined(PLATFORM_STM32H523) && !defined(PLATFORM_STM32F411)
+  #include "cpu_map.h"
+#endif
 
 #include "planner.h"
 #include "coolant_control.h"

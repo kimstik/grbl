@@ -486,4 +486,11 @@ void hal_nvmem_flush(void);  // Flush dirty cache to flash
 // ============================================================================
 // Note: hal_platform_info_t typedef and declarations are in hal_system.h
 
+// ============================================================================
+// AVR COMPATIBILITY
+// ============================================================================
+// Include cpu_map.h stub AFTER all HAL macros are defined
+// This allows cpu_map.h to override some macros with no-ops
+#include "cpu_map.h"
+
 #endif // PLATFORM_STM32F103_H
