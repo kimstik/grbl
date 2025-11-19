@@ -102,6 +102,9 @@
 #elif defined(PLATFORM_HC32F460)
   #define PLATFORM_NAME "HC32F460"
 
+#elif defined(PLATFORM_SG2002)
+  #define PLATFORM_NAME "Sophgo SG2002"
+
 // Auto-detection from compiler defines
 #elif defined(__AVR_ATmega328P__) || defined(__AVR_ATmega328__)
   #define PLATFORM_AVR_ATMEGA328P
@@ -150,6 +153,9 @@
 
 #elif defined(PLATFORM_STM32H523)
   #include "../platform/stm32h523/platform.h"
+
+#elif defined(PLATFORM_SG2002)
+  #include "../platform/sg2002/platform.h"
 
 #elif defined(PLATFORM_SAMD21)
   #include "../platform/samd21/platform.h"
