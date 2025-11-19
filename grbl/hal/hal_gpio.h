@@ -99,8 +99,12 @@
   void hal_gpio_write_port(hal_gpio_port_t port, uint32_t mask, uint32_t value);
   uint32_t hal_gpio_read_port(hal_gpio_port_t port);
 
-  #define HAL_GPIO_WRITE_PORT(port, mask, value)  hal_gpio_write_port(port, mask, value)
-  #define HAL_GPIO_READ_PORT(port)                hal_gpio_read_port(port)
+  #ifndef HAL_GPIO_WRITE_PORT
+    #define HAL_GPIO_WRITE_PORT(port, mask, value)  hal_gpio_write_port(port, mask, value)
+  #endif
+  #ifndef HAL_GPIO_READ_PORT
+    #define HAL_GPIO_READ_PORT(port)                hal_gpio_read_port(port)
+  #endif
 
   // Pin manipulation
   void hal_gpio_write_pin(hal_gpio_port_t port, uint8_t pin, bool value);

@@ -52,9 +52,8 @@ CFLAGS  = -mcpu=$(CPU) -mthumb $(FPU)
 CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)
 CFLAGS += -Wall -Wextra
 CFLAGS += -ffunction-sections -fdata-sections
-# CFLAGS_EXTRA must be first to override grbl headers (cpu_map.h, etc)
-CFLAGS += $(CFLAGS_EXTRA)
-CFLAGS += -I$(GRBL_DIR) -I$(GRBL_DIR)/hal -I$(PLATFORM_DIR) -I../stm32_common
+# CFLAGS_EXTRA must be ABSOLUTELY FIRST to override grbl headers (cpu_map.h, etc)
+CFLAGS += $(CFLAGS_EXTRA) -I$(PLATFORM_DIR) -I../stm32_common -I$(GRBL_DIR)/hal -I$(GRBL_DIR)
 
 # Build-specific flags
 ifeq ($(BUILD),RELEASE)
