@@ -9,7 +9,7 @@
   STM32H523 (Black Pill H5): 250MHz Cortex-M33, 32KB RAM, 128KB Flash
 */
 
-#include "../../grbl_hal.h"
+#include "../hal.h"
 #include "platform.h"
 #include "config.h"
 #include "../common/stm32/stm32_timing.h"
