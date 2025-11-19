@@ -140,25 +140,25 @@
 // ============================================================================
 
 #if defined(PLATFORM_AVR_ATMEGA328P)
-  #include "platforms/avr_atmega328p/platform.h"
+  #include "../platform/avr_atmega328p/platform.h"
 
 #elif defined(PLATFORM_STM32F103)
-  #include "platforms/stm32f103/platform.h"
+  #include "../platform/stm32f103/platform.h"
 
 #elif defined(PLATFORM_STM32F411)
-  #include "platforms/stm32f411/platform.h"
+  #include "../platform/stm32f411/platform.h"
 
 #elif defined(PLATFORM_STM32H523)
-  #include "platforms/stm32h523/platform.h"
+  #include "../platform/stm32h523/platform.h"
 
 #elif defined(PLATFORM_SAMD21)
-  #include "platforms/samd21/platform.h"
+  #include "../platform/samd21/platform.h"
 
 #elif defined(PLATFORM_CH32V006)
-  #include "platforms/ch32v006/platform.h"
+  #include "../platform/ch32v006/platform.h"
 
 #elif defined(PLATFORM_HC32F460)
-  #include "platforms/hc32f460/platform.h"
+  #include "../platform/hc32f460/platform.h"
 #endif
 
 // ============================================================================

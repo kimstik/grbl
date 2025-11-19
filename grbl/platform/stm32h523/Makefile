@@ -16,4 +16,4 @@ FPU            = -mfpu=fpv5-sp-d16 -mfloat-abi=hard
 OPENOCD_TARGET = stm32h5x.cfg
 
 # Include common build rules
-include ../stm32_common/common.mk
+include ../common/stm32/common.mk

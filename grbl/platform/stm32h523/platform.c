@@ -12,9 +12,9 @@
 #include "../../grbl_hal.h"
 #include "platform.h"
 #include "config.h"
-#include "../stm32_common/stm32_timing.h"
-#include "../stm32_common/stm32_nvmem.h"
-#include "../stm32_common/stm32_watchdog.h"
+#include "../common/stm32/stm32_timing.h"
+#include "../common/stm32/stm32_nvmem.h"
+#include "../common/stm32/stm32_watchdog.h"
 
 // ============================================================================
 // PLATFORM INFO

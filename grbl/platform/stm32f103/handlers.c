@@ -13,7 +13,7 @@
 #include "regs.h"
 
 // Include GRBL headers for system functions
-#include "../../../grbl.h"
+#include "../../grbl.h"
 
 // STM32 interrupt handlers for limits and control pins
 void limits_isr(void) {
