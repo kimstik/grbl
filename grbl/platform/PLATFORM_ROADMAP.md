@@ -27,13 +27,17 @@ This document outlines the planned platform ports and their implementation roadm
 
 ## In Progress Platforms
 
-### SAMD21G18A (Arduino Zero / MKR)
+### SAMD21G18A (Arduino Zero / MKR) - HIGH PRIORITY
 - **Status**: 🚧 Work In Progress (40% complete)
+- **Priority**: **HIGH** - Custom rSamba bootloader integration
 - **Architecture**: ARM Cortex-M0+, 48MHz
 - **Vendor**: Microchip (formerly Atmel)
 - **Memory**: 32KB RAM, 256KB Flash
+- **Bootloader**: rSamba (512 bytes) - https://github.com/kimstik/rSamba
 - **Target boards**: Arduino Zero, MKR series, Adafruit Feather M0
 - **Unique features**:
+  - **DIVAS** - Division and Square Root Accelerator (1-3 cycles)
+  - **rSamba** - Ultra-compact bootloader (maximum app space)
   - Native USB 2.0 Full Speed
   - 6x SERCOM (UART/SPI/I2C configurable)
   - 3x TCC timers with advanced PWM
@@ -44,6 +48,8 @@ This document outlines the planned platform ports and their implementation roadm
   - ✅ Startup code and vector table (44 IRQs)
   - ✅ Pin mapping (Arduino Zero compatible)
   - ✅ Linker script and memory layout
+  - ✅ rSamba bootloader integration (app starts at 0x00000200)
+  - ✅ DIVAS accelerator documented
   - 🚧 HAL implementation in progress
   - ⏳ GPIO, timers, UART pending
 - **Estimated completion**: 2025-11-29

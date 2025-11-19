@@ -13,7 +13,9 @@ Hardware Abstraction Layer implementation for SAMD21G18A-based boards (Arduino Z
 - **Core:** ARM Cortex-M0+ @ 48MHz
 - **RAM:** 32KB SRAM
 - **Flash:** 256KB
+- **Bootloader:** rSamba (512 bytes) - https://github.com/kimstik/rSamba
 - **FPU:** No (software emulation)
+- **DIVAS:** ✅ Division and Square Root Accelerator (1-3 cycles)
 - **DMA:** 12 channels
 - **USB:** Native USB 2.0 Full Speed
 - **Timers:** 3x TC (24-bit), 3x TCC (24-bit with PWM)
@@ -198,9 +200,14 @@ Object files go to `/build/samd21/`
 ## Memory Layout
 
 ### Flash (256KB, 0x00000000 - 0x0003FFFF)
-- **Bootloader:** 8KB (0x00000000 - 0x00001FFF) - Arduino bootloader
-- **Application:** 244KB (0x00002000 - 0x0003EFFF) - GRBL code
+- **Bootloader:** 512 bytes (0x00000000 - 0x000001FF) - rSamba bootloader
+- **Application:** 255.5KB (0x00000200 - 0x0003EFFF) - GRBL code
 - **NVMEM:** 4KB (0x0003F000 - 0x0003FFFF) - Settings storage
+
+**rSamba**: Ultra-compact 512-byte bootloader (https://github.com/kimstik/rSamba)
+- Based on SAM-BA v2.18 (Microchip original)
+- Implements "WwGVE" command subset
+- Minimal footprint allows maximum application space
 
 ### RAM (32KB, 0x20000000 - 0x20007FFF)
 - **Stack:** 4KB (grows downward from 0x20008000)
@@ -238,12 +245,27 @@ SAMD21 has no hardware EEPROM. GRBL settings are stored in Flash:
 
 ---
 
+## Hardware Accelerators
+
+### DIVAS - Division and Square Root Accelerator
+SAMD21 includes a hardware accelerator that compensates for Cortex-M0+ lack of hardware division:
+
+- **Operations**: 32-bit signed/unsigned division, modulo, square root
+- **Performance**: 1-3 cycles (vs 20+ cycles software division)
+- **Usage**: Transparent to compiler with proper flags
+- **Benefit**: Faster motion calculations, trajectory planning
+
+**Note**: GCC can automatically use DIVAS with `-mcpu=cortex-m0plus` and proper CMSIS definitions.
+
+---
+
 ## Timing Specifications
 
 | Parameter | Value | Notes |
 |-----------|-------|-------|
 | CPU Clock | 48 MHz | From DFLL48M |
 | Timer Resolution | ~20.8 ns | @ 48MHz |
+| Division (DIVAS) | 1-3 cycles | Hardware accelerator |
 | Stepper ISR | TC3 (24-bit) | Planned |
 | Pulse Reset | TC4 (24-bit) | Planned |
 | PWM (Spindle) | TCC0 (16-bit) | Up to 65535 levels |

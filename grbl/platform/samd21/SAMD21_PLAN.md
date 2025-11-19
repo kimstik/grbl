@@ -3,7 +3,7 @@
 **Platform**: SAMD21G18A (Arduino Zero, MKR series)
 **Vendor**: Microchip (formerly Atmel)
 **Status**: 🚧 Work In Progress (WIP)
-**Priority**: MEDIUM (Popular ARM Cortex-M0+ platform)
+**Priority**: HIGH (Popular platform + custom rSamba bootloader integration)
 
 ---
 
@@ -19,6 +19,8 @@
 - **Cost**: ~$2-3 USD in volume
 
 ### Key Features:
+- ✅ **DIVAS** - Division and Square Root Accelerator (1-3 cycles)
+- ✅ **rSamba bootloader** - Ultra-compact 512 bytes (https://github.com/kimstik/rSamba)
 - ✅ Native USB device (USB 2.0 Full Speed)
 - ✅ 6x SERCOM (configurable as UART/SPI/I2C)
 - ✅ 3x 24-bit Timer/Counters (TC)
@@ -27,7 +29,7 @@
 - ✅ 12-channel DMA controller
 - ✅ 10-bit DAC
 - ✅ 16 external interrupts
-- ❌ No hardware FPU (software emulation only)
+- ❌ No hardware FPU (but DIVAS compensates for division)
 - ❌ No hardware EEPROM (use flash emulation)
 
 ### Development Boards:
@@ -192,7 +194,25 @@ Tasks:
 
 ## 5. TECHNICAL CHALLENGES
 
-### Challenge 1: No Hardware EEPROM
+### Challenge 1: rSamba Bootloader Integration
+**Problem**: Custom 512-byte bootloader requires specific memory layout
+
+**Solution**:
+- Application starts at 0x00000200 (512 bytes offset)
+- Vector table relocated to application start
+- Linker script updated for rSamba layout
+- Reserve last 4KB for NVMEM (0x0003F000 - 0x0003FFFF)
+
+**Status**: ✅ Complete - linker script updated
+
+**Memory Layout**:
+```
+0x00000000 - 0x000001FF : rSamba bootloader (512 bytes)
+0x00000200 - 0x0003EFFF : Application (255.5 KB)
+0x0003F000 - 0x0003FFFF : NVMEM settings (4 KB)
+```
+
+### Challenge 2: No Hardware EEPROM
 **Problem**: SAMD21 has no EEPROM, must emulate in Flash
 
 **Solution**:
@@ -203,7 +223,24 @@ Tasks:
 
 **Status**: ⏳ Planned
 
-### Challenge 2: CMSIS Dependencies
+### Challenge 2: DIVAS Hardware Accelerator
+**Problem**: Cortex-M0+ lacks hardware division instruction
+
+**Solution**:
+- SAMD21 includes DIVAS (Division and Square Root Accelerator)
+- Hardware performs 32-bit division in 1-3 cycles
+- Supports: signed/unsigned division, modulo, square root
+- GCC can use DIVAS automatically with proper CMSIS
+
+**Benefits**:
+- Faster trajectory calculations (division-heavy)
+- Improved stepper rate calculations
+- Efficient feed rate planning
+- Compensates for M0+ limitations
+
+**Status**: ✅ Documented - compiler integration pending
+
+### Challenge 3: CMSIS Dependencies
 **Problem**: Need official Microchip headers for production
 
 **Solution**:
