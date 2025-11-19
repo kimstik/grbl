@@ -9,6 +9,7 @@
   Flash controller for STM32F1 family (F103, F105, F107).
 */
 
+#include <stddef.h>
 #include "../stm32_common/stm32_flash.h"
 #include "../stm32_common/stm32_timing.h"
 #include "regs.h"

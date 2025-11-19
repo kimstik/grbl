@@ -94,13 +94,17 @@ typedef enum {
 #define __NOP()  __asm__ volatile ("nop")
 
 // Interrupt control (CMSIS standard)
+#ifndef __disable_irq
 static inline void __disable_irq(void) {
   __asm__ volatile ("cpsid i" ::: "memory");
 }
+#endif
 
+#ifndef __enable_irq
 static inline void __enable_irq(void) {
   __asm__ volatile ("cpsie i" ::: "memory");
 }
+#endif
 
 // ============================================================================
 // VALIDATION HELPERS (for 98% reliability)

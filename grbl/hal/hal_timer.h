@@ -188,14 +188,26 @@ typedef enum {
   void hal_timer_stepper_set_period(uint32_t ticks);
   uint32_t hal_timer_stepper_get_count(void);
 
-  #define HAL_TIMER_STEPPER_INIT()            hal_timer_stepper_init()
-  #define HAL_TIMER_STEPPER_START()           hal_timer_stepper_start()
-  #define HAL_TIMER_STEPPER_STOP()            hal_timer_stepper_stop()
-  #define HAL_TIMER_STEPPER_SET_PERIOD(t)     hal_timer_stepper_set_period(t)
-  #define HAL_TIMER_STEPPER_GET_COUNT()       hal_timer_stepper_get_count()
+  #ifndef HAL_TIMER_STEPPER_INIT
+    #define HAL_TIMER_STEPPER_INIT()            hal_timer_stepper_init()
+  #endif
+  #ifndef HAL_TIMER_STEPPER_START
+    #define HAL_TIMER_STEPPER_START()           hal_timer_stepper_start()
+  #endif
+  #ifndef HAL_TIMER_STEPPER_STOP
+    #define HAL_TIMER_STEPPER_STOP()            hal_timer_stepper_stop()
+  #endif
+  #ifndef HAL_TIMER_STEPPER_SET_PERIOD
+    #define HAL_TIMER_STEPPER_SET_PERIOD(t)     hal_timer_stepper_set_period(t)
+  #endif
+  #ifndef HAL_TIMER_STEPPER_GET_COUNT
+    #define HAL_TIMER_STEPPER_GET_COUNT()       hal_timer_stepper_get_count()
+  #endif
 
   // ISR prototype (implemented in platform code)
-  #define HAL_TIMER_STEPPER_ISR()  void hal_timer_stepper_isr(void)
+  #ifndef HAL_TIMER_STEPPER_ISR
+    #define HAL_TIMER_STEPPER_ISR()  void hal_timer_stepper_isr(void)
+  #endif
 
   // --------------------------------------------------------------------------
   // STEP PULSE RESET TIMER
@@ -212,20 +224,44 @@ typedef enum {
   void hal_timer_pulse_reset_cmp_enable(void);
   void hal_timer_pulse_reset_cmp_disable(void);
 
-  #define HAL_TIMER_PULSE_RESET_INIT()              hal_timer_pulse_reset_init()
-  #define HAL_TIMER_PULSE_RESET_CONFIG_OVF(p)       hal_timer_pulse_reset_config_ovf(p)
-  #define HAL_TIMER_PULSE_RESET_CONFIG_CMP(p)       hal_timer_pulse_reset_config_cmp(p)
-  #define HAL_TIMER_PULSE_RESET_SET_COUNT(v)        hal_timer_pulse_reset_set_count(v)
-  #define HAL_TIMER_PULSE_RESET_SET_COMPARE(v)      hal_timer_pulse_reset_set_compare(v)
-  #define HAL_TIMER_PULSE_RESET_GET_COUNT()         hal_timer_pulse_reset_get_count()
-  #define HAL_TIMER_PULSE_RESET_OVF_ENABLE()        hal_timer_pulse_reset_ovf_enable()
-  #define HAL_TIMER_PULSE_RESET_OVF_DISABLE()       hal_timer_pulse_reset_ovf_disable()
-  #define HAL_TIMER_PULSE_RESET_CMP_ENABLE()        hal_timer_pulse_reset_cmp_enable()
-  #define HAL_TIMER_PULSE_RESET_CMP_DISABLE()       hal_timer_pulse_reset_cmp_disable()
+  #ifndef HAL_TIMER_PULSE_RESET_INIT
+    #define HAL_TIMER_PULSE_RESET_INIT()              hal_timer_pulse_reset_init()
+  #endif
+  #ifndef HAL_TIMER_PULSE_RESET_CONFIG_OVF
+    #define HAL_TIMER_PULSE_RESET_CONFIG_OVF(p)       hal_timer_pulse_reset_config_ovf(p)
+  #endif
+  #ifndef HAL_TIMER_PULSE_RESET_CONFIG_CMP
+    #define HAL_TIMER_PULSE_RESET_CONFIG_CMP(p)       hal_timer_pulse_reset_config_cmp(p)
+  #endif
+  #ifndef HAL_TIMER_PULSE_RESET_SET_COUNT
+    #define HAL_TIMER_PULSE_RESET_SET_COUNT(v)        hal_timer_pulse_reset_set_count(v)
+  #endif
+  #ifndef HAL_TIMER_PULSE_RESET_SET_COMPARE
+    #define HAL_TIMER_PULSE_RESET_SET_COMPARE(v)      hal_timer_pulse_reset_set_compare(v)
+  #endif
+  #ifndef HAL_TIMER_PULSE_RESET_GET_COUNT
+    #define HAL_TIMER_PULSE_RESET_GET_COUNT()         hal_timer_pulse_reset_get_count()
+  #endif
+  #ifndef HAL_TIMER_PULSE_RESET_OVF_ENABLE
+    #define HAL_TIMER_PULSE_RESET_OVF_ENABLE()        hal_timer_pulse_reset_ovf_enable()
+  #endif
+  #ifndef HAL_TIMER_PULSE_RESET_OVF_DISABLE
+    #define HAL_TIMER_PULSE_RESET_OVF_DISABLE()       hal_timer_pulse_reset_ovf_disable()
+  #endif
+  #ifndef HAL_TIMER_PULSE_RESET_CMP_ENABLE
+    #define HAL_TIMER_PULSE_RESET_CMP_ENABLE()        hal_timer_pulse_reset_cmp_enable()
+  #endif
+  #ifndef HAL_TIMER_PULSE_RESET_CMP_DISABLE
+    #define HAL_TIMER_PULSE_RESET_CMP_DISABLE()       hal_timer_pulse_reset_cmp_disable()
+  #endif
 
   // ISR prototypes
-  #define HAL_TIMER_PULSE_RESET_OVF_ISR()  void hal_timer_pulse_reset_ovf_isr(void)
-  #define HAL_TIMER_PULSE_RESET_CMP_ISR()  void hal_timer_pulse_reset_cmp_isr(void)
+  #ifndef HAL_TIMER_PULSE_RESET_OVF_ISR
+    #define HAL_TIMER_PULSE_RESET_OVF_ISR()  void hal_timer_pulse_reset_ovf_isr(void)
+  #endif
+  #ifndef HAL_TIMER_PULSE_RESET_CMP_ISR
+    #define HAL_TIMER_PULSE_RESET_CMP_ISR()  void hal_timer_pulse_reset_cmp_isr(void)
+  #endif
 
   // --------------------------------------------------------------------------
   // SPINDLE PWM TIMER
@@ -238,12 +274,24 @@ typedef enum {
   void hal_timer_spindle_pwm_enable(void);
   void hal_timer_spindle_pwm_disable(void);
 
-  #define HAL_TIMER_SPINDLE_PWM_INIT()        hal_timer_spindle_pwm_init()
-  #define HAL_TIMER_SPINDLE_PWM_CONFIG(f)     hal_timer_spindle_pwm_config(f)
-  #define HAL_TIMER_SPINDLE_PWM_SET_DUTY(v)   hal_timer_spindle_pwm_set_duty(v)
-  #define HAL_TIMER_SPINDLE_PWM_GET_DUTY()    hal_timer_spindle_pwm_get_duty()
-  #define HAL_TIMER_SPINDLE_PWM_ENABLE()      hal_timer_spindle_pwm_enable()
-  #define HAL_TIMER_SPINDLE_PWM_DISABLE()     hal_timer_spindle_pwm_disable()
+  #ifndef HAL_TIMER_SPINDLE_PWM_INIT
+    #define HAL_TIMER_SPINDLE_PWM_INIT()        hal_timer_spindle_pwm_init()
+  #endif
+  #ifndef HAL_TIMER_SPINDLE_PWM_CONFIG
+    #define HAL_TIMER_SPINDLE_PWM_CONFIG(f)     hal_timer_spindle_pwm_config(f)
+  #endif
+  #ifndef HAL_TIMER_SPINDLE_PWM_SET_DUTY
+    #define HAL_TIMER_SPINDLE_PWM_SET_DUTY(v)   hal_timer_spindle_pwm_set_duty(v)
+  #endif
+  #ifndef HAL_TIMER_SPINDLE_PWM_GET_DUTY
+    #define HAL_TIMER_SPINDLE_PWM_GET_DUTY()    hal_timer_spindle_pwm_get_duty()
+  #endif
+  #ifndef HAL_TIMER_SPINDLE_PWM_ENABLE
+    #define HAL_TIMER_SPINDLE_PWM_ENABLE()      hal_timer_spindle_pwm_enable()
+  #endif
+  #ifndef HAL_TIMER_SPINDLE_PWM_DISABLE
+    #define HAL_TIMER_SPINDLE_PWM_DISABLE()     hal_timer_spindle_pwm_disable()
+  #endif
 
   // --------------------------------------------------------------------------
   // PLATFORM CONSTANTS

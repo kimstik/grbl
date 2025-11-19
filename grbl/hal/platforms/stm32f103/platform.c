@@ -19,16 +19,11 @@
 // ============================================================================
 
 const hal_platform_info_t stm32_platform_info = {
-  .platform_name  = "STM32F103C8T6",
-  .cpu_name       = "ARM Cortex-M3",
-  .arch_name      = "ARM",
-  .cpu_freq       = 72000000,
-  .ram_size       = 20480,
-  .flash_size     = 65536,
-  .has_fpu        = 0,
-  .has_dma        = 1,
-  .has_usb        = 0,
-  .has_hw_eeprom  = 0
+  .name          = "STM32F103C8T6",
+  .cpu           = "ARM Cortex-M3",
+  .cpu_freq_hz   = 72000000,
+  .ram_bytes     = 20480,
+  .flash_bytes   = 65536
 };
 
 const hal_platform_info_t* hal_platform_get_info(void) {
@@ -119,7 +114,8 @@ void hal_gpio_set_output(GPIO_TypeDef* port, uint32_t mask) {
   }
 }
 
-void hal_gpio_set_input(GPIO_TypeDef* port, uint32_t mask) {
+void hal_gpio_set_input(hal_gpio_port_t port, uint32_t mask) {
+  GPIO_TypeDef* gpio = (GPIO_TypeDef*)port;
   // Configure pins as floating input
   // Mode: 0b0100 = Input mode, floating
   for (uint8_t pin = 0; pin < 16; pin++) {
@@ -270,7 +266,7 @@ void hal_timer_pulse_reset_init(void) {
   NVIC_SetPriority(TIM3_IRQn, 2);
 }
 
-#ifdef VARIABLE_SPINDLE
+// Spindle PWM timer initialization
 void hal_timer_spindle_pwm_init(void) {
   // Enable TIM1 clock
   RCC->APB2ENR |= RCC_APB2ENR_TIM1EN;
@@ -288,7 +284,6 @@ void hal_timer_spindle_pwm_init(void) {
 
   TIM1->CR1 = TIM_CR1_CEN;          // Enable counter
 }
-#endif
 
 // ============================================================================
 // SERIAL/UART FUNCTIONS
@@ -318,6 +313,49 @@ void hal_serial_init(uint32_t baud_rate) {
   NVIC_SetPriority(USART1_IRQn, 3);
 }
 
+// Forward declarations for serial ISR helpers (defined in serial.c)
+extern void stm32_usart1_rx_handler(void);
+extern void stm32_usart1_tx_handler(void);
+
+// USART1 interrupt handler
+// This is the actual ISR that dispatches to RX/TX handlers based on status flags
+void USART1_IRQHandler(void) {
+  // Check for RX not empty (data received)
+  if (USART1->SR & USART_SR_RXNE) {
+    stm32_usart1_rx_handler();
+  }
+
+  // Check for TX empty (ready to transmit)
+  if (USART1->SR & USART_SR_TXE) {
+    stm32_usart1_tx_handler();
+  }
+}
+
+// ============================================================================
+// INTERRUPT CONTROL
+// ============================================================================
+
+void hal_interrupts_enable(void) {
+  __enable_irq();
+}
+
+void hal_interrupts_disable(void) {
+  __disable_irq();
+}
+
+// Critical section state (required by HAL)
+uint32_t _hal_critical_state = 0;
+
+uint32_t hal_critical_enter(void) {
+  uint32_t primask = __get_PRIMASK();
+  __disable_irq();
+  return primask;
+}
+
+void hal_critical_exit(uint32_t state) {
+  __set_PRIMASK(state);
+}
+
 // ============================================================================
 // DELAY FUNCTIONS
 // ============================================================================
@@ -334,6 +372,11 @@ void hal_delay_us(uint32_t us) {
   uint32_t cycles = us * 72;  // 72 MHz = 72 cycles per microsecond
 
   while ((DWT->CYCCNT - start) < cycles);
+}
+
+// AVR compatibility - _delay_ms wrapper
+void _delay_ms(double ms) {
+  hal_delay_ms((uint32_t)ms);
 }
 
 // ============================================================================
@@ -362,7 +405,7 @@ void hal_nvmem_init(void) {
   nvmem_dirty = false;
 }
 
-unsigned char hal_nvmem_read_byte(unsigned int addr) {
+uint8_t hal_nvmem_read_byte(uint32_t addr) {
   if (!nvmem_initialized) {
     hal_nvmem_init();
   }
@@ -374,7 +417,7 @@ unsigned char hal_nvmem_read_byte(unsigned int addr) {
   return nvmem_cache[addr];
 }
 
-void hal_nvmem_write_byte(unsigned int addr, unsigned char data) {
+void hal_nvmem_write_byte(uint32_t addr, uint8_t data) {
   if (!nvmem_initialized) {
     hal_nvmem_init();
   }
@@ -462,7 +505,8 @@ void hal_nvmem_flush(void) {
 
 #ifdef ENABLE_WATCHDOG
 
-void hal_watchdog_init(void) {
+void hal_watchdog_init(uint32_t timeout_ms) {
+  (void)timeout_ms;  // Unused - STM32 watchdog timeout is fixed
   // Start IWDG
   IWDG->KR = 0xCCCC;  // Start watchdog
 
@@ -488,7 +532,7 @@ void hal_watchdog_refresh(void) {
 #else
 
 // Watchdog disabled for debugging
-void hal_watchdog_init(void) { }
+void hal_watchdog_init(uint32_t timeout_ms) { (void)timeout_ms; }
 void hal_watchdog_refresh(void) { }
 
 #endif // ENABLE_WATCHDOG
@@ -507,7 +551,7 @@ void hal_system_init(void) {
   DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
 
   // Initialize watchdog (disabled by default, enable with -DENABLE_WATCHDOG)
-  hal_watchdog_init();
+  hal_watchdog_init(1000);  // 1000ms timeout (ignored if watchdog disabled)
 
   // Initialize GPIO
   hal_gpio_init();

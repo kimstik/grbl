@@ -55,6 +55,11 @@
 // This allows GRBL to build standalone without external CMSIS pack
 #include "regs.h"
 
+// Define hal_gpio_port_t before hal_gpio.h includes it
+// This ensures our GPIO_TypeDef* is used instead of void*
+typedef GPIO_TypeDef* hal_gpio_port_t;
+#define HAL_GPIO_PORT_T_DEFINED
+
 // ============================================================================
 // PIN MAPPING - GPIO DEFINITIONS
 // ============================================================================
@@ -407,8 +412,10 @@ void hal_timer_spindle_pwm_init(void);
 #define HAL_SERIAL_TX_BUFFER_SIZE               64
 
 // Serial ISR definitions
-#define HAL_SERIAL_RX_ISR()                     void USART1_IRQHandler(void)
-#define HAL_SERIAL_TX_ISR()                     void USART1_IRQHandler(void)
+// On STM32, RX and TX share USART1_IRQHandler, so we define helper functions
+// The actual USART1_IRQHandler is in platform.c and calls these based on SR flags
+#define HAL_SERIAL_RX_ISR()                     void stm32_usart1_rx_handler(void)
+#define HAL_SERIAL_TX_ISR()                     void stm32_usart1_tx_handler(void)
 
 // Serial initialization
 void hal_serial_init(uint32_t baud_rate);

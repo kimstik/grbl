@@ -92,7 +92,9 @@
   // ============================================================================
 
   // Port/pin types
-  typedef void* hal_gpio_port_t;
+  #ifndef HAL_GPIO_PORT_T_DEFINED
+    typedef void* hal_gpio_port_t;
+  #endif
   typedef uint32_t hal_gpio_pin_t;
 
   // Port manipulation
@@ -110,31 +112,49 @@
   void hal_gpio_write_pin(hal_gpio_port_t port, uint8_t pin, bool value);
   bool hal_gpio_read_pin(hal_gpio_port_t port, uint8_t pin);
 
-  #define HAL_GPIO_WRITE_PIN(port, pin, value)  hal_gpio_write_pin(port, pin, value)
-  #define HAL_GPIO_READ_PIN(port, pin)          hal_gpio_read_pin(port, pin)
+  #ifndef HAL_GPIO_WRITE_PIN
+    #define HAL_GPIO_WRITE_PIN(port, pin, value)  hal_gpio_write_pin(port, pin, value)
+  #endif
+  #ifndef HAL_GPIO_READ_PIN
+    #define HAL_GPIO_READ_PIN(port, pin)          hal_gpio_read_pin(port, pin)
+  #endif
 
   // Bit operations
   void hal_gpio_set_bits(hal_gpio_port_t port, uint32_t mask);
   void hal_gpio_clear_bits(hal_gpio_port_t port, uint32_t mask);
   void hal_gpio_toggle_bits(hal_gpio_port_t port, uint32_t mask);
 
-  #define HAL_GPIO_SET_BITS(port, mask)    hal_gpio_set_bits(port, mask)
-  #define HAL_GPIO_CLEAR_BITS(port, mask)  hal_gpio_clear_bits(port, mask)
-  #define HAL_GPIO_TOGGLE_BITS(port, mask) hal_gpio_toggle_bits(port, mask)
+  #ifndef HAL_GPIO_SET_BITS
+    #define HAL_GPIO_SET_BITS(port, mask)    hal_gpio_set_bits(port, mask)
+  #endif
+  #ifndef HAL_GPIO_CLEAR_BITS
+    #define HAL_GPIO_CLEAR_BITS(port, mask)  hal_gpio_clear_bits(port, mask)
+  #endif
+  #ifndef HAL_GPIO_TOGGLE_BITS
+    #define HAL_GPIO_TOGGLE_BITS(port, mask) hal_gpio_toggle_bits(port, mask)
+  #endif
 
   // Direction control
   void hal_gpio_set_output(hal_gpio_port_t port, uint32_t mask);
   void hal_gpio_set_input(hal_gpio_port_t port, uint32_t mask);
 
-  #define HAL_GPIO_SET_OUTPUT(port, mask)  hal_gpio_set_output(port, mask)
-  #define HAL_GPIO_SET_INPUT(port, mask)   hal_gpio_set_input(port, mask)
+  #ifndef HAL_GPIO_SET_OUTPUT
+    #define HAL_GPIO_SET_OUTPUT(port, mask)  hal_gpio_set_output(port, mask)
+  #endif
+  #ifndef HAL_GPIO_SET_INPUT
+    #define HAL_GPIO_SET_INPUT(port, mask)   hal_gpio_set_input(port, mask)
+  #endif
 
   // Pull-up control
   void hal_gpio_pullup_enable(hal_gpio_port_t port, uint32_t mask);
   void hal_gpio_pullup_disable(hal_gpio_port_t port, uint32_t mask);
 
-  #define HAL_GPIO_PULLUP_ENABLE(port, mask)   hal_gpio_pullup_enable(port, mask)
-  #define HAL_GPIO_PULLUP_DISABLE(port, mask)  hal_gpio_pullup_disable(port, mask)
+  #ifndef HAL_GPIO_PULLUP_ENABLE
+    #define HAL_GPIO_PULLUP_ENABLE(port, mask)   hal_gpio_pullup_enable(port, mask)
+  #endif
+  #ifndef HAL_GPIO_PULLUP_DISABLE
+    #define HAL_GPIO_PULLUP_DISABLE(port, mask)  hal_gpio_pullup_disable(port, mask)
+  #endif
 
 #endif
 
