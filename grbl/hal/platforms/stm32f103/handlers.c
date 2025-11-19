@@ -12,9 +12,46 @@
 #include "platform.h"
 #include "regs.h"
 
-// Forward declarations of GRBL interrupt handlers
-extern void limits_isr(void);     // Defined in limits.c
-extern void control_isr(void);    // Defined in system.c
+// Include GRBL headers for system functions
+#include "../../../grbl.h"
+
+// STM32 interrupt handlers for limits and control pins
+void limits_isr(void) {
+  // Check limit pin state
+  if (sys.state != STATE_ALARM) {
+    if (!(sys_rt_exec_alarm)) {
+      // Check if any limit switch is triggered
+      if (HAL_GPIO_READ_PORT(LIMIT_PIN, LIMIT_MASK)) {
+        mc_reset(); // Initiate system kill
+        system_set_exec_alarm(EXEC_ALARM_HARD_LIMIT); // Indicate hard limit event
+      }
+    }
+  }
+}
+
+void control_isr(void) {
+  // Read control pin states and set appropriate system flags
+  uint8_t pin = HAL_GPIO_READ_PORT(CONTROL_PIN, CONTROL_MASK);
+
+  if (pin) {
+    // Invert because control pins are pulled high
+    pin ^= CONTROL_MASK;
+
+    // Check individual control bits and set flags
+    if (pin & (1 << CONTROL_RESET_PIN)) {
+      mc_reset();
+    }
+    if (pin & (1 << CONTROL_FEED_HOLD_PIN)) {
+      system_set_exec_state_flag(EXEC_FEED_HOLD);
+    }
+    if (pin & (1 << CONTROL_CYCLE_START_PIN)) {
+      system_set_exec_state_flag(EXEC_CYCLE_START);
+    }
+    if (pin & (1 << CONTROL_SAFETY_DOOR_PIN)) {
+      system_set_exec_state_flag(EXEC_SAFETY_DOOR);
+    }
+  }
+}
 
 // ============================================================================
 // LIMIT SWITCH INTERRUPT HANDLERS

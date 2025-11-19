@@ -117,7 +117,9 @@
   // --------------------------------------------------------------------------
 
   void hal_serial_init(uint32_t baud_rate);
-  #define HAL_SERIAL_INIT()  hal_serial_init(BAUD_RATE)
+  #ifndef HAL_SERIAL_INIT
+    #define HAL_SERIAL_INIT()  hal_serial_init(BAUD_RATE)
+  #endif
 
   // --------------------------------------------------------------------------
   // DATA REGISTER ACCESS
@@ -126,8 +128,12 @@
   uint8_t hal_serial_read_data(void);
   void hal_serial_write_data(uint8_t data);
 
-  #define HAL_SERIAL_READ_DATA()       hal_serial_read_data()
-  #define HAL_SERIAL_WRITE_DATA(data)  hal_serial_write_data(data)
+  #ifndef HAL_SERIAL_READ_DATA
+    #define HAL_SERIAL_READ_DATA()       hal_serial_read_data()
+  #endif
+  #ifndef HAL_SERIAL_WRITE_DATA
+    #define HAL_SERIAL_WRITE_DATA(data)  hal_serial_write_data(data)
+  #endif
 
   // --------------------------------------------------------------------------
   // STATUS FLAGS
@@ -138,10 +144,18 @@
   bool hal_serial_frame_error(void);
   bool hal_serial_overrun_error(void);
 
-  #define HAL_SERIAL_RX_READY()        hal_serial_rx_ready()
-  #define HAL_SERIAL_TX_READY()        hal_serial_tx_ready()
-  #define HAL_SERIAL_FRAME_ERROR()     hal_serial_frame_error()
-  #define HAL_SERIAL_OVERRUN_ERROR()   hal_serial_overrun_error()
+  #ifndef HAL_SERIAL_RX_READY
+    #define HAL_SERIAL_RX_READY()        hal_serial_rx_ready()
+  #endif
+  #ifndef HAL_SERIAL_TX_READY
+    #define HAL_SERIAL_TX_READY()        hal_serial_tx_ready()
+  #endif
+  #ifndef HAL_SERIAL_FRAME_ERROR
+    #define HAL_SERIAL_FRAME_ERROR()     hal_serial_frame_error()
+  #endif
+  #ifndef HAL_SERIAL_OVERRUN_ERROR
+    #define HAL_SERIAL_OVERRUN_ERROR()   hal_serial_overrun_error()
+  #endif
 
   // --------------------------------------------------------------------------
   // INTERRUPT CONTROL
@@ -152,17 +166,29 @@
   void hal_serial_tx_interrupt_enable(void);
   void hal_serial_tx_interrupt_disable(void);
 
-  #define HAL_SERIAL_RX_INTERRUPT_ENABLE()   hal_serial_rx_interrupt_enable()
-  #define HAL_SERIAL_RX_INTERRUPT_DISABLE()  hal_serial_rx_interrupt_disable()
-  #define HAL_SERIAL_TX_INTERRUPT_ENABLE()   hal_serial_tx_interrupt_enable()
-  #define HAL_SERIAL_TX_INTERRUPT_DISABLE()  hal_serial_tx_interrupt_disable()
+  #ifndef HAL_SERIAL_RX_INTERRUPT_ENABLE
+    #define HAL_SERIAL_RX_INTERRUPT_ENABLE()   hal_serial_rx_interrupt_enable()
+  #endif
+  #ifndef HAL_SERIAL_RX_INTERRUPT_DISABLE
+    #define HAL_SERIAL_RX_INTERRUPT_DISABLE()  hal_serial_rx_interrupt_disable()
+  #endif
+  #ifndef HAL_SERIAL_TX_INTERRUPT_ENABLE
+    #define HAL_SERIAL_TX_INTERRUPT_ENABLE()   hal_serial_tx_interrupt_enable()
+  #endif
+  #ifndef HAL_SERIAL_TX_INTERRUPT_DISABLE
+    #define HAL_SERIAL_TX_INTERRUPT_DISABLE()  hal_serial_tx_interrupt_disable()
+  #endif
 
   // --------------------------------------------------------------------------
   // ISR DEFINITIONS
   // --------------------------------------------------------------------------
 
-  #define HAL_SERIAL_RX_ISR()  void hal_serial_rx_isr(void)
-  #define HAL_SERIAL_TX_ISR()  void hal_serial_tx_isr(void)
+  #ifndef HAL_SERIAL_RX_ISR
+    #define HAL_SERIAL_RX_ISR()  void hal_serial_rx_isr(void)
+  #endif
+  #ifndef HAL_SERIAL_TX_ISR
+    #define HAL_SERIAL_TX_ISR()  void hal_serial_tx_isr(void)
+  #endif
 
 #endif
 

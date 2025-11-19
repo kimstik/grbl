@@ -201,6 +201,8 @@ typedef struct {
 
 // FLASH_SR bits
 #define FLASH_SR_BSY         (1 << 0)
+#define FLASH_SR_PGERR       (1 << 2)
+#define FLASH_SR_WRPRTERR    (1 << 4)
 #define FLASH_SR_EOP         (1 << 5)
 
 // FLASH_CR bits

@@ -70,7 +70,9 @@ LDFLAGS += -Wl,--gc-sections
 LDFLAGS += -Wl,-Map=$(BUILD_DIR)/grbl_$(PLATFORM_NAME).map
 LDFLAGS += -specs=nano.specs -specs=nosys.specs
 LDFLAGS += -T script.ld
-LDFLAGS += -lm
+
+# Libraries (must come after objects in link command)
+LIBS = -lm
 
 # Output files
 ELF_FILE = $(BUILD_DIR)/grbl_$(PLATFORM_NAME).elf
@@ -115,7 +117,7 @@ $(BUILD_DIR)/stm32_watchdog.o: ../stm32_common/stm32_watchdog.c | $(BUILD_DIR)
 
 # Link
 $(ELF_FILE): $(OBJECTS)
-	$(CC) $(LDFLAGS) -o $@ $(OBJECTS)
+	$(CC) $(LDFLAGS) -o $@ $(OBJECTS) $(LIBS)
 	$(SIZE) --format=berkeley $@
 
 # Create hex file
