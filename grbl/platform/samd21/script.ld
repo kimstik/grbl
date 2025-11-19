@@ -6,9 +6,14 @@
   Intelligence assisted
   License: MIT
 
-  Memory layout for SAMD21G18A:
-  - Flash: 256 KB (0x00000000 - 0x0003FFFF)
-  - RAM:    32 KB (0x20000000 - 0x20007FFF)
+  Memory layout for SAMD21G18A with rSamba bootloader:
+  - Bootloader: 512 bytes (0x00000000 - 0x000001FF) - rSamba
+  - Application: 255.5 KB (0x00000200 - 0x0003EFFF)
+  - NVMEM:       4 KB     (0x0003F000 - 0x0003FFFF) - Settings
+  - RAM:         32 KB    (0x20000000 - 0x20007FFF)
+
+  rSamba: https://github.com/kimstik/rSamba
+  Ultra-compact 512-byte bootloader for SAMD21
 */
 
 /* Entry point */
@@ -20,7 +25,8 @@ _stack_size = 0x1000;  /* 4KB stack */
 /* Memory regions */
 MEMORY
 {
-  FLASH (rx)  : ORIGIN = 0x00000000, LENGTH = 256K
+  /* rSamba bootloader occupies first 512 bytes */
+  FLASH (rx)  : ORIGIN = 0x00000200, LENGTH = 255488  /* 256K - 512B - 4KB */
   RAM   (rwx) : ORIGIN = 0x20000000, LENGTH = 32K
 }
 

@@ -26,12 +26,13 @@
 // PLATFORM CAPABILITIES
 // ============================================================================
 
-#define HAL_HAS_FPU           0   // Cortex-M0+ has no FPU
+#define HAL_HAS_FPU           0   // Cortex-M0+ has no FPU (software emulation)
 #define HAL_HAS_DMA           1   // 12 DMA channels
 #define HAL_HAS_USB           1   // Native USB device
 #define HAL_HAS_HW_EEPROM     0   // No hardware EEPROM (use flash emulation)
 #define HAL_HAS_HW_MULTIPLY   1   // 32-bit hardware multiplier
-#define HAL_HAS_HW_DIVIDE     1   // Hardware divider
+#define HAL_HAS_HW_DIVIDE     1   // DIVAS - Division and Square Root Accelerator
+#define HAL_HAS_DIVAS         1   // Hardware 32-bit division, sqrt, modulo (1-3 cycles)
 
 // ============================================================================
 // PLATFORM SPECIFICATIONS
