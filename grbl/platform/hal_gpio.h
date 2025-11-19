@@ -214,7 +214,7 @@ typedef enum {
 /*
   Pin mapping is defined in platform.h for each platform.
 
-  Example for AVR (in platforms/avr_atmega328p/platform.h):
+  Example for AVR (in platforms/atmega328p/platform.h):
 
     #define STEP_PORT       PORTD
     #define STEP_DDR        DDRD

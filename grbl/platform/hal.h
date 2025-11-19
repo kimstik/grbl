@@ -143,7 +143,7 @@
 // ============================================================================
 
 #if defined(PLATFORM_AVR_ATMEGA328P)
-  #include "avr_atmega328p/platform.h"
+  #include "atmega328p/platform.h"
 
 #elif defined(PLATFORM_STM32F103)
   #include "stm32f103/platform.h"
