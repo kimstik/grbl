@@ -1,13 +1,13 @@
 # GRBL HAL Platform Roadmap
 
-**Date**: 2025-11-18
-**Status**: Planning for future platform ports
+**Date**: 2025-11-19
+**Status**: Active development - multiple platforms in progress
 
 This document outlines the planned platform ports and their implementation roadmaps.
 
 ---
 
-## Current Platforms (100% Complete)
+## Production Platforms (100% Complete)
 
 ### STM32F103C8 (Blue Pill)
 - **Status**: ✅ Production ready
@@ -22,6 +22,47 @@ This document outlines the planned platform ports and their implementation roadm
 - **Memory**: 32KB RAM, 128KB Flash
 - **Completion**: 100%
 - **Code reuse**: ~60% via stm32_common
+
+---
+
+## In Progress Platforms
+
+### SAMD21G18A (Arduino Zero / MKR)
+- **Status**: 🚧 Work In Progress (40% complete)
+- **Architecture**: ARM Cortex-M0+, 48MHz
+- **Vendor**: Microchip (formerly Atmel)
+- **Memory**: 32KB RAM, 256KB Flash
+- **Target boards**: Arduino Zero, MKR series, Adafruit Feather M0
+- **Unique features**:
+  - Native USB 2.0 Full Speed
+  - 6x SERCOM (UART/SPI/I2C configurable)
+  - 3x TCC timers with advanced PWM
+  - 12-channel DMA
+  - Popular Arduino ecosystem
+- **Current status**:
+  - ✅ Build system complete
+  - ✅ Startup code and vector table (44 IRQs)
+  - ✅ Pin mapping (Arduino Zero compatible)
+  - ✅ Linker script and memory layout
+  - 🚧 HAL implementation in progress
+  - ⏳ GPIO, timers, UART pending
+- **Estimated completion**: 2025-11-29
+- **Target use case**: Arduino-compatible CNC, educational, maker projects
+- **See**: [SAMD21_PLAN.md](samd21/SAMD21_PLAN.md)
+
+### SG2002 (Sophgo RISC-V)
+- **Status**: 🚧 Work In Progress
+- **Architecture**: RISC-V C906, 700MHz (RV64IMAFDC)
+- **Vendor**: Sophgo
+- **Memory**: 256MB DDR3
+- **Target board**: LicheeRV Nano
+- **Unique features**:
+  - Dual-core: C906 (big) + C906 (little)
+  - Linux-capable RISC-V
+  - PLIC interrupt controller
+  - High performance for complex G-code
+- **Current status**: Platform structure ready
+- **Target use case**: High-end CNC, complex multi-axis systems
 
 ---
 
