@@ -26,12 +26,14 @@ else
 endif
 CC         = $(PREFIX)gcc
 OBJCOPY    = $(PREFIX)objcopy
+OBJDUMP    = $(PREFIX)objdump
 SIZE       = $(PREFIX)size
 GDB        = $(PREFIX)gdb
 
 # Paths
 GRBL_DIR   = ../..
-BUILD_DIR  = ../../../build_$(PLATFORM_NAME)_$(BUILD)
+BUILD_DIR  = ../../../build/$(PLATFORM_NAME)
+OUTPUT_DIR = ../../../build
 PLATFORM_DIR = .
 
 # GRBL core sources (from grbl directory)
@@ -65,6 +67,9 @@ CFLAGS  = -mcpu=$(CPU) -mthumb $(FPU)
 CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)
 CFLAGS += -Wall -Wextra
 CFLAGS += -ffunction-sections -fdata-sections
+
+# Floating point: default is float (single precision)
+# To enable double precision, add -D__USE_DOUBLE__ to CFLAGS_EXTRA in platform Makefile
 # CFLAGS_EXTRA must be ABSOLUTELY FIRST to override grbl headers (cpu_map.h, etc)
 CFLAGS += $(CFLAGS_EXTRA) -I$(PLATFORM_DIR) -I$(COMMON_DIR) -I$(GRBL_DIR)/platform -I$(GRBL_DIR)
 
@@ -81,7 +86,7 @@ endif
 # Linker flags
 LDFLAGS  = -mcpu=$(CPU) -mthumb $(FPU)
 LDFLAGS += -Wl,--gc-sections
-LDFLAGS += -Wl,-Map=$(BUILD_DIR)/grbl_$(PLATFORM_NAME).map
+LDFLAGS += -Wl,-Map=$(MAP_FILE)
 LDFLAGS += -specs=nano.specs -specs=nosys.specs
 LDFLAGS += -T script.ld
 
@@ -93,19 +98,31 @@ endif
 # Libraries (must come after objects in link command)
 LIBS = -lm
 
-# Output files
-ELF_FILE = $(BUILD_DIR)/grbl_$(PLATFORM_NAME).elf
-HEX_FILE = $(BUILD_DIR)/grbl_$(PLATFORM_NAME).hex
-BIN_FILE = $(BUILD_DIR)/grbl_$(PLATFORM_NAME).bin
+# Output file naming: release gets clean name, debug gets _dbg suffix
+ifeq ($(BUILD),RELEASE)
+  BINARY_NAME = grbl_$(PLATFORM_NAME)
+else
+  BINARY_NAME = grbl_$(PLATFORM_NAME)_dbg
+endif
+
+# Output files - artifacts go to /build, object files to /build/$(PLATFORM_NAME)
+ELF_FILE  = $(OUTPUT_DIR)/$(BINARY_NAME).elf
+HEX_FILE  = $(OUTPUT_DIR)/$(BINARY_NAME).hex
+BIN_FILE  = $(OUTPUT_DIR)/$(BINARY_NAME).bin
+DUMP_FILE = $(OUTPUT_DIR)/$(BINARY_NAME).dump
+MAP_FILE  = $(OUTPUT_DIR)/$(BINARY_NAME).map
 
 # ============================================================================
 # TARGETS
 # ============================================================================
 
-all: $(BUILD_DIR) $(HEX_FILE) $(BIN_FILE)
+all: $(BUILD_DIR) $(OUTPUT_DIR) $(HEX_FILE) $(BIN_FILE) $(DUMP_FILE)
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
+
+$(OUTPUT_DIR):
+	mkdir -p $(OUTPUT_DIR)
 
 # Compile GRBL core files
 $(BUILD_DIR)/%.o: $(GRBL_DIR)/%.c | $(BUILD_DIR)
@@ -147,6 +164,10 @@ $(HEX_FILE): $(ELF_FILE)
 $(BIN_FILE): $(ELF_FILE)
 	$(OBJCOPY) -O binary $< $@
 
+# Create disassembly dump
+$(DUMP_FILE): $(ELF_FILE)
+	$(OBJDUMP) -Sxdstr $< >$@
+
 # Flash using st-link
 flash: $(BIN_FILE)
 	st-flash write $< 0x8000000
@@ -160,12 +181,18 @@ flash-openocd: $(HEX_FILE)
 debug: $(ELF_FILE)
 	$(GDB) $<
 
-# Clean
+# Clean platform-specific files only
 clean:
+	rm -f $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.elf \
+	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.hex \
+	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.bin \
+	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.dump \
+	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.map
 	rm -rf $(BUILD_DIR)
 
+# Clean all build artifacts
 clean-all:
-	rm -rf $(GRBL_DIR)/../build_$(PLATFORM_NAME)_DEBUG $(GRBL_DIR)/../build_$(PLATFORM_NAME)_RELEASE
+	rm -rf $(OUTPUT_DIR)
 
 # Help
 help:
