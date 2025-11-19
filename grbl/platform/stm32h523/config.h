@@ -1,44 +1,44 @@
 /*
-  config.h - STM32F103 platform configuration
+  config.h - STM32H523 platform configuration
   Part of Grbl
 
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
 
-  Defines all STM32F103-specific parameters for the common code.
+  STM32H523CBT6: 250MHz Cortex-M33, 32KB RAM, 128KB Flash
 */
 
-#ifndef STM32F103_CONFIG_H
-#define STM32F103_CONFIG_H
+#ifndef STM32H523_CONFIG_H
+#define STM32H523_CONFIG_H
 
-#include "../stm32_common/stm32_platform.h"
+#include "../common/stm32/stm32_platform.h"
 
 // ============================================================================
-// STM32F103 PLATFORM CONFIGURATION
+// STM32H523 PLATFORM CONFIGURATION
 // ============================================================================
 
-// Clock frequencies (72 MHz CPU, APB1=36MHz, APB2=72MHz)
-#define STM32F103_CPU_FREQ      72000000UL
-#define STM32F103_APB1_FREQ     36000000UL
-#define STM32F103_APB2_FREQ     72000000UL
+// Clock frequencies (250 MHz CPU, APB1=125MHz, APB2=125MHz, APB3=125MHz)
+#define STM32H523_CPU_FREQ      250000000UL
+#define STM32H523_APB1_FREQ     125000000UL
+#define STM32H523_APB2_FREQ     125000000UL
 
-// Flash geometry (1KB pages)
-#define STM32F103_FLASH_PAGE_SIZE   1024
-#define STM32F103_FLASH_BASE_ADDR   0x0800F800  // Last 2KB (pages at 0x0800F800-0x0800FFFF)
-#define STM32F103_FLASH_NUM_PAGES   2           // 2 x 1KB = 2KB for NVMEM
+// Flash geometry (8KB pages)
+#define STM32H523_FLASH_PAGE_SIZE   8192    // 8KB pages
+#define STM32H523_FLASH_BASE_ADDR   0x0801E000  // Last 8KB (0x0801E000-0x0801FFFF)
+#define STM32H523_FLASH_NUM_PAGES   1       // 1 x 8KB = 8KB for NVMEM
 
 // Memory sizes
-#define STM32F103_RAM_SIZE      20480   // 20KB
-#define STM32F103_FLASH_SIZE    65536   // 64KB (some variants have 128KB)
+#define STM32H523_RAM_SIZE      32768   // 32KB SRAM
+#define STM32H523_FLASH_SIZE    131072  // 128KB Flash
 
 // Hardware capabilities
-#define STM32F103_HAS_FPU           false
-#define STM32F103_HAS_32BIT_TIMERS  false   // Only 16-bit TIM2/TIM3/TIM4
-#define STM32F103_GPIO_MODEL        1       // F1 family uses CRL/CRH registers
+#define STM32H523_HAS_FPU           true    // Cortex-M33 has FPU
+#define STM32H523_HAS_32BIT_TIMERS  true    // TIM2/TIM3/TIM4/TIM5 are 32-bit
+#define STM32H523_GPIO_MODEL        2       // H5 uses MODER/OTYPER (like F4)
 
 // ============================================================================
-// PIN MAPPING (can be customized per project)
+// PIN MAPPING (Black Pill H5 compatible)
 // ============================================================================
 
 // Stepper motors (GPIOA)
@@ -61,21 +61,21 @@
 #define CYCLE_START_PIN     5   // PB5
 #define SAFETY_DOOR_PIN     6   // PB6
 
-// Spindle control (GPIOA/GPIOB)
+// Spindle control
 #define SPINDLE_ENABLE_PIN      7   // PB7
 #define SPINDLE_PWM_PIN         8   // PA8 (TIM1 CH1)
 #define SPINDLE_DIRECTION_PIN   9   // PA9
 
 // Coolant (GPIOC)
 #define COOLANT_FLOOD_PIN   0   // PC0
-#define COOLANT_MIST_PIN    1   // PC1 (optional, if ENABLE_M7)
+#define COOLANT_MIST_PIN    1   // PC1
 
 // Serial (USART1)
-#define SERIAL_TX_PIN       9   // PA9
-#define SERIAL_RX_PIN       10  // PA10
+#define SERIAL_TX_PIN       9   // PA9 (or PB6 alternate)
+#define SERIAL_RX_PIN       10  // PA10 (or PB7 alternate)
 
-// Debug LED
-#define LED_PIN             13  // PC13 (built-in on Blue Pill, active LOW)
+// LED (built-in on board)
+#define LED_PIN             7   // PB7 (green LED on Black Pill H5)
 
 // Probe
 #define PROBE_PIN           15  // PC15
@@ -95,14 +95,14 @@
 // TIMER CONFIGURATION
 // ============================================================================
 
-// Stepper timer: TIM2 (16-bit on F103)
+// Stepper timer: TIM2 (32-bit on H5)
 #define STEPPER_TIMER_IRQn  TIM2_IRQn
 
-// Pulse reset timer: TIM3
+// Pulse reset timer: TIM3 (32-bit)
 #define PULSE_TIMER_IRQn    TIM3_IRQn
 
 // Spindle PWM: TIM1 CH1
-#define SPINDLE_PWM_MAX_VALUE   1000  // Default PWM period (can be changed)
+#define SPINDLE_PWM_MAX_VALUE   1000
 
 // ============================================================================
 // SERIAL CONFIGURATION
@@ -110,4 +110,4 @@
 
 #define SERIAL_BAUD_RATE    115200
 
-#endif // STM32F103_CONFIG_H
+#endif // STM32H523_CONFIG_H

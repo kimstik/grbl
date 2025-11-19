@@ -10,8 +10,8 @@
 */
 
 #include <stddef.h>
-#include "../stm32_common/stm32_flash.h"
-#include "../stm32_common/stm32_timing.h"
+#include "../common/stm32/stm32_flash.h"
+#include "../common/stm32/stm32_timing.h"
 #include "regs.h"
 #include "config.h"
 

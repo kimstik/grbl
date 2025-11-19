@@ -30,22 +30,35 @@ SIZE       = $(PREFIX)size
 GDB        = $(PREFIX)gdb
 
 # Paths
-GRBL_DIR   = ../../..
-BUILD_DIR  = $(GRBL_DIR)/../build_$(PLATFORM_NAME)_$(BUILD)
+GRBL_DIR   = ../..
+BUILD_DIR  = ../../../build_$(PLATFORM_NAME)_$(BUILD)
 PLATFORM_DIR = .
 
-# GRBL core sources
-SOURCES = main.c motion_control.c gcode.c spindle_control.c coolant_control.c serial.c \
-          protocol.c stepper.c nvmem.c settings.c planner.c nuts_bolts.c limits.c jog.c \
-          print.c probe.c report.c system.c \
-          platform.c startup.c handlers.c flash.c
+# GRBL core sources (from grbl directory)
+GRBL_SOURCES = main.c motion_control.c gcode.c spindle_control.c coolant_control.c serial.c \
+               protocol.c stepper.c nvmem.c settings.c planner.c nuts_bolts.c limits.c jog.c \
+               print.c probe.c report.c system.c
+
+# Platform-specific sources
+PLATFORM_SOURCES = platform.c startup.c handlers.c flash.c
 
 # STM32 common code
-SOURCES += ../stm32_common/stm32_nvmem.c \
-           ../stm32_common/stm32_timing.c \
-           ../stm32_common/stm32_watchdog.c
+COMMON_DIR = ../common/stm32
+COMMON_SOURCES = $(COMMON_DIR)/stm32_nvmem.c \
+                 $(COMMON_DIR)/stm32_timing.c \
+                 $(COMMON_DIR)/stm32_watchdog.c
+
+# All sources
+SOURCES = $(addprefix $(GRBL_DIR)/,$(GRBL_SOURCES)) \
+          $(PLATFORM_SOURCES) \
+          $(COMMON_SOURCES)
 
 OBJECTS = $(addprefix $(BUILD_DIR)/,$(notdir $(SOURCES:.c=.o)))
+
+# Search paths for sources
+vpath %.c $(GRBL_DIR)
+vpath %.c $(PLATFORM_DIR)
+vpath %.c $(COMMON_DIR)
 
 # Base compiler flags
 CFLAGS  = -mcpu=$(CPU) -mthumb $(FPU)
@@ -53,7 +66,7 @@ CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)
 CFLAGS += -Wall -Wextra
 CFLAGS += -ffunction-sections -fdata-sections
 # CFLAGS_EXTRA must be ABSOLUTELY FIRST to override grbl headers (cpu_map.h, etc)
-CFLAGS += $(CFLAGS_EXTRA) -I$(PLATFORM_DIR) -I../stm32_common -I$(GRBL_DIR)/hal -I$(GRBL_DIR)
+CFLAGS += $(CFLAGS_EXTRA) -I$(PLATFORM_DIR) -I$(COMMON_DIR) -I$(GRBL_DIR)/hal -I$(GRBL_DIR)
 
 # Build-specific flags
 ifeq ($(BUILD),RELEASE)
@@ -112,13 +125,13 @@ $(BUILD_DIR)/flash.o: flash.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 # Compile STM32 common files
-$(BUILD_DIR)/stm32_nvmem.o: ../stm32_common/stm32_nvmem.c | $(BUILD_DIR)
+$(BUILD_DIR)/stm32_nvmem.o: $(COMMON_DIR)/stm32_nvmem.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
-$(BUILD_DIR)/stm32_timing.o: ../stm32_common/stm32_timing.c | $(BUILD_DIR)
+$(BUILD_DIR)/stm32_timing.o: $(COMMON_DIR)/stm32_timing.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
-$(BUILD_DIR)/stm32_watchdog.o: ../stm32_common/stm32_watchdog.c | $(BUILD_DIR)
+$(BUILD_DIR)/stm32_watchdog.o: $(COMMON_DIR)/stm32_watchdog.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 # Link

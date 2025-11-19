@@ -1,11 +1,11 @@
 Archive member included to satisfy reference by file (symbol)
 
 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-s_ceil.o)
-                              ../../../../build_stm32f103_RELEASE/stepper.o (symbol from plugin) (ceil)
+                              ../../../build_stm32f103_RELEASE/stepper.o (symbol from plugin) (ceil)
 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-s_sin.o)
-                              ../../../../build_stm32f103_RELEASE/motion_control.o (symbol from plugin) (sin)
+                              ../../../build_stm32f103_RELEASE/motion_control.o (symbol from plugin) (sin)
 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-w_atan2.o)
-                              ../../../../build_stm32f103_RELEASE/motion_control.o (symbol from plugin) (atan2)
+                              ../../../build_stm32f103_RELEASE/motion_control.o (symbol from plugin) (atan2)
 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-e_rem_pio2.o)
                               /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-s_sin.o) (__ieee754_rem_pio2)
 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-k_rem_pio2.o)
@@ -13,17 +13,17 @@ Archive member included to satisfy reference by file (symbol)
 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-s_scalbn.o)
                               /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-k_rem_pio2.o) (scalbn)
 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-s_trunc.o)
-                              ../../../../build_stm32f103_RELEASE/gcode.o (symbol from plugin) (trunc)
+                              ../../../build_stm32f103_RELEASE/gcode.o (symbol from plugin) (trunc)
 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-s_lround.o)
-                              ../../../../build_stm32f103_RELEASE/planner.o (symbol from plugin) (lround)
+                              ../../../build_stm32f103_RELEASE/planner.o (symbol from plugin) (lround)
 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-w_sqrt.o)
-                              ../../../../build_stm32f103_RELEASE/motion_control.o (symbol from plugin) (sqrt)
+                              ../../../build_stm32f103_RELEASE/motion_control.o (symbol from plugin) (sqrt)
 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-s_round.o)
-                              ../../../../build_stm32f103_RELEASE/gcode.o (symbol from plugin) (round)
+                              ../../../build_stm32f103_RELEASE/gcode.o (symbol from plugin) (round)
 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-k_sin.o)
                               /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-s_sin.o) (__kernel_sin)
 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-s_cos.o)
-                              ../../../../build_stm32f103_RELEASE/motion_control.o (symbol from plugin) (cos)
+                              ../../../build_stm32f103_RELEASE/motion_control.o (symbol from plugin) (cos)
 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-e_sqrt.o)
                               /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-w_sqrt.o) (__ieee754_sqrt)
 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-s_floor.o)
@@ -105,25 +105,25 @@ Archive member included to satisfy reference by file (symbol)
 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libnosys.a(_exit.o)
                               /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(libc_a-exit.o) (_exit)
 /usr/lib/gcc/arm-none-eabi/13.2.1/thumb/v7-m/nofp/libgcc.a(_arm_mulsf3.o)
-                              /tmp/ccf5a8o8.ltrans0.ltrans.o (__aeabi_fmul)
+                              /tmp/cco1uAR6.ltrans0.ltrans.o (__aeabi_fmul)
 /usr/lib/gcc/arm-none-eabi/13.2.1/thumb/v7-m/nofp/libgcc.a(_arm_fixunsdfsi.o)
-                              /tmp/ccf5a8o8.ltrans0.ltrans.o (__aeabi_d2uiz)
+                              /tmp/cco1uAR6.ltrans0.ltrans.o (__aeabi_d2uiz)
 /usr/lib/gcc/arm-none-eabi/13.2.1/thumb/v7-m/nofp/libgcc.a(_arm_truncdfsf2.o)
-                              /tmp/ccf5a8o8.ltrans0.ltrans.o (__aeabi_d2f)
+                              /tmp/cco1uAR6.ltrans0.ltrans.o (__aeabi_d2f)
 /usr/lib/gcc/arm-none-eabi/13.2.1/thumb/v7-m/nofp/libgcc.a(_arm_addsubsf3.o)
-                              /tmp/ccf5a8o8.ltrans0.ltrans.o (__aeabi_fsub)
+                              /tmp/cco1uAR6.ltrans0.ltrans.o (__aeabi_fsub)
 /usr/lib/gcc/arm-none-eabi/13.2.1/thumb/v7-m/nofp/libgcc.a(_arm_muldivsf3.o)
-                              /tmp/ccf5a8o8.ltrans0.ltrans.o (__aeabi_fdiv)
+                              /tmp/cco1uAR6.ltrans0.ltrans.o (__aeabi_fdiv)
 /usr/lib/gcc/arm-none-eabi/13.2.1/thumb/v7-m/nofp/libgcc.a(_arm_cmpsf2.o)
-                              /tmp/ccf5a8o8.ltrans0.ltrans.o (__aeabi_fcmpeq)
+                              /tmp/cco1uAR6.ltrans0.ltrans.o (__aeabi_fcmpeq)
 /usr/lib/gcc/arm-none-eabi/13.2.1/thumb/v7-m/nofp/libgcc.a(_arm_fixsfsi.o)
-                              /tmp/ccf5a8o8.ltrans0.ltrans.o (__aeabi_f2iz)
+                              /tmp/cco1uAR6.ltrans0.ltrans.o (__aeabi_f2iz)
 /usr/lib/gcc/arm-none-eabi/13.2.1/thumb/v7-m/nofp/libgcc.a(_arm_fixunssfsi.o)
-                              /tmp/ccf5a8o8.ltrans0.ltrans.o (__aeabi_f2uiz)
+                              /tmp/cco1uAR6.ltrans0.ltrans.o (__aeabi_f2uiz)
 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(libc_a-memcpy.o)
-                              /tmp/ccf5a8o8.ltrans0.ltrans.o (memcpy)
+                              /tmp/cco1uAR6.ltrans0.ltrans.o (memcpy)
 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(libc_a-memcmp.o)
-                              /tmp/ccf5a8o8.ltrans0.ltrans.o (memcmp)
+                              /tmp/cco1uAR6.ltrans0.ltrans.o (memcmp)
 
 Discarded input sections
 
@@ -157,7 +157,7 @@ Discarded input sections
  .debug_str     0x00000000       0x8a /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/crt0.o
  .ARM.attributes
                 0x00000000       0x1b /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/crt0.o
- .data          0x00000000        0x0 /tmp/ccf5a8o8.ltrans0.ltrans.o
+ .data          0x00000000        0x0 /tmp/cco1uAR6.ltrans0.ltrans.o
  .data          0x00000000        0x0 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-s_ceil.o)
  .bss           0x00000000        0x0 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-s_ceil.o)
  .data          0x00000000        0x0 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-s_sin.o)
@@ -664,32 +664,32 @@ Linker script and memory map
 LOAD /usr/lib/gcc/arm-none-eabi/13.2.1/thumb/v7-m/nofp/crti.o
 LOAD /usr/lib/gcc/arm-none-eabi/13.2.1/thumb/v7-m/nofp/crtbegin.o
 LOAD /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/crt0.o
-LOAD ../../../../build_stm32f103_RELEASE/main.o
-LOAD /tmp/ccf5a8o8.ltrans0.ltrans.o
-LOAD ../../../../build_stm32f103_RELEASE/motion_control.o
-LOAD ../../../../build_stm32f103_RELEASE/gcode.o
-LOAD ../../../../build_stm32f103_RELEASE/spindle_control.o
-LOAD ../../../../build_stm32f103_RELEASE/coolant_control.o
-LOAD ../../../../build_stm32f103_RELEASE/serial.o
-LOAD ../../../../build_stm32f103_RELEASE/protocol.o
-LOAD ../../../../build_stm32f103_RELEASE/stepper.o
-LOAD ../../../../build_stm32f103_RELEASE/nvmem.o
-LOAD ../../../../build_stm32f103_RELEASE/settings.o
-LOAD ../../../../build_stm32f103_RELEASE/planner.o
-LOAD ../../../../build_stm32f103_RELEASE/nuts_bolts.o
-LOAD ../../../../build_stm32f103_RELEASE/limits.o
-LOAD ../../../../build_stm32f103_RELEASE/jog.o
-LOAD ../../../../build_stm32f103_RELEASE/print.o
-LOAD ../../../../build_stm32f103_RELEASE/probe.o
-LOAD ../../../../build_stm32f103_RELEASE/report.o
-LOAD ../../../../build_stm32f103_RELEASE/system.o
-LOAD ../../../../build_stm32f103_RELEASE/platform.o
-LOAD ../../../../build_stm32f103_RELEASE/startup.o
-LOAD ../../../../build_stm32f103_RELEASE/handlers.o
-LOAD ../../../../build_stm32f103_RELEASE/flash.o
-LOAD ../../../../build_stm32f103_RELEASE/stm32_nvmem.o
-LOAD ../../../../build_stm32f103_RELEASE/stm32_timing.o
-LOAD ../../../../build_stm32f103_RELEASE/stm32_watchdog.o
+LOAD ../../../build_stm32f103_RELEASE/main.o
+LOAD /tmp/cco1uAR6.ltrans0.ltrans.o
+LOAD ../../../build_stm32f103_RELEASE/motion_control.o
+LOAD ../../../build_stm32f103_RELEASE/gcode.o
+LOAD ../../../build_stm32f103_RELEASE/spindle_control.o
+LOAD ../../../build_stm32f103_RELEASE/coolant_control.o
+LOAD ../../../build_stm32f103_RELEASE/serial.o
+LOAD ../../../build_stm32f103_RELEASE/protocol.o
+LOAD ../../../build_stm32f103_RELEASE/stepper.o
+LOAD ../../../build_stm32f103_RELEASE/nvmem.o
+LOAD ../../../build_stm32f103_RELEASE/settings.o
+LOAD ../../../build_stm32f103_RELEASE/planner.o
+LOAD ../../../build_stm32f103_RELEASE/nuts_bolts.o
+LOAD ../../../build_stm32f103_RELEASE/limits.o
+LOAD ../../../build_stm32f103_RELEASE/jog.o
+LOAD ../../../build_stm32f103_RELEASE/print.o
+LOAD ../../../build_stm32f103_RELEASE/probe.o
+LOAD ../../../build_stm32f103_RELEASE/report.o
+LOAD ../../../build_stm32f103_RELEASE/system.o
+LOAD ../../../build_stm32f103_RELEASE/platform.o
+LOAD ../../../build_stm32f103_RELEASE/startup.o
+LOAD ../../../build_stm32f103_RELEASE/handlers.o
+LOAD ../../../build_stm32f103_RELEASE/flash.o
+LOAD ../../../build_stm32f103_RELEASE/stm32_nvmem.o
+LOAD ../../../build_stm32f103_RELEASE/stm32_timing.o
+LOAD ../../../build_stm32f103_RELEASE/stm32_watchdog.o
 LOAD /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a
 START GROUP
 LOAD /usr/lib/gcc/arm-none-eabi/13.2.1/thumb/v7-m/nofp/libgcc.a
@@ -713,7 +713,7 @@ LOAD /usr/lib/gcc/arm-none-eabi/13.2.1/thumb/v7-m/nofp/crtn.o
                 0x08000000                        . = ALIGN (0x4)
  *(.isr_vector)
  *(.text)
- .text          0x08000000     0x3fdc /tmp/ccf5a8o8.ltrans0.ltrans.o
+ .text          0x08000000     0x3fdc /tmp/cco1uAR6.ltrans0.ltrans.o
                 0x08003f8c                Reset_Handler
  *fill*         0x08003fdc        0x4 
  .text          0x08003fe0      0x100 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-s_ceil.o)
@@ -853,10 +853,10 @@ LOAD /usr/lib/gcc/arm-none-eabi/13.2.1/thumb/v7-m/nofp/crtn.o
  .text          0x08006e2c       0x5c /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(libc_a-memcmp.o)
                 0x08006e2c                memcmp
  *(.text*)
- .text.startup  0x08006e88      0x244 /tmp/ccf5a8o8.ltrans0.ltrans.o
+ .text.startup  0x08006e88      0x244 /tmp/cco1uAR6.ltrans0.ltrans.o
                 0x08006e88                main
  *(.rodata)
- .rodata        0x080070cc       0x5c /tmp/ccf5a8o8.ltrans0.ltrans.o
+ .rodata        0x080070cc       0x5c /tmp/cco1uAR6.ltrans0.ltrans.o
  .rodata        0x08007128      0x188 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-e_rem_pio2.o)
  .rodata        0x080072b0       0x50 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-k_rem_pio2.o)
  .rodata        0x08007300       0x10 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-e_sqrt.o)
@@ -864,7 +864,7 @@ LOAD /usr/lib/gcc/arm-none-eabi/13.2.1/thumb/v7-m/nofp/crtn.o
  .rodata        0x08007340       0x40 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-s_atan.o)
  *(.rodata*)
  .rodata.str1.1
-                0x08007380       0xf9 /tmp/ccf5a8o8.ltrans0.ltrans.o
+                0x08007380       0xf9 /tmp/cco1uAR6.ltrans0.ltrans.o
                                  0xfc (size before relaxing)
                 0x0800747c                        . = ALIGN (0x4)
  *fill*         0x08007479        0x3 
@@ -918,7 +918,7 @@ LOAD /usr/lib/gcc/arm-none-eabi/13.2.1/thumb/v7-m/nofp/crtn.o
                 0x20000050                        . = ALIGN (0x4)
                 0x20000050                        _sbss = .
  *(.bss)
- .bss           0x20000050      0xde4 /tmp/ccf5a8o8.ltrans0.ltrans.o
+ .bss           0x20000050      0xde4 /tmp/cco1uAR6.ltrans0.ltrans.o
  .bss           0x20000e34      0x13c /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(libc_a-findfp.o)
                 0x20000e34                __sf
                 0x20000f6c                __stdio_exit_handler
@@ -941,7 +941,7 @@ LOAD /usr/lib/gcc/arm-none-eabi/13.2.1/thumb/v7-m/nofp/crtn.o
  *fill*         0x20001370     0x3890 
                 0x20004c00                        . = ALIGN (0x4)
                 0x20004c00                        _eheap = .
-OUTPUT(../../../../build_stm32f103_RELEASE/grbl_stm32f103.elf elf32-littlearm)
+OUTPUT(../../../build_stm32f103_RELEASE/grbl_stm32f103.elf elf32-littlearm)
 LOAD linker stubs
 
 .ARM.attributes
@@ -949,7 +949,7 @@ LOAD linker stubs
  .ARM.attributes
                 0x00000000       0x1d /usr/lib/gcc/arm-none-eabi/13.2.1/thumb/v7-m/nofp/crti.o
  .ARM.attributes
-                0x0000001d       0x2b /tmp/ccf5a8o8.ltrans0.ltrans.o
+                0x0000001d       0x2b /tmp/cco1uAR6.ltrans0.ltrans.o
  .ARM.attributes
                 0x00000048       0x2d /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-s_ceil.o)
  .ARM.attributes
@@ -1024,7 +1024,7 @@ LOAD linker stubs
                 0x0000059d       0x2d /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(libc_a-memcmp.o)
 
 .comment        0x00000000       0x26
- .comment       0x00000000       0x27 /tmp/ccf5a8o8.ltrans0.ltrans.o
+ .comment       0x00000000       0x27 /tmp/cco1uAR6.ltrans0.ltrans.o
  .comment       0x00000000       0x26 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-s_ceil.o)
                                  0x27 (size before relaxing)
  .comment       0x00000026       0x27 /usr/lib/gcc/arm-none-eabi/13.2.1/../../../arm-none-eabi/lib/thumb/v7-m/nofp/libm.a(libm_a-s_sin.o)
