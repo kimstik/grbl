@@ -81,21 +81,52 @@ void hal_gpio_init(void) {
   // Initialize all GPIO pins used by GRBL
 
   // Enable PORT clock
-  // PM->APBBMASK.reg |= PM_APBBMASK_PORT;
+  PM->APBBMASK |= PM_APBBMASK_PORT;
 
-  // Configure step pins as outputs
-  // Configure direction pins as outputs
-  // Configure enable pin as output
-  // Configure limit switch pins as inputs with pullups
-  // Configure control pins as inputs with pullups
-  // Configure spindle pins
-  // Configure coolant pins
-  // Configure probe pin
+  // Configure direction pins as outputs (PA0, PA1, PA2)
+  PORT->Group[PORT_GROUPA].DIRSET = DIRECTION_MASK;
+  PORT->Group[PORT_GROUPA].OUTCLR = DIRECTION_MASK;  // Start low
 
-  // This is a placeholder - actual implementation would use
-  // PORT->Group[0].DIRSET.reg, DIRCLR.reg, PINCFG[], etc.
+  // Configure step pins as outputs (PA25, PA27, PA28)
+  PORT->Group[PORT_GROUPA].DIRSET = STEP_MASK;
+  PORT->Group[PORT_GROUPA].OUTCLR = STEP_MASK;  // Start low
 
-  // TODO: Implement full GPIO configuration
+  // Configure stepper enable pin as output (PA3)
+  PORT->Group[PORT_GROUPA].DIRSET = STEPPERS_DISABLE_MASK;
+  PORT->Group[PORT_GROUPA].OUTSET = STEPPERS_DISABLE_MASK;  // Start disabled (active low)
+
+  // Configure limit switch pins as inputs with pullups (PA4, PA5, PA7)
+  PORT->Group[PORT_GROUPA].DIRCLR = LIMIT_MASK_A;
+  PORT->Group[PORT_GROUPA].PINCFG[X_LIMIT_PIN] = PORT_PINCFG_INEN | PORT_PINCFG_PULLEN;
+  PORT->Group[PORT_GROUPA].PINCFG[Y_LIMIT_PIN] = PORT_PINCFG_INEN | PORT_PINCFG_PULLEN;
+  PORT->Group[PORT_GROUPA].PINCFG[Z_LIMIT_PIN] = PORT_PINCFG_INEN | PORT_PINCFG_PULLEN;
+  PORT->Group[PORT_GROUPA].OUTSET = LIMIT_MASK_A;  // Enable pullups
+
+  // Configure control pins as inputs with pullups (PA14, PA15, PA16)
+  PORT->Group[PORT_GROUPA].DIRCLR = CONTROL_MASK_A;
+  PORT->Group[PORT_GROUPA].PINCFG[CONTROL_RESET_PIN] = PORT_PINCFG_INEN | PORT_PINCFG_PULLEN;
+  PORT->Group[PORT_GROUPA].PINCFG[CONTROL_FEED_HOLD_PIN] = PORT_PINCFG_INEN | PORT_PINCFG_PULLEN;
+  PORT->Group[PORT_GROUPA].PINCFG[CONTROL_CYCLE_START_PIN] = PORT_PINCFG_INEN | PORT_PINCFG_PULLEN;
+  PORT->Group[PORT_GROUPA].OUTSET = CONTROL_MASK_A;  // Enable pullups
+
+  // Configure probe pin as input with pullup (PA19)
+  PORT->Group[PORT_GROUPA].DIRCLR = PROBE_MASK;
+  PORT->Group[PORT_GROUPA].PINCFG[PROBE_PIN] = PORT_PINCFG_INEN | PORT_PINCFG_PULLEN;
+  PORT->Group[PORT_GROUPA].OUTSET = PROBE_MASK;  // Enable pullup
+
+  // Configure spindle direction/enable pin as output (PA8)
+  PORT->Group[PORT_GROUPA].DIRSET = (1 << SPINDLE_DIRECTION_PIN);
+  PORT->Group[PORT_GROUPA].OUTCLR = (1 << SPINDLE_DIRECTION_PIN);  // Start low
+
+  // Spindle PWM pin will be configured by hal_spindle_pwm_init()
+
+  // Configure coolant pins as outputs (PA17, PA18)
+  PORT->Group[PORT_GROUPA].DIRSET = (1 << COOLANT_FLOOD_PIN);
+  PORT->Group[PORT_GROUPA].OUTCLR = (1 << COOLANT_FLOOD_PIN);  // Start off
+#ifdef ENABLE_M7
+  PORT->Group[PORT_GROUPA].DIRSET = (1 << COOLANT_MIST_PIN);
+  PORT->Group[PORT_GROUPA].OUTCLR = (1 << COOLANT_MIST_PIN);  // Start off
+#endif
 }
 
 // ============================================================================
@@ -122,22 +153,30 @@ void hal_system_init(void) {
 
 void hal_gpio_set_pin(hal_gpio_port_t port, uint8_t pin) {
   // Set pin high
-  // PORT->Group[port_index].OUTSET.reg = (1 << pin);
+  if (pin < 32) {
+    PORT->Group[port].OUTSET = (1UL << pin);
+  }
 }
 
 void hal_gpio_clear_pin(hal_gpio_port_t port, uint8_t pin) {
   // Set pin low
-  // PORT->Group[port_index].OUTCLR.reg = (1 << pin);
+  if (pin < 32) {
+    PORT->Group[port].OUTCLR = (1UL << pin);
+  }
 }
 
 void hal_gpio_toggle_pin(hal_gpio_port_t port, uint8_t pin) {
   // Toggle pin
-  // PORT->Group[port_index].OUTTGL.reg = (1 << pin);
+  if (pin < 32) {
+    PORT->Group[port].OUTTGL = (1UL << pin);
+  }
 }
 
 uint8_t hal_gpio_read_pin(hal_gpio_port_t port, uint8_t pin) {
   // Read pin state
-  // return (PORT->Group[port_index].IN.reg & (1 << pin)) ? 1 : 0;
+  if (pin < 32) {
+    return (PORT->Group[port].IN & (1UL << pin)) ? 1 : 0;
+  }
   return 0;
 }
 
