@@ -48,10 +48,8 @@
 // Include HAL (Hardware Abstraction Layer)
 #include "hal.h"
 
-// cpu_map.h only for AVR - STM32 defines pins in platform.h
-#if !defined(PLATFORM_STM32F103) && !defined(PLATFORM_STM32H523) && !defined(PLATFORM_STM32F411)
-  #include "cpu_map.h"
-#endif
+// cpu_map.h - each platform provides its own (AVR: full map, others: stub)
+#include "cpu_map.h"
 
 #include "planner.h"
 #include "coolant_control.h"
