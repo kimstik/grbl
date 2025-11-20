@@ -41,16 +41,16 @@
 
 void limits_init()
 {
-  HAL_GPIO_SET_INPUT(LIMIT_DDR, LIMIT_MASK);
+  GPIO_IN(LIMIT_DDR, LIMIT_MASK);
 
   #ifdef DISABLE_LIMIT_PIN_PULL_UP
-    HAL_GPIO_PULLUP_DISABLE(LIMIT_PORT, LIMIT_MASK);
+    GPIO_PULLUP_OFF(LIMIT_PORT, LIMIT_MASK);
   #else
-    HAL_GPIO_PULLUP_ENABLE(LIMIT_PORT, LIMIT_MASK);
+    GPIO_PULLUP_ON(LIMIT_PORT, LIMIT_MASK);
   #endif
 
   if (bit_istrue(settings.flags,BITFLAG_HARD_LIMIT_ENABLE)) {
-    HAL_GPIO_INTERRUPT_ENABLE(LIMIT_PCMSK, LIMIT_INT, LIMIT_MASK);
+    GPIO_INT_ON(LIMIT_PCMSK, LIMIT_INT, LIMIT_MASK);
   } else {
     limits_disable();
   }
@@ -64,7 +64,7 @@ void limits_init()
 // Disables hard limits.
 void limits_disable()
 {
-  HAL_GPIO_INTERRUPT_DISABLE(LIMIT_PCMSK, LIMIT_INT, LIMIT_MASK);
+  GPIO_INT_OFF(LIMIT_PCMSK, LIMIT_INT, LIMIT_MASK);
 }
 
 
@@ -74,7 +74,7 @@ void limits_disable()
 uint8_t limits_get_state()
 {
   uint8_t limit_state = 0;
-  uint8_t pin = HAL_GPIO_READ_PORT(LIMIT_PIN, LIMIT_MASK);
+  uint8_t pin = GPIO_RD(LIMIT_PIN, LIMIT_MASK);
   #ifdef INVERT_LIMIT_PIN_MASK
     pin ^= INVERT_LIMIT_PIN_MASK;
   #endif

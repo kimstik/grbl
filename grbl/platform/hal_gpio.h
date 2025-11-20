@@ -33,6 +33,7 @@
   // ============================================================================
 
   #include <avr/io.h>
+  #include <avr/interrupt.h>
 
   // Port IDs (just for type safety, evaluate to nothing)
   #define HAL_GPIO_PORT_B  PORTB
@@ -63,8 +64,8 @@
         (port) &= ~(1 << (pin)); \
     } while(0)
 
-  // Read port
-  #define HAL_GPIO_READ_PORT(pin_reg)  (pin_reg)
+  // Read port - defined in platform-specific header (e.g., atmega328p/platform.h)
+  // #define HAL_GPIO_READ_PORT(pin_reg)  (pin_reg)  // REMOVED - conflicts with 2-arg platform version
 
   // Read single pin
   #define HAL_GPIO_READ_PIN(pin_reg, pin)  (((pin_reg) >> (pin)) & 0x01)
@@ -286,9 +287,10 @@ typedef enum {
 #define GPIO_IN(port, mask)      HAL_GPIO_SET_INPUT(port, mask)
 
 // GPIO read/write shortcuts
-#define GPIO_RD(port)            HAL_GPIO_READ_PORT(port)
-#define GPIO_WR(port, value)     HAL_GPIO_WRITE_PORT(port, value)
-#define GPIO_PIN_RD(port, pin)   HAL_GPIO_READ_PIN(port, pin)
+// Note: GPIO_RD signature varies: AVR uses (port, mask), others use (port)
+#define GPIO_RD(...)                   HAL_GPIO_READ_PORT(__VA_ARGS__)
+#define GPIO_WR(port, mask, value)     HAL_GPIO_WRITE_PORT(port, mask, value)
+#define GPIO_PIN_RD(port, pin)         HAL_GPIO_READ_PIN(port, pin)
 
 // GPIO set/clear (multi-bit)
 #define GPIO_SET(port, mask)     HAL_GPIO_SET_BITS(port, mask)
@@ -298,5 +300,15 @@ typedef enum {
 // GPIO pullup shortcuts
 #define GPIO_PULLUP_ON(port, mask)   HAL_GPIO_PULLUP_ENABLE(port, mask)
 #define GPIO_PULLUP_OFF(port, mask)  HAL_GPIO_PULLUP_DISABLE(port, mask)
+
+// GPIO interrupt shortcuts
+#define GPIO_INT_ON(pcmsk, int_flag, mask)   HAL_GPIO_INTERRUPT_ENABLE(pcmsk, int_flag, mask)
+#define GPIO_INT_OFF(pcmsk, int_flag, mask)  HAL_GPIO_INTERRUPT_DISABLE(pcmsk, int_flag, mask)
+
+// GPIO ISR handler
+#define GPIO_ISR(name)  HAL_GPIO_IRQ_HANDLER(name)
+
+// Direct port write (bypasses port manipulation)
+#define GPIO_WR_DIRECT(port, value)  HAL_GPIO_WRITE_DIRECT(port, value)
 
 #endif // HAL_GPIO_H

@@ -171,17 +171,12 @@
 // HAL COMPONENT HEADERS
 // ============================================================================
 
-// Note: For AVR, most HAL macros are defined in platform.h
-// But hal_nvmem.h contains eeprom_get_char/eeprom_put_char macros needed by all
+// HAL component headers (all platforms)
 #include "hal_nvmem.h"
-
-// For other platforms, include additional component headers
-#ifndef PLATFORM_AVR_ATMEGA328P
-  #include "hal_system.h"
-  #include "hal_gpio.h"
-  #include "hal_timer.h"
-  #include "hal_serial.h"
-#endif
+#include "hal_system.h"
+#include "hal_gpio.h"
+#include "hal_timer.h"
+#include "hal_serial.h"
 
 // ============================================================================
 // PLATFORM CAPABILITIES (for compile-time feature detection)

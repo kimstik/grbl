@@ -33,20 +33,20 @@ void spindle_init()
   #ifdef VARIABLE_SPINDLE
     // Configure variable spindle PWM and enable pin, if requried. On the Uno, PWM and enable are
     // combined unless configured otherwise.
-    HAL_GPIO_SET_OUTPUT(SPINDLE_PWM_DDR, (1<<SPINDLE_PWM_BIT));
+    GPIO_OUT(SPINDLE_PWM_DDR, (1<<SPINDLE_PWM_BIT));
     HAL_TIMER_SPINDLE_PWM_INIT();
     #ifdef USE_SPINDLE_DIR_AS_ENABLE_PIN
-      HAL_GPIO_SET_OUTPUT(SPINDLE_ENABLE_DDR, (1<<SPINDLE_ENABLE_BIT));
+      GPIO_OUT(SPINDLE_ENABLE_DDR, (1<<SPINDLE_ENABLE_BIT));
     #else
       #ifndef ENABLE_DUAL_AXIS
-        HAL_GPIO_SET_OUTPUT(SPINDLE_DIRECTION_DDR, (1<<SPINDLE_DIRECTION_BIT));
+        GPIO_OUT(SPINDLE_DIRECTION_DDR, (1<<SPINDLE_DIRECTION_BIT));
       #endif
     #endif
     pwm_gradient = SPINDLE_PWM_RANGE/(settings.rpm_max-settings.rpm_min);
   #else
-    HAL_GPIO_SET_OUTPUT(SPINDLE_ENABLE_DDR, (1<<SPINDLE_ENABLE_BIT));
+    GPIO_OUT(SPINDLE_ENABLE_DDR, (1<<SPINDLE_ENABLE_BIT));
     #ifndef ENABLE_DUAL_AXIS
-      HAL_GPIO_SET_OUTPUT(SPINDLE_DIRECTION_DDR, (1<<SPINDLE_DIRECTION_BIT));
+      GPIO_OUT(SPINDLE_DIRECTION_DDR, (1<<SPINDLE_DIRECTION_BIT));
     #endif
   #endif
 
@@ -69,7 +69,7 @@ uint8_t spindle_get_state()
         #ifdef ENABLE_DUAL_AXIS
           return(SPINDLE_STATE_CW);
         #else
-          if (HAL_GPIO_READ_PIN(SPINDLE_DIRECTION_PORT, (1<<SPINDLE_DIRECTION_BIT))) { return(SPINDLE_STATE_CCW); }
+          if (GPIO_PIN_RD(SPINDLE_DIRECTION_PORT, (1<<SPINDLE_DIRECTION_BIT))) { return(SPINDLE_STATE_CCW); }
           else { return(SPINDLE_STATE_CW); }
         #endif
       }
@@ -83,7 +83,7 @@ uint8_t spindle_get_state()
       #ifdef ENABLE_DUAL_AXIS    
         return(SPINDLE_STATE_CW);
       #else
-        if (HAL_GPIO_READ_PIN(SPINDLE_DIRECTION_PORT, (1<<SPINDLE_DIRECTION_BIT))) { return(SPINDLE_STATE_CCW); }
+        if (GPIO_PIN_RD(SPINDLE_DIRECTION_PORT, (1<<SPINDLE_DIRECTION_BIT))) { return(SPINDLE_STATE_CCW); }
         else { return(SPINDLE_STATE_CW); }
       #endif
     }
@@ -101,16 +101,16 @@ void spindle_stop()
     HAL_TIMER_SPINDLE_PWM_DISABLE();
     #ifdef USE_SPINDLE_DIR_AS_ENABLE_PIN
       #ifdef INVERT_SPINDLE_ENABLE_PIN
-        HAL_GPIO_SET_BITS(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT));
+        GPIO_SET(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT));
       #else
-        HAL_GPIO_CLEAR_BITS(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT));
+        GPIO_CLR(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT));
       #endif
     #endif
   #else
     #ifdef INVERT_SPINDLE_ENABLE_PIN
-      HAL_GPIO_SET_BITS(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT));
+      GPIO_SET(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT));
     #else
-      HAL_GPIO_CLEAR_BITS(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT));
+      GPIO_CLR(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT));
     #endif
   #endif
 }
@@ -128,9 +128,9 @@ void spindle_stop()
       } else {
         HAL_TIMER_SPINDLE_PWM_ENABLE();
         #ifdef INVERT_SPINDLE_ENABLE_PIN
-          HAL_GPIO_CLEAR_BITS(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT));
+          GPIO_CLR(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT));
         #else
-          HAL_GPIO_SET_BITS(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT));
+          GPIO_SET(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT));
         #endif
       }
     #else
@@ -241,9 +241,9 @@ void spindle_stop()
     
     #if !defined(USE_SPINDLE_DIR_AS_ENABLE_PIN) && !defined(ENABLE_DUAL_AXIS)
       if (state == SPINDLE_ENABLE_CW) {
-        HAL_GPIO_CLEAR_BITS(SPINDLE_DIRECTION_PORT, (1<<SPINDLE_DIRECTION_BIT));
+        GPIO_CLR(SPINDLE_DIRECTION_PORT, (1<<SPINDLE_DIRECTION_BIT));
       } else {
-        HAL_GPIO_SET_BITS(SPINDLE_DIRECTION_PORT, (1<<SPINDLE_DIRECTION_BIT));
+        GPIO_SET(SPINDLE_DIRECTION_PORT, (1<<SPINDLE_DIRECTION_BIT));
       }
     #endif
   
@@ -259,9 +259,9 @@ void spindle_stop()
       // NOTE: Without variable spindle, the enable bit should just turn on or off, regardless
       // if the spindle speed value is zero, as its ignored anyhow.
       #ifdef INVERT_SPINDLE_ENABLE_PIN
-        HAL_GPIO_CLEAR_BITS(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT));
+        GPIO_CLR(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT));
       #else
-        HAL_GPIO_SET_BITS(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT));
+        GPIO_SET(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT));
       #endif    
     #endif
   
