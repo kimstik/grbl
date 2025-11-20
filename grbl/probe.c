@@ -29,11 +29,11 @@ uint8_t probe_invert_mask;
 // Probe pin initialization routine.
 void probe_init()
 {
-  HAL_GPIO_SET_INPUT(PROBE_DDR, PROBE_MASK);
+  GPIO_IN(PROBE_DDR, PROBE_MASK);
   #ifdef DISABLE_PROBE_PIN_PULL_UP
-    HAL_GPIO_PULLUP_DISABLE(PROBE_PORT, PROBE_MASK);
+    GPIO_PULLUP_OFF(PROBE_PORT, PROBE_MASK);
   #else
-    HAL_GPIO_PULLUP_ENABLE(PROBE_PORT, PROBE_MASK);
+    GPIO_PULLUP_ON(PROBE_PORT, PROBE_MASK);
   #endif
   probe_configure_invert_mask(false); // Initialize invert mask.
 }
@@ -51,7 +51,7 @@ void probe_configure_invert_mask(uint8_t is_probe_away)
 
 
 // Returns the probe pin state. Triggered = true. Called by gcode parser and probe state monitor.
-uint8_t probe_get_state() { return(HAL_GPIO_READ_PORT(PROBE_PIN, PROBE_MASK) ^ probe_invert_mask); }
+uint8_t probe_get_state() { return(GPIO_RD(PROBE_PIN, PROBE_MASK) ^ probe_invert_mask); }
 
 
 // Monitors probe pin state and records the system position when detected. Called by the
