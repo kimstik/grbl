@@ -68,236 +68,67 @@ typedef uint32_t hal_gpio_port_t;
 #include "core_cm0plus.h"
 
 // ============================================================================
-// PIN MAPPING - GPIO DEFINITIONS
+// BOARD CONFIGURATION
 // ============================================================================
 
 /*
-  ATSAMC21E18A-MZ / SAMD21G18A Pin Mapping for GRBL (MegARM Layout):
-  Target: MegARM - ATmega328P replacement board
-  Reference: https://github.com/kimstik/MegARM
+  Board-specific pin mappings are now in:
+    boards/megarm/config.h   - MegARM board (ATSAMC21E18A-MZ)
+    boards/generic/config.h  - Generic SAMD21 board
 
-  Direction pins (D5, D6, D7):
-    X_DIR    → PA0  (D5 - Port A, Pin 0)
-    Y_DIR    → PA1  (D6 - Port A, Pin 1)
-    Z_DIR    → PA2  (D7 - Port A, Pin 2)
+  To select board: make BOARD=megarm (default) or make BOARD=generic
+  To create custom board: copy boards/generic to boards/yourboard and modify
 
-  Step pins (D2, D3, D4):
-    X_STEP   → PA25 (D2 - Port A, Pin 25)
-    Y_STEP   → PA27 (D3 - Port A, Pin 27)
-    Z_STEP   → PA28 (D4 - Port A, Pin 28)
-
-  Stepper enable (B0):
-    ENABLE   → PA3  (B0 - Port A, Pin 3)
-
-  Limit switches (B1, B2, B4):
-    X_LIMIT  → PA4  (B1 - Port A, Pin 4)
-    Y_LIMIT  → PA5  (B2 - Port A, Pin 5)
-    Z_LIMIT  → PA7  (B4 - Port A, Pin 7)
-
-  Control pins (C0, C1, C2):
-    RESET       → PA14 (C0 - Port A, Pin 14)
-    FEED_HOLD   → PA15 (C1 - Port A, Pin 15) - shared with SAFETY_DOOR
-    CYCLE_START → PA16 (C2 - Port A, Pin 16)
-    SAFETY_DOOR → PA15 (C1 - same as FEED_HOLD)
-
-  Spindle control (B3, B5):
-    SPINDLE_PWM    → PA6  (B3 - Port A, Pin 6, TCC0/WO[0])
-    SPINDLE_DIR    → PA8  (B5 - Port A, Pin 8)
-    SPINDLE_ENABLE → PA8  (B5 - shared with DIR, use external logic)
-
-  Coolant control (C3, C4):
-    COOLANT_FLOOD → PA17 (C3 - Port A, Pin 17)
-    COOLANT_MIST  → PA18 (C4 - Port A, Pin 18)
-
-  Probe (C5):
-    PROBE → PA19 (C5 - Port A, Pin 19)
-
-  UART (Serial D0, D1):
-    RX    → PA23 (D0 - SERCOM3 PAD[1])
-    TX    → PA24 (D1 - SERCOM3 PAD[2])
-
-  Debug (B6, B7):
-    SWCLK → PA30 (B6 - SWD Clock)
-    SWDIO → PA31 (B7 - SWD Data)
+  All pin definitions (X_STEP_PIN, Y_DIR_PIN, etc.) are in board config.
+  This file (platform.h) contains only chip-specific HAL code.
 */
 
-// --------------------------------------------------------------------------
-// DIRECTION PINS (Port A: PA0, PA1, PA2)
-// --------------------------------------------------------------------------
-
-#define DIRECTION_PORT      PORT_GROUPA
-#define DIRECTION_PORT_ID   ((hal_gpio_port_t)PORT_GROUPA)
-#define DIRECTION_DDR       DIRECTION_PORT_ID  // DDR alias for AVR compatibility
-#define X_DIRECTION_PIN     0   // PA0 (D5)
-#define Y_DIRECTION_PIN     1   // PA1 (D6)
-#define Z_DIRECTION_PIN     2   // PA2 (D7)
-#define X_DIRECTION_BIT     0
-#define Y_DIRECTION_BIT     1
-#define Z_DIRECTION_BIT     2
-#define DIRECTION_MASK      ((1<<X_DIRECTION_PIN)|(1<<Y_DIRECTION_PIN)|(1<<Z_DIRECTION_PIN))
-
-// --------------------------------------------------------------------------
-// STEP PINS (Port A: PA25, PA27, PA28)
-// --------------------------------------------------------------------------
-
-#define STEP_PORT           PORT_GROUPA
-#define STEP_PORT_ID        ((hal_gpio_port_t)PORT_GROUPA)
-#define STEP_DDR            STEP_PORT_ID  // DDR alias for AVR compatibility
-#define X_STEP_PIN          25  // PA25 (D2)
-#define Y_STEP_PIN          27  // PA27 (D3)
-#define Z_STEP_PIN          28  // PA28 (D4)
-#define X_STEP_BIT          25
-#define Y_STEP_BIT          27
-#define Z_STEP_BIT          28
-#define STEP_MASK           ((1UL<<X_STEP_PIN)|(1UL<<Y_STEP_PIN)|(1UL<<Z_STEP_PIN))
-
-// --------------------------------------------------------------------------
-// STEPPER ENABLE PIN (Port A: PA3)
-// --------------------------------------------------------------------------
-
-#define STEPPERS_DISABLE_PORT   PORT_GROUPA
-#define STEPPERS_DISABLE_PORT_ID ((hal_gpio_port_t)PORT_GROUPA)
-#define STEPPERS_DISABLE_DDR    STEPPERS_DISABLE_PORT_ID  // DDR alias for AVR compatibility
-#define STEPPERS_DISABLE_PIN    3   // PA3 (B0)
-#define STEPPERS_DISABLE_BIT    3
-#define STEPPERS_DISABLE_MASK   (1<<STEPPERS_DISABLE_PIN)
-
-// --------------------------------------------------------------------------
-// LIMIT SWITCH PINS (Port A: PA4, PA5, PA7)
-// --------------------------------------------------------------------------
-
-#define X_LIMIT_PORT        PORT_GROUPA
-#define X_LIMIT_PORT_ID     ((hal_gpio_port_t)PORT_GROUPA)
-#define X_LIMIT_PIN         4   // PA4 (B1)
-#define X_LIMIT_BIT         4
-
-#define Y_LIMIT_PORT        PORT_GROUPA
-#define Y_LIMIT_PORT_ID     ((hal_gpio_port_t)PORT_GROUPA)
-#define Y_LIMIT_PIN         5   // PA5 (B2)
-#define Y_LIMIT_BIT         5
-
-#define Z_LIMIT_PORT        PORT_GROUPA
-#define Z_LIMIT_PORT_ID     ((hal_gpio_port_t)PORT_GROUPA)
-#define Z_LIMIT_PIN         7   // PA7 (B4)
-#define Z_LIMIT_BIT         7
-
-// For mask operations (all on Port A)
-#define LIMIT_MASK_A        ((1<<X_LIMIT_PIN)|(1<<Y_LIMIT_PIN)|(1<<Z_LIMIT_PIN))
-#define LIMIT_MASK_B        0
-
-// --------------------------------------------------------------------------
-// CONTROL PINS (Port A: PA14, PA15, PA16)
-// --------------------------------------------------------------------------
-
-#define CONTROL_RESET_PORT        PORT_GROUPA
-#define CONTROL_RESET_PORT_ID     ((hal_gpio_port_t)PORT_GROUPA)
-#define CONTROL_RESET_PIN         14  // PA14 (C0)
-#define CONTROL_RESET_BIT         14
-
-#define CONTROL_FEED_HOLD_PORT    PORT_GROUPA
-#define CONTROL_FEED_HOLD_PORT_ID ((hal_gpio_port_t)PORT_GROUPA)
-#define CONTROL_FEED_HOLD_PIN     15  // PA15 (C1)
-#define CONTROL_FEED_HOLD_BIT     15
-
-#define CONTROL_CYCLE_START_PORT  PORT_GROUPA
-#define CONTROL_CYCLE_START_PORT_ID ((hal_gpio_port_t)PORT_GROUPA)
-#define CONTROL_CYCLE_START_PIN   16  // PA16 (C2)
-#define CONTROL_CYCLE_START_BIT   16
-
-#define CONTROL_SAFETY_DOOR_PORT  PORT_GROUPA
-#define CONTROL_SAFETY_DOOR_PORT_ID ((hal_gpio_port_t)PORT_GROUPA)
-#define CONTROL_SAFETY_DOOR_PIN   15  // PA15 (C1 - shared with FEED_HOLD)
-#define CONTROL_SAFETY_DOOR_BIT   15
-
-#define CONTROL_MASK_A      ((1<<CONTROL_RESET_PIN)|(1<<CONTROL_FEED_HOLD_PIN)|(1<<CONTROL_CYCLE_START_PIN))
-#define CONTROL_MASK_B      0
-#define CONTROL_INVERT_MASK (CONTROL_MASK_A)
-
-// --------------------------------------------------------------------------
-// PROBE PIN (Port A: PA19)
-// --------------------------------------------------------------------------
-
-#define PROBE_PORT          PORT_GROUPA
-#define PROBE_PORT_ID       ((hal_gpio_port_t)PORT_GROUPA)
-#define PROBE_PIN           19  // PA19 (C5)
-#define PROBE_BIT           19
-#define PROBE_MASK          (1<<PROBE_PIN)
-
-// --------------------------------------------------------------------------
-// SPINDLE PINS (Port A: PA6, PA8)
-// --------------------------------------------------------------------------
-
-// Spindle PWM (PA6, TCC0/WO[0])
-#define SPINDLE_PWM_PORT        PORT_GROUPA
-#define SPINDLE_PWM_PIN         6   // PA6 (B3)
-#define SPINDLE_PWM_BIT         6
-#define SPINDLE_PWM_TCC         TCC0
-#define SPINDLE_PWM_CHANNEL     0   // WO[0]
-#define SPINDLE_PWM_PMUX        PORT_PMUX_PMUXE_E  // Function E
-
-// Spindle direction (PA8 - shared with enable, use external logic if needed)
-#define SPINDLE_DIRECTION_PORT  PORT_GROUPA
-#define SPINDLE_DIRECTION_PIN   8   // PA8 (B5)
-#define SPINDLE_DIRECTION_BIT   8
-
-// Spindle enable (same pin as direction - external logic required)
-#define SPINDLE_ENABLE_PORT     PORT_GROUPA
-#define SPINDLE_ENABLE_PIN      8   // PA8 (B5)
-#define SPINDLE_ENABLE_BIT      8
-
-// PWM resolution (16-bit counter)
-#ifdef VARIABLE_SPINDLE
-  #define SPINDLE_PWM_MAX_VALUE     65535  // 16-bit PWM
-  #define SPINDLE_PWM_MIN_VALUE     1
-  #define SPINDLE_PWM_OFF_VALUE     0
-  #define SPINDLE_PWM_RANGE         (SPINDLE_PWM_MAX_VALUE - SPINDLE_PWM_MIN_VALUE)
-#endif
-
-// --------------------------------------------------------------------------
-// COOLANT PINS (Port A: PA17, PA18)
-// --------------------------------------------------------------------------
-
-#define COOLANT_FLOOD_PORT      PORT_GROUPA
-#define COOLANT_FLOOD_PIN       17  // PA17 (C3)
-#define COOLANT_FLOOD_BIT       17
-
-#ifdef ENABLE_M7
-  #define COOLANT_MIST_PORT     PORT_GROUPA
-  #define COOLANT_MIST_PIN      18  // PA18 (C4)
-  #define COOLANT_MIST_BIT      18
-#endif
 
 // ============================================================================
-// TIMER MAPPING
+// CHIP-SPECIFIC PERIPHERAL CONFIGURATION
 // ============================================================================
 
-// Stepper timer: TC3 (16-bit timer/counter)
-#define STEPPER_TIMER           TC3
-#define STEPPER_TIMER_IRQn      TC3_IRQn
-#define STEPPER_TIMER_IRQHandler TC3_Handler
+// Note: All pin mapping definitions moved to boards/*/config.h
+// Board-specific: X_STEP_PIN, Y_DIRECTION_PIN, LIMIT_MASK_A, etc.
 
-// Step pulse reset timer: TC4 (16-bit timer/counter)
-#define PULSE_TIMER             TC4
-#define PULSE_TIMER_IRQn        TC4_IRQn
-#define PULSE_TIMER_IRQHandler  TC4_Handler
-
-// Spindle PWM timer: TCC0 (Timer/Counter for Control)
-// Already defined above
+// Chip-specific peripheral IDs and IRQ handlers defined below
 
 // ============================================================================
-// SERIAL/UART MAPPING
+// AVR COMPATIBILITY - PORT ALIASES
 // ============================================================================
 
-// Using SERCOM3 for UART (PA23=RX, PA24=TX)
-#define GRBL_SERCOM             SERCOM3
-#define GRBL_SERCOM_IRQn        SERCOM3_IRQn
-#define GRBL_SERCOM_IRQHandler  SERCOM3_Handler
+// Legacy compatibility macros for AVR-style code
+// Actual PORT values come from board config
+#define DIRECTION_PORT      X_DIRECTION_PORT
+#define DIRECTION_PORT_ID   ((hal_gpio_port_t)DIRECTION_PORT)
+#define DIRECTION_DDR       DIRECTION_PORT_ID
 
-// Pin mux for UART
-#define UART_RX_PIN             23  // PA23 (D0)
-#define UART_TX_PIN             24  // PA24 (D1)
-#define UART_RX_PAD             1   // SERCOM PAD[1]
-#define UART_TX_PAD             2   // SERCOM PAD[2]
+#define STEP_PORT           X_STEP_PORT
+#define STEP_PORT_ID        ((hal_gpio_port_t)STEP_PORT)
+#define STEP_DDR            STEP_PORT_ID
+
+#define STEPPERS_DISABLE_PORT_ID   ((hal_gpio_port_t)STEPPERS_DISABLE_PORT)
+#define STEPPERS_DISABLE_DDR       STEPPERS_DISABLE_PORT_ID
+
+// Combined masks (for backwards compatibility)
+#define DIRECTION_MASK      DIRECTION_MASK_A
+#define STEP_MASK           STEP_MASK_A
+#define STEPPERS_DISABLE_MASK  STEPPERS_DISABLE_MASK_A
+#define LIMIT_MASK          LIMIT_MASK_A
+#define CONTROL_MASK        CONTROL_MASK_A
+#define PROBE_MASK          PROBE_MASK_A
+
+// Port ID aliases
+#define X_LIMIT_PORT_ID     ((hal_gpio_port_t)X_LIMIT_PORT)
+#define Y_LIMIT_PORT_ID     ((hal_gpio_port_t)Y_LIMIT_PORT)
+#define Z_LIMIT_PORT_ID     ((hal_gpio_port_t)Z_LIMIT_PORT)
+
+#define CONTROL_RESET_PORT_ID       ((hal_gpio_port_t)CONTROL_RESET_PORT)
+#define CONTROL_FEED_HOLD_PORT_ID   ((hal_gpio_port_t)CONTROL_FEED_HOLD_PORT)
+#define CONTROL_CYCLE_START_PORT_ID ((hal_gpio_port_t)CONTROL_CYCLE_START_PORT)
+#define CONTROL_SAFETY_DOOR_PORT_ID ((hal_gpio_port_t)CONTROL_SAFETY_DOOR_PORT)
+
+#define PROBE_PORT_ID       ((hal_gpio_port_t)PROBE_PORT)
 
 // ============================================================================
 // FLASH EMULATION FOR EEPROM
@@ -399,18 +230,16 @@ void hal_spindle_pwm_set(uint16_t value);
 // These are used by core GRBL code (limits.c, probe.c, system.c)
 // Map AVR pin definitions to SAMD21 GPIO ports
 
-// Limit switches
+// Limit switches (AVR compatibility - DDR/PCMSK/INT only)
 #define LIMIT_DDR     0      // Not used on ARM (DDR is for AVR only)
-#define LIMIT_PORT    0      // Not used on ARM (PORT is for AVR pullup)
 #define LIMIT_PCMSK   0      // Not used on ARM
 #define LIMIT_INT     0      // Not used on ARM
 #undef LIMIT_PIN
 #define LIMIT_PIN     PORT_GROUPA  // Used for reading limit switches (redefine as PORT)
 #define LIMIT_MASK    LIMIT_MASK_A // Combined mask for all limit pins
 
-// Control pins
+// Control pins (AVR compatibility - DDR/PCMSK/INT only)
 #define CONTROL_DDR   0      // Not used on ARM
-#define CONTROL_PORT  0      // Not used on ARM
 #define CONTROL_PCMSK 0      // Not used on ARM
 #define CONTROL_INT   0      // Not used on ARM
 #undef CONTROL_PIN
@@ -418,9 +247,8 @@ void hal_spindle_pwm_set(uint16_t value);
 #undef CONTROL_MASK
 #define CONTROL_MASK  CONTROL_MASK_A // Combined mask for all control pins
 
-// Probe pin
+// Probe pin (AVR compatibility - DDR only)
 #define PROBE_DDR     0      // Not used on ARM
-#define PROBE_PORT    0      // Not used on ARM
 #undef PROBE_PIN
 #define PROBE_PIN     PORT_GROUPA  // Used for reading probe pin (redefine as PORT)
 #undef PROBE_MASK
