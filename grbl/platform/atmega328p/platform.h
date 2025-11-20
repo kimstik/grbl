@@ -273,17 +273,11 @@ static inline uint32_t hal_micros(void) {
 #define HAL_DELAY_US(us)                        _delay_us(us)
 
 // ============================================================================
-// HAL NVMEM (EEPROM) MACROS (ZERO OVERHEAD - expand to original AVR code)
+// HAL NVMEM (EEPROM) - Defined in hal_nvmem.h
 // ============================================================================
 
-#include <avr/eeprom.h>
-
-#define HAL_NVMEM_READ_BYTE(addr)               eeprom_read_byte((uint8_t*)(addr))
-#define HAL_NVMEM_WRITE_BYTE(addr, value)       eeprom_write_byte((uint8_t*)(addr), (value))
-#define HAL_NVMEM_READ_WORD(addr)               eeprom_read_word((uint16_t*)(addr))
-#define HAL_NVMEM_WRITE_WORD(addr, value)       eeprom_write_word((uint16_t*)(addr), (value))
-#define HAL_NVMEM_READ_DWORD(addr)              eeprom_read_dword((uint32_t*)(addr))
-#define HAL_NVMEM_WRITE_DWORD(addr, value)      eeprom_write_dword((uint32_t*)(addr), (value))
+// NVMEM macros are defined in platform/hal_nvmem.h for all platforms
+// AVR uses optimized eeprom_get_char/eeprom_put_char from nvmem.c
 
 // Note: cpu_map.h is included from grbl.h AFTER config.h to get VARIABLE_SPINDLE
 
