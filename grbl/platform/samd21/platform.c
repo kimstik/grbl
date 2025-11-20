@@ -17,6 +17,8 @@
 // CRITICAL SECTIONS
 // ============================================================================
 
+// ISSUE #10 (MINOR): Unused global variable - never referenced anywhere
+// TODO: Remove or use properly
 uint32_t _hal_critical_state = 0;
 
 uint32_t hal_critical_enter(void) {
@@ -78,14 +80,17 @@ void hal_clock_config(void) {
   // Enable DFLL48M in open-loop mode (simplest configuration)
   // Note: For production, use closed-loop mode with USB SOF or external 32kHz
 
-  // Enable DFLL48M reference clock (OSC8M / 256)
-  SYSCTRL->OSC8M = 0x87;  // Enable OSC8M, prescaler /1
+  // ISSUE #11 (MINOR): Magic number needs explanation
+  // 0x87 = ENABLE=1, PRESC=0 (no prescaling), ONDEMAND=0, RUNSTDBY=0
+  SYSCTRL->OSC8M = 0x87;  // Enable OSC8M at 8MHz
 
   // Configure DFLL48M in open-loop mode
   SYSCTRL->DFLLCTRL = 0;  // Disable DFLL
   while (!(SYSCTRL->PCLKSR & (1 << 0)));  // Wait for ready
 
-  // Load factory calibration values
+  // ISSUE #11 (MINOR): Magic address needs explanation
+  // 0x00806020 = NVM Software Calibration Area (factory programmed)
+  // Load factory calibration values for DFLL48M
   uint32_t coarse_cal = (*((uint32_t*)0x00806020) >> 26) & 0x3F;
   SYSCTRL->DFLLVAL = (coarse_cal << 10);
 
@@ -105,12 +110,28 @@ void hal_clock_config(void) {
 // GPIO INITIALIZATION
 // ============================================================================
 
+// ISSUE #5 (MAJOR): This entire function uses old-style direct PORT manipulation
+// TODO: Rewrite using new GPIO_SET_OUT(), GPIO_BSET(), GPIO_BCLR() macros
+// Example: Instead of PORT->Group[].DIRSET = (1 << PIN)
+//          Use: GPIO_SET_OUT(X_DIRECTION)
+//
+// Lines to update:
+// - 115-116: Direction pins (3 pins)
+// - 119-120: Step pins (3 pins)
+// - 123-124: Stepper enable (1 pin)
+// - 127-131: Limit switches (3 pins)
+// - 134-138: Control pins (3 pins)
+// - 141-143: Probe pin (1 pin)
+// - 146-147: Spindle direction (1 pin)
+// - 152-157: Coolant pins (1-2 pins)
+
 void hal_gpio_init(void) {
   // Initialize all GPIO pins used by GRBL
 
   // Enable PORT clock
   PM->APBBMASK |= PM_APBBMASK_PORT;
 
+  // ISSUE #5: OLD STYLE - should use GPIO_SET_OUT(X_DIRECTION) etc.
   // Configure direction pins as outputs (PA0, PA1, PA2)
   PORT->Group[PORT_GROUPA].DIRSET = DIRECTION_MASK;
   PORT->Group[PORT_GROUPA].OUTCLR = DIRECTION_MASK;  // Start low
@@ -165,13 +186,18 @@ void hal_system_init(void) {
   // Initialize system
   hal_clock_config();
 
-  // Configure SysTick for 1ms interrupts
+  // ISSUE #1 (CRITICAL): SysTick timer is DISABLED!
+  // This breaks hal_millis(), hal_micros(), and all timing functions
+  // Dwell times, feed rates, delays won't work correctly
+  // TODO: UNCOMMENT THIS LINE!
   // SysTick_Config(HAL_CPU_FREQ / 1000);
 
   // Initialize GPIO
   hal_gpio_init();
 
-  // Enable interrupts
+  // ISSUE #1 (CRITICAL): Interrupts are DISABLED!
+  // This prevents SysTick and all other interrupts from working
+  // TODO: UNCOMMENT THIS LINE!
   // __enable_irq();
 }
 
@@ -214,7 +240,11 @@ uint32_t hal_gpio_read_port(hal_gpio_port_t port) {
 }
 
 void hal_gpio_write_port(hal_gpio_port_t port, uint32_t mask, uint32_t value) {
-  // Write to port with mask
+  // ISSUE #9 (MODERATE): Thread-safety problem!
+  // Read-modify-write is NOT atomic - can corrupt if called from ISR
+  // TODO: Use OUTSET/OUTCLR instead, or wrap in critical section:
+  //   if (value) PORT->Group[port].OUTSET = mask;
+  //   else       PORT->Group[port].OUTCLR = mask;
   PORT->Group[port].OUT = (PORT->Group[port].OUT & ~mask) | (value & mask);
 }
 
@@ -244,7 +274,14 @@ void hal_gpio_toggle_bits(hal_gpio_port_t port, uint32_t mask) {
 }
 
 void hal_gpio_pullup_enable(hal_gpio_port_t port, uint32_t mask) {
-  // Enable pullups on specified pins
+  // ISSUE #7 (MAJOR): Inefficient O(32) loop even for single bit!
+  // TODO: Use __builtin_ctz() to iterate only set bits:
+  //   while (mask) {
+  //     uint8_t pin = __builtin_ctz(mask);
+  //     PORT->Group[port].PINCFG[pin] |= PORT_PINCFG_PULLEN;
+  //     PORT->Group[port].OUTSET = (1UL << pin);
+  //     mask &= ~(1UL << pin);
+  //   }
   for (uint8_t pin = 0; pin < 32; pin++) {
     if (mask & (1UL << pin)) {
       PORT->Group[port].PINCFG[pin] |= PORT_PINCFG_PULLEN;
@@ -254,7 +291,8 @@ void hal_gpio_pullup_enable(hal_gpio_port_t port, uint32_t mask) {
 }
 
 void hal_gpio_pullup_disable(hal_gpio_port_t port, uint32_t mask) {
-  // Disable pullups on specified pins
+  // ISSUE #7 (MAJOR): Inefficient O(32) loop even for single bit!
+  // TODO: Use __builtin_ctz() to iterate only set bits (see above)
   for (uint8_t pin = 0; pin < 32; pin++) {
     if (mask & (1UL << pin)) {
       PORT->Group[port].PINCFG[pin] &= ~PORT_PINCFG_PULLEN;
@@ -427,21 +465,41 @@ uint8_t hal_nvmem_read_byte(uint32_t addr) {
   return *flash_addr;
 }
 
+// ISSUE #2 (CRITICAL): NVMEM write NOT IMPLEMENTED!
+// Settings cannot be saved to EEPROM - all configuration lost on reset
+// GRBL settings ($0-$132) won't persist between power cycles
+// This makes the system effectively unusable for production
+//
+// TODO: Implement SAMD21 NVM controller sequence:
+// 1. Wait for NVMCTRL->INTFLAG.READY
+// 2. Set NVMCTRL->ADDR to target address
+// 3. Erase page: NVMCTRL->CTRLA = NVMCTRL_CMD_ER | NVMCTRL_CMDEX_KEY
+// 4. Wait for completion
+// 5. Write buffer: write to NVM memory space
+// 6. Write page: NVMCTRL->CTRLA = NVMCTRL_CMD_WP | NVMCTRL_CMDEX_KEY
+// 7. Wait for completion
+//
+// See SAMD21 datasheet section 22 (NVM Controller) for details
 void hal_nvmem_write_byte(uint32_t addr, uint8_t value) {
-  // Write to flash emulation area
-  // SAMD21 flash write requires:
-  // 1. Unlock NVM
-  // 2. Erase page if needed
-  // 3. Write data
-  // 4. Lock NVM
-
   // TODO: Implement flash write with page erase logic
+  (void)addr;
+  (void)value;
 }
 
 // ============================================================================
 // SPINDLE PWM FUNCTIONS
 // ============================================================================
 
+// ISSUE #3 (CRITICAL): Spindle PWM initialization INCOMPLETE!
+// Variable spindle speed (M3 S1000-S12000) won't work
+// Only on/off spindle control available
+//
+// TODO: Complete TCC0 configuration:
+// 1. Reset TCC0: TCC0->CTRLA = TCC_CTRLA_SWRST
+// 2. Set waveform mode: TCC0->WAVE = TCC_WAVE_WAVEGEN_NPWM
+// 3. Set period: TCC0->PER = SPINDLE_PWM_MAX_VALUE
+// 4. Set initial duty: TCC0->CC[0] = 0
+// 5. Enable TCC0: TCC0->CTRLA = TCC_CTRLA_ENABLE
 void hal_spindle_pwm_init(void) {
   // Initialize TCC0 for spindle PWM on PA6 (WO[0])
 
@@ -454,6 +512,8 @@ void hal_spindle_pwm_init(void) {
                   (0 << GCLK_CLKCTRL_GEN_Pos);  // Use GCLK0
   while (GCLK->STATUS & GCLK_STATUS_SYNCBUSY);
 
+  // ISSUE #13 (MINOR): Hard-coded magic numbers, hard to read
+  // Better: #define PMUX_FUNC_E 0x4
   // Configure PA6 for TCC0/WO[0] (Function E)
   PORT->Group[PORT_GROUPA].PINCFG[SPINDLE_PWM_PIN] = PORT_PINCFG_PMUXEN;
   PORT->Group[PORT_GROUPA].PMUX[SPINDLE_PWM_PIN >> 1] |= (0x4 << ((SPINDLE_PWM_PIN & 1) * 4));  // Function E
@@ -463,15 +523,17 @@ void hal_spindle_pwm_init(void) {
   // TODO: Add proper TCC structure to samd21.h if needed for advanced features
 }
 
+// ISSUE #3 (CRITICAL): Spindle PWM set NOT IMPLEMENTED!
+// M3 S1000 (set spindle speed) won't do anything
+// TODO: Implement: TCC0->CC[SPINDLE_PWM_CHANNEL] = value;
 void hal_spindle_pwm_set(uint16_t value) {
-  // Set PWM duty cycle
   // TODO: Implement TCC0 PWM set
-  // TCC0->CC[SPINDLE_PWM_CHANNEL] = value;
+  (void)value;
 }
 
+// ISSUE #3 (CRITICAL): Spindle PWM duty NOT IMPLEMENTED!
+// TODO: Implement: TCC0->CC[0] = duty;
 void hal_timer_spindle_pwm_set_duty(uint16_t duty) {
-  // Set spindle PWM duty cycle
-  // TCC0->CC[0] = duty;
   (void)duty;  // Not implemented yet
 }
 
@@ -499,9 +561,17 @@ void hal_delay_ms(uint32_t ms) {
   }
 }
 
+// ISSUE #6 (MAJOR): Inaccurate microsecond delay!
+// NOP loop timing varies with compiler optimization level (-O0, -Os, -O2)
+// The "/10" divisor is an arbitrary guess, not calibrated
+// Step pulse timing will be incorrect, affecting machine accuracy
+//
+// TODO: Use SysTick or TC timer for precise delays:
+// Option 1: Read SysTick->VAL and calculate elapsed ticks
+// Option 2: Use TC5 as microsecond counter (configure for 1MHz)
+// Option 3: Calibrate NOP loop at startup and adjust divisor
 void hal_delay_us(uint32_t us) {
   // Simple delay loop - not accurate
-  // TODO: Implement precise microsecond delay using timer
   volatile uint32_t count = us * (HAL_CPU_FREQ / 1000000) / 10;
   while (count--) {
     __asm__ volatile ("nop");
