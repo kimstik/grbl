@@ -189,7 +189,20 @@ typedef uint32_t hal_gpio_port_t;
 // HAL GPIO INTERRUPT MACROS
 // ============================================================================
 
-// GPIO interrupt macros (simplified - actual implementation would use EIC)
+// ISSUE #4 (CRITICAL): GPIO interrupts NOT IMPLEMENTED!
+// Hard limits won't trigger interrupts - must rely on polling (slow, unreliable)
+// Control pins (reset, feed hold, cycle start) won't work as interrupts
+// Probe detection may miss fast events
+//
+// TODO: Implement External Interrupt Controller (EIC):
+// 1. Enable EIC clock: PM->APBAMASK |= PM_APBAMASK_EIC
+// 2. Configure GCLK for EIC
+// 3. Map pins to EIC channels via PMUX (Function A)
+// 4. Configure EIC->CONFIG for edge/level detection
+// 5. Enable interrupts: EIC->INTENSET
+// 6. Implement EIC_Handler() ISR
+//
+// See SAMD21 datasheet section 21 (External Interrupt Controller)
 #define HAL_GPIO_INTERRUPT_ENABLE(pcmsk, interrupt, mask)   /* TODO: Implement EIC */
 #define HAL_GPIO_INTERRUPT_DISABLE(pcmsk, interrupt, mask)  /* TODO: Implement EIC */
 
@@ -227,13 +240,22 @@ void hal_spindle_pwm_set(uint16_t value);
 // AVR COMPATIBILITY LAYER
 // ============================================================================
 
+// ISSUE #12 (MODERATE): Confusing AVR compatibility definitions
+// These macros define meaningless zero values that confuse readers
+// They exist only to satisfy AVR-style code but serve no purpose on ARM
+//
+// Options:
+// 1. Remove these entirely (best - requires fixing core GRBL to be platform-agnostic)
+// 2. Add clear comments explaining they're dummy values
+// 3. Use #ifdef PLATFORM_AVR guards in core GRBL code
+
 // These are used by core GRBL code (limits.c, probe.c, system.c)
 // Map AVR pin definitions to SAMD21 GPIO ports
 
 // Limit switches (AVR compatibility - DDR/PCMSK/INT only)
-#define LIMIT_DDR     0      // Not used on ARM (DDR is for AVR only)
-#define LIMIT_PCMSK   0      // Not used on ARM
-#define LIMIT_INT     0      // Not used on ARM
+#define LIMIT_DDR     0      // DUMMY: Not used on ARM (DDR is for AVR only)
+#define LIMIT_PCMSK   0      // DUMMY: Not used on ARM (PCMSK is for AVR only)
+#define LIMIT_INT     0      // DUMMY: Not used on ARM (INT is for AVR only)
 #undef LIMIT_PIN
 #define LIMIT_PIN     PORT_GROUPA  // Used for reading limit switches (redefine as PORT)
 #define LIMIT_MASK    LIMIT_MASK_A // Combined mask for all limit pins

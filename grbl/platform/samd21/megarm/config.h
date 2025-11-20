@@ -27,17 +27,22 @@
 // STEP PINS (D2, D3, D4 on Arduino Mega pinout)
 // ============================================================================
 
+// ISSUE #8 (MODERATE): Redundant BIT definitions
+// Every pin has both PIN and BIT defined with same value
+// This adds clutter without benefit - only PIN is needed
+// TODO: Remove all *_BIT definitions, use only *_PIN
+
 #define X_STEP_PORT         PORT_GROUPA
 #define X_STEP_PIN          25   // PA25 (D2)
-#define X_STEP_BIT          25
+#define X_STEP_BIT          25   // REDUNDANT: same as PIN
 
 #define Y_STEP_PORT         PORT_GROUPA
 #define Y_STEP_PIN          27   // PA27 (D3)
-#define Y_STEP_BIT          27
+#define Y_STEP_BIT          27   // REDUNDANT: same as PIN
 
 #define Z_STEP_PORT         PORT_GROUPA
 #define Z_STEP_PIN          28   // PA28 (D4)
-#define Z_STEP_BIT          28
+#define Z_STEP_BIT          28   // REDUNDANT: same as PIN
 
 // Combined step mask (all on PORT A)
 #define STEP_MASK_A         ((1UL<<X_STEP_PIN)|(1UL<<Y_STEP_PIN)|(1UL<<Z_STEP_PIN))
