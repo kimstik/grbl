@@ -269,4 +269,34 @@ typedef enum {
 //        GPIO_BSET(PIN_X_STEP);
 #define PIN(name)  name##_PORT, name##_BIT
 
+// ============================================================================
+// SHORTER ALIASES (OPTIONAL - Issue #5)
+// ============================================================================
+
+/*
+  Optional shorter names for frequently used operations.
+  Use whichever style you prefer - both work identically.
+
+  Verbose style (explicit):    HAL_GPIO_SET_OUTPUT(...)
+  Concise style (shorter):     GPIO_OUT(...)
+*/
+
+// GPIO direction shortcuts
+#define GPIO_OUT(port, mask)     HAL_GPIO_SET_OUTPUT(port, mask)
+#define GPIO_IN(port, mask)      HAL_GPIO_SET_INPUT(port, mask)
+
+// GPIO read/write shortcuts
+#define GPIO_RD(port)            HAL_GPIO_READ_PORT(port)
+#define GPIO_WR(port, value)     HAL_GPIO_WRITE_PORT(port, value)
+#define GPIO_PIN_RD(port, pin)   HAL_GPIO_READ_PIN(port, pin)
+
+// GPIO set/clear (multi-bit)
+#define GPIO_SET(port, mask)     HAL_GPIO_SET_BITS(port, mask)
+#define GPIO_CLR(port, mask)     HAL_GPIO_CLEAR_BITS(port, mask)
+#define GPIO_TGL(port, mask)     HAL_GPIO_TOGGLE_BITS(port, mask)
+
+// GPIO pullup shortcuts
+#define GPIO_PULLUP_ON(port, mask)   HAL_GPIO_PULLUP_ENABLE(port, mask)
+#define GPIO_PULLUP_OFF(port, mask)  HAL_GPIO_PULLUP_DISABLE(port, mask)
+
 #endif // HAL_GPIO_H
