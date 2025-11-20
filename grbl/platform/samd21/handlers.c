@@ -13,34 +13,8 @@
 #include "platform.h"
 
 // ============================================================================
-// STEPPER TIMER INTERRUPT (TC3)
+// NOTE: TC3_Handler and TC4_Handler are defined in stepper.c
 // ============================================================================
-
-// Stepper interrupt handler
-// Called at configured step rate
-void TC3_Handler(void) {
-  // Clear interrupt flag
-  // TC3->COUNT16.INTFLAG.bit.MC0 = 1;
-
-  // Call GRBL stepper interrupt
-  // extern void st_interrupt(void);
-  // st_interrupt();
-}
-
-// ============================================================================
-// STEP PULSE RESET TIMER INTERRUPT (TC4)
-// ============================================================================
-
-// Step pulse reset interrupt handler
-// Called to end step pulse
-void TC4_Handler(void) {
-  // Clear interrupt flag
-  // TC4->COUNT16.INTFLAG.bit.MC0 = 1;
-
-  // Reset step pins
-  // extern void st_reset_interrupt(void);
-  // st_reset_interrupt();
-}
 
 // ============================================================================
 // SERIAL INTERRUPT (SERCOM3)

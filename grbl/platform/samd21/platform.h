@@ -12,6 +12,8 @@
 #ifndef PLATFORM_SAMD21_H
 #define PLATFORM_SAMD21_H
 
+#include <stdint.h>
+
 // ============================================================================
 // PLATFORM IDENTIFICATION
 // ============================================================================
@@ -48,6 +50,15 @@
 
 // Timer resolution
 #define HAL_TIMER_RESOLUTION_NS   20      // 20.8 ns @ 48 MHz
+
+// ============================================================================
+// TYPE DEFINITIONS (must be before hal_gpio.h include)
+// ============================================================================
+
+// Define hal_gpio_port_t before hal_gpio.h includes it
+// For SAMD21: port ID is an integer (0 = PORT_GROUPA, 1 = PORT_GROUPB)
+typedef uint32_t hal_gpio_port_t;
+#define HAL_GPIO_PORT_T_DEFINED
 
 // ============================================================================
 // SAMD21 INCLUDES
@@ -309,6 +320,55 @@
 #endif
 
 // ============================================================================
+// HAL GPIO MACROS
+// ============================================================================
+
+// Override generic hal_gpio.h macros with platform-specific 2-argument versions
+#define HAL_GPIO_READ_PORT(port, mask)          (hal_gpio_read_port(port) & (mask))
+#define HAL_GPIO_WRITE_PORT(port, mask, value)  hal_gpio_write_port(port, mask, value)
+
+// ============================================================================
+// HAL TIMER MACROS
+// ============================================================================
+
+// Stepper timer macros (TC3)
+#define HAL_TIMER_STEPPER_INIT()              hal_stepper_timer_init()
+#define HAL_TIMER_STEPPER_START()             hal_stepper_timer_start()
+#define HAL_TIMER_STEPPER_STOP()              hal_stepper_timer_stop()
+#define HAL_TIMER_STEPPER_SET_PERIOD(cycles)  hal_stepper_timer_set_period(cycles)
+#define HAL_TIMER_STEPPER_INTERRUPT_ENABLE()  (TC3->INTENSET = TC_INTFLAG_MC0)
+#define HAL_TIMER_STEPPER_INTERRUPT_DISABLE() (TC3->INTENCLR = TC_INTFLAG_MC0)
+#define HAL_TIMER_STEPPER_RESET_PRESCALER()   /* No prescaler reset needed */
+#define HAL_TIMER_STEPPER_ISR()               void TC3_Handler(void)
+
+// Pulse reset timer macros (TC4)
+#define HAL_TIMER_PULSE_RESET_INIT()          hal_pulse_timer_init()
+#define HAL_TIMER_PULSE_RESET_START()         (TC4->CTRLA |= TC_CTRLA_ENABLE)
+#define HAL_TIMER_PULSE_RESET_STOP()          (TC4->CTRLA &= ~TC_CTRLA_ENABLE)
+#define HAL_TIMER_PULSE_RESET_ISR()           void TC4_Handler(void)
+
+// Spindle PWM timer macros
+#define HAL_TIMER_SPINDLE_PWM_INIT()          hal_spindle_pwm_init()
+#define HAL_TIMER_SPINDLE_PWM_ENABLE()        (TCC0->CTRLA |= TC_CTRLA_ENABLE)
+#define HAL_TIMER_SPINDLE_PWM_DISABLE()       (TCC0->CTRLA &= ~TC_CTRLA_ENABLE)
+#define HAL_TIMER_SPINDLE_PWM_IS_ENABLED()    (TCC0->CTRLA & TC_CTRLA_ENABLE)
+#define HAL_TIMER_SPINDLE_PWM_SET(value)      hal_spindle_pwm_set(value)
+
+// ============================================================================
+// HAL GPIO INTERRUPT MACROS
+// ============================================================================
+
+// GPIO interrupt macros (simplified - actual implementation would use EIC)
+#define HAL_GPIO_INTERRUPT_ENABLE(pcmsk, interrupt, mask)   /* TODO: Implement EIC */
+#define HAL_GPIO_INTERRUPT_DISABLE(pcmsk, interrupt, mask)  /* TODO: Implement EIC */
+
+// ============================================================================
+// HAL DELAY MACROS
+// ============================================================================
+
+#define _delay_us(us)  hal_delay_us(us)
+
+// ============================================================================
 // PLATFORM-SPECIFIC FUNCTIONS
 // ============================================================================
 
@@ -324,5 +384,46 @@ void hal_gpio_init(void);
 // Timer functions
 uint32_t hal_millis(void);
 uint64_t hal_micros(void);
+void hal_stepper_timer_init(void);
+void hal_stepper_timer_start(void);
+void hal_stepper_timer_stop(void);
+void hal_stepper_timer_set_period(uint32_t period);
+void hal_pulse_timer_init(void);
+void hal_spindle_pwm_init(void);
+void hal_spindle_pwm_set(uint16_t value);
+
+// ============================================================================
+// AVR COMPATIBILITY LAYER
+// ============================================================================
+
+// These are used by core GRBL code (limits.c, probe.c, system.c)
+// Map AVR pin definitions to SAMD21 GPIO ports
+
+// Limit switches
+#define LIMIT_DDR     0      // Not used on ARM (DDR is for AVR only)
+#define LIMIT_PORT    0      // Not used on ARM (PORT is for AVR pullup)
+#define LIMIT_PCMSK   0      // Not used on ARM
+#define LIMIT_INT     0      // Not used on ARM
+#undef LIMIT_PIN
+#define LIMIT_PIN     PORT_GROUPA  // Used for reading limit switches (redefine as PORT)
+#define LIMIT_MASK    LIMIT_MASK_A // Combined mask for all limit pins
+
+// Control pins
+#define CONTROL_DDR   0      // Not used on ARM
+#define CONTROL_PORT  0      // Not used on ARM
+#define CONTROL_PCMSK 0      // Not used on ARM
+#define CONTROL_INT   0      // Not used on ARM
+#undef CONTROL_PIN
+#define CONTROL_PIN   PORT_GROUPA  // Used for reading control pins (redefine as PORT)
+#undef CONTROL_MASK
+#define CONTROL_MASK  CONTROL_MASK_A // Combined mask for all control pins
+
+// Probe pin
+#define PROBE_DDR     0      // Not used on ARM
+#define PROBE_PORT    0      // Not used on ARM
+#undef PROBE_PIN
+#define PROBE_PIN     PORT_GROUPA  // Used for reading probe pin (redefine as PORT)
+#undef PROBE_MASK
+#define PROBE_MASK    (1<<PROBE_BIT)  // Redefine using BIT instead of PIN
 
 #endif // PLATFORM_SAMD21_H
