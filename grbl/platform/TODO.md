@@ -356,12 +356,15 @@ platform/samd21/                      # SAMD21 chip family
 ### Build Results (MegARM)
 
 **DEBUG** (symbols included):
-- Size: 59,036 bytes text + 6,160 bytes RAM
-- Note: DEBUG size not representative of final binary
+- Flash: 59,004 bytes (text + data)
+- RAM: 6,160 bytes (data + bss)
+- Note: DEBUG size not representative of production binary
 
-**RELEASE** (TODO: measure):
-- Size: TBD (need `make BUILD=RELEASE`)
-- Expected: ~30-35KB with LTO optimization
+**RELEASE** (optimized for production):
+- Flash: 38,416 bytes (text: 38,336 + data: 80)
+- RAM: 6,000 bytes (data: 80 + bss: 5,920)
+- Optimization: `-Os -flto` (35% smaller than DEBUG)
+- Fits: ✅ 256KB Flash / ✅ 32KB RAM on SAMD21G18A
 
 ### Example Board Config: MegARM
 
@@ -485,6 +488,6 @@ make BOARD=generic   # Generic template
 
 ## Next Steps
 
-1. Measure RELEASE binary size for SAMD21
-2. Apply chip/board structure to other platforms (STM32F103, STM32H523, etc.)
-3. **Issue #9** (High Priority): Remove platform conditionals from core GRBL files
+1. Apply chip/board structure to other platforms (STM32F103, STM32H523, etc.)
+2. **Issue #9** (High Priority): Remove platform conditionals from core GRBL files
+3. **Issue #4** (Medium Priority): Remove redundant hal_*.h files
