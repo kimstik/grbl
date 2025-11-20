@@ -7,9 +7,10 @@ This document tracks architectural improvements to reduce code duplication, impr
 ✅ **Completed**:
 - Issue #10: Chip/board directory structure (SAMD21)
 - Issue #11: PORT + PIN definitions for all pins
+- Issue #1: Fix `common/dummy` pollution
 
 🚧 **In Progress**:
-- Issue #1: Fix `common/dummy` pollution (high priority)
+- None
 
 📋 **Planned**:
 - Issues #2-9: See priority list below
@@ -68,20 +69,34 @@ platform/samd21/
 
 ## Critical Issues
 
-### 1. Platform-Specific Code in Common Directories [HIGH PRIORITY]
+### ✅ Issue #1: Platform-Specific Code in Common Directories [COMPLETED]
 
-**Problem**: `grbl/platform/common/dummy/avr/io.h` contains platform-specific ARM code:
+**Status**: Implemented for all platforms
+
+**Problem**: `grbl/platform/common/dummy/avr/io.h` contained platform-specific ARM code:
 ```c
 #define sei()  __enable_irq()
 #define cli()  __disable_irq()
 ```
 
-**Impact**: Pollutes common code with ARM-specific implementations, breaking other platforms.
+**Impact**: Polluted common code with ARM-specific implementations.
 
-**Solution**:
-- Move ARM-specific compatibility to each ARM platform's directory
-- Keep `common/dummy` truly platform-agnostic
-- Each platform defines its own compatibility layer
+**Solution Implemented**:
+- ✅ Created platform-specific `avr/io.h` for each platform:
+  - `platform/samd21/avr/io.h` (ARM Cortex-M0+: cpsie/cpsid)
+  - `platform/stm32f103/avr/io.h` (ARM Cortex-M3: cpsie/cpsid)
+  - `platform/stm32f411/avr/io.h` (ARM Cortex-M4: cpsie/cpsid)
+  - `platform/stm32h523/avr/io.h` (ARM Cortex-M33: cpsie/cpsid)
+  - `platform/hc32f460/avr/io.h` (ARM Cortex-M4: cpsie/cpsid)
+  - `platform/ch32v006/avr/io.h` (RISC-V: csrsi/csrci mstatus)
+  - `platform/sg2002/avr/io.h` (RISC-V: csrsi/csrci mstatus)
+- ✅ Updated `common/dummy/avr/io.h` to require platform-specific definitions
+- ✅ Verified SAMD21 build still works correctly
+
+**Benefits**:
+- ✅ Common code is now truly platform-agnostic
+- ✅ Each platform uses correct interrupt control instructions
+- ✅ Easy to add new platforms with different architectures
 
 ---
 
@@ -271,13 +286,10 @@ platform/samd21/
 ### ✅ Completed
 - ~~Issue #10: Chip/board folder hierarchy~~ (SAMD21: ✅ Done)
 - ~~Issue #11: PORT definition to pin macros~~ (SAMD21: ✅ Done)
+- ~~Issue #1: Fix `common/dummy` pollution~~ (All platforms: ✅ Done)
 
 ### 🔴 High Priority (next tasks)
-1. **Issue #1**: Fix `common/dummy` pollution
-   - Move ARM-specific code from common/dummy/avr/io.h
-   - Each ARM platform defines own compatibility layer
-
-2. **Issue #9**: Remove platform conditionals from core
+1. **Issue #9**: Remove platform conditionals from core
    - Remove `#ifdef PLATFORM_*` from grbl/*.c files
    - Use HAL abstraction instead
 
@@ -473,6 +485,6 @@ make BOARD=generic   # Generic template
 
 ## Next Steps
 
-1. **Issue #1** (High Priority): Move ARM compatibility from common/dummy to each platform
-2. Measure RELEASE binary size for SAMD21
-3. Apply chip/board structure to other platforms (STM32F103, STM32H523, etc.)
+1. Measure RELEASE binary size for SAMD21
+2. Apply chip/board structure to other platforms (STM32F103, STM32H523, etc.)
+3. **Issue #9** (High Priority): Remove platform conditionals from core GRBL files
