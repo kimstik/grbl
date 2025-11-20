@@ -5,6 +5,9 @@
   Copyright (c) 2025 GRBL HAL Contributors
 */
 
+// -- FIXME: THIS useless file have to disappear --
+
+
 #ifndef HAL_GPIO_H
 #define HAL_GPIO_H
 

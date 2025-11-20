@@ -27,6 +27,8 @@
 // ============================================================================
 // PLATFORM CAPABILITIES
 // ============================================================================
+// TODO: HAL_HAS_* -> PLATFORM_HAS_*
+// TODO: HAL_*     -> PLATFORM_*
 
 #define HAL_HAS_FPU           0   // Cortex-M0+ has no FPU (software emulation)
 #define HAL_HAS_DMA           1   // 12 DMA channels

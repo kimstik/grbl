@@ -5,6 +5,8 @@
   Copyright (c) 2025 GRBL HAL Contributors
 */
 
+// -- FIXME: THIS useless file have to disappear --
+
 #ifndef HAL_NVMEM_H
 #define HAL_NVMEM_H
 
