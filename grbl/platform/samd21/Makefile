@@ -46,8 +46,8 @@ OUTPUT_DIR = ../../../build
 PLATFORM_DIR = .
 
 # GRBL core sources (from grbl directory)
-GRBL_SOURCES = main.c motion_control.c gcode.c spindle_control.c coolant_control.c serial.c \
-               protocol.c stepper.c nvmem.c settings.c planner.c nuts_bolts.c limits.c jog.c \
+GRBL_SOURCES = main.c motion_control.c gcode.c spindle_control.c coolant_control.c   \
+               protocol.c stepper.c settings.c planner.c nuts_bolts.c limits.c jog.c \
                print.c probe.c report.c system.c
 
 # Platform-specific sources

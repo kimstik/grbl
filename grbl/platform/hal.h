@@ -171,12 +171,15 @@
 // HAL COMPONENT HEADERS
 // ============================================================================
 
+#if !defined(__AVR_ATmega328P__)
 // HAL component headers (all platforms)
-#include "hal_nvmem.h"
 #include "hal_system.h"
-#include "hal_gpio.h"
 #include "hal_timer.h"
 #include "hal_serial.h"
+#endif
+
+#include "hal_nvmem.h"
+#include "hal_gpio.h"
 
 // ============================================================================
 // PLATFORM CAPABILITIES (for compile-time feature detection)

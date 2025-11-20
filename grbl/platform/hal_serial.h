@@ -5,6 +5,8 @@
   Copyright (c) 2025 GRBL HAL Contributors
 */
 
+// -- FIXME: THIS useless file have to disappear --
+
 #ifndef HAL_SERIAL_H
 #define HAL_SERIAL_H
 
@@ -235,3 +237,5 @@ uint8_t serial_get_rx_buffer_available(void);
 uint8_t serial_get_tx_buffer_count(void);
 
 #endif // HAL_SERIAL_H
+
+

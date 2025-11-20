@@ -15,6 +15,8 @@
 #ifndef BOARD_MEGARM_CONFIG_H
 #define BOARD_MEGARM_CONFIG_H
 
+//	notation - specified in platform\samd21\gpio.h 
+
 // ============================================================================
 // BOARD IDENTIFICATION
 // ============================================================================
@@ -27,25 +29,22 @@
 // STEP PINS (D2, D3, D4 on Arduino Mega pinout)
 // ============================================================================
 
-// ISSUE #8 (MODERATE): Redundant BIT definitions
+// ISSUE #8 (MODERATE): Redundant PIN definitions
 // Every pin has both PIN and BIT defined with same value
-// This adds clutter without benefit - only PIN is needed
-// TODO: Remove all *_BIT definitions, use only *_PIN
+// This adds clutter without benefit - only BIT is needed
+// TODO: Remove all *_PIN definitions, use only *_BIT
 
 #define X_STEP_PORT         PORT_GROUPA
-#define X_STEP_PIN          25   // PA25 (D2)
-#define X_STEP_BIT          25   // REDUNDANT: same as PIN
+#define X_STEP_BIT          25   // PA25 (D2)
 
 #define Y_STEP_PORT         PORT_GROUPA
-#define Y_STEP_PIN          27   // PA27 (D3)
-#define Y_STEP_BIT          27   // REDUNDANT: same as PIN
+#define Y_STEP_BIT          27   // PA27 (D3)
 
 #define Z_STEP_PORT         PORT_GROUPA
-#define Z_STEP_PIN          28   // PA28 (D4)
-#define Z_STEP_BIT          28   // REDUNDANT: same as PIN
+#define Z_STEP_BIT          28   // PA28 (D4)
 
 // Combined step mask (all on PORT A)
-#define STEP_MASK_A         ((1UL<<X_STEP_PIN)|(1UL<<Y_STEP_PIN)|(1UL<<Z_STEP_PIN))
+#define STEP_MASK_A         ((1UL<<X_STEP_BIT)|(1UL<<Y_STEP_BIT)|(1UL<<Z_STEP_BIT))
 #define STEP_MASK_B         0
 
 // ============================================================================
@@ -53,16 +52,13 @@
 // ============================================================================
 
 #define X_DIRECTION_PORT    PORT_GROUPA
-#define X_DIRECTION_PIN     0    // PA0 (D5)
-#define X_DIRECTION_BIT     0
+#define X_DIRECTION_BIT     0    // PA0 (D5)
 
 #define Y_DIRECTION_PORT    PORT_GROUPA
-#define Y_DIRECTION_PIN     1    // PA1 (D6)
-#define Y_DIRECTION_BIT     1
+#define Y_DIRECTION_BIT     1    // PA1 (D6)
 
 #define Z_DIRECTION_PORT    PORT_GROUPA
-#define Z_DIRECTION_PIN     2    // PA2 (D7)
-#define Z_DIRECTION_BIT     2
+#define Z_DIRECTION_BIT     2    // PA2 (D7)
 
 // Combined direction mask (all on PORT A)
 #define DIRECTION_MASK_A    ((1UL<<X_DIRECTION_PIN)|(1UL<<Y_DIRECTION_PIN)|(1UL<<Z_DIRECTION_PIN))
