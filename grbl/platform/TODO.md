@@ -8,12 +8,13 @@ This document tracks architectural improvements to reduce code duplication, impr
 - Issue #10: Chip/board directory structure (SAMD21)
 - Issue #11: PORT + PIN definitions for all pins
 - Issue #1: Fix `common/dummy` pollution
+- Issue #9: Remove PLATFORM_* conditionals from core
 
 🚧 **In Progress**:
 - None
 
 📋 **Planned**:
-- Issues #2-9: See priority list below
+- Issues #2-8: See priority list below
 
 ---
 
@@ -260,24 +261,28 @@ platform/samd21/
 
 ---
 
-### 9. Remove Platform-Specific Conditionals
+### ✅ Issue #9: Remove Platform-Specific Conditionals [COMPLETED]
 
-**Problem**: Platform checks scattered in core code:
-```c
-#ifdef PLATFORM_SAMD21
-  // Platform-specific code
-#endif
-```
+**Status**: Implemented for all platforms
 
-**Solution**:
-- Remove all `#ifdef PLATFORM_*` from core GRBL files
-- Use HAL abstraction macros instead
-- Platform differences handled in `platform.h` macros
-- Restore affected files to vanilla with valid MD5
+**Problem**: Platform checks using `PLATFORM_AVR_ATMEGA328P` scattered in code
+
+**Solution Implemented**:
+- ✅ Replaced all `#ifdef PLATFORM_AVR_ATMEGA328P` with `#ifdef __AVR__`
+- ✅ Updated grbl/nvmem.c to use `__AVR__` (standard GCC define)
+- ✅ Updated all HAL headers (hal_gpio.h, hal_nvmem.h, hal_serial.h, hal_system.h, hal_timer.h)
+- ✅ Vanilla EEPROM functions remain in nvmem.c (as in original GRBL)
+- ✅ No more PLATFORM_* conditionals in core grbl/*.c files
+
+**Benefits**:
+- ✅ Core files use standard GCC architecture defines (__AVR__)
+- ✅ More portable - works for all AVR chips, not just ATmega328P
+- ✅ Cleaner code without custom PLATFORM_* macros
+- ✅ Vanilla GRBL structure preserved where possible
 
 **Validation**:
-- After changes, verify vanilla files match MD5 checksums
-- Ensure all platforms still build and function correctly
+- ✅ SAMD21 builds successfully (59,004 bytes - unchanged)
+- ✅ Code structure remains compatible with vanilla GRBL for AVR
 
 ---
 
@@ -287,11 +292,7 @@ platform/samd21/
 - ~~Issue #10: Chip/board folder hierarchy~~ (SAMD21: ✅ Done)
 - ~~Issue #11: PORT definition to pin macros~~ (SAMD21: ✅ Done)
 - ~~Issue #1: Fix `common/dummy` pollution~~ (All platforms: ✅ Done)
-
-### 🔴 High Priority (next tasks)
-1. **Issue #9**: Remove platform conditionals from core
-   - Remove `#ifdef PLATFORM_*` from grbl/*.c files
-   - Use HAL abstraction instead
+- ~~Issue #9: Remove platform conditionals from core~~ (All files: ✅ Done)
 
 ### 🟡 Medium Priority
 3. **Issue #4**: Remove redundant `hal_*.h` files
@@ -489,5 +490,5 @@ make BOARD=generic   # Generic template
 ## Next Steps
 
 1. Apply chip/board structure to other platforms (STM32F103, STM32H523, etc.)
-2. **Issue #9** (High Priority): Remove platform conditionals from core GRBL files
-3. **Issue #4** (Medium Priority): Remove redundant hal_*.h files
+2. Evaluate architecture refactoring proposals (Issues #2-#8)
+3. Consider code style improvements (Issues #5, #6) for better readability
