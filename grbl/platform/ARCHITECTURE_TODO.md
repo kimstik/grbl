@@ -202,18 +202,108 @@ platform/samd21/
 
 ---
 
+## Directory Structure Reorganization
+
+### 10. Introduce Chip/Board Folder Hierarchy
+
+**Problem**: Current structure mixes chip-specific and board-specific configuration:
+```
+platform/samd21/
+  ├── platform.h     # Mix of chip + board config
+  ├── config.h       # Board-specific pins
+  └── platform.c
+```
+
+**Proposed structure**:
+```
+platform/samd21/                    # Chip-specific (SAMD21 family)
+  ├── samd21.h                      # Register definitions
+  ├── platform.h                    # HAL declarations
+  ├── platform.c                    # HAL implementations
+  └── boards/
+      ├── megarm/                   # MegARM board
+      │   └── config.h              # Pin mappings for MegARM
+      ├── arduino_zero/             # Arduino Zero board
+      │   └── config.h              # Pin mappings for Arduino Zero
+      └── generic/                  # Generic SAMD21 board
+          └── config.h              # Default pin mappings
+```
+
+**Benefits**:
+- Chip code shared across all boards using same chip
+- Easy to add new boards without duplicating chip code
+- Clear separation: chip vs board configuration
+- User only modifies board-specific config
+
+**Makefile selection**:
+```makefile
+CHIP = samd21
+BOARD = megarm
+CFLAGS += -I platform/$(CHIP)/boards/$(BOARD)
+```
+
+**Example usage**:
+```c
+// In platform/samd21/boards/megarm/config.h
+#define X_STEP_PORT   PORT_GROUPA
+#define X_STEP_PIN    25   // PA25 (D2 on MegARM)
+
+// In platform/samd21/boards/arduino_zero/config.h
+#define X_STEP_PORT   PORT_GROUPA
+#define X_STEP_PIN    18   // PA18 (D11 on Arduino Zero)
+```
+
+---
+
+### 11. Add PORT Definition to Pin Macros
+
+**Problem**: Current pin definitions only specify pin number:
+```c
+#define X_STEP_PIN    25  // PA25 - but which port?
+```
+
+**Issue**: Makes GPIO macros ambiguous:
+```c
+GPIO_BSET(X_STEP_PIN);  // Which port? Implicit assumption.
+```
+
+**Solution**: Always define both PORT and PIN:
+```c
+#define X_STEP_PORT   PORT_GROUPA
+#define X_STEP_PIN    25
+```
+
+**Benefits**:
+- Explicit port specification
+- Works for chips with multiple ports (PORTA, PORTB, etc.)
+- Clearer GPIO macro calls:
+  ```c
+  GPIO_BSET(X_STEP_PORT, X_STEP_PIN);
+  ```
+
+**Implementation**:
+1. Update all pin definitions to include PORT
+2. Update GPIO macros to accept (port, pin) arguments
+3. Verify on hardware that pins match expectations
+
+---
+
 ## Implementation Priority
 
-1. **High Priority** (breaks other platforms):
+1. **Critical Priority** (architectural foundation):
+   - Issue #10: Introduce chip/board folder hierarchy
+   - Issue #11: Add PORT definition to pin macros
+
+2. **High Priority** (breaks other platforms):
    - Issue #1: Fix `common/dummy` pollution
    - Issue #9: Remove platform conditionals from core
 
-2. **Medium Priority** (technical debt):
+3. **Medium Priority** (technical debt):
    - Issue #4: Remove redundant `hal_*.h` files
-   - Issue #7: Separate config from platform headers
+   - Issue #7: Separate config from platform headers (superseded by #10)
    - Issue #8: Restore vanilla core files
 
-3. **Low Priority** (cleanup):
+4. **Low Priority** (cleanup):
    - Issue #5: Rename macros (remove HAL_ prefix)
    - Issue #6: Simplify single-bit operations
    - Issue #3: Change header inclusion method
@@ -236,3 +326,146 @@ For each change:
 - Reduces vendor lock-in to "HAL" naming
 - Makes codebase more approachable for vanilla GRBL users
 - Facilitates porting to new platforms
+
+---
+
+## Example: SAMD21 Chip/Board Structure
+
+### Proposed File Organization
+
+```
+platform/samd21/                           # SAMD21 chip family
+├── samd21.h                               # Register definitions (SERCOM, TC, TCC, PORT, etc.)
+├── platform.h                             # HAL function declarations
+├── platform.c                             # HAL implementations (GPIO, timers, UART, etc.)
+├── startup.s                              # Chip startup code
+├── script.ld                              # Linker script
+├── Makefile                               # Chip build rules
+└── boards/                                # Board-specific configurations
+    ├── megarm/
+    │   ├── config.h                       # MegARM pin mappings
+    │   └── README.md                      # Board documentation
+    ├── arduino_zero/
+    │   ├── config.h                       # Arduino Zero pin mappings
+    │   └── README.md                      # Board documentation
+    └── generic/
+        ├── config.h                       # Generic SAMD21 defaults
+        └── README.md                      # Generic board info
+```
+
+### Example Board Config: MegARM
+
+**File**: `platform/samd21/boards/megarm/config.h`
+
+```c
+/*
+  MegARM Board Configuration
+  ATSAMC21E18A-MZ - Arduino Mega pin-compatible replacement
+  https://github.com/kimstik/MegARM
+*/
+
+#ifndef BOARD_MEGARM_CONFIG_H
+#define BOARD_MEGARM_CONFIG_H
+
+// Board identification
+#define BOARD_NAME "MegARM"
+#define BOARD_MCU  "ATSAMC21E18A-MZ"
+
+// Step pins (D2, D3, D4 on Arduino Mega pinout)
+#define X_STEP_PORT   PORT_GROUPA
+#define X_STEP_PIN    25   // PA25 (D2)
+
+#define Y_STEP_PORT   PORT_GROUPA
+#define Y_STEP_PIN    27   // PA27 (D3)
+
+#define Z_STEP_PORT   PORT_GROUPA
+#define Z_STEP_PIN    28   // PA28 (D4)
+
+// Direction pins (D5, D6, D7)
+#define X_DIR_PORT    PORT_GROUPA
+#define X_DIR_PIN     0    // PA0 (D5)
+
+#define Y_DIR_PORT    PORT_GROUPA
+#define Y_DIR_PIN     1    // PA1 (D6)
+
+#define Z_DIR_PORT    PORT_GROUPA
+#define Z_DIR_PIN     2    // PA2 (D7)
+
+// Stepper enable (B0)
+#define STEPPERS_DISABLE_PORT  PORT_GROUPA
+#define STEPPERS_DISABLE_PIN   3    // PA3 (B0)
+
+// Limit switches (B1, B2, B4)
+#define X_LIMIT_PORT  PORT_GROUPA
+#define X_LIMIT_PIN   4    // PA4 (B1)
+
+#define Y_LIMIT_PORT  PORT_GROUPA
+#define Y_LIMIT_PIN   5    // PA5 (B2)
+
+#define Z_LIMIT_PORT  PORT_GROUPA
+#define Z_LIMIT_PIN   7    // PA7 (B4)
+
+// Control pins (C0, C1, C2)
+#define CONTROL_RESET_PORT      PORT_GROUPA
+#define CONTROL_RESET_PIN       14   // PA14 (C0)
+
+#define CONTROL_FEED_HOLD_PORT  PORT_GROUPA
+#define CONTROL_FEED_HOLD_PIN   15   // PA15 (C1)
+
+#define CONTROL_CYCLE_START_PORT   PORT_GROUPA
+#define CONTROL_CYCLE_START_PIN    16   // PA16 (C2)
+
+// Spindle control (B3, B5)
+#define SPINDLE_PWM_PORT       PORT_GROUPA
+#define SPINDLE_PWM_PIN        6    // PA6 (B3)
+
+#define SPINDLE_DIRECTION_PORT PORT_GROUPA
+#define SPINDLE_DIRECTION_PIN  8    // PA8 (B5)
+
+// Coolant (C3, C4)
+#define COOLANT_FLOOD_PORT     PORT_GROUPA
+#define COOLANT_FLOOD_PIN      17   // PA17 (C3)
+
+#define COOLANT_MIST_PORT      PORT_GROUPA
+#define COOLANT_MIST_PIN       18   // PA18 (C4)
+
+// Probe (C5)
+#define PROBE_PORT             PORT_GROUPA
+#define PROBE_PIN              19   // PA19 (C5)
+
+// UART (D0, D1)
+#define UART_RX_PORT           PORT_GROUPA
+#define UART_RX_PIN            23   // PA23 (D0)
+#define UART_TX_PORT           PORT_GROUPA
+#define UART_TX_PIN            24   // PA24 (D1)
+
+#endif // BOARD_MEGARM_CONFIG_H
+```
+
+### Build System Integration
+
+**Makefile example**:
+```makefile
+# Select chip and board
+CHIP = samd21
+BOARD = megarm
+
+# Include paths
+INCLUDES = -I platform/$(CHIP) \
+           -I platform/$(CHIP)/boards/$(BOARD)
+
+# Chip-specific sources
+CHIP_SRC = platform/$(CHIP)/platform.c \
+           platform/$(CHIP)/startup.s
+
+# Board-specific config (included via -include flag)
+CFLAGS += -include platform/$(CHIP)/boards/$(BOARD)/config.h
+```
+
+### Benefits of This Approach
+
+1. **Reusability**: SAMD21 chip code shared across MegARM, Arduino Zero, and custom boards
+2. **Maintainability**: Pin changes only affect board config, not chip HAL
+3. **Clarity**: Clear separation between hardware abstraction and board layout
+4. **Extensibility**: Adding new board = create new folder + config.h
+5. **Port Safety**: Explicit port specification prevents wrong-port bugs
