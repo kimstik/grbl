@@ -316,6 +316,42 @@ typedef struct {
 #define TC3 ((Tc*)TC3_BASE)
 #define TC4 ((Tc*)TC4_BASE)
 
+// TCC - Timer/Counter for Control (PWM)
+typedef struct {
+  volatile uint32_t CTRLA;      // 0x00 Control A
+  volatile uint32_t CTRLBCLR;   // 0x04 Control B Clear
+  volatile uint32_t CTRLBSET;   // 0x08 Control B Set
+  volatile uint32_t SYNCBUSY;   // 0x0C Synchronization Busy
+  volatile uint32_t FCTRLA;     // 0x10 Recoverable Fault A Configuration
+  volatile uint32_t FCTRLB;     // 0x14 Recoverable Fault B Configuration
+  volatile uint32_t WEXCTRL;    // 0x18 Waveform Extension Configuration
+  volatile uint32_t DRVCTRL;    // 0x1C Driver Control
+  uint32_t RESERVED1[2];
+  volatile uint8_t  DBGCTRL;    // 0x28 Debug Control
+  uint8_t RESERVED2[3];
+  volatile uint32_t EVCTRL;     // 0x2C Event Control
+  volatile uint32_t INTENCLR;   // 0x30 Interrupt Enable Clear
+  volatile uint32_t INTENSET;   // 0x34 Interrupt Enable Set
+  volatile uint32_t INTFLAG;    // 0x38 Interrupt Flag Status and Clear
+  volatile uint32_t STATUS;     // 0x3C Status
+  volatile uint32_t COUNT;      // 0x40 Counter Value
+  volatile uint16_t PATT;       // 0x44 Pattern
+  uint16_t RESERVED3[1];
+  volatile uint32_t WAVE;       // 0x48 Waveform Control
+  volatile uint32_t PER;        // 0x4C Period
+  volatile uint32_t CC[4];      // 0x50-0x5C Compare/Capture
+  uint32_t RESERVED4[16];
+  volatile uint16_t PATTB;      // 0xA0 Pattern Buffer
+  uint16_t RESERVED5[1];
+  volatile uint32_t WAVEB;      // 0xA4 Waveform Control Buffer
+  volatile uint32_t PERB;       // 0xA8 Period Buffer
+  volatile uint32_t CCB[4];     // 0xAC-0xB8 Compare/Capture Buffer
+} Tcc;
+
+#define TCC0 ((Tcc*)TCC0_BASE)
+#define TCC1 ((Tcc*)TCC1_BASE)
+#define TCC2 ((Tcc*)TCC2_BASE)
+
 // TC CTRLA bits
 #define TC_CTRLA_SWRST_Pos      0
 #define TC_CTRLA_SWRST          (1 << TC_CTRLA_SWRST_Pos)
