@@ -23,11 +23,13 @@
 #include "hal.h"
 
 // ============================================================================
-// Original GRBL EEPROM functions (from Atmel AVR103 app note)
-// These are ONLY for AVR - other platforms use hal_nvmem_read/write_byte
+// AVR EEPROM functions (from Atmel AVR103 application note)
 // ============================================================================
 
-#ifdef PLATFORM_AVR_ATMEGA328P
+#ifdef __AVR__
+
+#include <avr/io.h>
+#include <avr/interrupt.h>
 
 // EEPROM bit compatibility for older AVR devices
 #ifndef EEPE
@@ -52,28 +54,29 @@ unsigned char eeprom_get_char(unsigned int addr)
 
 void eeprom_put_char(unsigned int addr, unsigned char new_value)
 {
-  char old_value;   // Old EEPROM value (signed char as in original!)
+  char old_value;   // Old EEPROM value
   char diff_mask;   // Difference mask, i.e. old value XOR new value
 
-  cli();  // Ensure atomic operation for the write operation
+  cli();  // Ensure atomic operation
 
   do {} while(EECR & (1<<EEPE));  // Wait for completion of previous write
-  #ifndef EEPROM_IGNORE_SELFPROG
+
+#ifndef EEPROM_IGNORE_SELFPROG
   do {} while(SPMCSR & (1<<SELFPRGEN));  // Wait for completion of SPM
-  #endif
+#endif
 
   EEAR = addr;              // Set EEPROM address register
-  EECR = (1<<EERE);        // Start EEPROM read operation
+  EECR = (1<<EERE);        // Start EEPROM read
   old_value = EEDR;         // Get old EEPROM value
   diff_mask = old_value ^ new_value;  // Get bit differences
 
-  // Check if any bits are changed to '1' in the new value
-  if(diff_mask & new_value) {
+  // Check if any bits need to be changed to '1'
+  if(diff_mask & old_value) {
     // Now we know that _some_ bits need to be erased to '1'
 
-    // Check if any bits in the new value are '0'
-    if(new_value != 0xff) {
-      // Now we know that some bits need to be programmed to '0' also
+    // Check if any bits need to be programmed to '0'
+    if(diff_mask & new_value) {
+      // Now we know that _some_ bits need to be programmed to '0' also
 
       EEDR = new_value;     // Set EEPROM data register
       EECR = (1<<EEMPE) |   // Set Master Write Enable bit...
@@ -91,7 +94,7 @@ void eeprom_put_char(unsigned int addr, unsigned char new_value)
 
     // Check if any bits are changed from '1' in the old value
     if(diff_mask) {
-      // Now we know that _some_ bits need to the programmed to '0'
+      // Now we know that _some_ bits need to be programmed to '0'
 
       EEDR = new_value;     // Set EEPROM data register
       EECR = (1<<EEMPE) |   // Set Master Write Enable bit...
@@ -103,10 +106,10 @@ void eeprom_put_char(unsigned int addr, unsigned char new_value)
   sei();  // Restore interrupt flag state
 }
 
-#endif // PLATFORM_AVR_ATMEGA328P
+#endif // __AVR__
 
 // ============================================================================
-// Extensions added as part of Grbl
+// GRBL NVMEM extensions (platform-agnostic)
 // ============================================================================
 
 /*! \brief  Write buffer to NVMEM with checksum.

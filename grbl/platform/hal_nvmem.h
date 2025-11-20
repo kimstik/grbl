@@ -22,7 +22,7 @@
 // CH32V006: Flash emulation (1-2KB)
 
 #ifndef HAL_NVMEM_SIZE
-  #ifdef PLATFORM_AVR_ATMEGA328P
+  #ifdef __AVR__
     #define HAL_NVMEM_SIZE  1024  // 1KB hardware EEPROM
   #else
     #define HAL_NVMEM_SIZE  1024  // Default for other platforms
@@ -33,24 +33,13 @@
 // PLATFORM-SPECIFIC IMPLEMENTATIONS
 // ============================================================================
 
-#ifdef PLATFORM_AVR_ATMEGA328P
+#ifdef __AVR__
   // ============================================================================
   // AVR IMPLEMENTATION - ZERO OVERHEAD, Direct EEPROM access
   // ============================================================================
 
-  #include <avr/io.h>
-  #include <avr/interrupt.h>
-
-  // EEPROM bit compatibility
-  #ifndef EEPE
-    #define EEPE  EEWE
-    #define EEMPE EEMWE
-  #endif
-
-  #ifndef EEPM1
-    #define EEPM1 5
-    #define EEPM0 4
-  #endif
+  // EEPROM functions declared here, implemented in nvmem.c
+  // (avr/io.h and avr/interrupt.h already included in nvmem.c)
 
   // --------------------------------------------------------------------------
   // READ/WRITE BYTES - Function declarations (implemented in nvmem.c)
@@ -166,18 +155,17 @@
 // COMMON NVMEM FUNCTIONS (all platforms)
 // ============================================================================
 
-#ifdef PLATFORM_AVR_ATMEGA328P
-  // For AVR: eeprom_get_char/eeprom_put_char are macros, function declarations in nvmem.h
+#ifdef __AVR__
+  // For AVR: eeprom_get_char/eeprom_put_char are real functions (in nvmem.c)
+  // No macros needed - functions declared above and implemented in nvmem.c
+#else
+  // For other platforms: map legacy names to HAL byte access
   #define eeprom_get_char(addr)         HAL_NVMEM_READ_BYTE(addr)
   #define eeprom_put_char(addr, val)    HAL_NVMEM_WRITE_BYTE(addr, val)
-#else
-  // For other platforms: declare functions (match original signatures for compatibility)
+
+  // Forward declarations
   int memcpy_from_nvmem_with_checksum(char *destination, unsigned int source, unsigned int size);
   bool nvmem_write_check(unsigned int destination, char *source, unsigned int size);
-
-  // Legacy function names (for compatibility)
-  #define eeprom_get_char(addr)         HAL_NVMEM_READ_BYTE(addr)
-  #define eeprom_put_char(addr, val)    HAL_NVMEM_WRITE_BYTE(addr, val)
 #endif
 
 // ============================================================================

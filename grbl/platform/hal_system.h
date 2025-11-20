@@ -28,7 +28,7 @@ void hal_system_init(void);
 // AVR: cli() / sei() - inline assembly, zero overhead
 // Others: NVIC or equivalent
 
-#ifdef PLATFORM_AVR_ATMEGA328P
+#ifdef __AVR__
   // For AVR: Direct mapping to original macros - ZERO overhead!
   #include <avr/interrupt.h>
   #define HAL_INTERRUPTS_ENABLE()   sei()
@@ -52,7 +52,7 @@ void hal_system_init(void);
 //   // ... critical code ...
 //   HAL_CRITICAL_SECTION_END();
 
-#ifdef PLATFORM_AVR_ATMEGA328P
+#ifdef __AVR__
   // AVR: Use SREG save/restore - original GRBL pattern
   #include <avr/interrupt.h>
 
@@ -81,7 +81,7 @@ void hal_system_init(void);
 // DELAY FUNCTIONS
 // ============================================================================
 
-#ifdef PLATFORM_AVR_ATMEGA328P
+#ifdef __AVR__
   // AVR: Use original delay functions - zero overhead
   #include <util/delay.h>
   #define HAL_DELAY_MS(ms)  _delay_ms(ms)
@@ -102,7 +102,7 @@ void hal_system_init(void);
 // Get milliseconds since boot
 // Get microseconds since boot (if available)
 
-#ifdef PLATFORM_AVR_ATMEGA328P
+#ifdef __AVR__
   // AVR: Will be implemented using existing timer0 overflow
   // (Arduino millis() equivalent, but we'll implement our own)
   uint32_t hal_millis(void);
@@ -122,7 +122,7 @@ void hal_system_init(void);
 // ============================================================================
 
 // Perform software reset
-#ifdef PLATFORM_AVR_ATMEGA328P
+#ifdef __AVR__
   // AVR: Watchdog reset method
   #include <avr/wdt.h>
   #define HAL_SYSTEM_RESET() \
@@ -156,7 +156,7 @@ const hal_platform_info_t* hal_platform_get_info(void);
 // WATCHDOG
 // ============================================================================
 
-#ifdef PLATFORM_AVR_ATMEGA328P
+#ifdef __AVR__
   // AVR: Direct watchdog control
   #include <avr/wdt.h>
   #define HAL_WATCHDOG_INIT(ms)  wdt_enable(WDTO_##ms##MS)

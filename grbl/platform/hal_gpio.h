@@ -27,7 +27,7 @@
     Same machine code as original GRBL!
 */
 
-#ifdef PLATFORM_AVR_ATMEGA328P
+#ifdef __AVR__
   // ============================================================================
   // AVR IMPLEMENTATION - ZERO OVERHEAD MACROS
   // ============================================================================
@@ -180,7 +180,7 @@ typedef enum {
   HAL_GPIO_IRQ_HIGH
 } hal_gpio_irq_mode_t;
 
-#ifdef PLATFORM_AVR_ATMEGA328P
+#ifdef __AVR__
   // AVR: Pin change interrupts are configured in platform code
   // Just provide enable/disable macros
 
