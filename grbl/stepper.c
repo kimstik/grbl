@@ -574,7 +574,7 @@ void stepper_init()
 {
   // Configure step and direction interface pins
   GPIO_OUT(STEP_DDR, STEP_MASK);
-  GPIO_BOUT(STEPPERS_DISABLE);
+  GPIO_SET_OUT(STEPPERS_DISABLE);
   GPIO_OUT(DIRECTION_DDR, DIRECTION_MASK);
 
   #ifdef ENABLE_DUAL_AXIS

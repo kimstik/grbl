@@ -33,20 +33,20 @@ void spindle_init()
   #ifdef VARIABLE_SPINDLE
     // Configure variable spindle PWM and enable pin, if requried. On the Uno, PWM and enable are
     // combined unless configured otherwise.
-    GPIO_BOUT(SPINDLE_PWM);
+    GPIO_SET_OUT(SPINDLE_PWM);
     HAL_TIMER_SPINDLE_PWM_INIT();
     #ifdef USE_SPINDLE_DIR_AS_ENABLE_PIN
-      GPIO_BOUT(SPINDLE_ENABLE);
+      GPIO_SET_OUT(SPINDLE_ENABLE);
     #else
       #ifndef ENABLE_DUAL_AXIS
-        GPIO_BOUT(SPINDLE_DIRECTION);
+        GPIO_SET_OUT(SPINDLE_DIRECTION);
       #endif
     #endif
     pwm_gradient = SPINDLE_PWM_RANGE/(settings.rpm_max-settings.rpm_min);
   #else
-    GPIO_BOUT(SPINDLE_ENABLE);
+    GPIO_SET_OUT(SPINDLE_ENABLE);
     #ifndef ENABLE_DUAL_AXIS
-      GPIO_BOUT(SPINDLE_DIRECTION);
+      GPIO_SET_OUT(SPINDLE_DIRECTION);
     #endif
   #endif
 

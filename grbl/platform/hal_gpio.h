@@ -266,10 +266,10 @@ typedef enum {
 #define GPIO_BTGL(name)  HAL_GPIO_TOGGLE_BITS(name##_PORT, (1<<name##_BIT))
 
 // Set single bit as output
-#define GPIO_BOUT(name)  HAL_GPIO_SET_OUTPUT(name##_DDR, (1<<name##_BIT))
+#define GPIO_SET_OUT(name)  HAL_GPIO_SET_OUTPUT(name##_DDR, (1<<name##_BIT))
 
 // Set single bit as input
-#define GPIO_BINP(name)  HAL_GPIO_SET_INPUT(name##_DDR, (1<<name##_BIT))
+#define GPIO_SET_INP(name)  HAL_GPIO_SET_INPUT(name##_DDR, (1<<name##_BIT))
 
 // Helper macro for pin definition (concatenates PORT and BIT as two separate args)
 // Usage: some_function(PIN(X_STEP))  expands to: some_function(X_STEP_PORT, X_STEP_BIT)
