@@ -235,4 +235,38 @@ typedef enum {
     #define Z_STEP_PIN      2
 */
 
+// ============================================================================
+// SIMPLIFIED SINGLE-BIT GPIO OPERATIONS
+// ============================================================================
+
+/*
+  Simplified macros for common single-bit GPIO operations.
+  Reduces verbosity and improves readability.
+
+  Usage:
+    GPIO_BSET(STEPPERS_DISABLE_PORT, STEPPERS_DISABLE_BIT);  // Set bit
+    GPIO_BCLR(STEPPERS_DISABLE_PORT, STEPPERS_DISABLE_BIT);  // Clear bit
+    GPIO_BTGL(STEPPERS_DISABLE_PORT, STEPPERS_DISABLE_BIT);  // Toggle bit
+
+  Old verbose style:
+    HAL_GPIO_SET_BITS(STEPPERS_DISABLE_PORT, (1<<STEPPERS_DISABLE_BIT));
+
+  New concise style:
+    GPIO_BSET(STEPPERS_DISABLE_PORT, STEPPERS_DISABLE_BIT);
+*/
+
+// Set single bit (bit = 1)
+#define GPIO_BSET(port, bit)  HAL_GPIO_SET_BITS(port, (1<<(bit)))
+
+// Clear single bit (bit = 0)
+#define GPIO_BCLR(port, bit)  HAL_GPIO_CLEAR_BITS(port, (1<<(bit)))
+
+// Toggle single bit
+#define GPIO_BTGL(port, bit)  HAL_GPIO_TOGGLE_BITS(port, (1<<(bit)))
+
+// Helper macro for pin definition (concatenates PORT and BIT)
+// Usage: #define PIN_X_STEP  X_STEP_PORT, X_STEP_BIT
+//        GPIO_BSET(PIN_X_STEP);
+#define PIN(name)  name##_PORT, name##_BIT
+
 #endif // HAL_GPIO_H
