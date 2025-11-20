@@ -18,14 +18,13 @@ OPENOCD_TARGET = at91samdXX.cfg
 
 # Board selection (override with make BOARD=generic)
 BOARD         ?= megarm
-BOARD_DIR      = boards/$(BOARD)
 
 # AVR stubs (temporary workaround for grbl.h AVR includes)
 # Platform dir must be first to override cpu_map.h
-CFLAGS_EXTRA   = -I. -I../common/dummy -I$(BOARD_DIR)
+CFLAGS_EXTRA   = -I. -I../common/dummy -I$(BOARD)
 
 # Include board-specific config
-CFLAGS_EXTRA  += -include $(BOARD_DIR)/config.h
+CFLAGS_EXTRA  += -include $(BOARD)/config.h
 
 # Toolchain
 TOOLCHAIN_PATH ?=
