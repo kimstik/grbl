@@ -1,10 +1,74 @@
-# GRBL HAL Architecture Refactoring TODO
+# GRBL HAL Refactoring TODO
 
-This document outlines necessary architectural improvements to reduce code duplication, improve maintainability, and align with vanilla GRBL design principles.
+This document tracks architectural improvements to reduce code duplication, improve maintainability, and align with vanilla GRBL design principles.
+
+## Status Summary
+
+✅ **Completed**:
+- Issue #10: Chip/board directory structure (SAMD21)
+- Issue #11: PORT + PIN definitions for all pins
+
+🚧 **In Progress**:
+- Issue #1: Fix `common/dummy` pollution (high priority)
+
+📋 **Planned**:
+- Issues #2-9: See priority list below
+
+---
+
+## Implementation Status
+
+### ✅ Issue #10: Chip/Board Folder Hierarchy [COMPLETED]
+
+**Status**: Implemented for SAMD21
+
+**Structure**:
+```
+platform/samd21/
+├── samd21.h       # Chip: register definitions
+├── platform.h     # Chip: HAL API
+├── platform.c     # Chip: implementations
+├── megarm/        # Board: MegARM config
+│   └── config.h
+└── generic/       # Board: generic template
+    └── config.h
+```
+
+**Build**: `make BOARD=megarm` (default) or `make BOARD=generic`
+
+**Benefits**:
+- ✅ Chip code shared across all boards
+- ✅ Easy to add new boards (copy generic/)
+- ✅ Clear separation: chip vs board config
+
+---
+
+### ✅ Issue #11: PORT + PIN Definitions [COMPLETED]
+
+**Status**: Implemented for SAMD21
+
+**Before**:
+```c
+#define X_STEP_PIN    25  // Which port?
+```
+
+**After**:
+```c
+#define X_STEP_PORT   PORT_GROUPA
+#define X_STEP_PIN    25   // PA25
+#define X_STEP_BIT    25
+```
+
+**Benefits**:
+- ✅ Explicit port specification
+- ✅ Prevents wrong-port bugs
+- ✅ Works for multi-port chips
+
+---
 
 ## Critical Issues
 
-### 1. Platform-Specific Code in Common Directories
+### 1. Platform-Specific Code in Common Directories [HIGH PRIORITY]
 
 **Problem**: `grbl/platform/common/dummy/avr/io.h` contains platform-specific ARM code:
 ```c
@@ -202,111 +266,39 @@ platform/samd21/
 
 ---
 
-## Directory Structure Reorganization
-
-### 10. Introduce Chip/Board Folder Hierarchy
-
-**Problem**: Current structure mixes chip-specific and board-specific configuration:
-```
-platform/samd21/
-  ├── platform.h     # Mix of chip + board config
-  ├── config.h       # Board-specific pins
-  └── platform.c
-```
-
-**Proposed structure**:
-```
-platform/samd21/                    # Chip-specific (SAMD21 family)
-  ├── samd21.h                      # Register definitions
-  ├── platform.h                    # HAL declarations
-  ├── platform.c                    # HAL implementations
-  └── boards/
-      ├── megarm/                   # MegARM board
-      │   └── config.h              # Pin mappings for MegARM
-      ├── arduino_zero/             # Arduino Zero board
-      │   └── config.h              # Pin mappings for Arduino Zero
-      └── generic/                  # Generic SAMD21 board
-          └── config.h              # Default pin mappings
-```
-
-**Benefits**:
-- Chip code shared across all boards using same chip
-- Easy to add new boards without duplicating chip code
-- Clear separation: chip vs board configuration
-- User only modifies board-specific config
-
-**Makefile selection**:
-```makefile
-CHIP = samd21
-BOARD = megarm
-CFLAGS += -I platform/$(CHIP)/boards/$(BOARD)
-```
-
-**Example usage**:
-```c
-// In platform/samd21/boards/megarm/config.h
-#define X_STEP_PORT   PORT_GROUPA
-#define X_STEP_PIN    25   // PA25 (D2 on MegARM)
-
-// In platform/samd21/boards/arduino_zero/config.h
-#define X_STEP_PORT   PORT_GROUPA
-#define X_STEP_PIN    18   // PA18 (D11 on Arduino Zero)
-```
-
----
-
-### 11. Add PORT Definition to Pin Macros
-
-**Problem**: Current pin definitions only specify pin number:
-```c
-#define X_STEP_PIN    25  // PA25 - but which port?
-```
-
-**Issue**: Makes GPIO macros ambiguous:
-```c
-GPIO_BSET(X_STEP_PIN);  // Which port? Implicit assumption.
-```
-
-**Solution**: Always define both PORT and PIN:
-```c
-#define X_STEP_PORT   PORT_GROUPA
-#define X_STEP_PIN    25
-```
-
-**Benefits**:
-- Explicit port specification
-- Works for chips with multiple ports (PORTA, PORTB, etc.)
-- Clearer GPIO macro calls:
-  ```c
-  GPIO_BSET(X_STEP_PORT, X_STEP_PIN);
-  ```
-
-**Implementation**:
-1. Update all pin definitions to include PORT
-2. Update GPIO macros to accept (port, pin) arguments
-3. Verify on hardware that pins match expectations
-
----
-
 ## Implementation Priority
 
-1. **Critical Priority** (architectural foundation):
-   - Issue #10: Introduce chip/board folder hierarchy
-   - Issue #11: Add PORT definition to pin macros
+### ✅ Completed
+- ~~Issue #10: Chip/board folder hierarchy~~ (SAMD21: ✅ Done)
+- ~~Issue #11: PORT definition to pin macros~~ (SAMD21: ✅ Done)
 
-2. **High Priority** (breaks other platforms):
-   - Issue #1: Fix `common/dummy` pollution
-   - Issue #9: Remove platform conditionals from core
+### 🔴 High Priority (next tasks)
+1. **Issue #1**: Fix `common/dummy` pollution
+   - Move ARM-specific code from common/dummy/avr/io.h
+   - Each ARM platform defines own compatibility layer
 
-3. **Medium Priority** (technical debt):
-   - Issue #4: Remove redundant `hal_*.h` files
-   - Issue #7: Separate config from platform headers (superseded by #10)
-   - Issue #8: Restore vanilla core files
+2. **Issue #9**: Remove platform conditionals from core
+   - Remove `#ifdef PLATFORM_*` from grbl/*.c files
+   - Use HAL abstraction instead
 
-4. **Low Priority** (cleanup):
-   - Issue #5: Rename macros (remove HAL_ prefix)
-   - Issue #6: Simplify single-bit operations
-   - Issue #3: Change header inclusion method
+### 🟡 Medium Priority
+3. **Issue #4**: Remove redundant `hal_*.h` files
+   - Review hal_serial.h, hal_nvmem.h
+   - Keep only if genuine cross-platform value
+
+4. **Issue #8**: Restore vanilla core files
+   - Rollback grbl/cpu_map.h to vanilla
+   - Rollback grbl/nvmem.c to vanilla
+   - Verify AVR MD5 match
+
+5. **Issue #2**: Remove hal_serial.h redundancy
+   - Platforms implement serial.c directly
+
+### 🟢 Low Priority (polish)
+6. **Issue #5**: Rename macros (remove HAL_ prefix)
+7. **Issue #6**: Simplify single-bit GPIO operations
+8. **Issue #3**: Change header inclusion method
+9. **Issue #7**: ~~Separate config from platform~~ (superseded by #10)
 
 ---
 
@@ -329,33 +321,39 @@ For each change:
 
 ---
 
-## Example: SAMD21 Chip/Board Structure
+## Example: SAMD21 Implementation (COMPLETED)
 
-### Proposed File Organization
+### ✅ Actual File Organization
 
 ```
-platform/samd21/                           # SAMD21 chip family
-├── samd21.h                               # Register definitions (SERCOM, TC, TCC, PORT, etc.)
-├── platform.h                             # HAL function declarations
-├── platform.c                             # HAL implementations (GPIO, timers, UART, etc.)
-├── startup.s                              # Chip startup code
-├── script.ld                              # Linker script
-├── Makefile                               # Chip build rules
-└── boards/                                # Board-specific configurations
-    ├── megarm/
-    │   ├── config.h                       # MegARM pin mappings
-    │   └── README.md                      # Board documentation
-    ├── arduino_zero/
-    │   ├── config.h                       # Arduino Zero pin mappings
-    │   └── README.md                      # Board documentation
-    └── generic/
-        ├── config.h                       # Generic SAMD21 defaults
-        └── README.md                      # Generic board info
+platform/samd21/                      # SAMD21 chip family
+├── samd21.h                          # Register definitions (SERCOM, TC, TCC, PORT, etc.)
+├── platform.h                        # HAL function declarations
+├── platform.c                        # HAL implementations (GPIO, timers, UART, etc.)
+├── startup.s                         # Chip startup code
+├── script.ld                         # Linker script (rSamba bootloader @ 0x200)
+├── Makefile                          # Chip build rules (BOARD selection)
+├── megarm/                           # MegARM board configuration
+│   ├── config.h                      # Pin mappings
+│   └── README.md                     # Board documentation
+└── generic/                          # Generic SAMD21 template
+    ├── config.h                      # Default pin mappings
+    └── README.md                     # Template guide
 ```
+
+### Build Results (MegARM)
+
+**DEBUG** (symbols included):
+- Size: 59,036 bytes text + 6,160 bytes RAM
+- Note: DEBUG size not representative of final binary
+
+**RELEASE** (TODO: measure):
+- Size: TBD (need `make BUILD=RELEASE`)
+- Expected: ~30-35KB with LTO optimization
 
 ### Example Board Config: MegARM
 
-**File**: `platform/samd21/boards/megarm/config.h`
+**File**: `platform/samd21/megarm/config.h`
 
 ```c
 /*
@@ -442,30 +440,39 @@ platform/samd21/                           # SAMD21 chip family
 #endif // BOARD_MEGARM_CONFIG_H
 ```
 
-### Build System Integration
+### ✅ Build System (Implemented)
 
-**Makefile example**:
+**Actual Makefile**:
 ```makefile
-# Select chip and board
-CHIP = samd21
-BOARD = megarm
+# Board selection (override with make BOARD=generic)
+BOARD ?= megarm
 
 # Include paths
-INCLUDES = -I platform/$(CHIP) \
-           -I platform/$(CHIP)/boards/$(BOARD)
-
-# Chip-specific sources
-CHIP_SRC = platform/$(CHIP)/platform.c \
-           platform/$(CHIP)/startup.s
+CFLAGS_EXTRA = -I. -I../common/dummy -I$(BOARD)
 
 # Board-specific config (included via -include flag)
-CFLAGS += -include platform/$(CHIP)/boards/$(BOARD)/config.h
+CFLAGS_EXTRA += -include $(BOARD)/config.h
 ```
 
-### Benefits of This Approach
+**Usage**:
+```bash
+cd grbl/platform/samd21
+make BOARD=megarm    # Default
+make BOARD=generic   # Generic template
+```
 
-1. **Reusability**: SAMD21 chip code shared across MegARM, Arduino Zero, and custom boards
-2. **Maintainability**: Pin changes only affect board config, not chip HAL
-3. **Clarity**: Clear separation between hardware abstraction and board layout
-4. **Extensibility**: Adding new board = create new folder + config.h
-5. **Port Safety**: Explicit port specification prevents wrong-port bugs
+### ✅ Benefits Realized
+
+1. **Reusability**: SAMD21 chip code shared across all boards ✅
+2. **Maintainability**: Pin changes only affect board config.h ✅
+3. **Clarity**: Clear chip vs board separation ✅
+4. **Extensibility**: Add board = `cp -r generic/ myboard/` ✅
+5. **Port Safety**: Explicit PORT + PIN prevents bugs ✅
+
+---
+
+## Next Steps
+
+1. **Issue #1** (High Priority): Move ARM compatibility from common/dummy to each platform
+2. Measure RELEASE binary size for SAMD21
+3. Apply chip/board structure to other platforms (STM32F103, STM32H523, etc.)
