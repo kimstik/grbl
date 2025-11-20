@@ -245,29 +245,28 @@ typedef enum {
   Reduces verbosity and improves readability.
 
   Usage:
-    GPIO_BSET(STEPPERS_DISABLE_PORT, STEPPERS_DISABLE_BIT);  // Set bit
-    GPIO_BCLR(STEPPERS_DISABLE_PORT, STEPPERS_DISABLE_BIT);  // Clear bit
-    GPIO_BTGL(STEPPERS_DISABLE_PORT, STEPPERS_DISABLE_BIT);  // Toggle bit
+    GPIO_BSET(STEPPERS_DISABLE);  // Set bit
+    GPIO_BCLR(STEPPERS_DISABLE);  // Clear bit
+    GPIO_BTGL(STEPPERS_DISABLE);  // Toggle bit
 
   Old verbose style:
-    HAL_GPIO_SET_BITS(STEPPERS_DISABLE_PORT, (1<<STEPPERS_DISABLE_BIT));
+    GPIO_CLR(STEPPERS_DISABLE_PORT, (1<<STEPPERS_DISABLE_BIT));
 
-  New concise style:
-    GPIO_BSET(STEPPERS_DISABLE_PORT, STEPPERS_DISABLE_BIT);
+  New concise style (Issue #6):
+    GPIO_BCLR(STEPPERS_DISABLE);
 */
 
 // Set single bit (bit = 1)
-#define GPIO_BSET(port, bit)  HAL_GPIO_SET_BITS(port, (1<<(bit)))
+#define GPIO_BSET(name)  HAL_GPIO_SET_BITS(name##_PORT, (1<<name##_BIT))
 
 // Clear single bit (bit = 0)
-#define GPIO_BCLR(port, bit)  HAL_GPIO_CLEAR_BITS(port, (1<<(bit)))
+#define GPIO_BCLR(name)  HAL_GPIO_CLEAR_BITS(name##_PORT, (1<<name##_BIT))
 
 // Toggle single bit
-#define GPIO_BTGL(port, bit)  HAL_GPIO_TOGGLE_BITS(port, (1<<(bit)))
+#define GPIO_BTGL(name)  HAL_GPIO_TOGGLE_BITS(name##_PORT, (1<<name##_BIT))
 
-// Helper macro for pin definition (concatenates PORT and BIT)
-// Usage: #define PIN_X_STEP  X_STEP_PORT, X_STEP_BIT
-//        GPIO_BSET(PIN_X_STEP);
+// Helper macro for pin definition (concatenates PORT and BIT as two separate args)
+// Usage: some_function(PIN(X_STEP))  expands to: some_function(X_STEP_PORT, X_STEP_BIT)
 #define PIN(name)  name##_PORT, name##_BIT
 
 // ============================================================================

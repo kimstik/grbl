@@ -101,16 +101,16 @@ void spindle_stop()
     HAL_TIMER_SPINDLE_PWM_DISABLE();
     #ifdef USE_SPINDLE_DIR_AS_ENABLE_PIN
       #ifdef INVERT_SPINDLE_ENABLE_PIN
-        GPIO_SET(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT));
+        GPIO_BSET(SPINDLE_ENABLE);
       #else
-        GPIO_CLR(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT));
+        GPIO_BCLR(SPINDLE_ENABLE);
       #endif
     #endif
   #else
     #ifdef INVERT_SPINDLE_ENABLE_PIN
-      GPIO_SET(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT));
+      GPIO_BSET(SPINDLE_ENABLE);
     #else
-      GPIO_CLR(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT));
+      GPIO_BCLR(SPINDLE_ENABLE);
     #endif
   #endif
 }
@@ -128,9 +128,9 @@ void spindle_stop()
       } else {
         HAL_TIMER_SPINDLE_PWM_ENABLE();
         #ifdef INVERT_SPINDLE_ENABLE_PIN
-          GPIO_CLR(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT));
+          GPIO_BCLR(SPINDLE_ENABLE);
         #else
-          GPIO_SET(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT));
+          GPIO_BSET(SPINDLE_ENABLE);
         #endif
       }
     #else
@@ -241,9 +241,9 @@ void spindle_stop()
     
     #if !defined(USE_SPINDLE_DIR_AS_ENABLE_PIN) && !defined(ENABLE_DUAL_AXIS)
       if (state == SPINDLE_ENABLE_CW) {
-        GPIO_CLR(SPINDLE_DIRECTION_PORT, (1<<SPINDLE_DIRECTION_BIT));
+        GPIO_BCLR(SPINDLE_DIRECTION);
       } else {
-        GPIO_SET(SPINDLE_DIRECTION_PORT, (1<<SPINDLE_DIRECTION_BIT));
+        GPIO_BSET(SPINDLE_DIRECTION);
       }
     #endif
   
@@ -259,9 +259,9 @@ void spindle_stop()
       // NOTE: Without variable spindle, the enable bit should just turn on or off, regardless
       // if the spindle speed value is zero, as its ignored anyhow.
       #ifdef INVERT_SPINDLE_ENABLE_PIN
-        GPIO_CLR(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT));
+        GPIO_BCLR(SPINDLE_ENABLE);
       #else
-        GPIO_SET(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT));
+        GPIO_BSET(SPINDLE_ENABLE);
       #endif    
     #endif
   
