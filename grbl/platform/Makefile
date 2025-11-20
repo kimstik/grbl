@@ -42,6 +42,9 @@ sg2002:
 	@echo "==== Building SG2002 (BUILD=$(BUILD)) ===="
 	$(MAKE) -C sg2002 BUILD=$(BUILD)
 
+check:	#TODO: compile base AVR port and check hash of generated images by /common/chk.py
+	@echo "integrity check"
+
 # Clean all platforms
 clean:
 	@echo "Cleaning all platforms..."

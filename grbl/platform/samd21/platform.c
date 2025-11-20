@@ -204,7 +204,7 @@ void hal_system_init(void) {
 // ============================================================================
 // GPIO FUNCTIONS
 // ============================================================================
-
+/*  FIXME> this block have no sence. to be removed. all is done in /common/gpio.h
 void hal_gpio_set_pin(hal_gpio_port_t port, uint8_t pin) {
   // Set pin high
   if (pin < 32) {
@@ -299,7 +299,7 @@ void hal_gpio_pullup_disable(hal_gpio_port_t port, uint32_t mask) {
     }
   }
 }
-
+*/
 // ============================================================================
 // TIMER FUNCTIONS (Stepper Timer)
 // ============================================================================
@@ -380,113 +380,6 @@ void hal_timer_pulse_reset_set_count(uint32_t count) {
 }
 
 // ============================================================================
-// SERIAL/UART FUNCTIONS
-// ============================================================================
-
-void hal_serial_init(uint32_t baudrate) {
-  // Initialize SERCOM3 for UART (PA23=RX/PAD1, PA24=TX/PAD2)
-
-  // Enable SERCOM3 clock
-  PM->APBCMASK |= PM_APBCMASK_SERCOM3;
-
-  // Configure GCLK for SERCOM3
-  GCLK->CLKCTRL = GCLK_CLKCTRL_ID_SERCOM3_CORE |
-                  GCLK_CLKCTRL_CLKEN |
-                  (0 << GCLK_CLKCTRL_GEN_Pos);  // Use GCLK0 (48MHz)
-  while (GCLK->STATUS & GCLK_STATUS_SYNCBUSY);
-
-  // Configure PA23 (RX) and PA24 (TX) for SERCOM3
-  PORT->Group[PORT_GROUPA].PINCFG[23] = PORT_PINCFG_PMUXEN;
-  PORT->Group[PORT_GROUPA].PINCFG[24] = PORT_PINCFG_PMUXEN;
-  PORT->Group[PORT_GROUPA].PMUX[23 >> 1] = (0x2 << 4) | 0x2;  // Function C for both
-
-  // Reset SERCOM3
-  SERCOM3->CTRLA = SERCOM_USART_CTRLA_SWRST;
-  while (SERCOM3->CTRLA & SERCOM_USART_CTRLA_SWRST);
-
-  // Configure SERCOM3 as USART with internal clock
-  SERCOM3->CTRLA = SERCOM_USART_CTRLA_MODE_USART_INT_CLK |
-                   SERCOM_USART_CTRLA_RXPO_PAD1 |   // RX on PAD1
-                   (2 << SERCOM_USART_CTRLA_TXPO_Pos) |  // TX on PAD2
-                   SERCOM_USART_CTRLA_DORD;         // LSB first
-
-  // Configure 8N1
-  SERCOM3->CTRLB = SERCOM_USART_CTRLB_CHSIZE_8BIT |
-                   SERCOM_USART_CTRLB_TXEN |
-                   SERCOM_USART_CTRLB_RXEN;
-  while (SERCOM3->SYNCBUSY);
-
-  // Calculate baud rate: BAUD = 65536 * (1 - 16 * (f_baud / f_ref))
-  // For 115200 @ 48MHz: BAUD = 65536 * (1 - 16 * (115200 / 48000000)) = 63019
-  uint16_t baud_value = 65536 - ((65536 * 16.0f * baudrate) / HAL_CPU_FREQ);
-  SERCOM3->BAUD = baud_value;
-
-  // Enable SERCOM3
-  SERCOM3->CTRLA |= SERCOM_USART_CTRLA_ENABLE;
-  while (SERCOM3->SYNCBUSY);
-}
-
-void hal_serial_write(uint8_t data) {
-  // Write byte to UART
-  while (!(SERCOM3->INTFLAG & SERCOM_USART_INTFLAG_DRE));
-  SERCOM3->DATA = data;
-}
-
-uint8_t hal_serial_read(void) {
-  // Read byte from UART
-  while (!(SERCOM3->INTFLAG & SERCOM_USART_INTFLAG_RXC));
-  return (uint8_t)SERCOM3->DATA;
-}
-
-uint8_t hal_serial_available(void) {
-  // Check if data available
-  return (SERCOM3->INTFLAG & SERCOM_USART_INTFLAG_RXC) ? 1 : 0;
-}
-
-void hal_serial_tx_interrupt_enable(void) {
-  // Enable TX interrupt
-  SERCOM3->INTENSET = SERCOM_USART_INTFLAG_DRE;
-}
-
-void hal_serial_tx_interrupt_disable(void) {
-  // Disable TX interrupt
-  SERCOM3->INTENCLR = SERCOM_USART_INTFLAG_DRE;
-}
-
-// ============================================================================
-// NVMEM (Flash Emulation) FUNCTIONS
-// ============================================================================
-
-uint8_t hal_nvmem_read_byte(uint32_t addr) {
-  // Read from flash emulation area
-  if (addr >= HAL_NVMEM_FLASH_SIZE) return 0xFF;
-
-  uint8_t* flash_addr = (uint8_t*)(HAL_NVMEM_FLASH_START + addr);
-  return *flash_addr;
-}
-
-// ISSUE #2 (CRITICAL): NVMEM write NOT IMPLEMENTED!
-// Settings cannot be saved to EEPROM - all configuration lost on reset
-// GRBL settings ($0-$132) won't persist between power cycles
-// This makes the system effectively unusable for production
-//
-// TODO: Implement SAMD21 NVM controller sequence:
-// 1. Wait for NVMCTRL->INTFLAG.READY
-// 2. Set NVMCTRL->ADDR to target address
-// 3. Erase page: NVMCTRL->CTRLA = NVMCTRL_CMD_ER | NVMCTRL_CMDEX_KEY
-// 4. Wait for completion
-// 5. Write buffer: write to NVM memory space
-// 6. Write page: NVMCTRL->CTRLA = NVMCTRL_CMD_WP | NVMCTRL_CMDEX_KEY
-// 7. Wait for completion
-//
-// See SAMD21 datasheet section 22 (NVM Controller) for details
-void hal_nvmem_write_byte(uint32_t addr, uint8_t value) {
-  // TODO: Implement flash write with page erase logic
-  (void)addr;
-  (void)value;
-}
-
-// ============================================================================
 // SPINDLE PWM FUNCTIONS
 // ============================================================================
 
@@ -554,13 +447,6 @@ void hal_watchdog_feed(void) {
 // DELAY FUNCTIONS
 // ============================================================================
 
-void hal_delay_ms(uint32_t ms) {
-  uint32_t start = hal_millis();
-  while ((hal_millis() - start) < ms) {
-    // Wait
-  }
-}
-
 // ISSUE #6 (MAJOR): Inaccurate microsecond delay!
 // NOP loop timing varies with compiler optimization level (-O0, -Os, -O2)
 // The "/10" divisor is an arbitrary guess, not calibrated
@@ -570,7 +456,7 @@ void hal_delay_ms(uint32_t ms) {
 // Option 1: Read SysTick->VAL and calculate elapsed ticks
 // Option 2: Use TC5 as microsecond counter (configure for 1MHz)
 // Option 3: Calibrate NOP loop at startup and adjust divisor
-void hal_delay_us(uint32_t us) {
+void _delay_us(uint32_t us) {
   // Simple delay loop - not accurate
   volatile uint32_t count = us * (HAL_CPU_FREQ / 1000000) / 10;
   while (count--) {

@@ -30,25 +30,25 @@
 // TODO: HAL_HAS_* -> PLATFORM_HAS_*
 // TODO: HAL_*     -> PLATFORM_*
 
-#define HAL_HAS_FPU           0   // Cortex-M0+ has no FPU (software emulation)
-#define HAL_HAS_DMA           1   // 12 DMA channels
-#define HAL_HAS_USB           1   // Native USB device
-#define HAL_HAS_HW_EEPROM     0   // No hardware EEPROM (use flash emulation)
-#define HAL_HAS_HW_MULTIPLY   1   // 32-bit hardware multiplier
-#define HAL_HAS_HW_DIVIDE     1   // DIVAS - Division and Square Root Accelerator
-#define HAL_HAS_DIVAS         1   // Hardware 32-bit division, sqrt, modulo (1-3 cycles)
+#define PLATFORM_HAS_FPU           0   // Cortex-M0+ has no FPU (software emulation)
+#define PLATFORM_HAS_DMA           1   // 12 DMA channels
+#define PLATFORM_HAS_USB           1   // Native USB device
+#define PLATFORM_HAS_HW_EEPROM     0   // No hardware EEPROM (use flash emulation)
+#define PLATFORM_HAS_HW_MULTIPLY   1   // 32-bit hardware multiplier
+#define PLATFORM_HAS_HW_DIVIDE     1   // DIVAS - Division and Square Root Accelerator
+#define PLATFORM_HAS_DIVAS         1   // Hardware 32-bit division, sqrt, modulo (1-3 cycles)
 
 // ============================================================================
 // PLATFORM SPECIFICATIONS
 // ============================================================================
 
-#ifndef HAL_CPU_FREQ
-  #define HAL_CPU_FREQ        48000000UL  // 48 MHz
+#ifndef CPU_FREQ
+  #define CPU_FREQ        48000000UL  // 48 MHz
 #endif
 
-#define HAL_RAM_SIZE          32768       // 32 KB
-#define HAL_FLASH_SIZE        262144      // 256 KB
-#define HAL_EEPROM_SIZE       0           // No hardware EEPROM
+#define RAM_SIZE          32768       // 32 KB
+#define FLASH_SIZE        262144      // 256 KB
+#define EEPROM_SIZE       0           // No hardware EEPROM
 
 // Timer resolution
 #define HAL_TIMER_RESOLUTION_NS   20      // 20.8 ns @ 48 MHz
@@ -208,11 +208,6 @@ typedef uint32_t hal_gpio_port_t;
 #define HAL_GPIO_INTERRUPT_ENABLE(pcmsk, interrupt, mask)   /* TODO: Implement EIC */
 #define HAL_GPIO_INTERRUPT_DISABLE(pcmsk, interrupt, mask)  /* TODO: Implement EIC */
 
-// ============================================================================
-// HAL DELAY MACROS
-// ============================================================================
-
-#define _delay_us(us)  hal_delay_us(us)
 
 // ============================================================================
 // PLATFORM-SPECIFIC FUNCTIONS
@@ -254,6 +249,8 @@ void hal_spindle_pwm_set(uint16_t value);
 // These are used by core GRBL code (limits.c, probe.c, system.c)
 // Map AVR pin definitions to SAMD21 GPIO ports
 
+
+// FIXME: what it is? it have to be no here, but in board config!! to trash it
 // Limit switches (AVR compatibility - DDR/PCMSK/INT only)
 #define LIMIT_DDR     0      // DUMMY: Not used on ARM (DDR is for AVR only)
 #define LIMIT_PCMSK   0      // DUMMY: Not used on ARM (PCMSK is for AVR only)
