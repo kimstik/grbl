@@ -1,14 +1,21 @@
 ﻿/*
-  gpio.h - FIXME:...
+  gpio.h - GPIO abstraction for ARM platforms
   Part of Grbl
 
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
+
+  NOTE: This file is auto-included via -include flag in Makefile
+  For AVR: Skip this file entirely (uses hal_gpio.h definitions)
+  For ARM: Provides GPIO abstraction macros
 */
 
 #ifndef GPIO_H
 #define GPIO_H
+
+// Skip this file for AVR - it has its own definitions in hal_gpio.h
+#ifndef __AVR__
 
 // -- generic part --
 #define BIT_MSK(nbit)		( 1<<(nbit) )
@@ -21,26 +28,7 @@
 #define BIT_CLR( x, nbit)	{ x &= ~BIT_MSK(nbit); }
 #define BIT_TGL(x, nbit)	{ x ^=  BIT_MSK(nbit); }
 
-// -- temporal workaround part --
-
-#ifdef __AVR__	// in the far future it have to be dropped. keep it for the momemt for initial integritiy check
-
-	// Port manipulation - CRITICAL: These must be identical to original GRBL!
-	// Write multiple pins atomically with mask
-	#define GPIO_WRITE_PORT(port, mask, value)	((port) = ((port) & ~(mask)) | ((value) & (mask)))
-
-	// Write single pin
-	#define GPIO_WRITE_PIN(port, pin, value) \
-	do { \
-	  if (value) \
-	    (port) |= (1 << (pin)); \
-	  else \
-	    (port) &= ~(1 << (pin)); \
-	} while(0)
-
-#endif
-
-//--  internal part --
+//--  internal part - register definitions for ARM platforms --
 
 #if !defined(GPIO_OUT_REG)
  #define GPIO_OUT_REG(name)	name##_PORT
@@ -97,5 +85,7 @@
 #if !defined(GPIO_BGET)
  #define GPIO_BGET(name) 	 	( !(GPIO_INP_REG(name) & BIT_MSK(name##_BIT)) != 0 )	// GPIO pin get/read (LIMIT/CONTROL/PROBE)
 #endif
+
+#endif // !__AVR__
 
 #endif // GPIO_H
