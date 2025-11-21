@@ -260,19 +260,29 @@ typedef enum {
 */
 
 // Set single bit (bit = 1)
-#define GPIO_BSET(name)  HAL_GPIO_SET_BITS(name##_PORT, (1<<name##_BIT))
+#if !defined(GPIO_BSET)
+  #define GPIO_BSET(name)  HAL_GPIO_SET_BITS(name##_PORT, (1<<name##_BIT))
+#endif
 
 // Clear single bit (bit = 0)
-#define GPIO_BCLR(name)  HAL_GPIO_CLEAR_BITS(name##_PORT, (1<<name##_BIT))
+#if !defined(GPIO_BCLR)
+  #define GPIO_BCLR(name)  HAL_GPIO_CLEAR_BITS(name##_PORT, (1<<name##_BIT))
+#endif
 
 // Toggle single bit
-#define GPIO_BTGL(name)  HAL_GPIO_TOGGLE_BITS(name##_PORT, (1<<name##_BIT))
+#if !defined(GPIO_BTGL)
+  #define GPIO_BTGL(name)  HAL_GPIO_TOGGLE_BITS(name##_PORT, (1<<name##_BIT))
+#endif
 
 // Set single bit as output
-#define GPIO_SET_OUT(name)  HAL_GPIO_SET_OUTPUT(name##_DDR, (1<<name##_BIT))
+#if !defined(GPIO_SET_OUT)
+  #define GPIO_SET_OUT(name)  HAL_GPIO_SET_OUTPUT(name##_DDR, (1<<name##_BIT))
+#endif
 
 // Set single bit as input
-#define GPIO_SET_INP(name)  HAL_GPIO_SET_INPUT(name##_DDR, (1<<name##_BIT))
+#if !defined(GPIO_SET_INP)
+  #define GPIO_SET_INP(name)  HAL_GPIO_SET_INPUT(name##_DDR, (1<<name##_BIT))
+#endif
 
 // Helper macro for pin definition (concatenates PORT and BIT as two separate args)
 // Usage: some_function(PIN(X_STEP))  expands to: some_function(X_STEP_PORT, X_STEP_BIT)
