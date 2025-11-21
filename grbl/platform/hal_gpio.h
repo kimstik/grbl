@@ -307,7 +307,7 @@ typedef enum {
 // GPIO read/write shortcuts
 // Note: GPIO_RD signature varies: AVR uses (port, mask), others use (port)
 #define GPIO_RD(...)                   HAL_GPIO_READ_PORT(__VA_ARGS__)
-#define GPIO_WR(port, mask, value)     HAL_GPIO_WRITE_PORT(port, mask, value)
+#define GPIO_WR(port, mask, value)     GPIO_WRITE_PORT(port, mask, value)
 #define GPIO_PIN_RD(port, pin)         HAL_GPIO_READ_PIN(port, pin)
 
 // GPIO set/clear (multi-bit)
