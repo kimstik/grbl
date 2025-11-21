@@ -11,12 +11,25 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 known_hashes = {
+	# ==== Official gnea/grbl v1.1h release ====
 	# source code https://github.com/gnea/grbl/archive/refs/tags/v1.1h.20190825.tar.gz
 	# image       https://github.com/gnea/grbl/releases/download/v1.1h.20190825/grbl_v1.1h.20190825.hex
-	'aec218a09666a4c3d79eafa5cc46f5a0':'(MD5) Golden image: 84163 bytes of grbl_v1.1h.20190825.hex'	, 
-	'7f14441d024bb6af43b547e435e598b8':'grbl.hex - gcc 15.2'										,
-	'6134ac924a80e22a31ffb83643b5add1':'grbl.bin - gcc 7   '			  							,
-	'79af184e67b27defd27a39309ac53563':'grbl.hex - gcc 7   '										,
+	'aec218a09666a4c3d79eafa5cc46f5a0':'(MD5) Golden image: 84163 bytes of grbl_v1.1h.20190825.hex',
+
+	# ==== kimstik/grbl master branch (vanilla) ====
+	# Built from: https://github.com/kimstik/grbl commit eefe2bb (master)
+	# Compiler: avr-gcc (GCC) 7.3.0 (Arduino toolchain)
+	# Flags: -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -ffunction-sections -flto -Wl,--gc-sections
+	# Build date: 2025-11-21
+	# Archive: build/vanilla-grbl-gcc-7.3.0.tar.gz (60KB)
+	'9cb869c15075d1adc9d37d1bcf614d06':'grbl.hex (vanilla master, gcc 7.3.0+LTO) 83656 bytes',
+	'ce0b90457da3d01159ce435dd4f5336e':'grbl.bin (vanilla master, gcc 7.3.0+LTO) 29738 bytes',
+	'87a85a47993a1381737cbbf83059bacc':'main.elf (vanilla master, gcc 7.3.0+LTO) 46388 bytes',
+
+	# ==== Historical / other builds ====
+	'7f14441d024bb6af43b547e435e598b8':'grbl.hex - gcc 15.2',
+	'6134ac924a80e22a31ffb83643b5add1':'grbl.bin - gcc 7',
+	'79af184e67b27defd27a39309ac53563':'grbl.hex - gcc 7',
 
 }
 
