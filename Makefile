@@ -48,8 +48,9 @@ AVRDUDE = avrdude $(PROGRAMMER) -p $(DEVICE) -B 10 -F
 
 # Compile flags for avr-gcc v4.9.2 compatible with the IDE. Or if you don't care about the warnings.
 # LTO disabled for HAL build to achieve 100% binary match
-# -include for invisible porting: common/gpio.h is auto-included in every .c file
-COMPILE = avr-gcc -Wall -Os -DF_CPU=$(CLOCK) -mmcu=$(DEVICE) -I. -Igrbl -Igrbl/platform -ffunction-sections -include grbl/platform/common/gpio.h
+# -include for invisible porting: common/gpio.h is auto-included (skipped for AVR via #ifndef __AVR__)
+AVR_GCC_PATH ?= $(HOME)/avr-toolchain/avr/bin
+COMPILE = $(AVR_GCC_PATH)/avr-gcc -Wall -Os -DF_CPU=$(CLOCK) -mmcu=$(DEVICE) -I. -Igrbl -Igrbl/platform -ffunction-sections -include grbl/platform/common/gpio.h
 
 
 OBJECTS = $(addprefix $(BUILDDIR)/,$(notdir $(SOURCE:.c=.o)))
@@ -92,8 +93,8 @@ $(BUILDDIR)/main.elf: $(OBJECTS)
 
 grbl.hex: $(BUILDDIR)/main.elf
 	rm -f grbl.hex
-	avr-objcopy -j .text -j .data -O ihex $(BUILDDIR)/main.elf grbl.hex
-	avr-size --format=berkeley $(BUILDDIR)/main.elf
+	$(AVR_GCC_PATH)/avr-objcopy -j .text -j .data -O ihex $(BUILDDIR)/main.elf grbl.hex
+	$(AVR_GCC_PATH)/avr-size --format=berkeley $(BUILDDIR)/main.elf
 # If you have an EEPROM section, you must also create a hex file for the
 # EEPROM and add it to the "flash" target.
 
