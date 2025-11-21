@@ -55,17 +55,17 @@
 
   // Port manipulation - CRITICAL: These must be identical to original GRBL!
   // Write multiple pins atomically with mask
-  #define HAL_GPIO_WRITE_PORT(port, mask, value) \
-    ((port) = ((port) & ~(mask)) | ((value) & (mask)))
-
-  // Write single pin
-  #define HAL_GPIO_WRITE_PIN(port, pin, value) \
-    do { \
-      if (value) \
-        (port) |= (1 << (pin)); \
-      else \
-        (port) &= ~(1 << (pin)); \
-    } while(0)
+//  #define HAL_GPIO_WRITE_PORT(port, mask, value) \
+//    ((port) = ((port) & ~(mask)) | ((value) & (mask)))
+//
+//  // Write single pin
+//  #define HAL_GPIO_WRITE_PIN(port, pin, value) \
+//    do { \
+//      if (value) \
+//        (port) |= (1 << (pin)); \
+//      else \
+//        (port) &= ~(1 << (pin)); \
+//    } while(0)
 
   // Read port - defined in platform-specific header (e.g., atmega328p/platform.h)
   // #define HAL_GPIO_READ_PORT(pin_reg)  (pin_reg)  // REMOVED - conflicts with 2-arg platform version
