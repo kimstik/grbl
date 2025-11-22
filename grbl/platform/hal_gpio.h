@@ -167,46 +167,43 @@ typedef enum {
 */
 
 // ============================================================================
-// SIMPLIFIED SINGLE-BIT GPIO OPERATIONS
+// SIMPLIFIED SINGLE-BIT GPIO OPERATIONS - Replaced by gpio.h
 // ============================================================================
 
 /*
-  Simplified macros for common single-bit GPIO operations.
-  Reduces verbosity and improves readability.
+  These macros are now defined in platform/common/gpio.h with better abstraction.
+  gpio.h provides unified GPIO_Bxxx and GPIO_Mxxx macros for all platforms.
 
-  Usage:
-    GPIO_BSET(STEPPERS_DISABLE);  // Set bit
-    GPIO_BCLR(STEPPERS_DISABLE);  // Clear bit
-    GPIO_BTGL(STEPPERS_DISABLE);  // Toggle bit
+  Old hal_gpio.h style (deprecated):
+    GPIO_BSET(name) → HAL_GPIO_SET_BITS(name##_PORT, (1<<name##_BIT))
 
-  Old verbose style:
-    GPIO_CLR(STEPPERS_DISABLE_PORT, (1<<STEPPERS_DISABLE_BIT));
+  New gpio.h style (recommended):
+    GPIO_BSET(name) → GPIO_BWR(name, OREG, SET)
 
-  New concise style (Issue #6):
-    GPIO_BCLR(STEPPERS_DISABLE);
+  See platform/common/gpio.h for details.
 */
 
-// Set single bit (bit = 1)
-#if !defined(GPIO_BSET)
-  #define GPIO_BSET(name)  HAL_GPIO_SET_BITS(name##_PORT, (1<<name##_BIT))
-#endif
+// Set single bit (bit = 1) - Replaced by gpio.h
+// #if !defined(GPIO_BSET)
+//   #define GPIO_BSET(name)  HAL_GPIO_SET_BITS(name##_PORT, (1<<name##_BIT))
+// #endif
 
-// Clear single bit (bit = 0)
-#if !defined(GPIO_BCLR)
-  #define GPIO_BCLR(name)  HAL_GPIO_CLEAR_BITS(name##_PORT, (1<<name##_BIT))
-#endif
+// Clear single bit (bit = 0) - Replaced by gpio.h
+// #if !defined(GPIO_BCLR)
+//   #define GPIO_BCLR(name)  HAL_GPIO_CLEAR_BITS(name##_PORT, (1<<name##_BIT))
+// #endif
 
-// Toggle single bit
-#if !defined(GPIO_BTGL)
-  #define GPIO_BTGL(name)  HAL_GPIO_TOGGLE_BITS(name##_PORT, (1<<name##_BIT))
-#endif
+// Toggle single bit - Replaced by gpio.h
+// #if !defined(GPIO_BTGL)
+//   #define GPIO_BTGL(name)  HAL_GPIO_TOGGLE_BITS(name##_PORT, (1<<name##_BIT))
+// #endif
 
-// Set single bit as output
+// Set single bit as output - Still used in init code
 #if !defined(GPIO_SET_OUT)
   #define GPIO_SET_OUT(name)  HAL_GPIO_SET_OUTPUT(name##_DDR, (1<<name##_BIT))
 #endif
 
-// Set single bit as input
+// Set single bit as input - Still used in init code
 #if !defined(GPIO_SET_INP)
   #define GPIO_SET_INP(name)  HAL_GPIO_SET_INPUT(name##_DDR, (1<<name##_BIT))
 #endif
