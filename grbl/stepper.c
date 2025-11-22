@@ -328,9 +328,9 @@ HAL_TIMER_STEPPER_ISR()
   if (busy) { return; } // The busy-flag is used to avoid reentering this interrupt
 
   // Set the direction pins a couple of nanoseconds before we step the steppers
-  GPIO_MWV( DIRECTION, OREG, (st.dir_outbits & DIRECTION_MASK) );
+  GPIO_MWO( DIRECTION, (st.dir_outbits & DIRECTION_MASK) );
   #ifdef ENABLE_DUAL_AXIS
-    GPIO_MWV( DIRECTION_DUAL, OREG, (st.dir_outbits_dual & DIRECTION_MASK_DUAL) );
+    GPIO_MWO( DIRECTION_DUAL, (st.dir_outbits_dual & DIRECTION_MASK_DUAL) );
   #endif
 
   // Then pulse the stepping pins
@@ -340,9 +340,9 @@ HAL_TIMER_STEPPER_ISR()
       st.step_bits_dual = GPIO_RD(STEP_PORT_DUAL, STEP_MASK_DUAL) | st.step_outbits_dual;
     #endif
   #else  // Normal operation
-    GPIO_MWV( STEP, OREG, st.step_outbits );
+    GPIO_MWO( STEP, st.step_outbits );
     #ifdef ENABLE_DUAL_AXIS
-      GPIO_MWV( STEP_DUAL, OREG, st.step_outbits_dual );
+      GPIO_MWO( STEP_DUAL, st.step_outbits_dual );
     #endif
   #endif
 
@@ -496,9 +496,9 @@ HAL_TIMER_STEPPER_ISR()
 HAL_TIMER_PULSE_RESET_ISR()
 {
   // Reset stepping pins (leave the direction pins)
-  GPIO_MWV( STEP, OREG, (step_port_invert_mask & STEP_MASK) );
+  GPIO_MWO( STEP, (step_port_invert_mask & STEP_MASK) );
   #ifdef ENABLE_DUAL_AXIS
-    GPIO_MWV( STEP_DUAL, OREG, (step_port_invert_mask_dual & STEP_MASK_DUAL) );
+    GPIO_MWO( STEP_DUAL, (step_port_invert_mask_dual & STEP_MASK_DUAL) );
   #endif
   HAL_TIMER_PULSE_RESET_STOP();
 }
@@ -558,13 +558,13 @@ void st_reset()
   st.dir_outbits = dir_port_invert_mask; // Initialize direction bits to default.
 
   // Initialize step and direction port pins.
-  GPIO_MWV( STEP, OREG, step_port_invert_mask );
-  GPIO_MWV( DIRECTION, OREG, dir_port_invert_mask );
+  GPIO_MWO( STEP, step_port_invert_mask );
+  GPIO_MWO( DIRECTION, dir_port_invert_mask );
 
   #ifdef ENABLE_DUAL_AXIS
     st.dir_outbits_dual = dir_port_invert_mask_dual;
-    GPIO_MWV( STEP_DUAL, OREG, step_port_invert_mask_dual );
-    GPIO_MWV( DIRECTION_DUAL, OREG, dir_port_invert_mask_dual );
+    GPIO_MWO( STEP_DUAL, step_port_invert_mask_dual );
+    GPIO_MWO( DIRECTION_DUAL, dir_port_invert_mask_dual );
   #endif
 }
 
