@@ -167,84 +167,25 @@ typedef enum {
 */
 
 // ============================================================================
-// SIMPLIFIED SINGLE-BIT GPIO OPERATIONS - Replaced by gpio.h
+// GPIO MACROS FOR INIT CODE (Single-bit operations on _DDR)
 // ============================================================================
 
-/*
-  These macros are now defined in platform/common/gpio.h with better abstraction.
-  gpio.h provides unified GPIO_Bxxx and GPIO_Mxxx macros for all platforms.
-
-  Old hal_gpio.h style (deprecated):
-    GPIO_BSET(name) → HAL_GPIO_SET_BITS(name##_PORT, (1<<name##_BIT))
-
-  New gpio.h style (recommended):
-    GPIO_BSET(name) → GPIO_BWR(name, OREG, SET)
-
-  See platform/common/gpio.h for details.
-*/
-
-// Set single bit (bit = 1) - Replaced by gpio.h
-// #if !defined(GPIO_BSET)
-//   #define GPIO_BSET(name)  HAL_GPIO_SET_BITS(name##_PORT, (1<<name##_BIT))
-// #endif
-
-// Clear single bit (bit = 0) - Replaced by gpio.h
-// #if !defined(GPIO_BCLR)
-//   #define GPIO_BCLR(name)  HAL_GPIO_CLEAR_BITS(name##_PORT, (1<<name##_BIT))
-// #endif
-
-// Toggle single bit - Replaced by gpio.h
-// #if !defined(GPIO_BTGL)
-//   #define GPIO_BTGL(name)  HAL_GPIO_TOGGLE_BITS(name##_PORT, (1<<name##_BIT))
-// #endif
-
-// Set single bit as output - Still used in init code
+// Set single bit as output - Used in init code
 #if !defined(GPIO_SET_OUT)
   #define GPIO_SET_OUT(name)  HAL_GPIO_SET_OUTPUT(name##_DDR, (1<<name##_BIT))
 #endif
 
-// Set single bit as input - Still used in init code
+// Set single bit as input - Used in init code
 #if !defined(GPIO_SET_INP)
   #define GPIO_SET_INP(name)  HAL_GPIO_SET_INPUT(name##_DDR, (1<<name##_BIT))
 #endif
 
 // Helper macro for pin definition (concatenates PORT and BIT as two separate args)
-// Usage: some_function(PIN(X_STEP))  expands to: some_function(X_STEP_PORT, X_STEP_BIT)
 #define PIN(name)  name##_PORT, name##_BIT
 
 // ============================================================================
-// SHORTER ALIASES (OPTIONAL - Issue #5)
+// GPIO INTERRUPT MACROS (AVR-specific)
 // ============================================================================
-
-/*
-  Optional shorter names for frequently used operations.
-  Use whichever style you prefer - both work identically.
-
-  Verbose style (explicit):    HAL_GPIO_SET_OUTPUT(...)
-  Concise style (shorter):     GPIO_OUT(...)
-*/
-
-// GPIO direction shortcuts
-// Replaced by gpio.h abstractions:
-// #define GPIO_OUT(port, mask)     HAL_GPIO_SET_OUTPUT(port, mask)   // → GPIO_MDIR_OUT(name)
-// #define GPIO_IN(port, mask)      HAL_GPIO_SET_INPUT(port, mask)    // → GPIO_MDIR_INP(name)
-
-// GPIO read/write shortcuts
-// Replaced by gpio.h abstractions:
-// #define GPIO_RD(...)                   HAL_GPIO_READ_PORT(__VA_ARGS__)            // → GPIO_MRD(name, IREG)
-// #define GPIO_WR(port, mask, value)     HAL_GPIO_WRITE_PORT(port, mask, value)     // → GPIO_MWO(name, val)
-// #define GPIO_PIN_RD(port, pin)         HAL_GPIO_READ_PIN(port, pin)               // → GPIO_BRD(name, OREG/IREG)
-
-// GPIO set/clear (multi-bit)
-// Replaced by gpio.h abstractions:
-// #define GPIO_SET(port, mask)     HAL_GPIO_SET_BITS(port, mask)     // → GPIO_MWR(name, OREG, SET)
-// #define GPIO_CLR(port, mask)     HAL_GPIO_CLEAR_BITS(port, mask)   // → GPIO_MWR(name, OREG, CLR)
-// #define GPIO_TGL(port, mask)     HAL_GPIO_TOGGLE_BITS(port, mask)  // → GPIO_MWR(name, OREG, TGL)
-
-// GPIO pullup shortcuts
-// Replaced by gpio.h abstractions:
-// #define GPIO_PULLUP_ON(port, mask)   HAL_GPIO_PULLUP_ENABLE(port, mask)    // → GPIO_MPULLUP_EN(name)
-// #define GPIO_PULLUP_OFF(port, mask)  HAL_GPIO_PULLUP_DISABLE(port, mask)   // → GPIO_MPULLUP_DIS(name)
 
 // GPIO interrupt shortcuts
 #define GPIO_INT_ON(pcmsk, int_flag, mask)   HAL_GPIO_INTERRUPT_ENABLE(pcmsk, int_flag, mask)
@@ -252,8 +193,5 @@ typedef enum {
 
 // GPIO ISR handler
 #define GPIO_ISR(name)  HAL_GPIO_IRQ_HANDLER(name)
-
-// Replaced by gpio.h abstractions:
-// #define GPIO_WR_DIRECT(port, value)  HAL_GPIO_WRITE_DIRECT(port, value)  // → GPIO_OREG(name) = val
 
 #endif // HAL_GPIO_H
