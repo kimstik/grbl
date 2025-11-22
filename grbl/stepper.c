@@ -226,9 +226,9 @@ void st_wake_up()
 {
   // Enable stepper drivers.
   if (bit_istrue(settings.flags,BITFLAG_INVERT_ST_ENABLE)) {
-    GPIO_BSET(STEPPERS_DISABLE);
+    GPIO_BSET( STEPPERS_DISABLE );
   } else {
-    GPIO_BCLR(STEPPERS_DISABLE);
+    GPIO_BCLR( STEPPERS_DISABLE );
   }
 
   // Initialize stepper output bits to ensure first ISR call does not step.
@@ -268,9 +268,9 @@ void st_go_idle()
   }
   if (bit_istrue(settings.flags,BITFLAG_INVERT_ST_ENABLE)) { pin_state = !pin_state; } // Apply pin invert.
   if (pin_state) {
-    GPIO_BSET(STEPPERS_DISABLE);
+    GPIO_BSET( STEPPERS_DISABLE );
   } else {
-    GPIO_BCLR(STEPPERS_DISABLE);
+    GPIO_BCLR( STEPPERS_DISABLE );
   }
 }
 

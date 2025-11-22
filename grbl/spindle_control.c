@@ -101,16 +101,16 @@ void spindle_stop()
     HAL_TIMER_SPINDLE_PWM_DISABLE();
     #ifdef USE_SPINDLE_DIR_AS_ENABLE_PIN
       #ifdef INVERT_SPINDLE_ENABLE_PIN
-        GPIO_BSET(SPINDLE_ENABLE);
+        GPIO_BSET( SPINDLE_ENABLE );
       #else
-        GPIO_BCLR(SPINDLE_ENABLE);
+        GPIO_BCLR( SPINDLE_ENABLE );
       #endif
     #endif
   #else
     #ifdef INVERT_SPINDLE_ENABLE_PIN
-      GPIO_BSET(SPINDLE_ENABLE);
+      GPIO_BSET( SPINDLE_ENABLE );
     #else
-      GPIO_BCLR(SPINDLE_ENABLE);
+      GPIO_BCLR( SPINDLE_ENABLE );
     #endif
   #endif
 }
@@ -128,9 +128,9 @@ void spindle_stop()
       } else {
         HAL_TIMER_SPINDLE_PWM_ENABLE();
         #ifdef INVERT_SPINDLE_ENABLE_PIN
-          GPIO_BCLR(SPINDLE_ENABLE);
+          GPIO_BCLR( SPINDLE_ENABLE );
         #else
-          GPIO_BSET(SPINDLE_ENABLE);
+          GPIO_BSET( SPINDLE_ENABLE );
         #endif
       }
     #else
@@ -241,15 +241,15 @@ void spindle_stop()
     
     #if !defined(USE_SPINDLE_DIR_AS_ENABLE_PIN) && !defined(ENABLE_DUAL_AXIS)
       if (state == SPINDLE_ENABLE_CW) {
-        GPIO_BCLR(SPINDLE_DIRECTION);
+        GPIO_BCLR( SPINDLE_DIRECTION );
       } else {
-        GPIO_BSET(SPINDLE_DIRECTION);
+        GPIO_BSET( SPINDLE_DIRECTION );
       }
     #endif
-  
+
     #ifdef VARIABLE_SPINDLE
       // NOTE: Assumes all calls to this function is when Grbl is not moving or must remain off.
-      if (settings.flags & BITFLAG_LASER_MODE) { 
+      if (settings.flags & BITFLAG_LASER_MODE) {
         if (state == SPINDLE_ENABLE_CCW) { rpm = 0.0; } // TODO: May need to be rpm_min*(100/MAX_SPINDLE_SPEED_OVERRIDE);
       }
       spindle_set_speed(spindle_compute_pwm_value(rpm));
@@ -259,10 +259,10 @@ void spindle_stop()
       // NOTE: Without variable spindle, the enable bit should just turn on or off, regardless
       // if the spindle speed value is zero, as its ignored anyhow.
       #ifdef INVERT_SPINDLE_ENABLE_PIN
-        GPIO_BCLR(SPINDLE_ENABLE);
+        GPIO_BCLR( SPINDLE_ENABLE );
       #else
-        GPIO_BSET(SPINDLE_ENABLE);
-      #endif    
+        GPIO_BSET( SPINDLE_ENABLE );
+      #endif
     #endif
   
   }

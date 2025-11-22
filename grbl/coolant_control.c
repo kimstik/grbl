@@ -61,15 +61,15 @@ uint8_t coolant_get_state()
 void coolant_stop()
 {
   #ifdef INVERT_COOLANT_FLOOD_PIN
-    GPIO_BSET(COOLANT_FLOOD);
+    GPIO_BSET( COOLANT_FLOOD );
   #else
-    GPIO_BCLR(COOLANT_FLOOD);
+    GPIO_BCLR( COOLANT_FLOOD );
   #endif
   #ifdef ENABLE_M7
     #ifdef INVERT_COOLANT_MIST_PIN
-      GPIO_BSET(COOLANT_MIST);
+      GPIO_BSET( COOLANT_MIST );
     #else
-      GPIO_BCLR(COOLANT_MIST);
+      GPIO_BCLR( COOLANT_MIST );
     #endif
   #endif
 }
@@ -81,38 +81,38 @@ void coolant_stop()
 // parser program end, and g-code parser coolant_sync().
 void coolant_set_state(uint8_t mode)
 {
-  if (sys.abort) { return; } // Block during abort.  
-  
+  if (sys.abort) { return; } // Block during abort.
+
 	if (mode & COOLANT_FLOOD_ENABLE) {
 		#ifdef INVERT_COOLANT_FLOOD_PIN
-			GPIO_BCLR(COOLANT_FLOOD);
+			GPIO_BCLR( COOLANT_FLOOD );
 		#else
-			GPIO_BSET(COOLANT_FLOOD);
+			GPIO_BSET( COOLANT_FLOOD );
 		#endif
 	} else {
 	  #ifdef INVERT_COOLANT_FLOOD_PIN
-			GPIO_BSET(COOLANT_FLOOD);
+			GPIO_BSET( COOLANT_FLOOD );
 		#else
-			GPIO_BCLR(COOLANT_FLOOD);
+			GPIO_BCLR( COOLANT_FLOOD );
 		#endif
 	}
 
 	#ifdef ENABLE_M7
 		if (mode & COOLANT_MIST_ENABLE) {
 			#ifdef INVERT_COOLANT_MIST_PIN
-				GPIO_BCLR(COOLANT_MIST);
+				GPIO_BCLR( COOLANT_MIST );
 			#else
-				GPIO_BSET(COOLANT_MIST);
+				GPIO_BSET( COOLANT_MIST );
 			#endif
 		} else {
 			#ifdef INVERT_COOLANT_MIST_PIN
-				GPIO_BSET(COOLANT_MIST);
+				GPIO_BSET( COOLANT_MIST );
 			#else
-				GPIO_BCLR(COOLANT_MIST);
+				GPIO_BCLR( COOLANT_MIST );
 			#endif
 		}
 	#endif
-	
+
   sys.report_ovr_counter = 0; // Set to report change immediately
 }
 
