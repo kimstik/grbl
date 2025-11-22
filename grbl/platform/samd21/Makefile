@@ -24,7 +24,8 @@ BOARD         ?= megarm
 CFLAGS_EXTRA   = -I. -I../common/dummy -I$(BOARD)
 
 # Auto-include gpio.h for all platforms (invisible porting)
-CFLAGS_EXTRA  += -include ../common/gpio.h
+# Platform-specific gpio.h MUST come before common/gpio.h
+CFLAGS_EXTRA  += -include gpio.h -include ../common/gpio.h
 
 # Include board-specific config
 CFLAGS_EXTRA  += -include $(BOARD)/config.h
