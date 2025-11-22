@@ -101,44 +101,6 @@ typedef uint32_t hal_gpio_port_t;
 // Chip-specific peripheral IDs and IRQ handlers defined below
 
 // ============================================================================
-// AVR COMPATIBILITY - PORT ALIASES
-// ============================================================================
-
-// Legacy compatibility macros for AVR-style code
-// Actual PORT values come from board config
-// (STEP_PORT, DIRECTION_PORT now defined in board config.h)
-// #define DIRECTION_PORT      X_DIRECTION_PORT
-#define DIRECTION_PORT_ID   ((hal_gpio_port_t)DIRECTION_PORT)
-#define DIRECTION_DDR       DIRECTION_PORT_ID
-
-// #define STEP_PORT           X_STEP_PORT
-#define STEP_PORT_ID        ((hal_gpio_port_t)STEP_PORT)
-#define STEP_DDR            STEP_PORT_ID
-
-#define STEPPERS_DISABLE_PORT_ID   ((hal_gpio_port_t)STEPPERS_DISABLE_PORT)
-#define STEPPERS_DISABLE_DDR       STEPPERS_DISABLE_PORT_ID
-
-// Combined masks (for backwards compatibility)
-#define DIRECTION_MASK      DIRECTION_MASK_A
-#define STEP_MASK           STEP_MASK_A
-#define STEPPERS_DISABLE_MASK  STEPPERS_DISABLE_MASK_A
-#define LIMIT_MASK          LIMIT_MASK_A
-#define CONTROL_MASK        CONTROL_MASK_A
-#define PROBE_MASK          PROBE_MASK_A
-
-// Port ID aliases
-#define X_LIMIT_PORT_ID     ((hal_gpio_port_t)X_LIMIT_PORT)
-#define Y_LIMIT_PORT_ID     ((hal_gpio_port_t)Y_LIMIT_PORT)
-#define Z_LIMIT_PORT_ID     ((hal_gpio_port_t)Z_LIMIT_PORT)
-
-#define CONTROL_RESET_PORT_ID       ((hal_gpio_port_t)CONTROL_RESET_PORT)
-#define CONTROL_FEED_HOLD_PORT_ID   ((hal_gpio_port_t)CONTROL_FEED_HOLD_PORT)
-#define CONTROL_CYCLE_START_PORT_ID ((hal_gpio_port_t)CONTROL_CYCLE_START_PORT)
-#define CONTROL_SAFETY_DOOR_PORT_ID ((hal_gpio_port_t)CONTROL_SAFETY_DOOR_PORT)
-
-#define PROBE_PORT_ID       ((hal_gpio_port_t)PROBE_PORT)
-
-// ============================================================================
 // FLASH EMULATION FOR EEPROM
 // ============================================================================
 
@@ -157,14 +119,6 @@ typedef uint32_t hal_gpio_port_t;
   #define USB_VID               0x2341
   #define USB_PID               0x804D
 #endif
-
-// ============================================================================
-// HAL GPIO MACROS
-// ============================================================================
-
-// Override generic hal_gpio.h macros with platform-specific 2-argument versions
-#define HAL_GPIO_READ_PORT(port, mask)          (hal_gpio_read_port(port) & (mask))
-#define HAL_GPIO_WRITE_PORT(port, mask, value)  hal_gpio_write_port(port, mask, value)
 
 // ============================================================================
 // HAL TIMER MACROS
