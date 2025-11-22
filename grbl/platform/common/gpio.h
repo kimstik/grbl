@@ -18,10 +18,10 @@
 #define BIT_OR(x, nbit)		( x |  BIT_MSK(nbit) )
 #define BIT_AI(x, nbit)		( x & ~BIT_MSK(nbit) )
 #define BIT_XR(x, nbit)		( x ^  BIT_MSK(nbit) )
-                               
-#define BIT_SET(x, nbit)	{ x |=  BIT_MSK(nbit); }
-#define BIT_CLR(x, nbit)	{ x &= ~BIT_MSK(nbit); }
-#define BIT_TGL(x, nbit)	{ x ^=  BIT_MSK(nbit); }
+
+#define BIT_SET(x, nbit)	((x) |=  BIT_MSK(nbit))
+#define BIT_CLR(x, nbit)	((x) &= ~BIT_MSK(nbit))
+#define BIT_TGL(x, nbit)	((x) ^=  BIT_MSK(nbit))
 
 // -- temporal workaround part --
 
@@ -29,7 +29,7 @@
 
 	// Port manipulation - CRITICAL: These must be identical to original GRBL!
 	// Write multiple pins atomically with mask
-	#define GPIO_WRITE_PORT(port, mask, value)	((port) = ((port) & ~(mask)) | ((value) & (mask)))
+	#define GPIO_WRITE_PORT(port, mask, value)	((port) = ((port) & ~(mask)) | (value))
 
 	// Write single pin
 	#define GPIO_WRITE_PIN(port, pin, value) \

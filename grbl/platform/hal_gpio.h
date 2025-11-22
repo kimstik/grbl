@@ -30,67 +30,7 @@
     Same machine code as original GRBL!
 */
 
-#ifdef __AVR__
-  // ============================================================================
-  // AVR IMPLEMENTATION - ZERO OVERHEAD MACROS
-  // ============================================================================
-
-  #include <avr/io.h>
-  #include <avr/interrupt.h>
-
-  // Port IDs (just for type safety, evaluate to nothing)
-  #define HAL_GPIO_PORT_B  PORTB
-  #define HAL_GPIO_PORT_C  PORTC
-  #define HAL_GPIO_PORT_D  PORTD
-
-  // Pin IDs (bit numbers)
-  #define HAL_GPIO_PIN_0   0
-  #define HAL_GPIO_PIN_1   1
-  #define HAL_GPIO_PIN_2   2
-  #define HAL_GPIO_PIN_3   3
-  #define HAL_GPIO_PIN_4   4
-  #define HAL_GPIO_PIN_5   5
-  #define HAL_GPIO_PIN_6   6
-  #define HAL_GPIO_PIN_7   7
-
-  // Port manipulation - CRITICAL: These must be identical to original GRBL!
-  // Write multiple pins atomically with mask
-//  #define HAL_GPIO_WRITE_PORT(port, mask, value) \
-//    ((port) = ((port) & ~(mask)) | ((value) & (mask)))
-//
-//  // Write single pin
-//  #define HAL_GPIO_WRITE_PIN(port, pin, value) \
-//    do { \
-//      if (value) \
-//        (port) |= (1 << (pin)); \
-//      else \
-//        (port) &= ~(1 << (pin)); \
-//    } while(0)
-
-  // Read port - defined in platform-specific header (e.g., atmega328p/platform.h)
-  // #define HAL_GPIO_READ_PORT(pin_reg)  (pin_reg)  // REMOVED - conflicts with 2-arg platform version
-
-  // Read single pin
-  #define HAL_GPIO_READ_PIN(pin_reg, pin)  (((pin_reg) >> (pin)) & 0x01)
-
-  // Set pin(s) high
-  #define HAL_GPIO_SET_BITS(port, mask)    ((port) |= (mask))
-
-  // Clear pin(s) low
-  #define HAL_GPIO_CLEAR_BITS(port, mask)  ((port) &= ~(mask))
-
-  // Toggle pin(s)
-  #define HAL_GPIO_TOGGLE_BITS(port, mask) ((port) ^= (mask))
-
-  // Direction control (DDR)
-  #define HAL_GPIO_SET_OUTPUT(ddr, mask)   ((ddr) |= (mask))
-  #define HAL_GPIO_SET_INPUT(ddr, mask)    ((ddr) &= ~(mask))
-
-  // Pull-up control (for inputs: write to PORT register)
-  #define HAL_GPIO_PULLUP_ENABLE(port, mask)   ((port) |= (mask))
-  #define HAL_GPIO_PULLUP_DISABLE(port, mask)  ((port) &= ~(mask))
-
-#else
+#ifndef __AVR__  // For non-AVR platforms only - AVR uses atmega328p/platform.h
   // ============================================================================
   // OTHER PLATFORMS - Function-based or inline implementations
   // ============================================================================
@@ -184,19 +124,7 @@ typedef enum {
   HAL_GPIO_IRQ_HIGH
 } hal_gpio_irq_mode_t;
 
-#ifdef __AVR__
-  // AVR: Pin change interrupts are configured in platform code
-  // Just provide enable/disable macros
-
-  // These will be defined in platform.h for specific PCINT groups
-  #define HAL_GPIO_IRQ_ENABLE(irq_mask)   /* Defined by platform */
-  #define HAL_GPIO_IRQ_DISABLE(irq_mask)  /* Defined by platform */
-
-  // Interrupt vector macros (for ISR definitions)
-  // Usage: HAL_GPIO_IRQ_HANDLER(LIMIT_INT)
-  #define HAL_GPIO_IRQ_HANDLER(name)  ISR(name##_vect)
-
-#else
+#ifndef __AVR__  // For non-AVR platforms only
   // Other platforms: Configure EXTI or equivalent
   void hal_gpio_irq_config(hal_gpio_port_t port, uint8_t pin,
                            hal_gpio_irq_mode_t mode, uint8_t priority);
@@ -208,7 +136,6 @@ typedef enum {
 
   // Interrupt handler definition
   #define HAL_GPIO_IRQ_HANDLER(name)  void name##_IRQHandler(void)
-
 #endif
 
 // ============================================================================
@@ -307,7 +234,7 @@ typedef enum {
 // GPIO read/write shortcuts
 // Note: GPIO_RD signature varies: AVR uses (port, mask), others use (port)
 #define GPIO_RD(...)                   HAL_GPIO_READ_PORT(__VA_ARGS__)
-#define GPIO_WR(port, mask, value)     GPIO_WRITE_PORT(port, mask, value)
+#define GPIO_WR(port, mask, value)     HAL_GPIO_WRITE_PORT(port, mask, value)
 #define GPIO_PIN_RD(port, pin)         HAL_GPIO_READ_PIN(port, pin)
 
 // GPIO set/clear (multi-bit)

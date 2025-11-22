@@ -70,13 +70,13 @@ void eeprom_put_char(unsigned int addr, unsigned char new_value)
   old_value = EEDR;         // Get old EEPROM value
   diff_mask = old_value ^ new_value;  // Get bit differences
 
-  // Check if any bits need to be changed to '1'
-  if(diff_mask & old_value) {
+  // Check if any bits are changed to '1' in the new value
+  if(diff_mask & new_value) {
     // Now we know that _some_ bits need to be erased to '1'
 
-    // Check if any bits need to be programmed to '0'
-    if(diff_mask & new_value) {
-      // Now we know that _some_ bits need to be programmed to '0' also
+    // Check if any bits in the new value are '0'
+    if(new_value != 0xff) {
+      // Now we know that some bits need to be programmed to '0' also
 
       EEDR = new_value;     // Set EEPROM data register
       EECR = (1<<EEMPE) |   // Set Master Write Enable bit...

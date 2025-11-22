@@ -1,0 +1,248 @@
+/root/avr-toolchain/avr/bin/avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -Igrbl -Igrbl/platform -ffunction-sections -include grbl/platform/common/gpio.h -MMD -MP -c grbl/main.c -o build/main.o
+In file included from grbl/platform/hal.h:182:0,
+                 from grbl/grbl.h:49,
+                 from grbl/main.c:22:
+grbl/platform/hal_gpio.h:220:0: warning: "HAL_GPIO_IRQ_HANDLER" redefined
+   #define HAL_GPIO_IRQ_HANDLER(name)  ISR(name##_vect)
+ 
+In file included from grbl/platform/hal.h:146:0,
+                 from grbl/grbl.h:49,
+                 from grbl/main.c:22:
+grbl/platform/atmega328p/platform.h:134:0: note: this is the location of the previous definition
+ #define HAL_GPIO_IRQ_HANDLER(int_name)          ISR(int_name##_vect)
+ 
+/root/avr-toolchain/avr/bin/avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -Igrbl -Igrbl/platform -ffunction-sections -include grbl/platform/common/gpio.h -MMD -MP -c grbl/motion_control.c -o build/motion_control.o
+In file included from grbl/platform/hal.h:182:0,
+                 from grbl/grbl.h:49,
+                 from grbl/motion_control.c:22:
+grbl/platform/hal_gpio.h:220:0: warning: "HAL_GPIO_IRQ_HANDLER" redefined
+   #define HAL_GPIO_IRQ_HANDLER(name)  ISR(name##_vect)
+ 
+In file included from grbl/platform/hal.h:146:0,
+                 from grbl/grbl.h:49,
+                 from grbl/motion_control.c:22:
+grbl/platform/atmega328p/platform.h:134:0: note: this is the location of the previous definition
+ #define HAL_GPIO_IRQ_HANDLER(int_name)          ISR(int_name##_vect)
+ 
+/root/avr-toolchain/avr/bin/avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -Igrbl -Igrbl/platform -ffunction-sections -include grbl/platform/common/gpio.h -MMD -MP -c grbl/gcode.c -o build/gcode.o
+In file included from grbl/platform/hal.h:182:0,
+                 from grbl/grbl.h:49,
+                 from grbl/gcode.c:22:
+grbl/platform/hal_gpio.h:220:0: warning: "HAL_GPIO_IRQ_HANDLER" redefined
+   #define HAL_GPIO_IRQ_HANDLER(name)  ISR(name##_vect)
+ 
+In file included from grbl/platform/hal.h:146:0,
+                 from grbl/grbl.h:49,
+                 from grbl/gcode.c:22:
+grbl/platform/atmega328p/platform.h:134:0: note: this is the location of the previous definition
+ #define HAL_GPIO_IRQ_HANDLER(int_name)          ISR(int_name##_vect)
+ 
+/root/avr-toolchain/avr/bin/avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -Igrbl -Igrbl/platform -ffunction-sections -include grbl/platform/common/gpio.h -MMD -MP -c grbl/spindle_control.c -o build/spindle_control.o
+In file included from grbl/platform/hal.h:182:0,
+                 from grbl/grbl.h:49,
+                 from grbl/spindle_control.c:22:
+grbl/platform/hal_gpio.h:220:0: warning: "HAL_GPIO_IRQ_HANDLER" redefined
+   #define HAL_GPIO_IRQ_HANDLER(name)  ISR(name##_vect)
+ 
+In file included from grbl/platform/hal.h:146:0,
+                 from grbl/grbl.h:49,
+                 from grbl/spindle_control.c:22:
+grbl/platform/atmega328p/platform.h:134:0: note: this is the location of the previous definition
+ #define HAL_GPIO_IRQ_HANDLER(int_name)          ISR(int_name##_vect)
+ 
+/root/avr-toolchain/avr/bin/avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -Igrbl -Igrbl/platform -ffunction-sections -include grbl/platform/common/gpio.h -MMD -MP -c grbl/coolant_control.c -o build/coolant_control.o
+In file included from grbl/platform/hal.h:182:0,
+                 from grbl/grbl.h:49,
+                 from grbl/coolant_control.c:21:
+grbl/platform/hal_gpio.h:220:0: warning: "HAL_GPIO_IRQ_HANDLER" redefined
+   #define HAL_GPIO_IRQ_HANDLER(name)  ISR(name##_vect)
+ 
+In file included from grbl/platform/hal.h:146:0,
+                 from grbl/grbl.h:49,
+                 from grbl/coolant_control.c:21:
+grbl/platform/atmega328p/platform.h:134:0: note: this is the location of the previous definition
+ #define HAL_GPIO_IRQ_HANDLER(int_name)          ISR(int_name##_vect)
+ 
+/root/avr-toolchain/avr/bin/avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -Igrbl -Igrbl/platform -ffunction-sections -include grbl/platform/common/gpio.h -MMD -MP -c grbl/serial.c -o build/serial.o
+In file included from grbl/platform/hal.h:182:0,
+                 from grbl/grbl.h:49,
+                 from grbl/serial.c:22:
+grbl/platform/hal_gpio.h:220:0: warning: "HAL_GPIO_IRQ_HANDLER" redefined
+   #define HAL_GPIO_IRQ_HANDLER(name)  ISR(name##_vect)
+ 
+In file included from grbl/platform/hal.h:146:0,
+                 from grbl/grbl.h:49,
+                 from grbl/serial.c:22:
+grbl/platform/atmega328p/platform.h:134:0: note: this is the location of the previous definition
+ #define HAL_GPIO_IRQ_HANDLER(int_name)          ISR(int_name##_vect)
+ 
+/root/avr-toolchain/avr/bin/avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -Igrbl -Igrbl/platform -ffunction-sections -include grbl/platform/common/gpio.h -MMD -MP -c grbl/protocol.c -o build/protocol.o
+In file included from grbl/platform/hal.h:182:0,
+                 from grbl/grbl.h:49,
+                 from grbl/protocol.c:22:
+grbl/platform/hal_gpio.h:220:0: warning: "HAL_GPIO_IRQ_HANDLER" redefined
+   #define HAL_GPIO_IRQ_HANDLER(name)  ISR(name##_vect)
+ 
+In file included from grbl/platform/hal.h:146:0,
+                 from grbl/grbl.h:49,
+                 from grbl/protocol.c:22:
+grbl/platform/atmega328p/platform.h:134:0: note: this is the location of the previous definition
+ #define HAL_GPIO_IRQ_HANDLER(int_name)          ISR(int_name##_vect)
+ 
+/root/avr-toolchain/avr/bin/avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -Igrbl -Igrbl/platform -ffunction-sections -include grbl/platform/common/gpio.h -MMD -MP -c grbl/stepper.c -o build/stepper.o
+In file included from grbl/platform/hal.h:182:0,
+                 from grbl/grbl.h:49,
+                 from grbl/stepper.c:22:
+grbl/platform/hal_gpio.h:220:0: warning: "HAL_GPIO_IRQ_HANDLER" redefined
+   #define HAL_GPIO_IRQ_HANDLER(name)  ISR(name##_vect)
+ 
+In file included from grbl/platform/hal.h:146:0,
+                 from grbl/grbl.h:49,
+                 from grbl/stepper.c:22:
+grbl/platform/atmega328p/platform.h:134:0: note: this is the location of the previous definition
+ #define HAL_GPIO_IRQ_HANDLER(int_name)          ISR(int_name##_vect)
+ 
+/root/avr-toolchain/avr/bin/avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -Igrbl -Igrbl/platform -ffunction-sections -include grbl/platform/common/gpio.h -MMD -MP -c grbl/nvmem.c -o build/nvmem.o
+In file included from grbl/platform/hal.h:182:0,
+                 from grbl/grbl.h:49,
+                 from grbl/nvmem.c:22:
+grbl/platform/hal_gpio.h:220:0: warning: "HAL_GPIO_IRQ_HANDLER" redefined
+   #define HAL_GPIO_IRQ_HANDLER(name)  ISR(name##_vect)
+ 
+In file included from grbl/platform/hal.h:146:0,
+                 from grbl/grbl.h:49,
+                 from grbl/nvmem.c:22:
+grbl/platform/atmega328p/platform.h:134:0: note: this is the location of the previous definition
+ #define HAL_GPIO_IRQ_HANDLER(int_name)          ISR(int_name##_vect)
+ 
+grbl/nvmem.c: In function 'memcpy_to_nvmem_with_checksum':
+grbl/nvmem.c:127:26: warning: '<<' in boolean context, did you mean '<' ? [-Wint-in-bool-context]
+     checksum = (checksum << 1) || (checksum >> 7);
+                ~~~~~~~~~~^~~~~
+grbl/nvmem.c: In function 'memcpy_from_nvmem_with_checksum':
+grbl/nvmem.c:149:26: warning: '<<' in boolean context, did you mean '<' ? [-Wint-in-bool-context]
+     checksum = (checksum << 1) || (checksum >> 7);
+                ~~~~~~~~~~^~~~~
+/root/avr-toolchain/avr/bin/avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -Igrbl -Igrbl/platform -ffunction-sections -include grbl/platform/common/gpio.h -MMD -MP -c grbl/settings.c -o build/settings.o
+In file included from grbl/platform/hal.h:182:0,
+                 from grbl/grbl.h:49,
+                 from grbl/settings.c:22:
+grbl/platform/hal_gpio.h:220:0: warning: "HAL_GPIO_IRQ_HANDLER" redefined
+   #define HAL_GPIO_IRQ_HANDLER(name)  ISR(name##_vect)
+ 
+In file included from grbl/platform/hal.h:146:0,
+                 from grbl/grbl.h:49,
+                 from grbl/settings.c:22:
+grbl/platform/atmega328p/platform.h:134:0: note: this is the location of the previous definition
+ #define HAL_GPIO_IRQ_HANDLER(int_name)          ISR(int_name##_vect)
+ 
+/root/avr-toolchain/avr/bin/avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -Igrbl -Igrbl/platform -ffunction-sections -include grbl/platform/common/gpio.h -MMD -MP -c grbl/planner.c -o build/planner.o
+In file included from grbl/platform/hal.h:182:0,
+                 from grbl/grbl.h:49,
+                 from grbl/planner.c:23:
+grbl/platform/hal_gpio.h:220:0: warning: "HAL_GPIO_IRQ_HANDLER" redefined
+   #define HAL_GPIO_IRQ_HANDLER(name)  ISR(name##_vect)
+ 
+In file included from grbl/platform/hal.h:146:0,
+                 from grbl/grbl.h:49,
+                 from grbl/planner.c:23:
+grbl/platform/atmega328p/platform.h:134:0: note: this is the location of the previous definition
+ #define HAL_GPIO_IRQ_HANDLER(int_name)          ISR(int_name##_vect)
+ 
+/root/avr-toolchain/avr/bin/avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -Igrbl -Igrbl/platform -ffunction-sections -include grbl/platform/common/gpio.h -MMD -MP -c grbl/nuts_bolts.c -o build/nuts_bolts.o
+In file included from grbl/platform/hal.h:182:0,
+                 from grbl/grbl.h:49,
+                 from grbl/nuts_bolts.c:22:
+grbl/platform/hal_gpio.h:220:0: warning: "HAL_GPIO_IRQ_HANDLER" redefined
+   #define HAL_GPIO_IRQ_HANDLER(name)  ISR(name##_vect)
+ 
+In file included from grbl/platform/hal.h:146:0,
+                 from grbl/grbl.h:49,
+                 from grbl/nuts_bolts.c:22:
+grbl/platform/atmega328p/platform.h:134:0: note: this is the location of the previous definition
+ #define HAL_GPIO_IRQ_HANDLER(int_name)          ISR(int_name##_vect)
+ 
+/root/avr-toolchain/avr/bin/avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -Igrbl -Igrbl/platform -ffunction-sections -include grbl/platform/common/gpio.h -MMD -MP -c grbl/limits.c -o build/limits.o
+In file included from grbl/platform/hal.h:182:0,
+                 from grbl/grbl.h:49,
+                 from grbl/limits.c:22:
+grbl/platform/hal_gpio.h:220:0: warning: "HAL_GPIO_IRQ_HANDLER" redefined
+   #define HAL_GPIO_IRQ_HANDLER(name)  ISR(name##_vect)
+ 
+In file included from grbl/platform/hal.h:146:0,
+                 from grbl/grbl.h:49,
+                 from grbl/limits.c:22:
+grbl/platform/atmega328p/platform.h:134:0: note: this is the location of the previous definition
+ #define HAL_GPIO_IRQ_HANDLER(int_name)          ISR(int_name##_vect)
+ 
+/root/avr-toolchain/avr/bin/avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -Igrbl -Igrbl/platform -ffunction-sections -include grbl/platform/common/gpio.h -MMD -MP -c grbl/jog.c -o build/jog.o
+In file included from grbl/platform/hal.h:182:0,
+                 from grbl/grbl.h:49,
+                 from grbl/jog.c:21:
+grbl/platform/hal_gpio.h:220:0: warning: "HAL_GPIO_IRQ_HANDLER" redefined
+   #define HAL_GPIO_IRQ_HANDLER(name)  ISR(name##_vect)
+ 
+In file included from grbl/platform/hal.h:146:0,
+                 from grbl/grbl.h:49,
+                 from grbl/jog.c:21:
+grbl/platform/atmega328p/platform.h:134:0: note: this is the location of the previous definition
+ #define HAL_GPIO_IRQ_HANDLER(int_name)          ISR(int_name##_vect)
+ 
+/root/avr-toolchain/avr/bin/avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -Igrbl -Igrbl/platform -ffunction-sections -include grbl/platform/common/gpio.h -MMD -MP -c grbl/print.c -o build/print.o
+In file included from grbl/platform/hal.h:182:0,
+                 from grbl/grbl.h:49,
+                 from grbl/print.c:22:
+grbl/platform/hal_gpio.h:220:0: warning: "HAL_GPIO_IRQ_HANDLER" redefined
+   #define HAL_GPIO_IRQ_HANDLER(name)  ISR(name##_vect)
+ 
+In file included from grbl/platform/hal.h:146:0,
+                 from grbl/grbl.h:49,
+                 from grbl/print.c:22:
+grbl/platform/atmega328p/platform.h:134:0: note: this is the location of the previous definition
+ #define HAL_GPIO_IRQ_HANDLER(int_name)          ISR(int_name##_vect)
+ 
+/root/avr-toolchain/avr/bin/avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -Igrbl -Igrbl/platform -ffunction-sections -include grbl/platform/common/gpio.h -MMD -MP -c grbl/probe.c -o build/probe.o
+In file included from grbl/platform/hal.h:182:0,
+                 from grbl/grbl.h:49,
+                 from grbl/probe.c:21:
+grbl/platform/hal_gpio.h:220:0: warning: "HAL_GPIO_IRQ_HANDLER" redefined
+   #define HAL_GPIO_IRQ_HANDLER(name)  ISR(name##_vect)
+ 
+In file included from grbl/platform/hal.h:146:0,
+                 from grbl/grbl.h:49,
+                 from grbl/probe.c:21:
+grbl/platform/atmega328p/platform.h:134:0: note: this is the location of the previous definition
+ #define HAL_GPIO_IRQ_HANDLER(int_name)          ISR(int_name##_vect)
+ 
+/root/avr-toolchain/avr/bin/avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -Igrbl -Igrbl/platform -ffunction-sections -include grbl/platform/common/gpio.h -MMD -MP -c grbl/report.c -o build/report.o
+In file included from grbl/platform/hal.h:182:0,
+                 from grbl/grbl.h:49,
+                 from grbl/report.c:29:
+grbl/platform/hal_gpio.h:220:0: warning: "HAL_GPIO_IRQ_HANDLER" redefined
+   #define HAL_GPIO_IRQ_HANDLER(name)  ISR(name##_vect)
+ 
+In file included from grbl/platform/hal.h:146:0,
+                 from grbl/grbl.h:49,
+                 from grbl/report.c:29:
+grbl/platform/atmega328p/platform.h:134:0: note: this is the location of the previous definition
+ #define HAL_GPIO_IRQ_HANDLER(int_name)          ISR(int_name##_vect)
+ 
+/root/avr-toolchain/avr/bin/avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -Igrbl -Igrbl/platform -ffunction-sections -include grbl/platform/common/gpio.h -MMD -MP -c grbl/system.c -o build/system.o
+In file included from grbl/platform/hal.h:182:0,
+                 from grbl/grbl.h:49,
+                 from grbl/system.c:21:
+grbl/platform/hal_gpio.h:220:0: warning: "HAL_GPIO_IRQ_HANDLER" redefined
+   #define HAL_GPIO_IRQ_HANDLER(name)  ISR(name##_vect)
+ 
+In file included from grbl/platform/hal.h:146:0,
+                 from grbl/grbl.h:49,
+                 from grbl/system.c:21:
+grbl/platform/atmega328p/platform.h:134:0: note: this is the location of the previous definition
+ #define HAL_GPIO_IRQ_HANDLER(int_name)          ISR(int_name##_vect)
+ 
+/root/avr-toolchain/avr/bin/avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -Igrbl -Igrbl/platform -ffunction-sections -include grbl/platform/common/gpio.h -o build/main.elf build/main.o build/motion_control.o build/gcode.o build/spindle_control.o build/coolant_control.o build/serial.o build/protocol.o build/stepper.o build/nvmem.o build/settings.o build/planner.o build/nuts_bolts.o build/limits.o build/jog.o build/print.o build/probe.o build/report.o build/system.o -lm -Wl,--gc-sections
+rm -f grbl.hex
+/root/avr-toolchain/avr/bin/avr-objcopy -j .text -j .data -O ihex build/main.elf grbl.hex
+/root/avr-toolchain/avr/bin/avr-size --format=berkeley build/main.elf
+   text	   data	    bss	    dec	    hex	filename
+  30644	      0	   1633	  32277	   7e15	build/main.elf
