@@ -573,13 +573,13 @@ void st_reset()
 void stepper_init()
 {
   // Configure step and direction interface pins
-  GPIO_OUT(STEP_DDR, STEP_MASK);
+  GPIO_MDIR_OUT( STEP );
   GPIO_SET_OUT(STEPPERS_DISABLE);
-  GPIO_OUT(DIRECTION_DDR, DIRECTION_MASK);
+  GPIO_MDIR_OUT( DIRECTION );
 
   #ifdef ENABLE_DUAL_AXIS
-    GPIO_OUT(STEP_DDR_DUAL, STEP_MASK_DUAL);
-    GPIO_OUT(DIRECTION_DDR_DUAL, DIRECTION_MASK_DUAL);
+    GPIO_MDIR_OUT( STEP_DUAL );
+    GPIO_MDIR_OUT( DIRECTION_DUAL );
   #endif
 
   // Configure Timer 1: Stepper Driver Interrupt

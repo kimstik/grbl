@@ -120,6 +120,23 @@
  #define GPIO_PULLUP_DIS(name)	GPIO_BWR( name, PREG, CLR )
 #endif
 
+// Multi-bit versions (for composite masks like STEP_MASK, LIMIT_MASK)
+#if !defined(GPIO_MDIR_OUT)
+ #define GPIO_MDIR_OUT(name)	GPIO_MWR( name, DREG, SET )	// Set multiple gpio pins as output
+#endif
+
+#if !defined(GPIO_MDIR_INP)
+ #define GPIO_MDIR_INP(name)	GPIO_MWR( name, DREG, CLR )	// Set multiple gpio pins as input
+#endif
+
+#if !defined(GPIO_MPULLUP_EN)
+ #define GPIO_MPULLUP_EN(name)	GPIO_MWR( name, PREG, SET )	// Enable pullup on multiple gpio pins
+#endif
+
+#if !defined(GPIO_MPULLUP_DIS)
+ #define GPIO_MPULLUP_DIS(name)	GPIO_MWR( name, PREG, CLR )	// Disable pullup on multiple gpio pins
+#endif
+
 #if !defined(GPIO_BGET)
 // #define GPIO_BGET(name) 	 	( !(GPIO_IREG(name) & BIT_MSK(name##_BIT)) != 0 )	// GPIO pin get/read (LIMIT/CONTROL/PROBE)
  #define GPIO_BGET(name) 	 	( !(GPIO_BRD(name, IREG)) != 0 )	// GPIO pin get/read (LIMIT/CONTROL/PROBE)

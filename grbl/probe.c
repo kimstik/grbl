@@ -29,11 +29,11 @@ uint8_t probe_invert_mask;
 // Probe pin initialization routine.
 void probe_init()
 {
-  GPIO_IN(PROBE_DDR, PROBE_MASK);
+  GPIO_MDIR_INP( PROBE );
   #ifdef DISABLE_PROBE_PIN_PULL_UP
-    GPIO_PULLUP_OFF(PROBE_PORT, PROBE_MASK);
+    GPIO_MPULLUP_DIS( PROBE );
   #else
-    GPIO_PULLUP_ON(PROBE_PORT, PROBE_MASK);
+    GPIO_MPULLUP_EN( PROBE );
   #endif
   probe_configure_invert_mask(false); // Initialize invert mask.
 }

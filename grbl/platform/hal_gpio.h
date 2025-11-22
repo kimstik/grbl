@@ -228,8 +228,9 @@ typedef enum {
 */
 
 // GPIO direction shortcuts
-#define GPIO_OUT(port, mask)     HAL_GPIO_SET_OUTPUT(port, mask)
-#define GPIO_IN(port, mask)      HAL_GPIO_SET_INPUT(port, mask)
+// Replaced by gpio.h abstractions:
+// #define GPIO_OUT(port, mask)     HAL_GPIO_SET_OUTPUT(port, mask)   // → GPIO_MDIR_OUT(name)
+// #define GPIO_IN(port, mask)      HAL_GPIO_SET_INPUT(port, mask)    // → GPIO_MDIR_INP(name)
 
 // GPIO read/write shortcuts
 // Note: GPIO_RD signature varies: AVR uses (port, mask), others use (port)
@@ -244,8 +245,9 @@ typedef enum {
 #define GPIO_TGL(port, mask)     HAL_GPIO_TOGGLE_BITS(port, mask)
 
 // GPIO pullup shortcuts
-#define GPIO_PULLUP_ON(port, mask)   HAL_GPIO_PULLUP_ENABLE(port, mask)
-#define GPIO_PULLUP_OFF(port, mask)  HAL_GPIO_PULLUP_DISABLE(port, mask)
+// Replaced by gpio.h abstractions:
+// #define GPIO_PULLUP_ON(port, mask)   HAL_GPIO_PULLUP_ENABLE(port, mask)    // → GPIO_MPULLUP_EN(name)
+// #define GPIO_PULLUP_OFF(port, mask)  HAL_GPIO_PULLUP_DISABLE(port, mask)   // → GPIO_MPULLUP_DIS(name)
 
 // GPIO interrupt shortcuts
 #define GPIO_INT_ON(pcmsk, int_flag, mask)   HAL_GPIO_INTERRUPT_ENABLE(pcmsk, int_flag, mask)
