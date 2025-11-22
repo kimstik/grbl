@@ -77,10 +77,10 @@ CFLAGS += $(CFLAGS_EXTRA) -I$(PLATFORM_DIR) -I$(COMMON_DIR) -I$(GRBL_DIR)/platfo
 ifeq ($(BUILD),RELEASE)
   CFLAGS += -Os -g0
   CFLAGS += -flto -fno-fat-lto-objects
-  CFLAGS += -DENABLE_WATCHDOG
-  CFLAGS += -DNDEBUG
+  CFLAGS += -DWATCHDOG_ENABLE
 else
   CFLAGS += -O0 -g3
+  CFLAGS += -DDEBUG
 endif
 
 # Linker flags

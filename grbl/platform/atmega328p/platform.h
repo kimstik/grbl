@@ -67,15 +67,6 @@
   #define SERIAL_UDRE   USART_UDRE_vect
 #endif
 
-// ============================================================================
-// PLATFORM-SPECIFIC INITIALIZATION
-// ============================================================================
-
-// Platform initialization (called before main)
-// For AVR: Nothing needed (Arduino bootloader handles it)
-static inline void hal_system_init(void) {
-  // No-op for AVR
-}
 
 // ============================================================================
 // TIMING FUNCTIONS (AVR-specific implementations)

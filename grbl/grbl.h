@@ -54,6 +54,7 @@
 
 #include "planner.h"
 #include "coolant_control.h"
+#include "eeprom.h"
 #include "nvmem.h"
 #include "gcode.h"
 #include "limits.h"

@@ -15,22 +15,6 @@
 #include "config.h"
 
 // ============================================================================
-// PLATFORM INFO
-// ============================================================================
-
-const hal_platform_info_t stm32_platform_info = {
-  .name          = "STM32F103C8T6",
-  .cpu           = "ARM Cortex-M3",
-  .cpu_freq_hz   = 72000000,
-  .ram_bytes     = 20480,
-  .flash_bytes   = 65536
-};
-
-const hal_platform_info_t* hal_platform_get_info(void) {
-  return &stm32_platform_info;
-}
-
-// ============================================================================
 // SYSTEM TIMING (SysTick-based millisecond counter)
 // ============================================================================
 
