@@ -234,8 +234,9 @@ typedef enum {
 // GPIO read/write shortcuts
 // Note: GPIO_RD signature varies: AVR uses (port, mask), others use (port)
 #define GPIO_RD(...)                   HAL_GPIO_READ_PORT(__VA_ARGS__)
-#define GPIO_WR(port, mask, value)     HAL_GPIO_WRITE_PORT(port, mask, value)
-#define GPIO_PIN_RD(port, pin)         HAL_GPIO_READ_PIN(port, pin)
+// Replaced by gpio.h abstractions:
+// #define GPIO_WR(port, mask, value)     HAL_GPIO_WRITE_PORT(port, mask, value)     // → GPIO_MWO(name, val)
+// #define GPIO_PIN_RD(port, pin)         HAL_GPIO_READ_PIN(port, pin)               // → GPIO_BRD(name, OREG/IREG)
 
 // GPIO set/clear (multi-bit)
 #define GPIO_SET(port, mask)     HAL_GPIO_SET_BITS(port, mask)
@@ -253,7 +254,7 @@ typedef enum {
 // GPIO ISR handler
 #define GPIO_ISR(name)  HAL_GPIO_IRQ_HANDLER(name)
 
-// Direct port write (bypasses port manipulation)
-#define GPIO_WR_DIRECT(port, value)  HAL_GPIO_WRITE_DIRECT(port, value)
+// Replaced by gpio.h abstractions:
+// #define GPIO_WR_DIRECT(port, value)  HAL_GPIO_WRITE_DIRECT(port, value)  // → GPIO_OREG(name) = val
 
 #endif // HAL_GPIO_H
