@@ -55,7 +55,7 @@ GRBL_SOURCES = main.c motion_control.c gcode.c spindle_control.c coolant_control
                print.c probe.c report.c system.c
 
 # Platform-specific sources
-PLATFORM_SOURCES = platform.c startup.c handlers.c
+PLATFORM_SOURCES = platform.c startup.c handlers.c serial.c nvmem.c
 
 # All sources
 SOURCES = $(addprefix $(GRBL_DIR)/,$(GRBL_SOURCES)) \
