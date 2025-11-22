@@ -24,9 +24,9 @@
 
 void coolant_init()
 {
-  GPIO_SET_OUT(COOLANT_FLOOD);
+  GPIO_DIR_OUT(COOLANT_FLOOD);
   #ifdef ENABLE_M7
-    GPIO_SET_OUT(COOLANT_MIST);
+    GPIO_DIR_OUT(COOLANT_MIST);
   #endif
   coolant_stop();
 }

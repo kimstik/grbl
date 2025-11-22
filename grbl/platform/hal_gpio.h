@@ -167,18 +167,8 @@ typedef enum {
 */
 
 // ============================================================================
-// GPIO MACROS FOR INIT CODE (Single-bit operations on _DDR)
+// GPIO HELPER MACROS
 // ============================================================================
-
-// Set single bit as output - Used in init code
-#if !defined(GPIO_SET_OUT)
-  #define GPIO_SET_OUT(name)  HAL_GPIO_SET_OUTPUT(name##_DDR, (1<<name##_BIT))
-#endif
-
-// Set single bit as input - Used in init code
-#if !defined(GPIO_SET_INP)
-  #define GPIO_SET_INP(name)  HAL_GPIO_SET_INPUT(name##_DDR, (1<<name##_BIT))
-#endif
 
 // Helper macro for pin definition (concatenates PORT and BIT as two separate args)
 #define PIN(name)  name##_PORT, name##_BIT
