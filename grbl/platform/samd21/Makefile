@@ -23,6 +23,9 @@ BOARD         ?= megarm
 # Platform-specific avr/ overrides common/dummy/avr/
 CFLAGS_EXTRA   = -I. -I../common/dummy -I$(BOARD)
 
+# Auto-include gpio.h for all platforms (invisible porting)
+CFLAGS_EXTRA  += -include ../common/gpio.h
+
 # Include board-specific config
 CFLAGS_EXTRA  += -include $(BOARD)/config.h
 
