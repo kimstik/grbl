@@ -142,4 +142,8 @@
  #define GPIO_BGET(name) 	 	( !(GPIO_BRD(name, IREG)) != 0 )	// GPIO pin get/read (LIMIT/CONTROL/PROBE)
 #endif
 
+#if !defined(GPIO_BGETOUT)
+ #define GPIO_BGETOUT(name) 	GPIO_BRD(name, OREG)	// GPIO output pin state read (COOLANT/SPINDLE)
+#endif
+
 #endif // GPIO_H

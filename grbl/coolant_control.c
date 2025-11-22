@@ -37,17 +37,17 @@ uint8_t coolant_get_state()
 {
   uint8_t cl_state = COOLANT_STATE_DISABLE;
   #ifdef INVERT_COOLANT_FLOOD_PIN
-    if (!GPIO_BRD( COOLANT_FLOOD, OREG )) {
+    if (!GPIO_BGETOUT( COOLANT_FLOOD )) {
   #else
-    if (GPIO_BRD( COOLANT_FLOOD, OREG )) {
+    if (GPIO_BGETOUT( COOLANT_FLOOD )) {
   #endif
     cl_state |= COOLANT_STATE_FLOOD;
   }
   #ifdef ENABLE_M7
     #ifdef INVERT_COOLANT_MIST_PIN
-      if (!GPIO_BRD( COOLANT_MIST, OREG )) {
+      if (!GPIO_BGETOUT( COOLANT_MIST )) {
     #else
-      if (GPIO_BRD( COOLANT_MIST, OREG )) {
+      if (GPIO_BGETOUT( COOLANT_MIST )) {
     #endif
       cl_state |= COOLANT_STATE_MIST;
     }
