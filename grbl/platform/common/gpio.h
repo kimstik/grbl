@@ -67,7 +67,8 @@
 
 // TODO: BWR/BRD potom pereiminuem v RD/WR (kogra izbavimsya ot HAL kolliziy)
 #define GPIO_BWR(name, reg, op)		BIT_##op( GPIO_##reg(name), name##_BIT )	//	bit write op
-#define GPIO_BRD(name, reg    )		( GPIO_##reg(name) & BIT_MSK(name##_BIT) )	//	bit read 
+#define GPIO_BRD(name, reg    )		( GPIO_##reg(name) & BIT_MSK(name##_BIT) )	//	bit read
+#define GPIO_MRD(name, reg    )		( GPIO_##reg(name) & name##_MASK )	//	read by mask 
 
 // __scratch__, keepme
 //#define GPIO_PSET(port, val)  { GPIO_OREG(port) = (val); }				// GPIO port write
