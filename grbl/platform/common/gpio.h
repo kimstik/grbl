@@ -23,6 +23,10 @@
 #define BIT_CLR(x, nbit)	((x) &= ~BIT_MSK(nbit))
 #define BIT_TGL(x, nbit)	((x) ^=  BIT_MSK(nbit))
 
+#define MSK_SET(x, mask)	((x) |=  (mask))
+#define MSK_CLR(x, mask)	((x) &= ~(mask))
+#define MSK_TGL(x, mask)	((x) ^=  (mask))
+
 // -- temporal workaround part --
 
 #ifdef __AVR__	// in the far future it have to be dropped. keep it for the momemt for initial integritiy check
@@ -68,6 +72,7 @@
 // TODO: BWR/BRD potom pereiminuem v RD/WR (kogra izbavimsya ot HAL kolliziy)
 #define GPIO_BWR(name, reg, op)		BIT_##op( GPIO_##reg(name), name##_BIT )	//	bit write op
 #define GPIO_BRD(name, reg    )		( GPIO_##reg(name) & BIT_MSK(name##_BIT) )	//	bit read
+#define GPIO_MWR(name, reg, op)		MSK_##op( GPIO_##reg(name), name##_MASK )	//	mask write op
 #define GPIO_MRD(name, reg    )		( GPIO_##reg(name) & name##_MASK )	//	read by mask 
 
 // __scratch__, keepme
@@ -84,27 +89,33 @@
 #endif
 
 #if !defined(GPIO_BCLR)
- #define GPIO_BCLR(name)  		BIT_CLR( GPIO_OREG(name), name##_BIT )	// Clear  gpio pin ( = 0)
+// #define GPIO_BCLR(name)  		BIT_CLR( GPIO_OREG(name), name##_BIT )	// Clear  gpio pin ( = 0)
+ #define GPIO_BCLR(name)  		GPIO_BWR( name, OREG, CLR )	// Clear  gpio pin ( = 0)
 #endif
 
 #if !defined(GPIO_BTGL)
- #define GPIO_BTGL(name)  		BIT_TGL( GPIO_OREG(name), name##_BIT )	// Toggle gpio pin
+// #define GPIO_BTGL(name)  		BIT_TGL( GPIO_OREG(name), name##_BIT )	// Toggle gpio pin
+ #define GPIO_BTGL(name)  		GPIO_BWR( name, OREG, TGL )	// Toggle gpio pin
 #endif
 
 #if !defined(GPIO_DIR_OUT)
- #define GPIO_DIR_OUT(name)  	BIT_SET( GPIO_DREG(name), name##_BIT )	// Set gpio pin as output
+// #define GPIO_DIR_OUT(name)  	BIT_SET( GPIO_DREG(name), name##_BIT )	// Set gpio pin as output
+ #define GPIO_DIR_OUT(name)  	GPIO_BWR( name, DREG, SET )	// Set gpio pin as output
 #endif
 
 #if !defined(GPIO_DIR_INP)
- #define GPIO_DIR_INP(name)  	BIT_CLR( GPIO_DREG(name), name##_BIT )	// Set gpio pin as input
+// #define GPIO_DIR_INP(name)  	BIT_CLR( GPIO_DREG(name), name##_BIT )	// Set gpio pin as input
+ #define GPIO_DIR_INP(name)  	GPIO_BWR( name, DREG, CLR )	// Set gpio pin as input
 #endif
 
 #if !defined(GPIO_PULLUP_EN)
- #define GPIO_PULLUP_EN( name)	BIT_SET( GPIO_PREG(name),  name##_BIT )	// GPIO pin pull-up enable
+// #define GPIO_PULLUP_EN( name)	BIT_SET( GPIO_PREG(name),  name##_BIT )	// GPIO pin pull-up enable
+ #define GPIO_PULLUP_EN( name)	GPIO_BWR( name, PREG, SET )	// GPIO pin pull-up enable
 #endif
 
 #if !defined(GPIO_PULLUP_DIS)
- #define GPIO_PULLUP_DIS(name)	BIT_CLR( GPIO_PREG(name),  name##_BIT )
+// #define GPIO_PULLUP_DIS(name)	BIT_CLR( GPIO_PREG(name),  name##_BIT )
+ #define GPIO_PULLUP_DIS(name)	GPIO_BWR( name, PREG, CLR )
 #endif
 
 #if !defined(GPIO_BGET)
