@@ -69,7 +69,7 @@ uint8_t spindle_get_state()
         #ifdef ENABLE_DUAL_AXIS
           return(SPINDLE_STATE_CW);
         #else
-          if (GPIO_PIN_RD(SPINDLE_DIRECTION_PORT, (1<<SPINDLE_DIRECTION_BIT))) { return(SPINDLE_STATE_CCW); }
+          if (GPIO_BRD( SPINDLE_DIRECTION, OREG )) { return(SPINDLE_STATE_CCW); }
           else { return(SPINDLE_STATE_CW); }
         #endif
       }
@@ -83,7 +83,7 @@ uint8_t spindle_get_state()
       #ifdef ENABLE_DUAL_AXIS    
         return(SPINDLE_STATE_CW);
       #else
-        if (GPIO_PIN_RD(SPINDLE_DIRECTION_PORT, (1<<SPINDLE_DIRECTION_BIT))) { return(SPINDLE_STATE_CCW); }
+        if (GPIO_BRD( SPINDLE_DIRECTION, OREG )) { return(SPINDLE_STATE_CCW); }
         else { return(SPINDLE_STATE_CW); }
       #endif
     }

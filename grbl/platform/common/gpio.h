@@ -74,6 +74,7 @@
 #define GPIO_BRD(name, reg    )		( GPIO_##reg(name) & BIT_MSK(name##_BIT) )	//	bit read
 #define GPIO_MWR(name, reg, op)		MSK_##op( GPIO_##reg(name), name##_MASK )	//	mask write op
 #define GPIO_MWV(name, reg, val)	( GPIO_##reg(name) = (GPIO_##reg(name) & ~name##_MASK) | (val) )	//	mask write value
+#define GPIO_MWO(name, val)			GPIO_MWV( name, OREG, val )	//	mask write OREG shorthand
 #define GPIO_MRD(name, reg    )		( GPIO_##reg(name) & name##_MASK )	//	read by mask 
 
 // __scratch__, keepme
