@@ -101,11 +101,9 @@
     // Define flood and mist coolant enable output pins.
     #define COOLANT_FLOOD_DDR   DDRC
     #define COOLANT_FLOOD_PORT  PORTC
-    #define COOLANT_FLOOD_PIN   PINC
     #define COOLANT_FLOOD_BIT   3  // Uno Analog Pin 3
     #define COOLANT_MIST_DDR   DDRC
     #define COOLANT_MIST_PORT  PORTC
-    #define COOLANT_MIST_PIN   PINC
     #define COOLANT_MIST_BIT   4  // Uno Analog Pin 4
 
     // Define spindle enable and spindle direction output pins.
@@ -125,7 +123,6 @@
     #ifndef USE_SPINDLE_DIR_AS_ENABLE_PIN
       #define SPINDLE_DIRECTION_DDR   DDRB
       #define SPINDLE_DIRECTION_PORT  PORTB
-      #define SPINDLE_DIRECTION_PIN   PINB
       #define SPINDLE_DIRECTION_BIT   5  // Uno Digital Pin 13 (NOTE: D13 can't be pulled-high input due to LED.)
     #endif
 

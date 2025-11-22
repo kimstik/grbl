@@ -51,7 +51,7 @@ void probe_configure_invert_mask(uint8_t is_probe_away)
 
 
 // Returns the probe pin state. Triggered = true. Called by gcode parser and probe state monitor.
-uint8_t probe_get_state() { return(GPIO_RD(PROBE_PIN, PROBE_MASK) ^ probe_invert_mask); }
+uint8_t probe_get_state() { return(GPIO_MRD( PROBE, IREG ) ^ probe_invert_mask); }
 
 
 // Monitors probe pin state and records the system position when detected. Called by the

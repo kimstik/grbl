@@ -74,7 +74,7 @@ void limits_disable()
 uint8_t limits_get_state()
 {
   uint8_t limit_state = 0;
-  uint8_t pin = GPIO_RD(LIMIT_PIN, LIMIT_MASK);
+  uint8_t pin = GPIO_MRD( LIMIT, IREG );
   #ifdef INVERT_LIMIT_PIN_MASK
     pin ^= INVERT_LIMIT_PIN_MASK;
   #endif
