@@ -70,9 +70,10 @@ BUILD ?= DEBUG
 ifeq ($(BUILD),RELEASE)
   CFLAGS += -Os -g0
   CFLAGS += -flto -fno-fat-lto-objects
-  CFLAGS += -DNDEBUG
+  CFLAGS += -DWATCHDOG_ENABLE
 else
   CFLAGS += -O0 -g3
+  CFLAGS += -DDEBUG
 endif
 
 # Linker flags

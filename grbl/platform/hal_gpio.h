@@ -103,15 +103,6 @@
 #endif
 
 // ============================================================================
-// GPIO INITIALIZATION
-// ============================================================================
-
-// Initialize GPIO subsystem
-// For AVR: No-op (ports are ready at boot)
-// For others: Enable GPIO clocks, configure ports
-void hal_gpio_init(void);
-
-// ============================================================================
 // GPIO INTERRUPTS (External Interrupts / Pin Change Interrupts)
 // ============================================================================
 
@@ -171,7 +162,7 @@ typedef enum {
 // ============================================================================
 
 // Helper macro for pin definition (concatenates PORT and BIT as two separate args)
-#define PIN(name)  name##_PORT, name##_BIT
+//#define PIN(name)  name##_PORT, name##_BIT
 
 // ============================================================================
 // GPIO INTERRUPT MACROS (AVR-specific)

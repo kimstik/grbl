@@ -9,8 +9,8 @@
   SAMD21G18A: ARM Cortex-M0+, 48MHz, 32KB RAM, 256KB Flash
 */
 
-#include "../hal.h"
 #include "platform.h"
+#include "../hal.h"
 #include "config.h"
 
 // ============================================================================
@@ -30,22 +30,6 @@ uint32_t hal_critical_enter(void) {
 
 void hal_critical_exit(uint32_t state) {
   __asm volatile ("MSR primask, %0" : : "r" (state) : "memory");
-}
-
-// ============================================================================
-// PLATFORM INFO
-// ============================================================================
-
-const hal_platform_info_t samd21_platform_info = {
-  .name = PLATFORM_NAME,
-  .cpu = PLATFORM_CPU,
-  .cpu_freq_hz = PLATFORM_CPU_FREQ,
-  .ram_bytes = PLATFORM_RAM_SIZE,
-  .flash_bytes = PLATFORM_FLASH_SIZE
-};
-
-const hal_platform_info_t* hal_platform_get_info(void) {
-  return &samd21_platform_info;
 }
 
 // ============================================================================
@@ -106,200 +90,6 @@ void hal_clock_config(void) {
   while (GCLK->STATUS & GCLK_STATUS_SYNCBUSY);
 }
 
-// ============================================================================
-// GPIO INITIALIZATION
-// ============================================================================
-
-// ISSUE #5 (MAJOR): This entire function uses old-style direct PORT manipulation
-// TODO: Rewrite using new GPIO_SET_OUT(), GPIO_BSET(), GPIO_BCLR() macros
-// Example: Instead of PORT->Group[].DIRSET = (1 << PIN)
-//          Use: GPIO_SET_OUT(X_DIRECTION)
-//
-// Lines to update:
-// - 115-116: Direction pins (3 pins)
-// - 119-120: Step pins (3 pins)
-// - 123-124: Stepper enable (1 pin)
-// - 127-131: Limit switches (3 pins)
-// - 134-138: Control pins (3 pins)
-// - 141-143: Probe pin (1 pin)
-// - 146-147: Spindle direction (1 pin)
-// - 152-157: Coolant pins (1-2 pins)
-
-void hal_gpio_init(void) {
-  // Initialize all GPIO pins used by GRBL
-
-  // Enable PORT clock
-  PM->APBBMASK |= PM_APBBMASK_PORT;
-
-  // ISSUE #5: OLD STYLE - should use GPIO_SET_OUT(X_DIRECTION) etc.
-  // Configure direction pins as outputs (PA0, PA1, PA2)
-  PORT->Group[PORT_GROUPA].DIRSET = DIRECTION_MASK;
-  PORT->Group[PORT_GROUPA].OUTCLR = DIRECTION_MASK;  // Start low
-
-  // Configure step pins as outputs (PA25, PA27, PA28)
-  PORT->Group[PORT_GROUPA].DIRSET = STEP_MASK;
-  PORT->Group[PORT_GROUPA].OUTCLR = STEP_MASK;  // Start low
-
-  // Configure stepper enable pin as output (PA3)
-  PORT->Group[PORT_GROUPA].DIRSET = STEPPERS_DISABLE_MASK;
-  PORT->Group[PORT_GROUPA].OUTSET = STEPPERS_DISABLE_MASK;  // Start disabled (active low)
-
-  // Configure limit switch pins as inputs with pullups (PA4, PA5, PA7)
-  PORT->Group[PORT_GROUPA].DIRCLR = LIMIT_MASK_A;
-  PORT->Group[PORT_GROUPA].PINCFG[X_LIMIT_BIT] = PORT_PINCFG_INEN | PORT_PINCFG_PULLEN;
-  PORT->Group[PORT_GROUPA].PINCFG[Y_LIMIT_BIT] = PORT_PINCFG_INEN | PORT_PINCFG_PULLEN;
-  PORT->Group[PORT_GROUPA].PINCFG[Z_LIMIT_BIT] = PORT_PINCFG_INEN | PORT_PINCFG_PULLEN;
-  PORT->Group[PORT_GROUPA].OUTSET = LIMIT_MASK_A;  // Enable pullups
-
-  // Configure control pins as inputs with pullups (PA14, PA15, PA16)
-  PORT->Group[PORT_GROUPA].DIRCLR = CONTROL_MASK_A;
-  PORT->Group[PORT_GROUPA].PINCFG[CONTROL_RESET_BIT] = PORT_PINCFG_INEN | PORT_PINCFG_PULLEN;
-  PORT->Group[PORT_GROUPA].PINCFG[CONTROL_FEED_HOLD_BIT] = PORT_PINCFG_INEN | PORT_PINCFG_PULLEN;
-  PORT->Group[PORT_GROUPA].PINCFG[CONTROL_CYCLE_START_BIT] = PORT_PINCFG_INEN | PORT_PINCFG_PULLEN;
-  PORT->Group[PORT_GROUPA].OUTSET = CONTROL_MASK_A;  // Enable pullups
-
-  // Configure probe pin as input with pullup (PA19)
-  PORT->Group[PORT_GROUPA].DIRCLR = PROBE_MASK;
-  PORT->Group[PORT_GROUPA].PINCFG[PROBE_BIT] = PORT_PINCFG_INEN | PORT_PINCFG_PULLEN;
-  PORT->Group[PORT_GROUPA].OUTSET = PROBE_MASK;  // Enable pullup
-
-  // Configure spindle direction/enable pin as output (PA8)
-  PORT->Group[PORT_GROUPA].DIRSET = (1 << SPINDLE_DIRECTION_BIT);
-  PORT->Group[PORT_GROUPA].OUTCLR = (1 << SPINDLE_DIRECTION_BIT);  // Start low
-
-  // Spindle PWM pin will be configured by hal_spindle_pwm_init()
-
-  // Configure coolant pins as outputs (PA17, PA18)
-  PORT->Group[PORT_GROUPA].DIRSET = (1 << COOLANT_FLOOD_BIT);
-  PORT->Group[PORT_GROUPA].OUTCLR = (1 << COOLANT_FLOOD_BIT);  // Start off
-#ifdef ENABLE_M7
-  PORT->Group[PORT_GROUPA].DIRSET = (1 << COOLANT_MIST_BIT);
-  PORT->Group[PORT_GROUPA].OUTCLR = (1 << COOLANT_MIST_BIT);  // Start off
-#endif
-}
-
-// ============================================================================
-// SYSTEM INITIALIZATION
-// ============================================================================
-
-void hal_system_init(void) {
-  // Initialize system
-  hal_clock_config();
-
-  // ISSUE #1 (CRITICAL): SysTick timer is DISABLED!
-  // This breaks hal_millis(), hal_micros(), and all timing functions
-  // Dwell times, feed rates, delays won't work correctly
-  // TODO: UNCOMMENT THIS LINE!
-  // SysTick_Config(CPU_FREQ / 1000);
-
-  // Initialize GPIO
-  hal_gpio_init();
-
-  // ISSUE #1 (CRITICAL): Interrupts are DISABLED!
-  // This prevents SysTick and all other interrupts from working
-  // TODO: UNCOMMENT THIS LINE!
-  // __enable_irq();
-}
-
-// ============================================================================
-// GPIO FUNCTIONS
-// ============================================================================
-/*  FIXME> this block have no sence. to be removed. all is done in /common/gpio.h
-void hal_gpio_set_pin(hal_gpio_port_t port, uint8_t pin) {
-  // Set pin high
-  if (pin < 32) {
-    PORT->Group[port].OUTSET = (1UL << pin);
-  }
-}
-
-void hal_gpio_clear_pin(hal_gpio_port_t port, uint8_t pin) {
-  // Set pin low
-  if (pin < 32) {
-    PORT->Group[port].OUTCLR = (1UL << pin);
-  }
-}
-
-void hal_gpio_toggle_pin(hal_gpio_port_t port, uint8_t pin) {
-  // Toggle pin
-  if (pin < 32) {
-    PORT->Group[port].OUTTGL = (1UL << pin);
-  }
-}
-
-bool hal_gpio_read_pin(hal_gpio_port_t port, uint8_t pin) {
-  // Read pin state
-  if (pin < 32) {
-    return (PORT->Group[port].IN & (1UL << pin)) ? true : false;
-  }
-  return false;
-}
-
-uint32_t hal_gpio_read_port(hal_gpio_port_t port) {
-  // Read entire port
-  return PORT->Group[port].IN;
-}
-
-void hal_gpio_write_port(hal_gpio_port_t port, uint32_t mask, uint32_t value) {
-  // ISSUE #9 (MODERATE): Thread-safety problem!
-  // Read-modify-write is NOT atomic - can corrupt if called from ISR
-  // TODO: Use OUTSET/OUTCLR instead, or wrap in critical section:
-  //   if (value) PORT->Group[port].OUTSET = mask;
-  //   else       PORT->Group[port].OUTCLR = mask;
-  PORT->Group[port].OUT = (PORT->Group[port].OUT & ~mask) | (value & mask);
-}
-
-void hal_gpio_set_output(hal_gpio_port_t port, uint32_t mask) {
-  // Set pins as outputs
-  PORT->Group[port].DIRSET = mask;
-}
-
-void hal_gpio_set_input(hal_gpio_port_t port, uint32_t mask) {
-  // Set pins as inputs
-  PORT->Group[port].DIRCLR = mask;
-}
-
-void hal_gpio_set_bits(hal_gpio_port_t port, uint32_t mask) {
-  // Set bits (output high)
-  PORT->Group[port].OUTSET = mask;
-}
-
-void hal_gpio_clear_bits(hal_gpio_port_t port, uint32_t mask) {
-  // Clear bits (output low)
-  PORT->Group[port].OUTCLR = mask;
-}
-
-void hal_gpio_toggle_bits(hal_gpio_port_t port, uint32_t mask) {
-  // Toggle bits
-  PORT->Group[port].OUTTGL = mask;
-}
-
-void hal_gpio_pullup_enable(hal_gpio_port_t port, uint32_t mask) {
-  // ISSUE #7 (MAJOR): Inefficient O(32) loop even for single bit!
-  // TODO: Use __builtin_ctz() to iterate only set bits:
-  //   while (mask) {
-  //     uint8_t pin = __builtin_ctz(mask);
-  //     PORT->Group[port].PINCFG[pin] |= PORT_PINCFG_PULLEN;
-  //     PORT->Group[port].OUTSET = (1UL << pin);
-  //     mask &= ~(1UL << pin);
-  //   }
-  for (uint8_t pin = 0; pin < 32; pin++) {
-    if (mask & (1UL << pin)) {
-      PORT->Group[port].PINCFG[pin] |= PORT_PINCFG_PULLEN;
-      PORT->Group[port].OUTSET = (1UL << pin);  // Set OUT bit for pullup
-    }
-  }
-}
-
-void hal_gpio_pullup_disable(hal_gpio_port_t port, uint32_t mask) {
-  // ISSUE #7 (MAJOR): Inefficient O(32) loop even for single bit!
-  // TODO: Use __builtin_ctz() to iterate only set bits (see above)
-  for (uint8_t pin = 0; pin < 32; pin++) {
-    if (mask & (1UL << pin)) {
-      PORT->Group[port].PINCFG[pin] &= ~PORT_PINCFG_PULLEN;
-    }
-  }
-}
-*/
 // ============================================================================
 // TIMER FUNCTIONS (Stepper Timer)
 // ============================================================================
@@ -444,33 +234,13 @@ void hal_watchdog_feed(void) {
 }
 
 // ============================================================================
-// DELAY FUNCTIONS
-// ============================================================================
-
-// ISSUE #6 (MAJOR): Inaccurate microsecond delay!
-// NOP loop timing varies with compiler optimization level (-O0, -Os, -O2)
-// The "/10" divisor is an arbitrary guess, not calibrated
-// Step pulse timing will be incorrect, affecting machine accuracy
-//
+// // AVR <util/delay.h>	DELAY FUNCTIONS
 // TODO: Use SysTick or TC timer for precise delays:
 // Option 1: Read SysTick->VAL and calculate elapsed ticks
 // Option 2: Use TC5 as microsecond counter (configure for 1MHz)
 // Option 3: Calibrate NOP loop at startup and adjust divisor
-void _delay_us(uint32_t us) {
-  // Simple delay loop - not accurate
-  volatile uint32_t count = us * (CPU_FREQ / 1000000) / 10;
-  while (count--) {
-    __asm__ volatile ("nop");
-  }
-}
-
-void _delay_ms(uint32_t ms) {
-  // Millisecond delay
-  while (ms--) {
-    _delay_us(1000);
-  }
-}
-
+void _delay_us(double __us) {}
+void _delay_ms(double __ms) {}
 // ============================================================================
 // INTERRUPT CONTROL
 // ============================================================================

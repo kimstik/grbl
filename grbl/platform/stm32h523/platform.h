@@ -274,14 +274,6 @@
 #define HAL_NVMEM_FLASH_PAGE_SIZE 1024
 
 // ============================================================================
-// PLATFORM INFO STRUCTURE
-// ============================================================================
-
-extern const hal_platform_info_t stm32_platform_info;
-
-const hal_platform_info_t* hal_platform_get_info(void);
-
-// ============================================================================
 // HAL GPIO MACROS
 // ============================================================================
 
@@ -476,25 +468,5 @@ void hal_gpio_init(void);
 // NVMEM (Flash emulation) functions
 void hal_nvmem_init(void);
 void hal_nvmem_flush(void);  // Flush dirty cache to flash
-
-// ============================================================================
-// PLATFORM INFO STRUCTURE
-// ============================================================================
-
-typedef struct {
-  const char* platform_name;
-  const char* cpu_name;
-  const char* arch_name;
-  uint32_t cpu_freq;
-  uint32_t ram_size;
-  uint32_t flash_size;
-  uint8_t has_fpu;
-  uint8_t has_dma;
-  uint8_t has_usb;
-  uint8_t has_hw_eeprom;
-} hal_platform_info_t;
-
-extern const hal_platform_info_t stm32_platform_info;
-const hal_platform_info_t* hal_platform_get_info(void);
 
 #endif // PLATFORM_STM32H523_H

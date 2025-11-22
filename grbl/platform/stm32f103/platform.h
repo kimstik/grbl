@@ -295,12 +295,6 @@ typedef GPIO_TypeDef* hal_gpio_port_t;
 #define HAL_NVMEM_FLASH_PAGE_SIZE 1024
 
 // ============================================================================
-// PLATFORM INFO STRUCTURE
-// ============================================================================
-// Note: hal_platform_info_t is defined in hal_system.h
-// Declarations are provided by HAL headers
-
-// ============================================================================
 // HAL GPIO MACROS
 // ============================================================================
 
@@ -488,11 +482,6 @@ void hal_gpio_init(void);
 // NVMEM (Flash emulation) functions
 void hal_nvmem_init(void);
 void hal_nvmem_flush(void);  // Flush dirty cache to flash
-
-// ============================================================================
-// PLATFORM INFO
-// ============================================================================
-// Note: hal_platform_info_t typedef and declarations are in hal_system.h
 
 // ============================================================================
 // AVR COMPATIBILITY - cpu_map.h stubs

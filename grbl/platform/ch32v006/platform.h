@@ -315,30 +315,6 @@ static inline void hal_critical_exit(uint32_t state) {
   __asm__ volatile("csrw mstatus, %0" :: "r"(state));
 }
 
-// ============================================================================
-// PLATFORM INFO STRUCTURE
-// ============================================================================
-
-extern const hal_platform_info_t ch32v006_platform_info;
-
-const hal_platform_info_t* hal_platform_get_info(void);
-
-// ============================================================================
-// PLATFORM-SPECIFIC FUNCTIONS
-// ============================================================================
-
-// Platform initialization
-void hal_system_init(void);
-
-// Clock configuration (48 MHz internal RC)
-void hal_clock_config(void);
-
-// GPIO initialization
-void hal_gpio_init(void);
-
-// Timer functions
-uint32_t hal_millis(void);
-uint64_t hal_micros(void);
 
 // ============================================================================
 // OPTIMIZATION NOTES FOR CH32V006

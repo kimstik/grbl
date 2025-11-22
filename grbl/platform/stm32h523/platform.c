@@ -17,27 +17,6 @@
 #include "../common/stm32/stm32_watchdog.h"
 
 // ============================================================================
-// PLATFORM INFO
-// ============================================================================
-
-const hal_platform_info_t stm32_platform_info = {
-  .platform_name  = "STM32H523CBT6",
-  .cpu_name       = "ARM Cortex-M33",
-  .arch_name      = "ARM",
-  .cpu_freq       = 250000000,
-  .ram_size       = 32768,
-  .flash_size     = 131072,
-  .has_fpu        = 1,
-  .has_dma        = 1,
-  .has_usb        = 1,
-  .has_hw_eeprom  = 0
-};
-
-const hal_platform_info_t* hal_platform_get_info(void) {
-  return &stm32_platform_info;
-}
-
-// ============================================================================
 // PLATFORM CONFIGURATION INSTANCE
 // ============================================================================
 

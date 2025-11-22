@@ -21,7 +21,7 @@ BOARD         ?= megarm
 
 # Include paths (platform dir first to override common files)
 # Platform-specific avr/ overrides common/dummy/avr/
-CFLAGS_EXTRA   = -I. -I../common/dummy -I$(BOARD)
+CFLAGS_EXTRA   = -I. -I../common/dummy -I$(BOARD) 
 
 # Auto-include gpio.h for all platforms (invisible porting)
 # Platform-specific gpio.h MUST come before common/gpio.h
@@ -29,6 +29,8 @@ CFLAGS_EXTRA  += -include gpio.h -include ../common/gpio.h
 
 # Include board-specific config
 CFLAGS_EXTRA  += -include $(BOARD)/config.h
+
+CFLAGS_EXTRA  += -include platform.h
 
 # Toolchain
 TOOLCHAIN_PATH ?=
@@ -83,16 +85,17 @@ BUILD ?= DEBUG
 ifeq ($(BUILD),RELEASE)
   CFLAGS += -Os -g0
   CFLAGS += -flto -fno-fat-lto-objects
-  CFLAGS += -DNDEBUG
+  CFLAGS += -DWATCHDOG_ENABLE
 else
   CFLAGS += -O0 -g3
+  CFLAGS += -DDEBUG
 endif
 
 # Linker flags
 LDFLAGS  = -mcpu=$(CPU) -mthumb $(FPU)
 LDFLAGS += -Wl,--gc-sections
 LDFLAGS += -Wl,-Map=$(MAP_FILE)
-LDFLAGS += -specs=nano.specs -specs=nosys.specs
+#LDFLAGS += -specs=nano.specs -specs=nosys.specs
 LDFLAGS += -T script.ld
 
 # LTO for release builds

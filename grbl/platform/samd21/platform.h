@@ -50,11 +50,6 @@
 #define FLASH_SIZE        262144      // 256 KB
 #define EEPROM_SIZE       0           // No hardware EEPROM
 
-// PLATFORM_ naming
-#define PLATFORM_CPU_FREQ   CPU_FREQ
-#define PLATFORM_RAM_SIZE   RAM_SIZE
-#define PLATFORM_FLASH_SIZE FLASH_SIZE
-
 // Timer resolution
 #define HAL_TIMER_RESOLUTION_NS   20      // 20.8 ns @ 48 MHz
 
@@ -173,14 +168,8 @@ typedef uint32_t hal_gpio_port_t;
 // PLATFORM-SPECIFIC FUNCTIONS
 // ============================================================================
 
-// Platform initialization
-void hal_system_init(void);
-
 // Clock configuration (48 MHz from DFLL48M)
 void hal_clock_config(void);
-
-// GPIO initialization
-void hal_gpio_init(void);
 
 // Timer functions
 uint32_t hal_millis(void);
@@ -196,6 +185,17 @@ void hal_spindle_pwm_set(uint16_t value);
 // ============================================================================
 // AVR COMPATIBILITY LAYER
 // ============================================================================
+
+// SAMD21 ARM Cortex-M0+ interrupt control
+// Use inline assembly for direct CPSIE/CPSID instructions
+#define sei()  __asm volatile ("cpsie i" : : : "memory")
+#define cli()  __asm volatile ("cpsid i" : : : "memory")
+
+#define HAL_CRITICAL_SECTION_BEGIN()
+#define HAL_CRITICAL_SECTION_END()
+
+
+
 
 // ISSUE #12 (MODERATE): Confusing AVR compatibility definitions
 // These macros define meaningless zero values that confuse readers
