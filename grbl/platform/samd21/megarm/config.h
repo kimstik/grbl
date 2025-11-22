@@ -29,10 +29,8 @@
 // STEP PINS (D2, D3, D4 on Arduino Mega pinout)
 // ============================================================================
 
-// ISSUE #8 (MODERATE): Redundant PIN definitions
-// Every pin has both PIN and BIT defined with same value
-// This adds clutter without benefit - only BIT is needed
-// TODO: Remove all *_PIN definitions, use only *_BIT
+// ISSUE #8 (RESOLVED): Removed redundant PIN definitions
+// Only *_BIT definitions are used - cleaner and less error-prone
 
 #define X_STEP_PORT         PORT_GROUPA
 #define X_STEP_BIT          25   // PA25 (D2)
@@ -61,7 +59,7 @@
 #define Z_DIRECTION_BIT     2    // PA2 (D7)
 
 // Combined direction mask (all on PORT A)
-#define DIRECTION_MASK_A    ((1UL<<X_DIRECTION_PIN)|(1UL<<Y_DIRECTION_PIN)|(1UL<<Z_DIRECTION_PIN))
+#define DIRECTION_MASK_A    ((1UL<<X_DIRECTION_BIT)|(1UL<<Y_DIRECTION_BIT)|(1UL<<Z_DIRECTION_BIT))
 #define DIRECTION_MASK_B    0
 
 // ============================================================================
@@ -69,10 +67,9 @@
 // ============================================================================
 
 #define STEPPERS_DISABLE_PORT   PORT_GROUPA
-#define STEPPERS_DISABLE_PIN    3    // PA3 (B0)
-#define STEPPERS_DISABLE_BIT    3
+#define STEPPERS_DISABLE_BIT    3    // PA3 (B0)
 
-#define STEPPERS_DISABLE_MASK_A (1UL<<STEPPERS_DISABLE_PIN)
+#define STEPPERS_DISABLE_MASK_A (1UL<<STEPPERS_DISABLE_BIT)
 #define STEPPERS_DISABLE_MASK_B 0
 
 // ============================================================================
@@ -80,19 +77,16 @@
 // ============================================================================
 
 #define X_LIMIT_PORT        PORT_GROUPA
-#define X_LIMIT_PIN         4    // PA4 (B1)
-#define X_LIMIT_BIT         4
+#define X_LIMIT_BIT         4    // PA4 (B1)
 
 #define Y_LIMIT_PORT        PORT_GROUPA
-#define Y_LIMIT_PIN         5    // PA5 (B2)
-#define Y_LIMIT_BIT         5
+#define Y_LIMIT_BIT         5    // PA5 (B2)
 
 #define Z_LIMIT_PORT        PORT_GROUPA
-#define Z_LIMIT_PIN         7    // PA7 (B4)
-#define Z_LIMIT_BIT         7
+#define Z_LIMIT_BIT         7    // PA7 (B4)
 
 // Combined limit mask (all on PORT A)
-#define LIMIT_MASK_A        ((1UL<<X_LIMIT_PIN)|(1UL<<Y_LIMIT_PIN)|(1UL<<Z_LIMIT_PIN))
+#define LIMIT_MASK_A        ((1UL<<X_LIMIT_BIT)|(1UL<<Y_LIMIT_BIT)|(1UL<<Z_LIMIT_BIT))
 #define LIMIT_MASK_B        0
 
 // ============================================================================
@@ -100,23 +94,19 @@
 // ============================================================================
 
 #define CONTROL_RESET_PORT      PORT_GROUPA
-#define CONTROL_RESET_PIN       14   // PA14 (C0)
-#define CONTROL_RESET_BIT       14
+#define CONTROL_RESET_BIT       14   // PA14 (C0)
 
 #define CONTROL_FEED_HOLD_PORT  PORT_GROUPA
-#define CONTROL_FEED_HOLD_PIN   15   // PA15 (C1)
-#define CONTROL_FEED_HOLD_BIT   15
+#define CONTROL_FEED_HOLD_BIT   15   // PA15 (C1)
 
 #define CONTROL_CYCLE_START_PORT   PORT_GROUPA
-#define CONTROL_CYCLE_START_PIN    16   // PA16 (C2)
-#define CONTROL_CYCLE_START_BIT    16
+#define CONTROL_CYCLE_START_BIT    16   // PA16 (C2)
 
 #define CONTROL_SAFETY_DOOR_PORT   PORT_GROUPA
-#define CONTROL_SAFETY_DOOR_PIN    15   // PA15 (C1 - shared with FEED_HOLD)
-#define CONTROL_SAFETY_DOOR_BIT    15
+#define CONTROL_SAFETY_DOOR_BIT    15   // PA15 (C1 - shared with FEED_HOLD)
 
 // Combined control mask (all on PORT A)
-#define CONTROL_MASK_A      ((1UL<<CONTROL_RESET_PIN)|(1UL<<CONTROL_FEED_HOLD_PIN)|(1UL<<CONTROL_CYCLE_START_PIN))
+#define CONTROL_MASK_A      ((1UL<<CONTROL_RESET_BIT)|(1UL<<CONTROL_FEED_HOLD_BIT)|(1UL<<CONTROL_CYCLE_START_BIT))
 #define CONTROL_MASK_B      0
 
 #define CONTROL_INVERT_MASK CONTROL_MASK_A
@@ -126,10 +116,9 @@
 // ============================================================================
 
 #define PROBE_PORT          PORT_GROUPA
-#define PROBE_PIN           19   // PA19 (C5)
-#define PROBE_BIT           19
+#define PROBE_BIT           19   // PA19 (C5)
 
-#define PROBE_MASK_A        (1UL<<PROBE_PIN)
+#define PROBE_MASK_A        (1UL<<PROBE_BIT)
 #define PROBE_MASK_B        0
 
 // ============================================================================
@@ -137,17 +126,14 @@
 // ============================================================================
 
 #define SPINDLE_PWM_PORT       PORT_GROUPA
-#define SPINDLE_PWM_PIN        6    // PA6 (B3) - TCC0/WO[0]
-#define SPINDLE_PWM_BIT        6
+#define SPINDLE_PWM_BIT        6    // PA6 (B3) - TCC0/WO[0]
 #define SPINDLE_PWM_CHANNEL    0    // TCC0 channel 0
 
 #define SPINDLE_DIRECTION_PORT PORT_GROUPA
-#define SPINDLE_DIRECTION_PIN  8    // PA8 (B5)
-#define SPINDLE_DIRECTION_BIT  8
+#define SPINDLE_DIRECTION_BIT  8    // PA8 (B5)
 
 #define SPINDLE_ENABLE_PORT    PORT_GROUPA
-#define SPINDLE_ENABLE_PIN     9    // PA9 (optional)
-#define SPINDLE_ENABLE_BIT     9
+#define SPINDLE_ENABLE_BIT     9    // PA9 (optional)
 
 // Spindle PWM configuration
 #define SPINDLE_PWM_MAX_VALUE  65535  // 16-bit PWM
@@ -160,13 +146,11 @@
 // ============================================================================
 
 #define COOLANT_FLOOD_PORT     PORT_GROUPA
-#define COOLANT_FLOOD_PIN      17   // PA17 (C3)
-#define COOLANT_FLOOD_BIT      17
+#define COOLANT_FLOOD_BIT      17   // PA17 (C3)
 
 #ifdef ENABLE_M7
   #define COOLANT_MIST_PORT    PORT_GROUPA
-  #define COOLANT_MIST_PIN     18   // PA18 (C4)
-  #define COOLANT_MIST_BIT     18
+  #define COOLANT_MIST_BIT     18   // PA18 (C4)
 #endif
 
 // ============================================================================
@@ -174,13 +158,11 @@
 // ============================================================================
 
 #define UART_RX_PORT           PORT_GROUPA
-#define UART_RX_PIN            23   // PA23 (D0) - SERCOM3 PAD[1]
-#define UART_RX_BIT            23
+#define UART_RX_BIT            23   // PA23 (D0) - SERCOM3 PAD[1]
 #define UART_RX_PAD            1    // SERCOM PAD[1]
 
 #define UART_TX_PORT           PORT_GROUPA
-#define UART_TX_PIN            24   // PA24 (D1) - SERCOM3 PAD[2]
-#define UART_TX_BIT            24
+#define UART_TX_BIT            24   // PA24 (D1) - SERCOM3 PAD[2]
 #define UART_TX_PAD            2    // SERCOM PAD[2]
 
 // UART peripheral selection
@@ -205,5 +187,23 @@
 #define STEPPER_TIMER_GCLK_ID  GCLK_CLKCTRL_ID_TC3_TC4
 #define SPINDLE_PWM_GCLK_ID    GCLK_CLKCTRL_ID_TCC0_TCC1
 #define UART_GCLK_ID           GCLK_CLKCTRL_ID_SERCOM3_CORE
+
+// ============================================================================
+// SINGLE-PORT ALIASES (for gpio.h compatibility)
+// ============================================================================
+// MegARM uses single port (PORT A), so map _MASK to _MASK_A
+
+#define STEP_MASK               STEP_MASK_A
+#define DIRECTION_MASK          DIRECTION_MASK_A
+#define STEPPERS_DISABLE_MASK   STEPPERS_DISABLE_MASK_A
+#define LIMIT_MASK              LIMIT_MASK_A
+#define CONTROL_MASK            CONTROL_MASK_A
+#define PROBE_MASK              PROBE_MASK_A
+
+#define STEP_PORT               PORT_GROUPA
+#define DIRECTION_PORT          PORT_GROUPA
+#define LIMIT_PORT              PORT_GROUPA
+#define CONTROL_PORT            PORT_GROUPA
+#define STEPPERS_DISABLE_PORT_ALIAS   PORT_GROUPA
 
 #endif // BOARD_MEGARM_CONFIG_H

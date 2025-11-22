@@ -50,6 +50,11 @@
 #define FLASH_SIZE        262144      // 256 KB
 #define EEPROM_SIZE       0           // No hardware EEPROM
 
+// HAL_ aliases for backwards compatibility (TODO: rename to PLATFORM_*)
+#define HAL_CPU_FREQ      CPU_FREQ
+#define HAL_RAM_SIZE      RAM_SIZE
+#define HAL_FLASH_SIZE    FLASH_SIZE
+
 // Timer resolution
 #define HAL_TIMER_RESOLUTION_NS   20      // 20.8 ns @ 48 MHz
 
