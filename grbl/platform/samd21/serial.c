@@ -1,13 +1,10 @@
-#include "serial.h"
+#include <stdint.h>
+#include "samd21.h"
+#include "platform.h"
+#include "../../serial.h"
 
 #define RX_RING_BUFFER (RX_BUFFER_SIZE+1)
 #define TX_RING_BUFFER (TX_BUFFER_SIZE+1)
-
-void    serial_init()	{}
-void    serial_write(uint8_t data) {}
-uint8_t serial_read() {}
-void 	serial_reset_read_buffer() {}
-
 
 void serial_init(uint32_t baudrate) {
   // Initialize SERCOM3 for UART (PA23=RX/PAD1, PA24=TX/PAD2)
@@ -77,5 +74,14 @@ void serial_tx_interrupt_enable(void) {
 void serial_tx_interrupt_disable(void) {
   // Disable TX interrupt
   SERCOM3->INTENCLR = SERCOM_USART_INTFLAG_DRE;
+}
+
+void serial_reset_read_buffer(void) {
+  // Reset read buffer
+}
+
+uint8_t serial_get_rx_buffer_available(void) {
+  // Return number of bytes available
+  return serial_available();
 }
 
