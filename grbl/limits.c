@@ -41,12 +41,12 @@
 
 void limits_init()
 {
-  GPIO_IN(LIMIT_DDR, LIMIT_MASK);
+  GPIO_MDIR_INP( LIMIT );
 
   #ifdef DISABLE_LIMIT_PIN_PULL_UP
-    GPIO_PULLUP_OFF(LIMIT_PORT, LIMIT_MASK);
+    GPIO_MPULLUP_DIS( LIMIT );
   #else
-    GPIO_PULLUP_ON(LIMIT_PORT, LIMIT_MASK);
+    GPIO_MPULLUP_EN( LIMIT );
   #endif
 
   if (bit_istrue(settings.flags,BITFLAG_HARD_LIMIT_ENABLE)) {
