@@ -40,7 +40,7 @@ void system_init()
 uint8_t system_control_get_state()
 {
   uint8_t control_state = 0;
-  uint8_t pin = GPIO_RD(CONTROL_PIN, CONTROL_MASK) ^ CONTROL_MASK;
+  uint8_t pin = GPIO_MRD( CONTROL, IREG ) ^ CONTROL_MASK;
   #ifdef INVERT_CONTROL_PIN_MASK
     pin ^= INVERT_CONTROL_PIN_MASK;
   #endif

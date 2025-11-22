@@ -335,9 +335,9 @@ HAL_TIMER_STEPPER_ISR()
 
   // Then pulse the stepping pins
   #ifdef STEP_PULSE_DELAY
-    st.step_bits = GPIO_RD(STEP_PORT, STEP_MASK) | st.step_outbits; // Store out_bits to prevent overwriting.
+    st.step_bits = GPIO_MRD( STEP, OREG ) | st.step_outbits; // Store out_bits to prevent overwriting.
     #ifdef ENABLE_DUAL_AXIS
-      st.step_bits_dual = GPIO_RD(STEP_PORT_DUAL, STEP_MASK_DUAL) | st.step_outbits_dual;
+      st.step_bits_dual = GPIO_MRD( STEP_DUAL, OREG ) | st.step_outbits_dual;
     #endif
   #else  // Normal operation
     GPIO_MWO( STEP, st.step_outbits );
