@@ -50,10 +50,10 @@
 #define FLASH_SIZE        262144      // 256 KB
 #define EEPROM_SIZE       0           // No hardware EEPROM
 
-// HAL_ aliases for backwards compatibility (TODO: rename to PLATFORM_*)
-#define HAL_CPU_FREQ      CPU_FREQ
-#define HAL_RAM_SIZE      RAM_SIZE
-#define HAL_FLASH_SIZE    FLASH_SIZE
+// PLATFORM_ naming
+#define PLATFORM_CPU_FREQ   CPU_FREQ
+#define PLATFORM_RAM_SIZE   RAM_SIZE
+#define PLATFORM_FLASH_SIZE FLASH_SIZE
 
 // Timer resolution
 #define HAL_TIMER_RESOLUTION_NS   20      // 20.8 ns @ 48 MHz
@@ -106,11 +106,12 @@ typedef uint32_t hal_gpio_port_t;
 
 // Legacy compatibility macros for AVR-style code
 // Actual PORT values come from board config
-#define DIRECTION_PORT      X_DIRECTION_PORT
+// (STEP_PORT, DIRECTION_PORT now defined in board config.h)
+// #define DIRECTION_PORT      X_DIRECTION_PORT
 #define DIRECTION_PORT_ID   ((hal_gpio_port_t)DIRECTION_PORT)
 #define DIRECTION_DDR       DIRECTION_PORT_ID
 
-#define STEP_PORT           X_STEP_PORT
+// #define STEP_PORT           X_STEP_PORT
 #define STEP_PORT_ID        ((hal_gpio_port_t)STEP_PORT)
 #define STEP_DDR            STEP_PORT_ID
 
@@ -142,7 +143,7 @@ typedef uint32_t hal_gpio_port_t;
 // ============================================================================
 
 // Use last 4KB of flash for EEPROM emulation
-#define HAL_NVMEM_FLASH_START   (0x00000000 + HAL_FLASH_SIZE - 4096)
+#define HAL_NVMEM_FLASH_START   (0x00000000 + FLASH_SIZE - 4096)
 #define HAL_NVMEM_FLASH_SIZE    4096
 #define HAL_NVMEM_FLASH_PAGE_SIZE 64  // SAMD21 has 64-byte pages
 

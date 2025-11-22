@@ -63,9 +63,9 @@ SOURCES = $(addprefix $(GRBL_DIR)/,$(GRBL_SOURCES)) \
 
 OBJECTS = $(addprefix $(BUILD_DIR)/,$(notdir $(SOURCES:.c=.o)))
 
-# Search paths for sources
-vpath %.c $(GRBL_DIR)
+# Search paths for sources (platform dir first to override grbl/ files)
 vpath %.c $(PLATFORM_DIR)
+vpath %.c $(GRBL_DIR)
 
 # Base compiler flags
 CFLAGS  = -mcpu=$(CPU) -mthumb $(FPU)
@@ -141,6 +141,12 @@ $(BUILD_DIR)/startup.o: startup.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 $(BUILD_DIR)/handlers.o: handlers.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+$(BUILD_DIR)/serial.o: serial.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+$(BUILD_DIR)/nvmem.o: nvmem.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 # Link

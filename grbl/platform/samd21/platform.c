@@ -39,9 +39,9 @@ void hal_critical_exit(uint32_t state) {
 const hal_platform_info_t samd21_platform_info = {
   .name = PLATFORM_NAME,
   .cpu = PLATFORM_CPU,
-  .cpu_freq_hz = HAL_CPU_FREQ,
-  .ram_bytes = HAL_RAM_SIZE,
-  .flash_bytes = HAL_FLASH_SIZE
+  .cpu_freq_hz = PLATFORM_CPU_FREQ,
+  .ram_bytes = PLATFORM_RAM_SIZE,
+  .flash_bytes = PLATFORM_FLASH_SIZE
 };
 
 const hal_platform_info_t* hal_platform_get_info(void) {
@@ -190,7 +190,7 @@ void hal_system_init(void) {
   // This breaks hal_millis(), hal_micros(), and all timing functions
   // Dwell times, feed rates, delays won't work correctly
   // TODO: UNCOMMENT THIS LINE!
-  // SysTick_Config(HAL_CPU_FREQ / 1000);
+  // SysTick_Config(CPU_FREQ / 1000);
 
   // Initialize GPIO
   hal_gpio_init();
@@ -458,7 +458,7 @@ void hal_watchdog_feed(void) {
 // Option 3: Calibrate NOP loop at startup and adjust divisor
 void _delay_us(uint32_t us) {
   // Simple delay loop - not accurate
-  volatile uint32_t count = us * (HAL_CPU_FREQ / 1000000) / 10;
+  volatile uint32_t count = us * (CPU_FREQ / 1000000) / 10;
   while (count--) {
     __asm__ volatile ("nop");
   }
@@ -467,7 +467,7 @@ void _delay_us(uint32_t us) {
 void _delay_ms(uint32_t ms) {
   // Millisecond delay
   while (ms--) {
-    hal_delay_us(1000);
+    _delay_us(1000);
   }
 }
 
