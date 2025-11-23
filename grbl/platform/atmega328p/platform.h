@@ -135,7 +135,7 @@ static inline uint32_t hal_micros(void) {
 // #define HAL_GPIO_INTERRUPT_DISABLE(pcmsk, pcie, mask)  ((pcmsk) &= ~(mask), PCICR &= ~(1 << (pcie)))
 
 //#define HAL_GPIO_IRQ_HANDLER(name)  void name##_IRQHandler(void)
-#define IRQ_HANDLER(name)  void name##_IRQHandler(void)
+#define IRQ_HANDLER(name)  ISR(name##_INT_vect)
 
 
 
