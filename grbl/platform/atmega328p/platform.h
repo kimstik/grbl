@@ -206,22 +206,7 @@ static inline uint32_t hal_micros(void) {
 #define HAL_TIMER_SPINDLE_PWM_GET_DUTY()      (OCR2A)
 */
 
-#define ISR_STEP_DELAY() 	ISR(TIMER0_COMPA_vect)	//HAL_TIMER_PULSE_DELAY_ISR
-#define ISR_STEP_RESET()   	ISR(TIMER0_OVF_vect)	//HAL_TIMER_PULSE_RESET_ISR
-#define ISR_STEP()       	ISR(TIMER1_COMPA_vect)	//HAL_TIMER_STEPPER_ISR
-
-//ISR_STEP_DELAY()
-//ISR_STEP_RESET()
-//ISR_STEP()
-
-
-#define STP_TMR_INT_ENA()	(TIMSK1 |=  (1<<OCIE1A))	//	HAL_TIMER_STEPPER_INTERRUPT_ENABLE
-#define STP_TMR_INT_DIS()	(TIMSK1 &= ~(1<<OCIE1A))	//	HAL_TIMER_STEPPER_INTERRUPT_DISABLE
-
-
-#define HAL_TIMER_SPINDLE_PWM_ENABLE()        (TCCR2A |= (1<<COM2A1))
-#define HAL_TIMER_SPINDLE_PWM_DISABLE()       (TCCR2A &= ~(1<<COM2A1))
-#define PWM_IS_ENABLED()    (TCCR2A & (1<<COM2A1))		//HAL_TIMER_SPINDLE_PWM_IS_ENABLED
+// Timer macros moved to timer.h
 
 
 // ============================================================================
