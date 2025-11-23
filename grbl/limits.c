@@ -66,7 +66,7 @@ void limits_init()
 void limits_disable()
 {
 //  GPIO_INT_OFF(LIMIT_PCMSK, LIMIT_INT, LIMIT_MASK);
-  GPIO_INT_ENA(LIMIT);
+  GPIO_INT_DIS(LIMIT);
 }
 
 
