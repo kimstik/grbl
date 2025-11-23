@@ -30,7 +30,8 @@ void system_init()
   #else
     GPIO_MPULLUP_EN( CONTROL );
   #endif
-  GPIO_INT_ON(CONTROL_PCMSK, CONTROL_INT, CONTROL_MASK);
+//  GPIO_INT_ON(CONTROL_PCMSK, CONTROL_INT, CONTROL_MASK);
+  GPIO_INT_ENA(CONTROL);
 }
 
 
@@ -61,7 +62,7 @@ uint8_t system_control_get_state()
 // only the realtime command execute variable to have the main program execute these when
 // its ready. This works exactly like the character-based realtime commands when picked off
 // directly from the incoming serial data stream.
-HAL_GPIO_IRQ_HANDLER(CONTROL_INT)
+IRQ_HANDLER(CONTROL)
 {
   uint8_t pin = system_control_get_state();
   if (pin) {

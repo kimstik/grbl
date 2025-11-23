@@ -65,7 +65,7 @@ uint8_t spindle_get_state()
         if (bit_istrue(SPINDLE_ENABLE_PORT,(1<<SPINDLE_ENABLE_BIT))) { return(SPINDLE_STATE_CW); }
       #endif
     #else
-      if (HAL_TIMER_SPINDLE_PWM_IS_ENABLED()) {
+      if (PWM_IS_ENABLED()) {
         #ifdef ENABLE_DUAL_AXIS
           return(SPINDLE_STATE_CW);
         #else

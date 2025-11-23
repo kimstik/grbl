@@ -48,6 +48,16 @@
 #if !defined(GPIO_PREG)
  #define GPIO_PREG(name)	name##_PORT // AVR-specific - default
 #endif
+/*
+//pin change stuff
+#if !defined(GPIO_PCIE)		// Pin change interrupt enable reg
+ #define GPIO_PCIE(name)	name##_PCIE		// AVR-specific naming - subject to be redefined in platform
+#endif
+
+#if !defined(GPIO_PCMS)		// Pin change interrupt mask reg
+ #define GPIO_PCMS(name)	name##_PCMSK	// AVR-specific - default
+#endif
+*/
 
 // TODO: BWR/BRD potom pereiminuem v RD/WR (kogra izbavimsya ot HAL kolliziy)
 #define GPIO_BWR(name, reg,  op)		   BIT_##op( GPIO_##reg(name), name##_BIT  )	//	bit write op

@@ -8,6 +8,9 @@
 #ifndef HAL_TIMER_H
 #define HAL_TIMER_H
 
+//FIXME: this file have to be NOT used anymore- use platform specific /timer.h
+
+/*
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -28,6 +31,7 @@ typedef enum {
 // ============================================================================
 
 #ifdef __AVR__
+
   // ============================================================================
   // AVR IMPLEMENTATION - ZERO OVERHEAD
   // ============================================================================
@@ -318,5 +322,7 @@ typedef enum {
 
 // Convert timer ticks to microseconds
 #define HAL_TIMER_TICKS_TO_US(ticks)  ((ticks) / HAL_TICKS_PER_MICROSECOND)
+
+*/
 
 #endif // HAL_TIMER_H

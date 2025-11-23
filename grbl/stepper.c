@@ -245,8 +245,7 @@ void st_wake_up()
     st.step_pulse_time = -(((settings.pulse_microseconds-2)*TICKS_PER_MICROSECOND) >> 3);
   #endif
 
-  // Enable Stepper Driver Interrupt
-  HAL_TIMER_STEPPER_INTERRUPT_ENABLE();
+  STP_TMR_INT_ENA();	//	// Enable Stepper Driver Interrupt
 }
 
 
@@ -254,8 +253,8 @@ void st_wake_up()
 void st_go_idle()
 {
   // Disable Stepper Driver Interrupt. Allow Stepper Port Reset Interrupt to finish, if active.
-  HAL_TIMER_STEPPER_INTERRUPT_DISABLE();
-  HAL_TIMER_STEPPER_RESET_PRESCALER();
+  STP_TMR_INT_DIS();	//HAL_TIMER_STEPPER_INTERRUPT_DISABLE();
+  STP_TMR_PRESCALER_RESET();	//	HAL_TIMER_STEPPER_RESET_PRESCALER();
   busy = false;
 
   // Set stepper driver idle state, disabled or enabled, depending on settings and circumstances.
@@ -323,7 +322,7 @@ void st_go_idle()
 // TODO: Replace direct updating of the int32 position counters in the ISR somehow. Perhaps use smaller
 // int8 variables and update position counters only when a segment completes. This can get complicated
 // with probing and homing cycles that require true real-time positions.
-HAL_TIMER_STEPPER_ISR()
+ISR_STEP()
 {
   if (busy) { return; } // The busy-flag is used to avoid reentering this interrupt
 
@@ -349,7 +348,7 @@ HAL_TIMER_STEPPER_ISR()
   // Enable step pulse reset timer so that The Stepper Port Reset Interrupt can reset the signal after
   // exactly settings.pulse_microseconds microseconds, independent of the main Timer1 prescaler.
   HAL_TIMER_PULSE_RESET_SET_COUNT(st.step_pulse_time);
-  HAL_TIMER_PULSE_RESET_START();
+  STP_PULSE_RESET_START(); // HAL_TIMER_PULSE_RESET_START();
 
   busy = true;
   sei(); // Re-enable interrupts to allow Stepper Port Reset Interrupt to fire on-time.
@@ -368,7 +367,8 @@ HAL_TIMER_STEPPER_ISR()
       #endif
 
       // Initialize step segment timing per step and load number of steps to execute.
-      HAL_TIMER_STEPPER_SET_PERIOD(st.exec_segment->cycles_per_tick);
+      STP_TMR_PERIOD_SET( st.exec_segment->cycles_per_tick ); //     HAL_TIMER_STEPPER_SET_PERIOD(st.exec_segment->cycles_per_tick);
+
       st.step_count = st.exec_segment->n_step; // NOTE: Can sometimes be zero when moving slow.
       // If the new segment starts a new planner block, initialize stepper variables and counters.
       // NOTE: When the segment data index changes, this indicates a new planner block.
@@ -493,14 +493,14 @@ HAL_TIMER_STEPPER_ISR()
 // This interrupt is enabled by ISR_TIMER1_COMPAREA when it sets the motor port bits to execute
 // a step. This ISR resets the motor port after a short period (settings.pulse_microseconds)
 // completing one step cycle.
-HAL_TIMER_PULSE_RESET_ISR()
+ISR_STEP_RESET()
 {
   // Reset stepping pins (leave the direction pins)
   GPIO_MWO( STEP, (step_port_invert_mask & STEP_MASK) );
   #ifdef ENABLE_DUAL_AXIS
     GPIO_MWO( STEP_DUAL, (step_port_invert_mask_dual & STEP_MASK_DUAL) );
   #endif
-  HAL_TIMER_PULSE_RESET_STOP();
+  STP_PULSE_RESET_STOP(); // HAL_TIMER_PULSE_RESET_STOP();
 }
 #ifdef STEP_PULSE_DELAY
   // This interrupt is used only when STEP_PULSE_DELAY is enabled. Here, the step pulse is
@@ -508,7 +508,7 @@ HAL_TIMER_PULSE_RESET_ISR()
   // will then trigger after the appropriate settings.pulse_microseconds, as in normal operation.
   // The new timing between direction, step pulse, and step complete events are setup in the
   // st_wake_up() routine.
-  HAL_TIMER_PULSE_DELAY_ISR()
+  ISR_STEP_DELAY()
   {
     GPIO_OREG( STEP ) = st.step_bits;
     #ifdef ENABLE_DUAL_AXIS
