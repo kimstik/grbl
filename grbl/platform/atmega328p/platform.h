@@ -11,6 +11,7 @@
 #ifndef PLATFORM_AVR_ATMEGA328P_H
 #define PLATFORM_AVR_ATMEGA328P_H
 
+#include "timer.h"
 // ============================================================================
 // PLATFORM IDENTIFICATION
 // ============================================================================
@@ -95,7 +96,7 @@ static inline uint32_t hal_micros(void) {
 // ============================================================================
 // HAL GPIO MACROS (ZERO OVERHEAD - expand to original AVR code)
 // ============================================================================
-
+/*
 // Basic GPIO operations - expand to original GRBL code EXACTLY
 #define HAL_GPIO_SET_BITS(port, mask)           ((port) |= (mask))
 #define HAL_GPIO_CLEAR_BITS(port, mask)         ((port) &= ~(mask))
@@ -123,7 +124,21 @@ static inline uint32_t hal_micros(void) {
 
 // Pin change interrupt handlers
 #define HAL_GPIO_IRQ_HANDLER(int_name)          ISR(int_name##_vect)
+*/
 
+// Backward compatibility for base code (used in cpu_map.h GPIO_INT_ON/OFF macros)
+#define HAL_GPIO_INTERRUPT_ENABLE(pcmsk, pcie, mask)   ((pcmsk) |= (mask), PCICR |= (1 << (pcie)))
+#define HAL_GPIO_INTERRUPT_DISABLE(pcmsk, pcie, mask)  ((pcmsk) &= ~(mask), PCICR &= ~(1 << (pcie)))
+#define HAL_GPIO_IRQ_HANDLER(int_name)                 ISR(int_name##_vect)
+
+// New short names (for future use - not yet in base code)
+#define GPIO_INT_ENA(name)  ((name##_PCMSK) |=  (name##_MASK), PCICR |=  (1 << (name##_INT)))
+#define GPIO_INT_DIS(name)  ((name##_PCMSK) &= ~(name##_MASK), PCICR &= ~(1 << (name##_INT)))
+#define IRQ_HANDLER(name)   ISR(name##_INT_vect)
+
+
+
+/*
 // ============================================================================
 // HAL TIMER MACROS (ZERO OVERHEAD - expand to original AVR code)
 // ============================================================================
@@ -152,14 +167,9 @@ static inline uint32_t hal_micros(void) {
 #define HAL_TIMER_STEPPER_RESET_PRESCALER() \
   (TCCR1B = (TCCR1B & ~(0x07<<CS10)) | (1<<CS10))
 
-#define HAL_TIMER_STEPPER_INTERRUPT_ENABLE()    (TIMSK1 |= (1<<OCIE1A))
-#define HAL_TIMER_STEPPER_INTERRUPT_DISABLE()   (TIMSK1 &= ~(1<<OCIE1A))
-
 // ----------------------------------------------------------------------------
 // TIMER0: Step Pulse Reset Interrupt & Pulse Delay (when STEP_PULSE_DELAY defined)
 // ----------------------------------------------------------------------------
-
-#define HAL_TIMER_PULSE_RESET_ISR()             ISR(TIMER0_OVF_vect)
 
 #define HAL_TIMER_PULSE_RESET_INIT() \
   ( \
@@ -193,10 +203,10 @@ static inline uint32_t hal_micros(void) {
 
 #define HAL_TIMER_SPINDLE_PWM_SET_DUTY(duty)  (OCR2A = (duty))
 #define HAL_TIMER_SPINDLE_PWM_GET_DUTY()      (OCR2A)
+*/
 
-#define HAL_TIMER_SPINDLE_PWM_ENABLE()        (TCCR2A |= (1<<COM2A1))
-#define HAL_TIMER_SPINDLE_PWM_DISABLE()       (TCCR2A &= ~(1<<COM2A1))
-#define HAL_TIMER_SPINDLE_PWM_IS_ENABLED()    (TCCR2A & (1<<COM2A1))
+// Timer macros moved to timer.h
+
 
 // ============================================================================
 // HAL SERIAL/UART MACROS (ZERO OVERHEAD - expand to original AVR code)

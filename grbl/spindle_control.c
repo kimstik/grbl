@@ -34,7 +34,7 @@ void spindle_init()
     // Configure variable spindle PWM and enable pin, if requried. On the Uno, PWM and enable are
     // combined unless configured otherwise.
     GPIO_DIR_OUT(SPINDLE_PWM);
-    HAL_TIMER_SPINDLE_PWM_INIT();
+    PWM_INIT();
     #ifdef USE_SPINDLE_DIR_AS_ENABLE_PIN
       GPIO_DIR_OUT(SPINDLE_ENABLE);
     #else
@@ -65,7 +65,7 @@ uint8_t spindle_get_state()
         if (bit_istrue(SPINDLE_ENABLE_PORT,(1<<SPINDLE_ENABLE_BIT))) { return(SPINDLE_STATE_CW); }
       #endif
     #else
-      if (HAL_TIMER_SPINDLE_PWM_IS_ENABLED()) {
+      if (PWM_IS_ENABLED()) {
         #ifdef ENABLE_DUAL_AXIS
           return(SPINDLE_STATE_CW);
         #else
@@ -98,7 +98,7 @@ uint8_t spindle_get_state()
 void spindle_stop()
 {
   #ifdef VARIABLE_SPINDLE
-    HAL_TIMER_SPINDLE_PWM_DISABLE();
+    PWM_DISABLE();
     #ifdef USE_SPINDLE_DIR_AS_ENABLE_PIN
       #ifdef INVERT_SPINDLE_ENABLE_PIN
         GPIO_BSET( SPINDLE_ENABLE );
@@ -121,12 +121,12 @@ void spindle_stop()
   // and stepper ISR. Keep routine small and efficient.
   void spindle_set_speed(uint8_t pwm_value)
   {
-    HAL_TIMER_SPINDLE_PWM_SET_DUTY(pwm_value);
+    PWM_SET(pwm_value);
     #ifdef SPINDLE_ENABLE_OFF_WITH_ZERO_SPEED
       if (pwm_value == SPINDLE_PWM_OFF_VALUE) {
         spindle_stop();
       } else {
-        HAL_TIMER_SPINDLE_PWM_ENABLE();
+        PWM_ENABLE();
         #ifdef INVERT_SPINDLE_ENABLE_PIN
           GPIO_BCLR( SPINDLE_ENABLE );
         #else
@@ -135,9 +135,9 @@ void spindle_stop()
       }
     #else
       if (pwm_value == SPINDLE_PWM_OFF_VALUE) {
-        HAL_TIMER_SPINDLE_PWM_DISABLE();
+        PWM_DISABLE();
       } else {
-        HAL_TIMER_SPINDLE_PWM_ENABLE();
+        PWM_ENABLE();
       }
     #endif
   }
