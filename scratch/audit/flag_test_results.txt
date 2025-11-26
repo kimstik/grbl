@@ -1,0 +1,32 @@
+Flag Testing Results
+===================
+Date: Wed Nov 26 14:20:21 UTC 2025
+GCC Version: avr-gcc (GCC) 7.3.0
+Baseline flags: -Os -flto -ffast-math
+Baseline size: 29614 bytes
+
+
+Flag: -fno-inline-small-functions
+Description: Prevent small function inlining
+Size: 29606 bytes
+Savings: 8 bytes (0.03%)
+
+Flag: -Wl,--relax
+Description: Linker relaxation (AVR-specific)
+Size: 29210 bytes
+Savings: 404 bytes (1.36%)
+
+Flag: -mcall-prologues
+Description: Share function prologues
+Size: 28940 bytes
+Savings: 674 bytes (2.28%)
+
+Flag: -fno-split-wide-types
+Description: Keep 32/64-bit types together
+Size: 29360 bytes
+Savings: 254 bytes (0.86%)
+
+Flag: -fno-tree-scev-cprop
+Description: Disable SCEV constant propagation
+Size: 29582 bytes
+Savings: 32 bytes (0.11%)
