@@ -55,12 +55,17 @@ Baseline (both OFF):     29,738 bytes
 G5 only:                 32,580 bytes (✅ fits, 188 bytes free)
 G5 + G5.1:               33,246 bytes (❌ overflow 478 bytes)
 
-WITH full optimization (avr-gcc 7.3.0):
+WITH full optimization - avr-gcc 7.3.0 (RECOMMENDED):
 Baseline (both OFF):     28,286 bytes (saves 1,452 bytes = 4.88%)
-G5 + G5.1:               31,610 bytes (✅ FITS! 1,158 bytes free)
+G5 + G5.1:               31,610 bytes (✅ FITS! 1,158 bytes free) ⭐ BEST
 
-User-reported (avr-gcc 15.2, all flags combined):
-Baseline:                30,066 → 28,444 bytes (saves 1,622 bytes = 5.4%)
+WITH full optimization - avr-gcc 15.2.0:
+Baseline (both OFF):     28,444 bytes (saves 1,294 bytes = 4.35%)
+G5 + G5.1:               31,900 bytes (✅ fits, 868 bytes free)
+
+Compiler Comparison for G5+G5.1:
+gcc 7.3.0:  31,610 bytes (1,158 free) ⭐ BEST - 290 bytes smaller
+gcc 15.2.0: 31,900 bytes (868 free)
 ```
 
 ---
@@ -69,9 +74,9 @@ Baseline:                30,066 → 28,444 bytes (saves 1,622 bytes = 5.4%)
 
 ### Build Configuration
 
-**Compiler:** avr-gcc 7.3.0 (default) or 15.2 (with optimization)
+**Compiler:** avr-gcc 7.3.0 (RECOMMENDED for G5+G5.1) or 15.2.0 (tested)
 **Target MCU:** ATmega328P (Arduino Uno)
-**Optimization:** -Os (default)
+**Optimization:** -Os + 6 size optimization flags
 
 ### Preprocessor Flags
 
@@ -442,22 +447,34 @@ md5sum grbl.hex  # Must match!
 4. ✅ Safety assessment (all flags approved)
 5. ✅ G5+G5.1 validation (confirmed fit with 1,158 bytes free)
 
-**Results (avr-gcc 7.3.0):**
+**Results (avr-gcc 7.3.0 - RECOMMENDED):**
 | Configuration | Flash | Status |
 |--------------|-------|--------|
 | Baseline (no optimization) | 29,738 | Reference |
 | Baseline (optimized) | 28,286 | -1,452 bytes |
 | G5+G5.1 (no optimization) | 33,246 | ❌ Overflow -478 |
-| **G5+G5.1 (optimized)** | **31,610** | ✅ **Fits +1,158** |
+| **G5+G5.1 (optimized)** | **31,610** | ✅ **Fits +1,158** ⭐ |
 
-**Most Effective Flags:**
-- `-mcall-prologues`: 674 bytes (2.28%) - Share function prologues
-- `-Wl,--relax`: 404 bytes (1.36%) - AVR linker optimization
-- `-fno-split-wide-types`: 254 bytes (0.86%) - Improve 32-bit operations
+**Results (avr-gcc 15.2.0 - tested):**
+| Configuration | Flash | Status |
+|--------------|-------|--------|
+| Baseline (optimized) | 28,444 | -1,294 bytes |
+| G5+G5.1 (optimized) | 31,900 | ✅ Fits +868 |
+| **Comparison with 7.3.0** | **+290 bytes** | **Worse for splines** |
+
+**Compiler Recommendation:**
+- ⭐ **Use gcc 7.3.0** for G5+G5.1 (290 bytes smaller, more headroom)
+- Use gcc 15.2.0 for baseline or ATmega2560+ (better baseline optimization)
+
+**Most Effective Flags (both compilers):**
+- `-mcall-prologues`: ~674 bytes (2.28%) - Share function prologues
+- `-Wl,--relax`: ~404 bytes (1.36%) - AVR linker optimization
+- `-fno-split-wide-types`: ~254 bytes (0.86%) - Improve 32-bit operations
 
 **Documentation:**
 - -ffast-math audit: `scratch/audit/FFAST_MATH_SAFETY_AUDIT.md`
 - All flags investigation: `scratch/audit/OPTIMIZATION_FLAGS_RESULTS.md`
+- Compiler comparison: `scratch/audit/GCC_VERSION_COMPARISON.md`
 - Individual flag measurements: `scratch/audit/flag_test_results.txt`
 - Test automation script: `scratch/test_individual_flags.sh`
 
