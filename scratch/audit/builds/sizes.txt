@@ -1,0 +1,3 @@
+Baseline: 29738 bytes
+Fast-math: 29614 bytes
+Savings: 124 bytes (0.42%)

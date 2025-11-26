@@ -1,0 +1,25 @@
+=== Baseline float operations ===
+00006a86 <__subsf3>:
+00006a88 <__addsf3>:
+00006ab6 <__addsf3x>:
+00006c72 <__cmpsf2>:
+00006c86 <__divsf3>:
+00006cae <__divsf3x>:
+00006dd6 <__floatunsisf>:
+00006dda <__floatsisf>:
+000070b6 <__gesf2>:
+00007136 <__mulsf3>:
+0000715c <__mulsf3x>:
+
+=== Fast-math float operations ===
+00006a20 <__subsf3>:
+00006a22 <__addsf3>:
+00006a50 <__addsf3x>:
+00006c0c <__cmpsf2>:
+00006c20 <__divsf3>:
+00006c48 <__divsf3x>:
+00006d70 <__floatunsisf>:
+00006d74 <__floatsisf>:
+00007050 <__gesf2>:
+000070d0 <__mulsf3>:
+000070f6 <__mulsf3x>:
