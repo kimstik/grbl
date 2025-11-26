@@ -54,9 +54,9 @@ Baseline (both OFF):     29,738 bytes (MD5 verified identical)
 G5 only:                 32,580 bytes (✅ fits, 188 bytes free)
 G5 + G5.1:               33,246 bytes (❌ overflow 478 bytes)
 
-With aggressive optimization (avr-gcc 15.2):
+User-reported results (avr-gcc 15.2, all flags combined):
 Baseline:                30,066 bytes
-With all flags:          28,444 bytes (saves 1,622 bytes!)
+With all flags:          28,444 bytes (saves 1,622 bytes = 5.4%)
 ```
 
 ---
@@ -83,21 +83,20 @@ Located in `grbl/config.h`:
 // #define ENABLE_QUADRATIC_SPLINES
 ```
 
-### Aggressive Optimization Flags (Under Investigation)
+### Additional Optimization Flags (Investigation in Progress)
 
 ```makefile
-# Potential flags for size optimization (avr-gcc 15.2)
-COMPILE += -flto                          # Link-Time Optimization
+# Potential flags for additional size optimization
+# Note: -flto already included in baseline, -ffast-math now added
 COMPILE += -fno-inline-small-functions    # Prevent small function inlining
 COMPILE += -Wl,--relax                    # Linker relaxation (AVR-specific)
-COMPILE += -ffast-math                    # ⚠️ Fast math (NEEDS SAFETY AUDIT)
 COMPILE += -mcall-prologues               # Share function prologues
 COMPILE += -fno-split-wide-types          # Keep 32/64-bit types together
 COMPILE += -fno-tree-scev-cprop           # Disable SCEV constant propagation
 ```
 
-**Savings:** 1,622 bytes (5.4% reduction)
-**Risk:** -ffast-math requires deep safety analysis
+**User reported (all flags combined, gcc 15.2):** 1,622 bytes (5.4% reduction)
+**Current status:** Investigating each flag individually
 
 ---
 
@@ -166,7 +165,7 @@ grbl/gcode.c               +169 lines  Parser integration
 
 ### Decision 2: -ffast-math Optimization ✅
 **Problem:** Need more flash space for G5.1 on ATmega328P
-**Opportunity:** User reports 1,622 bytes savings with optimization flags
+**Opportunity:** User reports 1,622 bytes savings with ALL optimization flags combined (gcc 15.2)
 **Status:** ✅ AUDIT COMPLETE - APPROVED
 
 **Key Question:** Is -ffast-math safe for Grbl's motion control math?
@@ -179,8 +178,8 @@ grbl/gcode.c               +169 lines  Parser integration
 4. **Numerical accuracy** - ✅ Zero degradation
 
 **Flash Savings:**
-- avr-gcc 7.3.0: 124 bytes (0.42%)
-- avr-gcc 15.2: ~1,622 bytes expected (5.4%)
+- avr-gcc 7.3.0: 124 bytes (0.42%) for -ffast-math alone
+- Note: 1,622 bytes (5.4%) is for ALL flags combined on gcc 15.2
 
 **Documentation:**
 - Full audit: `scratch/audit/FFAST_MATH_SAFETY_AUDIT.md`
@@ -348,7 +347,7 @@ md5sum grbl.hex  # Must match!
 **Challenge:** Fit splines in limited space
 **Solution:**
 1. Make G5.1 optional (saves 666 bytes)
-2. Investigate aggressive optimization (saves 1,622 bytes)
+2. Investigate optimization flags (user reported 1,622 bytes total with all flags)
 
 ---
 
