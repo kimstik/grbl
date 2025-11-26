@@ -75,6 +75,12 @@
 #define MOTION_MODE_PROBE_AWAY 142 // G38.4 (Do not alter value)
 #define MOTION_MODE_PROBE_AWAY_NO_ERROR 143 // G38.5 (Do not alter value)
 #define MOTION_MODE_NONE 80 // G80 (Do not alter value)
+#ifdef ENABLE_CUBIC_SPLINES
+  #define MOTION_MODE_CUBIC_SPLINE 5 // G5 (Cubic B-spline)
+  #ifdef ENABLE_QUADRATIC_SPLINES
+    #define MOTION_MODE_QUADRATIC_SPLINE 51 // G5.1 (Quadratic spline)
+  #endif
+#endif
 
 // Modal Group G2: Plane select
 #define PLANE_SELECT_XY 0 // G17 (Default: Must be zero)
@@ -149,6 +155,9 @@
 #define WORD_X  10
 #define WORD_Y  11
 #define WORD_Z  12
+#ifdef ENABLE_CUBIC_SPLINES
+  #define WORD_Q  13
+#endif
 
 // Define g-code parser position updating flags
 #define GC_UPDATE_POS_TARGET   0 // Must be zero
@@ -202,7 +211,11 @@ typedef struct {
   uint8_t l;       // G10 or canned cycles parameters
   int32_t n;       // Line number
   float p;         // G10 or dwell parameters
-  // float q;      // G82 peck drilling
+#ifdef ENABLE_CUBIC_SPLINES
+  float q;         // G5 cubic spline Q parameter
+#else
+  // float q;      // G82 peck drilling (not implemented)
+#endif
   float r;         // Arc radius
   float s;         // Spindle speed
   uint8_t t;       // Tool selection
@@ -225,6 +238,9 @@ typedef struct {
   float coord_offset[N_AXIS];    // Retains the G92 coordinate offset (work coordinates) relative to
                                  // machine zero in mm. Non-persistent. Cleared upon reset and boot.
   float tool_length_offset;      // Tracks tool length offset value when enabled.
+#ifdef ENABLE_CUBIC_SPLINES
+  float spline_pq[2];            // Stores P,Q offsets from previous G5 command (X,Y)
+#endif
 } parser_state_t;
 extern parser_state_t gc_state;
 

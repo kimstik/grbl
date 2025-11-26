@@ -676,6 +676,67 @@
 
 
 /* ---------------------------------------------------------------------------------------
+   CUBIC AND QUADRATIC SPLINE SUPPORT (G5, G5.1)
+
+   Enable cubic (G5) and optionally quadratic (G5.1) B-spline interpolation support.
+   This adds smooth curve generation using Bezier splines, useful for CAM-generated
+   toolpaths requiring continuous smooth motion without discrete line segments.
+
+   FLASH MEMORY USAGE (measured on ATmega328P):
+   - ENABLE_CUBIC_SPLINES only (G5):     ~2.8KB  (fits in 32KB, 188 bytes free)
+   - + ENABLE_QUADRATIC_SPLINES (G5.1):  +666 bytes (OVERFLOW by 478 bytes!)
+
+   The ATmega328P (Arduino Uno) has only 32KB flash (~30KB used by base Grbl).
+
+   RECOMMENDATION for ATmega328P:
+   - Enable ONLY G5 (cubic splines) - fits perfectly
+   - Disable G5.1 (quadratic splines) - causes overflow
+
+   For ATmega2560 or other MCUs with more flash: Both can be enabled safely.
+
+   When BOTH DISABLED (default): No impact on flash/RAM. Firmware binary will be
+   IDENTICAL to baseline (same MD5 checksum). G5/G5.1 return "Unsupported command".
+
+   When ENABLED: Commands work in XY plane (G17) only. Implementation uses adaptive
+   step size for smooth approximation of Bezier curves.
+
+   Usage:
+     G5 X.. Y.. I.. J.. P.. Q..  - Cubic spline with two control points
+     G5.1 X.. Y.. I.. J..        - Quadratic spline (converted to cubic internally)
+
+   NOTE: Only works in XY plane (G17). Attempting to use in G18 or G19 will error.
+   NOTE: Feed rate (F) must be defined before using spline commands.
+   NOTE: ENABLE_QUADRATIC_SPLINES requires ENABLE_CUBIC_SPLINES to be enabled.
+*/
+// #define ENABLE_CUBIC_SPLINES // Default disabled. Uncomment to enable G5 splines.
+// #define ENABLE_QUADRATIC_SPLINES // Default disabled. Uncomment to enable G5.1 (requires G5).
+
+#ifdef ENABLE_CUBIC_SPLINES
+  // Bezier curve interpolation parameters. These control the quality vs. performance tradeoff.
+  // Smaller MIN_STEP = smoother curves but more segments (slower execution, more memory)
+  // Larger MAX_STEP = faster execution but may lose curve detail
+  // SIGMA = tolerance for linear approximation in mm (Manhattan distance)
+
+  #ifndef BEZIER_MIN_STEP
+    #define BEZIER_MIN_STEP 0.002f  // Minimum step size (0.002 = 2 microns)
+  #endif
+
+  #ifndef BEZIER_MAX_STEP
+    #define BEZIER_MAX_STEP 0.1f    // Maximum step size (0.1mm)
+  #endif
+
+  #ifndef BEZIER_SIGMA
+    #define BEZIER_SIGMA 0.1f       // Linear approximation tolerance (0.1mm)
+  #endif
+#endif
+
+// Dependency check: ENABLE_QUADRATIC_SPLINES requires ENABLE_CUBIC_SPLINES
+#if defined(ENABLE_QUADRATIC_SPLINES) && !defined(ENABLE_CUBIC_SPLINES)
+  #error "ENABLE_QUADRATIC_SPLINES requires ENABLE_CUBIC_SPLINES to be enabled first"
+#endif
+
+
+/* ---------------------------------------------------------------------------------------
    OEM Single File Configuration Option
 
    Instructions: Paste the cpu_map and default setting definitions below without an enclosing

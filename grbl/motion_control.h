@@ -45,6 +45,14 @@ void mc_line(float *target, plan_line_data_t *pl_data);
 void mc_arc(float *target, plan_line_data_t *pl_data, float *position, float *offset, float radius,
   uint8_t axis_0, uint8_t axis_1, uint8_t axis_linear, uint8_t is_clockwise_arc);
 
+#ifdef ENABLE_CUBIC_SPLINES
+// Execute cubic B-spline interpolation. position == current xyz, target == target xyz,
+// first == first control point xyz, second == second control point xyz.
+// Uses adaptive Bezier curve segmentation with De Casteljau's algorithm for numerical stability.
+void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position,
+                       float *first, float *second);
+#endif
+
 // Dwell for a specific number of seconds
 void mc_dwell(float seconds);
 
