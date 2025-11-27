@@ -35,9 +35,34 @@ STP_TMR_PRESCALER_RESET();
 // ============================================================================
 // ISR DEFINITIONS
 // ============================================================================
-#define ISR_STEP()          void TC3_Handler(void)
-#define ISR_STEP_RESET()    void TC4_Handler(void)
-#define ISR_STEP_DELAY()    void TC5_Handler(void)
+// SAMD21 ISR wrappers that auto-clear interrupt flags
+// ARM Cortex-M requires manual clearing of peripheral INTFLAG registers
+static inline void __isr_step_impl(void);
+static inline void __isr_step_reset_impl(void);
+#ifdef STEP_PULSE_DELAY
+  static inline void __isr_step_delay_impl(void);
+#endif
+
+__attribute__((always_inline)) inline void TC3_Handler(void) {
+  TC3->INTFLAG = TC_INTFLAG_MC0;  // Clear MC0 interrupt flag FIRST
+  __isr_step_impl();
+}
+
+__attribute__((always_inline)) inline void TC4_Handler(void) {
+  TC4->INTFLAG = TC_INTFLAG_OVF;  // Clear OVF interrupt flag FIRST
+  __isr_step_reset_impl();
+}
+
+#ifdef STEP_PULSE_DELAY
+  __attribute__((always_inline)) inline void TC5_Handler(void) {
+    TC5->INTFLAG = TC_INTFLAG_MC0;  // Clear MC0 interrupt flag FIRST
+    __isr_step_delay_impl();
+  }
+#endif
+
+#define ISR_STEP()          static inline void __isr_step_impl(void)
+#define ISR_STEP_RESET()    static inline void __isr_step_reset_impl(void)
+#define ISR_STEP_DELAY()    static inline void __isr_step_delay_impl(void)
 
 // ============================================================================
 // STEPPER TIMER (TC3 - 16-bit timer/counter)
