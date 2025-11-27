@@ -10,9 +10,11 @@
   - Reset handler
   - Vector table
   - BSS/Data initialization
+  - Clock initialization (48 MHz from DFLL48M)
 */
 
 #include <stdint.h>
+#include "samd21.h"
 
 // ============================================================================
 // EXTERNAL SYMBOLS (from linker script)
@@ -127,6 +129,50 @@ void (* const vector_table[])(void) = {
 };
 
 // ============================================================================
+// SYSTEM INITIALIZATION (Clock configuration)
+// ============================================================================
+
+void SystemInit(void) {
+  // Configure NVM wait states for 48 MHz operation (1 wait state required)
+  NVMCTRL->CTRLB = (NVMCTRL->CTRLB & ~(0xF << 1)) | (1 << 1);
+
+  // Step 1: Configure OSC8M to run at 8 MHz (default, just ensure enabled)
+  SYSCTRL->OSC8M = SYSCTRL_OSC8M_ENABLE | SYSCTRL_OSC8M_PRESC_DIV1 | (0x3 << 4);
+  while (!(SYSCTRL->PCLKSR & (1 << 3))); // Wait for OSC8M ready
+
+  // Step 2: Configure GCLK_GEN1 to use OSC8M (temporary source for DFLL reference)
+  GCLK->GENDIV = (1 << GCLK_GENCTRL_ID_Pos) | (1 << 16); // GEN1, div=1
+  GCLK->GENCTRL = (1 << GCLK_GENCTRL_ID_Pos) |
+                  (GCLK_SOURCE_OSC8M << GCLK_GENCTRL_SRC_Pos) |
+                  GCLK_GENCTRL_GENEN;
+  while (GCLK->STATUS & GCLK_STATUS_SYNCBUSY);
+
+  // Step 3: Enable DFLL48M in open-loop mode first
+  SYSCTRL->DFLLCTRL = 0; // Ensure disabled
+  while (!(SYSCTRL->PCLKSR & SYSCTRL_PCLKSR_DFLLRDY));
+
+  // Load calibration values from NVM (factory calibration at 0x00806020)
+  uint32_t coarse = (*(uint32_t*)NVMCTRL_CALIBRATION_AREA_ADDR >> 26) & 0x3F;
+  SYSCTRL->DFLLVAL = (coarse << SYSCTRL_DFLLVAL_COARSE_Pos) | (512 << SYSCTRL_DFLLVAL_FINE_Pos);
+
+  // Enable DFLL in open-loop mode
+  SYSCTRL->DFLLCTRL = SYSCTRL_DFLLCTRL_ENABLE;
+  while (!(SYSCTRL->PCLKSR & SYSCTRL_PCLKSR_DFLLRDY));
+
+  // Step 4: Configure GCLK_GEN0 to use DFLL48M as source
+  GCLK->GENDIV = (0 << GCLK_GENCTRL_ID_Pos); // GEN0, div=1
+  while (GCLK->STATUS & GCLK_STATUS_SYNCBUSY);
+
+  GCLK->GENCTRL = (0 << GCLK_GENCTRL_ID_Pos) |
+                  (GCLK_SOURCE_DFLL48M << GCLK_GENCTRL_SRC_Pos) |
+                  GCLK_GENCTRL_GENEN |
+                  GCLK_GENCTRL_IDC;
+  while (GCLK->STATUS & GCLK_STATUS_SYNCBUSY);
+
+  // Now running at 48 MHz!
+}
+
+// ============================================================================
 // RESET HANDLER
 // ============================================================================
 
@@ -145,6 +191,9 @@ void Reset_Handler(void) {
   while (dst < &_ebss) {
     *dst++ = 0;
   }
+
+  // Initialize system clocks (48 MHz)
+  SystemInit();
 
   // Call main program
   main();
