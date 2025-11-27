@@ -13,6 +13,7 @@
 #define PLATFORM_SAMD21_H
 
 #include <stdint.h>
+#include "timer.h"
 
 // ============================================================================
 // PLATFORM IDENTIFICATION
@@ -116,34 +117,12 @@ typedef uint32_t hal_gpio_port_t;
 #endif
 
 // ============================================================================
-// HAL TIMER MACROS
+// TIMER MACROS - moved to timer.h
 // ============================================================================
-
-// Stepper timer macros (TC3)
-#define HAL_TIMER_STEPPER_INIT()              hal_stepper_timer_init()
-#define HAL_TIMER_STEPPER_START()             hal_stepper_timer_start()
-#define HAL_TIMER_STEPPER_STOP()              hal_stepper_timer_stop()
-#define HAL_TIMER_STEPPER_SET_PERIOD(cycles)  hal_stepper_timer_set_period(cycles)
-#define HAL_TIMER_STEPPER_INTERRUPT_ENABLE()  (TC3->INTENSET = TC_INTFLAG_MC0)
-#define HAL_TIMER_STEPPER_INTERRUPT_DISABLE() (TC3->INTENCLR = TC_INTFLAG_MC0)
-#define HAL_TIMER_STEPPER_RESET_PRESCALER()   /* No prescaler reset needed */
-#define HAL_TIMER_STEPPER_ISR()               void TC3_Handler(void)
-
-// Pulse reset timer macros (TC4)
-#define HAL_TIMER_PULSE_RESET_INIT()          hal_pulse_timer_init()
-#define HAL_TIMER_PULSE_RESET_START()         (TC4->CTRLA |= TC_CTRLA_ENABLE)
-#define HAL_TIMER_PULSE_RESET_STOP()          (TC4->CTRLA &= ~TC_CTRLA_ENABLE)
-#define HAL_TIMER_PULSE_RESET_ISR()           void TC4_Handler(void)
-
-// Spindle PWM timer macros
-#define HAL_TIMER_SPINDLE_PWM_INIT()          hal_spindle_pwm_init()
-#define HAL_TIMER_SPINDLE_PWM_ENABLE()        (TCC0->CTRLA |= TC_CTRLA_ENABLE)
-#define HAL_TIMER_SPINDLE_PWM_DISABLE()       (TCC0->CTRLA &= ~TC_CTRLA_ENABLE)
-#define HAL_TIMER_SPINDLE_PWM_IS_ENABLED()    (TCC0->CTRLA & TC_CTRLA_ENABLE)
-#define HAL_TIMER_SPINDLE_PWM_SET(value)      hal_spindle_pwm_set(value)
+// Timer macros (STP_TMR_*, STP_PULSE_RESET_*, PWM_*, ISR_*) now in timer.h
 
 // ============================================================================
-// HAL GPIO INTERRUPT MACROS
+// GPIO INTERRUPT MACROS
 // ============================================================================
 
 // ISSUE #4 (CRITICAL): GPIO interrupts NOT IMPLEMENTED!
@@ -160,8 +139,16 @@ typedef uint32_t hal_gpio_port_t;
 // 6. Implement EIC_Handler() ISR
 //
 // See SAMD21 datasheet section 21 (External Interrupt Controller)
+
+// Backward compatibility for base code (used in cpu_map.h)
 #define HAL_GPIO_INTERRUPT_ENABLE(pcmsk, interrupt, mask)   /* TODO: Implement EIC */
 #define HAL_GPIO_INTERRUPT_DISABLE(pcmsk, interrupt, mask)  /* TODO: Implement EIC */
+#define HAL_GPIO_IRQ_HANDLER(int_name)                      void int_name##_Handler(void)
+
+// New short names (for future migration)
+#define GPIO_INT_ENA(name)  /* TODO: Implement EIC for name */
+#define GPIO_INT_DIS(name)  /* TODO: Implement EIC for name */
+#define IRQ_HANDLER(name)   void name##_Handler(void)
 
 
 // ============================================================================
@@ -171,16 +158,9 @@ typedef uint32_t hal_gpio_port_t;
 // Clock configuration (48 MHz from DFLL48M)
 void hal_clock_config(void);
 
-// Timer functions
+// Timing functions
 uint32_t hal_millis(void);
 uint64_t hal_micros(void);
-void hal_stepper_timer_init(void);
-void hal_stepper_timer_start(void);
-void hal_stepper_timer_stop(void);
-void hal_stepper_timer_set_period(uint32_t period);
-void hal_pulse_timer_init(void);
-void hal_spindle_pwm_init(void);
-void hal_spindle_pwm_set(uint16_t value);
 
 // ============================================================================
 // AVR COMPATIBILITY LAYER
