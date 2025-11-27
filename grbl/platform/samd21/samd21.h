@@ -219,9 +219,11 @@ typedef struct {
 
 // GCLK Generator IDs
 #define GCLK_CLKCTRL_ID_DFLL48  0
+#define GCLK_CLKCTRL_ID_EIC     3
 #define GCLK_CLKCTRL_ID_SERCOM3_CORE 23
-#define GCLK_CLKCTRL_ID_TC3_TC4 27
 #define GCLK_CLKCTRL_ID_TCC0_TCC1 26
+#define GCLK_CLKCTRL_ID_TCC2_TC3  27  // Shared clock for TCC2 and TC3
+#define GCLK_CLKCTRL_ID_TC4_TC5   28  // Shared clock for TC4 and TC5 (BUG #15 fix)
 
 // GCLK GENCTRL bits
 #define GCLK_GENCTRL_ID_Pos     0

@@ -142,14 +142,7 @@ void SystemInit(void) {
   SYSCTRL->OSC8M = SYSCTRL_OSC8M_ENABLE | SYSCTRL_OSC8M_PRESC_DIV1 | (0x2 << 4);
   while (!(SYSCTRL->PCLKSR & (1 << 3))); // Wait for OSC8M ready
 
-  // Step 2: Configure GCLK_GEN1 to use OSC8M (temporary source for DFLL reference)
-  GCLK->GENDIV = (1 << GCLK_GENCTRL_ID_Pos) | (1 << 16); // GEN1, div=1
-  GCLK->GENCTRL = (1 << GCLK_GENCTRL_ID_Pos) |
-                  (GCLK_SOURCE_OSC8M << GCLK_GENCTRL_SRC_Pos) |
-                  GCLK_GENCTRL_GENEN;
-  while (GCLK->STATUS & GCLK_STATUS_SYNCBUSY);
-
-  // Step 3: Enable DFLL48M in open-loop mode first
+  // Step 2: Enable DFLL48M in open-loop mode
   SYSCTRL->DFLLCTRL = 0; // Ensure disabled
   while (!(SYSCTRL->PCLKSR & SYSCTRL_PCLKSR_DFLLRDY));
 
@@ -161,7 +154,7 @@ void SystemInit(void) {
   SYSCTRL->DFLLCTRL = SYSCTRL_DFLLCTRL_ENABLE;
   while (!(SYSCTRL->PCLKSR & SYSCTRL_PCLKSR_DFLLRDY));
 
-  // Step 4: Configure GCLK_GEN0 to use DFLL48M as source
+  // Step 3: Configure GCLK_GEN0 to use DFLL48M as source
   GCLK->GENDIV = (0 << GCLK_GENCTRL_ID_Pos); // GEN0, div=1
   while (GCLK->STATUS & GCLK_STATUS_SYNCBUSY);
 

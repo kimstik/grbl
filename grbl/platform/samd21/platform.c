@@ -151,10 +151,9 @@ void hal_gpio_interrupt_init(void) {
   EIC_INT_ENABLE(15);
   EIC_INT_ENABLE(0);
 
-  // Configure PROBE pin (PA19)
-  EIC_PIN_CONFIG(PORT_GROUPA, 19);  // PROBE
-  EIC_CONFIG_CHANNEL(3, EIC_CONFIG_SENSE_BOTH);  // PA19 -> EXTINT[3]
-  EIC_INT_ENABLE(3);
+  // NOTE: PROBE pin (PA19) is POLLED, not interrupt-driven (see probe.c)
+  // Pin direction and pullup configured by probe_init() in probe.c
+  // No EIC configuration needed here
 
   // Enable EIC interrupt in NVIC
   NVIC_EnableIRQ(EIC_IRQn);
