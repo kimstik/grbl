@@ -46,18 +46,17 @@ STP_TMR_PRESCALER_RESET();
 // TC3 initialization for CTC mode
 #define STP_TMR_INIT() \
   do { \
-    PM->APBCMASK.reg |= PM_APBCMASK_TC3; \
-    GCLK->CLKCTRL.reg = GCLK_CLKCTRL_ID_TCC2_TC3 | GCLK_CLKCTRL_GEN_GCLK0 | GCLK_CLKCTRL_CLKEN; \
-    while (GCLK->STATUS.bit.SYNCBUSY); \
-    TC3->COUNT16.CTRLA.reg = TC_CTRLA_MODE_COUNT16; \
-    TC3->COUNT16.CTRLA.reg |= TC_CTRLA_WAVEGEN_MFRQ; \
-    TC3->COUNT16.CTRLA.reg |= TC_CTRLA_PRESCALER_DIV1; \
-    while (TC3->COUNT16.STATUS.bit.SYNCBUSY); \
+    PM->APBCMASK |= PM_APBCMASK_TC3; \
+    GCLK->CLKCTRL = (GCLK_CLKCTRL_ID_TC3_TC4 << GCLK_CLKCTRL_ID_Pos) | \
+                     GCLK_CLKCTRL_GEN_GCLK0 | GCLK_CLKCTRL_CLKEN; \
+    while (GCLK->STATUS & (1 << 7)); \
+    TC3->CTRLA = TC_CTRLA_MODE_COUNT16 | TC_CTRLA_WAVEGEN_MFRQ | TC_CTRLA_PRESCALER_DIV1; \
+    while (TC3->STATUS & (1 << 7)); \
   } while(0)
 
-#define STP_TMR_INT_ENA()               (TC3->COUNT16.INTENSET.reg = TC_INTENSET_MC0)
-#define STP_TMR_INT_DIS()               (TC3->COUNT16.INTENCLR.reg = TC_INTENCLR_MC0)
-#define STP_TMR_PERIOD_SET(cycles)      (TC3->COUNT16.CC[0].reg = (cycles))
+#define STP_TMR_INT_ENA()               (TC3->INTENSET = TC_INTFLAG_MC0)
+#define STP_TMR_INT_DIS()               (TC3->INTENCLR = TC_INTFLAG_MC0)
+#define STP_TMR_PERIOD_SET(cycles)      (TC3->CC[0] = (cycles))
 #define STP_TMR_PRESCALER_SET(prescaler) /* SAMD21: Prescaler set in INIT, dynamic change requires reconfiguration */
 #define STP_TMR_PRESCALER_RESET()       /* Not needed on SAMD21 */
 
@@ -67,21 +66,22 @@ STP_TMR_PRESCALER_RESET();
 
 #define STP_PULSE_RESET_INIT() \
   do { \
-    PM->APBCMASK.reg |= PM_APBCMASK_TC4; \
-    GCLK->CLKCTRL.reg = GCLK_CLKCTRL_ID_TC4_TC5 | GCLK_CLKCTRL_GEN_GCLK0 | GCLK_CLKCTRL_CLKEN; \
-    while (GCLK->STATUS.bit.SYNCBUSY); \
-    TC4->COUNT16.CTRLA.reg = TC_CTRLA_MODE_COUNT16; \
-    TC4->COUNT16.INTENSET.reg = TC_INTENSET_OVF; \
-    while (TC4->COUNT16.STATUS.bit.SYNCBUSY); \
+    PM->APBCMASK |= PM_APBCMASK_TC4; \
+    GCLK->CLKCTRL = (GCLK_CLKCTRL_ID_TC3_TC4 << GCLK_CLKCTRL_ID_Pos) | \
+                     GCLK_CLKCTRL_GEN_GCLK0 | GCLK_CLKCTRL_CLKEN; \
+    while (GCLK->STATUS & (1 << 7)); \
+    TC4->CTRLA = TC_CTRLA_MODE_COUNT16; \
+    TC4->INTENSET = TC_INTFLAG_OVF; \
+    while (TC4->STATUS & (1 << 7)); \
   } while(0)
 
-#define STP_PULSE_RESET_START()         (TC4->COUNT16.CTRLA.reg |= TC_CTRLA_ENABLE)
-#define STP_PULSE_RESET_STOP()          (TC4->COUNT16.CTRLA.reg &= ~TC_CTRLA_ENABLE)
-#define STP_PULSE_RESET_COUNT_SET(val)  (TC4->COUNT16.COUNT.reg = (val))
-#define STP_PULSE_RESET_COMPARE_SET(val) (TC4->COUNT16.CC[0].reg = (val))
+#define STP_PULSE_RESET_START()         (TC4->CTRLA |= TC_CTRLA_ENABLE)
+#define STP_PULSE_RESET_STOP()          (TC4->CTRLA &= ~TC_CTRLA_ENABLE)
+#define STP_PULSE_RESET_COUNT_SET(val)  (TC4->COUNT = (val))
+#define STP_PULSE_RESET_COMPARE_SET(val) (TC4->CC[0] = (val))
 
 #ifdef STEP_PULSE_DELAY
-  #define STP_PULSE_DELAY_INIT()        (TC5->COUNT16.INTENSET.reg = TC_INTENSET_MC0)
+  #define STP_PULSE_DELAY_INIT()        (TC5->INTENSET = TC_INTFLAG_MC0)
 #endif
 
 // ============================================================================
@@ -90,20 +90,21 @@ STP_TMR_PRESCALER_RESET();
 
 #define PWM_INIT() \
   do { \
-    PM->APBCMASK.reg |= PM_APBCMASK_TCC0; \
-    GCLK->CLKCTRL.reg = GCLK_CLKCTRL_ID_TCC0_TCC1 | GCLK_CLKCTRL_GEN_GCLK0 | GCLK_CLKCTRL_CLKEN; \
-    while (GCLK->STATUS.bit.SYNCBUSY); \
-    TCC0->CTRLA.reg = TCC_CTRLA_PRESCALER_DIV64; \
-    TCC0->WAVE.reg = TCC_WAVE_WAVEGEN_NPWM; \
-    TCC0->PER.reg = 0xFF; \
-    while (TCC0->SYNCBUSY.bit.PER); \
+    PM->APBCMASK |= PM_APBCMASK_TCC0; \
+    GCLK->CLKCTRL = (GCLK_CLKCTRL_ID_TCC0_TCC1 << GCLK_CLKCTRL_ID_Pos) | \
+                     GCLK_CLKCTRL_GEN_GCLK0 | GCLK_CLKCTRL_CLKEN; \
+    while (GCLK->STATUS & (1 << 7)); \
+    TCC0->CTRLA = TCC_CTRLA_PRESCALER_DIV64; \
+    TCC0->WAVE = TCC_WAVE_WAVEGEN_NPWM; \
+    TCC0->PER = 0xFF; \
+    while (TCC0->SYNCBUSY & (1 << 3)); \
   } while(0)
 
-#define PWM_ENABLE()            (TCC0->CTRLA.reg |= TCC_CTRLA_ENABLE)
-#define PWM_DISABLE()           (TCC0->CTRLA.reg &= ~TCC_CTRLA_ENABLE)
-#define PWM_IS_ENABLED()        (TCC0->CTRLA.reg & TCC_CTRLA_ENABLE)
+#define PWM_ENABLE()            (TCC0->CTRLA |= TCC_CTRLA_ENABLE)
+#define PWM_DISABLE()           (TCC0->CTRLA &= ~TCC_CTRLA_ENABLE)
+#define PWM_IS_ENABLED()        (TCC0->CTRLA & TCC_CTRLA_ENABLE)
 #define PWM_SET(duty_value) \
   do { \
-    TCC0->CC[0].reg = (duty_value); \
-    while (TCC0->SYNCBUSY.bit.CC0); \
+    TCC0->CC[0] = (duty_value); \
+    while (TCC0->SYNCBUSY & (1 << 4)); \
   } while(0)

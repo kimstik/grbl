@@ -373,6 +373,35 @@ typedef struct {
 #define TC_INTFLAG_MC0_Pos      4
 #define TC_INTFLAG_MC0          (1 << TC_INTFLAG_MC0_Pos)
 
+// TCC - Timer Counter for Control (PWM)
+// Note: TCC uses similar structure to TC but with enhanced features
+// Tcc type is forward declared earlier in this file
+
+// TCC CTRLA bits
+#define TCC_CTRLA_SWRST_Pos      0
+#define TCC_CTRLA_SWRST          (1 << TCC_CTRLA_SWRST_Pos)
+#define TCC_CTRLA_ENABLE_Pos     1
+#define TCC_CTRLA_ENABLE         (1 << TCC_CTRLA_ENABLE_Pos)
+#define TCC_CTRLA_PRESCALER_Pos  8
+#define TCC_CTRLA_PRESCALER_Msk  (0x7 << TCC_CTRLA_PRESCALER_Pos)
+#define TCC_CTRLA_PRESCALER_DIV1  (0x0 << TCC_CTRLA_PRESCALER_Pos)
+#define TCC_CTRLA_PRESCALER_DIV2  (0x1 << TCC_CTRLA_PRESCALER_Pos)
+#define TCC_CTRLA_PRESCALER_DIV4  (0x2 << TCC_CTRLA_PRESCALER_Pos)
+#define TCC_CTRLA_PRESCALER_DIV8  (0x3 << TCC_CTRLA_PRESCALER_Pos)
+#define TCC_CTRLA_PRESCALER_DIV16 (0x4 << TCC_CTRLA_PRESCALER_Pos)
+#define TCC_CTRLA_PRESCALER_DIV64 (0x5 << TCC_CTRLA_PRESCALER_Pos)
+#define TCC_CTRLA_PRESCALER_DIV256 (0x6 << TCC_CTRLA_PRESCALER_Pos)
+#define TCC_CTRLA_PRESCALER_DIV1024 (0x7 << TCC_CTRLA_PRESCALER_Pos)
+
+// TCC WAVE bits (at offset similar to TC CTRLBSET but different function)
+#define TCC_WAVE_WAVEGEN_Pos     0
+#define TCC_WAVE_WAVEGEN_Msk     (0x7 << TCC_WAVE_WAVEGEN_Pos)
+#define TCC_WAVE_WAVEGEN_NPWM    (0x2 << TCC_WAVE_WAVEGEN_Pos)  // Normal PWM
+
+// GCLK CLKCTRL GEN field values
+#define GCLK_CLKCTRL_GEN_GCLK0   (0x0 << GCLK_CLKCTRL_GEN_Pos)
+#define GCLK_CLKCTRL_GEN_GCLK1   (0x1 << GCLK_CLKCTRL_GEN_Pos)
+
 // SERCOM - Serial Communication Interface (USART mode)
 typedef struct {
   volatile uint32_t CTRLA;      // 0x00 Control A
