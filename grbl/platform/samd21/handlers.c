@@ -12,7 +12,6 @@
 #include "../hal.h"
 #include "platform.h"
 #include "timer.h"
-#include "../../grbl.h"
 
 // ============================================================================
 // TIMER ISR WRAPPERS - Auto-clear interrupt flags before calling implementation
