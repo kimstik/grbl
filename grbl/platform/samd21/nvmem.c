@@ -57,6 +57,10 @@ static void flash_write_page(uint32_t addr, const uint8_t *data) {
     dst[i] = src[i];
   }
 
+  // Data Synchronization Barrier - ensure ALL page buffer writes complete
+  // before issuing Flash write command (BUG #13 fix)
+  __DSB();
+
   // Write page buffer to Flash
   flash_execute_command(NVMCTRL_CMD_WP, addr);
 }

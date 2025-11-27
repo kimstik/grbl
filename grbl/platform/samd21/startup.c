@@ -15,6 +15,7 @@
 
 #include <stdint.h>
 #include "samd21.h"
+#include "core_cm0plus.h"
 
 // ============================================================================
 // EXTERNAL SYMBOLS (from linker script)
@@ -187,11 +188,17 @@ void Reset_Handler(void) {
     *dst++ = *src++;
   }
 
+  // Data Synchronization Barrier - ensure .data copy completes before BSS init (BUG #13 fix)
+  __DSB();
+
   // Zero-initialize .bss section
   dst = &_sbss;
   while (dst < &_ebss) {
     *dst++ = 0;
   }
+
+  // Data Synchronization Barrier - ensure BSS init completes before SystemInit (BUG #13 fix)
+  __DSB();
 
   // Initialize system clocks (48 MHz)
   SystemInit();

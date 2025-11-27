@@ -12,6 +12,7 @@
 #include "../hal.h"
 #include "platform.h"
 #include "timer.h"
+#include "../../grbl.h"
 
 // ============================================================================
 // TIMER ISR WRAPPERS - Auto-clear interrupt flags before calling implementation
@@ -52,6 +53,55 @@ void TC4_Handler(void) {
 // SERCOM3_Handler is implemented in serial.c
 
 // ============================================================================
+// LIMIT AND CONTROL PIN ISR IMPLEMENTATIONS
+// ============================================================================
+
+// Limit switch interrupt handler
+void limits_isr(void) {
+  // Check limit pin state
+  if (sys.state != STATE_ALARM) {
+    if (!(sys_rt_exec_alarm)) {
+      // Check if any limit switch is triggered
+      uint32_t limit_state = PORT->Group[LIMIT_PIN].IN & LIMIT_MASK;
+      if (limit_state) {
+        mc_reset(); // Initiate system kill
+        system_set_exec_alarm(EXEC_ALARM_HARD_LIMIT); // Indicate hard limit event
+      }
+    }
+  }
+}
+
+// Control pin interrupt handler
+void control_isr(void) {
+  // Read control pin states and set appropriate system flags
+  uint32_t pin = PORT->Group[CONTROL_PIN].IN;
+
+  // Mask to get only control pins
+  pin &= CONTROL_MASK;
+
+  if (pin) {
+    // Invert because control pins are pulled high
+    pin ^= CONTROL_MASK;
+
+    // Check individual control bits and set flags
+    if (pin & (1 << CONTROL_RESET_BIT)) {
+      mc_reset();
+    }
+    if (pin & (1 << CONTROL_FEED_HOLD_BIT)) {
+      system_set_exec_state_flag(EXEC_FEED_HOLD);
+    }
+    if (pin & (1 << CONTROL_CYCLE_START_BIT)) {
+      system_set_exec_state_flag(EXEC_CYCLE_START);
+    }
+    #ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
+      if (pin & (1 << CONTROL_SAFETY_DOOR_BIT)) {
+        system_set_exec_state_flag(EXEC_SAFETY_DOOR);
+      }
+    #endif
+  }
+}
+
+// ============================================================================
 // GPIO INTERRUPTS (EIC - External Interrupt Controller)
 // ============================================================================
 
@@ -62,10 +112,10 @@ void TC4_Handler(void) {
 // - EXTINT[14] -> PA14 (CONTROL_RESET)
 // - EXTINT[15] -> PA15 (CONTROL_FEED_HOLD)
 // - EXTINT[0]  -> PA16 (CONTROL_CYCLE_START) - PA16 % 16 = 0
-// - EXTINT[3]  -> PA19 (PROBE) - PA19 % 16 = 3
+// Note: PROBE pin (PA19) is polled, not interrupt-driven
 
 // External interrupt controller handler
-// Handles all GPIO interrupts (limits, control, probe)
+// Handles all GPIO interrupts (limits, control)
 void EIC_Handler(void) {
   // Get pending interrupt flags
   uint32_t flags = EIC->INTFLAG;
@@ -75,19 +125,11 @@ void EIC_Handler(void) {
 
   // Check limit switches (EXTINT[4,5,7])
   if (flags & ((1<<4) | (1<<5) | (1<<7))) {
-    extern void limits_isr(void);
     limits_isr();
   }
 
   // Check control pins (EXTINT[0,14,15])
   if (flags & ((1<<0) | (1<<14) | (1<<15))) {
-    extern void control_interrupt_handler(void);
-    control_interrupt_handler();
-  }
-
-  // Check probe pin (EXTINT[3])
-  if (flags & (1<<3)) {
-    extern void probe_isr(void);
-    probe_isr();
+    control_isr();
   }
 }
