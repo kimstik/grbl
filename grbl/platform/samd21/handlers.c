@@ -53,57 +53,14 @@ void TC4_Handler(void) {
 // SERCOM3_Handler is implemented in serial.c
 
 // ============================================================================
-// LIMIT AND CONTROL PIN ISR IMPLEMENTATIONS
-// ============================================================================
-
-// Limit switch interrupt handler
-void limits_isr(void) {
-  // Check limit pin state
-  if (sys.state != STATE_ALARM) {
-    if (!(sys_rt_exec_alarm)) {
-      // Check if any limit switch is triggered
-      uint32_t limit_state = PORT->Group[LIMIT_PIN].IN & LIMIT_MASK;
-      if (limit_state) {
-        mc_reset(); // Initiate system kill
-        system_set_exec_alarm(EXEC_ALARM_HARD_LIMIT); // Indicate hard limit event
-      }
-    }
-  }
-}
-
-// Control pin interrupt handler
-void control_isr(void) {
-  // Read control pin states and set appropriate system flags
-  uint32_t pin = PORT->Group[CONTROL_PIN].IN;
-
-  // Mask to get only control pins
-  pin &= CONTROL_MASK;
-
-  if (pin) {
-    // Invert because control pins are pulled high
-    pin ^= CONTROL_MASK;
-
-    // Check individual control bits and set flags
-    if (pin & (1 << CONTROL_RESET_BIT)) {
-      mc_reset();
-    }
-    if (pin & (1 << CONTROL_FEED_HOLD_BIT)) {
-      system_set_exec_state_flag(EXEC_FEED_HOLD);
-    }
-    if (pin & (1 << CONTROL_CYCLE_START_BIT)) {
-      system_set_exec_state_flag(EXEC_CYCLE_START);
-    }
-    #ifdef ENABLE_SAFETY_DOOR_INPUT_PIN
-      if (pin & (1 << CONTROL_SAFETY_DOOR_BIT)) {
-        system_set_exec_state_flag(EXEC_SAFETY_DOOR);
-      }
-    #endif
-  }
-}
-
-// ============================================================================
 // GPIO INTERRUPTS (EIC - External Interrupt Controller)
 // ============================================================================
+
+// Forward declarations - these functions are defined in base GRBL code:
+// - LIMIT_INT_IRQHandler() is defined in limits.c via HAL_GPIO_IRQ_HANDLER(LIMIT_INT)
+// - CONTROL_INT_IRQHandler() is defined in system.c via HAL_GPIO_IRQ_HANDLER(CONTROL_INT)
+extern void LIMIT_INT_IRQHandler(void);
+extern void CONTROL_INT_IRQHandler(void);
 
 // EIC channels mapped to pins:
 // - EXTINT[4]  -> PA4  (X_LIMIT)
@@ -116,6 +73,7 @@ void control_isr(void) {
 
 // External interrupt controller handler
 // Handles all GPIO interrupts (limits, control)
+// Calls base GRBL interrupt handlers from limits.c and system.c
 void EIC_Handler(void) {
   // Get pending interrupt flags
   uint32_t flags = EIC->INTFLAG;
@@ -125,11 +83,11 @@ void EIC_Handler(void) {
 
   // Check limit switches (EXTINT[4,5,7])
   if (flags & ((1<<4) | (1<<5) | (1<<7))) {
-    limits_isr();
+    LIMIT_INT_IRQHandler();  // Call base GRBL limit handler from limits.c
   }
 
   // Check control pins (EXTINT[0,14,15])
   if (flags & ((1<<0) | (1<<14) | (1<<15))) {
-    control_isr();
+    CONTROL_INT_IRQHandler();  // Call base GRBL control handler from system.c
   }
 }
