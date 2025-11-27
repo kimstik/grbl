@@ -91,134 +91,14 @@ void hal_clock_config(void) {
 }
 
 // ============================================================================
-// TIMER FUNCTIONS (Stepper Timer)
+// TIMER FUNCTIONS - Now implemented as macros in timer.h
 // ============================================================================
-
-void hal_stepper_timer_init(void) {
-  // Initialize TC3 for stepper timing
-
-  // Enable TC3 clock
-  PM->APBCMASK |= PM_APBCMASK_TC3;
-
-  // Configure GCLK for TC3
-  GCLK->CLKCTRL = GCLK_CLKCTRL_ID_TC3_TC4 |
-                  GCLK_CLKCTRL_CLKEN |
-                  (0 << GCLK_CLKCTRL_GEN_Pos);  // Use GCLK0
-  while (GCLK->STATUS & GCLK_STATUS_SYNCBUSY);
-
-  // Reset TC3
-  TC3->CTRLA = TC_CTRLA_SWRST;
-  while (TC3->CTRLA & TC_CTRLA_SWRST);
-
-  // Configure TC3: 16-bit mode, match frequency, no prescaler
-  TC3->CTRLA = TC_CTRLA_MODE_COUNT16 |
-               TC_CTRLA_WAVEGEN_MFRQ |
-               TC_CTRLA_PRESCALER_DIV1;
-
-  // Set initial period
-  TC3->CC[0] = 1000;  // Default 1ms
-
-  // Enable interrupt
-  TC3->INTENSET = TC_INTFLAG_MC0;
-}
-
-void hal_stepper_timer_start(void) {
-  // Start stepper timer
-  TC3->CTRLA |= TC_CTRLA_ENABLE;
-  while (TC3->STATUS & 0x80);  // Wait for sync
-}
-
-void hal_stepper_timer_stop(void) {
-  // Stop stepper timer
-  TC3->CTRLA &= ~TC_CTRLA_ENABLE;
-  while (TC3->STATUS & 0x80);  // Wait for sync
-}
-
-void hal_stepper_timer_set_period(uint32_t period) {
-  // Set timer period in ticks
-  if (period > 0xFFFF) period = 0xFFFF;
-  TC3->CC[0] = (uint16_t)period;
-}
-
-void hal_pulse_timer_init(void) {
-  // Initialize TC4 for pulse reset
-
-  // Enable TC4 clock
-  PM->APBCMASK |= PM_APBCMASK_TC4;
-
-  // GCLK already configured for TC3/TC4
-
-  // Reset TC4
-  TC4->CTRLA = TC_CTRLA_SWRST;
-  while (TC4->CTRLA & TC_CTRLA_SWRST);
-
-  // Configure TC4: 16-bit mode, match frequency
-  TC4->CTRLA = TC_CTRLA_MODE_COUNT16 |
-               TC_CTRLA_WAVEGEN_MFRQ |
-               TC_CTRLA_PRESCALER_DIV1;
-
-  // Set period for pulse width (in CPU ticks)
-  TC4->CC[0] = 100;  // Short pulse
-
-  // Enable interrupt
-  TC4->INTENSET = TC_INTFLAG_MC0;
-}
-
-void hal_timer_pulse_reset_set_count(uint32_t count) {
-  // Set pulse timer count value
-  TC4->COUNT = (uint16_t)count;
-}
-
-// ============================================================================
-// SPINDLE PWM FUNCTIONS
-// ============================================================================
-
-// ISSUE #3 (CRITICAL): Spindle PWM initialization INCOMPLETE!
-// Variable spindle speed (M3 S1000-S12000) won't work
-// Only on/off spindle control available
-//
-// TODO: Complete TCC0 configuration:
-// 1. Reset TCC0: TCC0->CTRLA = TCC_CTRLA_SWRST
-// 2. Set waveform mode: TCC0->WAVE = TCC_WAVE_WAVEGEN_NPWM
-// 3. Set period: TCC0->PER = SPINDLE_PWM_MAX_VALUE
-// 4. Set initial duty: TCC0->CC[0] = 0
-// 5. Enable TCC0: TCC0->CTRLA = TCC_CTRLA_ENABLE
-void hal_spindle_pwm_init(void) {
-  // Initialize TCC0 for spindle PWM on PA6 (WO[0])
-
-  // Enable TCC0 clock
-  PM->APBCMASK |= PM_APBCMASK_TCC0;
-
-  // Configure GCLK for TCC0
-  GCLK->CLKCTRL = GCLK_CLKCTRL_ID_TCC0_TCC1 |
-                  GCLK_CLKCTRL_CLKEN |
-                  (0 << GCLK_CLKCTRL_GEN_Pos);  // Use GCLK0
-  while (GCLK->STATUS & GCLK_STATUS_SYNCBUSY);
-
-  // ISSUE #13 (MINOR): Hard-coded magic numbers, hard to read
-  // Better: #define PMUX_FUNC_E 0x4
-  // Configure PA6 for TCC0/WO[0] (Function E)
-  PORT->Group[PORT_GROUPA].PINCFG[SPINDLE_PWM_BIT] = PORT_PINCFG_PMUXEN;
-  PORT->Group[PORT_GROUPA].PMUX[SPINDLE_PWM_BIT >> 1] |= (0x4 << ((SPINDLE_PWM_BIT & 1) * 4));  // Function E
-
-  // Reset TCC0 (using TC structure as they're similar)
-  // Note: TCC has more features but basic config is similar to TC
-  // TODO: Add proper TCC structure to samd21.h if needed for advanced features
-}
-
-// ISSUE #3 (CRITICAL): Spindle PWM set NOT IMPLEMENTED!
-// M3 S1000 (set spindle speed) won't do anything
-// TODO: Implement: TCC0->CC[SPINDLE_PWM_CHANNEL] = value;
-void hal_spindle_pwm_set(uint16_t value) {
-  // TODO: Implement TCC0 PWM set
-  (void)value;
-}
-
-// ISSUE #3 (CRITICAL): Spindle PWM duty NOT IMPLEMENTED!
-// TODO: Implement: TCC0->CC[0] = duty;
-void hal_timer_spindle_pwm_set_duty(uint16_t duty) {
-  (void)duty;  // Not implemented yet
-}
+// Timer initialization, control, and ISR definitions moved to timer.h
+// All timer operations use platform-agnostic macros:
+//   STP_TMR_*          - Stepper timer (TC3)
+//   STP_PULSE_RESET_*  - Pulse reset timer (TC4)
+//   PWM_*              - Spindle PWM (TCC0)
+//   ISR_STEP, ISR_STEP_RESET, ISR_STEP_DELAY - Interrupt handlers
 
 // ============================================================================
 // WATCHDOG FUNCTIONS
