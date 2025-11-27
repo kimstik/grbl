@@ -39,7 +39,11 @@ void serial_init() {
   // Configure PA23 (RX/PAD1) and PA24 (TX/PAD2) for SERCOM3 (Function C = 0x2)
   PORT->Group[PORT_GROUPA].PINCFG[23] = PORT_PINCFG_PMUXEN;
   PORT->Group[PORT_GROUPA].PINCFG[24] = PORT_PINCFG_PMUXEN;
-  PORT->Group[PORT_GROUPA].PMUX[23 >> 1] = (0x2 << 4) | 0x2;  // Both pins = Function C
+
+  // PA23 is odd (uses upper nibble of PMUX[11])
+  // PA24 is even (uses lower nibble of PMUX[12])
+  PORT->Group[PORT_GROUPA].PMUX[23 >> 1] = (PORT->Group[PORT_GROUPA].PMUX[23 >> 1] & 0x0F) | (0x2 << 4);
+  PORT->Group[PORT_GROUPA].PMUX[24 >> 1] = (PORT->Group[PORT_GROUPA].PMUX[24 >> 1] & 0xF0) | 0x2;
 
   // Reset SERCOM3
   SERCOM3->CTRLA = SERCOM_USART_CTRLA_SWRST;
