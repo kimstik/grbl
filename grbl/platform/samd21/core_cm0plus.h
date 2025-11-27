@@ -74,6 +74,31 @@ typedef struct {
 #define NVIC_BASE         (0xE000E100UL)
 #define NVIC              ((NVIC_Type *)NVIC_BASE)
 
+// NVIC helper functions
+__STATIC_INLINE void NVIC_EnableIRQ(IRQn_Type IRQn) {
+  NVIC->ISER[0] = (1 << ((uint32_t)(IRQn) & 0x1F));
+}
+
+__STATIC_INLINE void NVIC_DisableIRQ(IRQn_Type IRQn) {
+  NVIC->ICER[0] = (1 << ((uint32_t)(IRQn) & 0x1F));
+}
+
+__STATIC_INLINE void NVIC_SetPendingIRQ(IRQn_Type IRQn) {
+  NVIC->ISPR[0] = (1 << ((uint32_t)(IRQn) & 0x1F));
+}
+
+__STATIC_INLINE void NVIC_ClearPendingIRQ(IRQn_Type IRQn) {
+  NVIC->ICPR[0] = (1 << ((uint32_t)(IRQn) & 0x1F));
+}
+
+__STATIC_INLINE void NVIC_SetPriority(IRQn_Type IRQn, uint32_t priority) {
+  NVIC->IP[(uint32_t)(IRQn)] = ((priority << 6) & 0xC0);
+}
+
+__STATIC_INLINE uint32_t NVIC_GetPriority(IRQn_Type IRQn) {
+  return (NVIC->IP[(uint32_t)(IRQn)] >> 6);
+}
+
 // ============================================================================
 // SysTick
 // ============================================================================
