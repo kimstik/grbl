@@ -496,4 +496,47 @@ typedef struct {
 #define NVMCTRL_INTFLAG_READY_Pos 0
 #define NVMCTRL_INTFLAG_READY   (1 << NVMCTRL_INTFLAG_READY_Pos)
 
+// EIC - External Interrupt Controller
+typedef struct {
+  volatile uint8_t  CTRL;       // 0x00 Control
+  volatile uint8_t  STATUS;     // 0x01 Status
+  volatile uint8_t  NMICTRL;    // 0x02 NMI Control
+  volatile uint8_t  NMIFLAG;    // 0x03 NMI Flag
+  volatile uint32_t EVCTRL;     // 0x04 Event Control
+  volatile uint32_t INTENCLR;   // 0x08 Interrupt Enable Clear
+  volatile uint32_t INTENSET;   // 0x0C Interrupt Enable Set
+  volatile uint32_t INTFLAG;    // 0x10 Interrupt Flag Status and Clear
+  volatile uint32_t WAKEUP;     // 0x14 Wakeup Enable
+  volatile uint32_t CONFIG[2];  // 0x18 Configuration 0-1
+} Eic;
+
+#define EIC ((Eic*)EIC_BASE)
+
+// EIC CTRL bits
+#define EIC_CTRL_SWRST_Pos      0
+#define EIC_CTRL_SWRST          (1 << EIC_CTRL_SWRST_Pos)
+#define EIC_CTRL_ENABLE_Pos     1
+#define EIC_CTRL_ENABLE         (1 << EIC_CTRL_ENABLE_Pos)
+
+// EIC CONFIG register - 4 bits per channel (SENSE0-7 in CONFIG[0], SENSE8-15 in CONFIG[1])
+#define EIC_CONFIG_SENSE_Pos(n)     ((n) * 4)
+#define EIC_CONFIG_SENSE_Msk(n)     (0xF << EIC_CONFIG_SENSE_Pos(n))
+#define EIC_CONFIG_FILTEN_Pos(n)    (((n) * 4) + 3)
+#define EIC_CONFIG_FILTEN(n)        (1 << EIC_CONFIG_FILTEN_Pos(n))
+
+// EIC SENSE modes
+#define EIC_CONFIG_SENSE_NONE       0x0
+#define EIC_CONFIG_SENSE_RISE       0x1
+#define EIC_CONFIG_SENSE_FALL       0x2
+#define EIC_CONFIG_SENSE_BOTH       0x3
+#define EIC_CONFIG_SENSE_HIGH       0x4
+#define EIC_CONFIG_SENSE_LOW        0x5
+
+// PM APBAMASK bits for EIC
+#define PM_APBAMASK_EIC_Pos     2
+#define PM_APBAMASK_EIC         (1 << PM_APBAMASK_EIC_Pos)
+
+// GCLK ID for EIC
+#define GCLK_CLKCTRL_ID_EIC     3
+
 #endif // SAMD21_H

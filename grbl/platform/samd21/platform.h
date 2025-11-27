@@ -122,32 +122,58 @@ typedef uint32_t hal_gpio_port_t;
 // Timer macros (STP_TMR_*, STP_PULSE_RESET_*, PWM_*, ISR_*) now in timer.h
 
 // ============================================================================
-// GPIO INTERRUPT MACROS
+// GPIO INTERRUPT MACROS - EIC (External Interrupt Controller)
 // ============================================================================
 
-// ISSUE #4 (CRITICAL): GPIO interrupts NOT IMPLEMENTED!
-// Hard limits won't trigger interrupts - must rely on polling (slow, unreliable)
-// Control pins (reset, feed hold, cycle start) won't work as interrupts
-// Probe detection may miss fast events
-//
-// TODO: Implement External Interrupt Controller (EIC):
-// 1. Enable EIC clock: PM->APBAMASK |= PM_APBAMASK_EIC
-// 2. Configure GCLK for EIC
-// 3. Map pins to EIC channels via PMUX (Function A)
-// 4. Configure EIC->CONFIG for edge/level detection
-// 5. Enable interrupts: EIC->INTENSET
-// 6. Implement EIC_Handler() ISR
-//
-// See SAMD21 datasheet section 21 (External Interrupt Controller)
+// EIC initialization - must be called before enabling any GPIO interrupts
+#define EIC_INIT() \
+  do { \
+    PM->APBAMASK |= PM_APBAMASK_EIC; \
+    GCLK->CLKCTRL = (GCLK_CLKCTRL_ID_EIC << GCLK_CLKCTRL_ID_Pos) | \
+                     GCLK_CLKCTRL_GEN_GCLK0 | GCLK_CLKCTRL_CLKEN; \
+    while (GCLK->STATUS & GCLK_STATUS_SYNCBUSY); \
+    EIC->CTRL = 0; \
+    while (EIC->STATUS & (1 << 7)); \
+    EIC->CTRL = EIC_CTRL_ENABLE; \
+    while (EIC->STATUS & (1 << 7)); \
+  } while(0)
+
+// Map pin to EIC channel: PA[n] -> EXTINT[n % 16] via PMUX Function A (0x0)
+#define EIC_CHANNEL(pin_bit)  ((pin_bit) & 0xF)
+
+// Configure pin for EIC interrupt (PMUX + PINCFG)
+#define EIC_PIN_CONFIG(port, pin_bit) \
+  do { \
+    PORT->Group[port].PINCFG[pin_bit] = PORT_PINCFG_PMUXEN | PORT_PINCFG_INEN; \
+    uint8_t pmux_idx = (pin_bit) >> 1; \
+    if ((pin_bit) & 1) { \
+      PORT->Group[port].PMUX[pmux_idx] = (PORT->Group[port].PMUX[pmux_idx] & 0x0F) | (0x0 << 4); \
+    } else { \
+      PORT->Group[port].PMUX[pmux_idx] = (PORT->Group[port].PMUX[pmux_idx] & 0xF0) | 0x0; \
+    } \
+  } while(0)
+
+// Configure EIC channel for edge detection (BOTH edges for limits/control/probe)
+#define EIC_CONFIG_CHANNEL(ch, sense) \
+  do { \
+    uint8_t cfg_idx = (ch) >> 3; \
+    uint8_t bit_pos = ((ch) & 0x7) * 4; \
+    EIC->CONFIG[cfg_idx] = (EIC->CONFIG[cfg_idx] & ~(0xF << bit_pos)) | \
+                           ((sense) << bit_pos) | EIC_CONFIG_FILTEN(ch & 0x7); \
+  } while(0)
+
+// Enable/disable EIC interrupt for channel
+#define EIC_INT_ENABLE(ch)      (EIC->INTENSET = (1 << (ch)))
+#define EIC_INT_DISABLE(ch)     (EIC->INTENCLR = (1 << (ch)))
 
 // Backward compatibility for base code (used in cpu_map.h)
-#define HAL_GPIO_INTERRUPT_ENABLE(pcmsk, interrupt, mask)   /* TODO: Implement EIC */
-#define HAL_GPIO_INTERRUPT_DISABLE(pcmsk, interrupt, mask)  /* TODO: Implement EIC */
+#define HAL_GPIO_INTERRUPT_ENABLE(pcmsk, interrupt, mask)   /* Handled by EIC_INIT + pin setup */
+#define HAL_GPIO_INTERRUPT_DISABLE(pcmsk, interrupt, mask)  /* Handled by EIC_INT_DISABLE */
 #define HAL_GPIO_IRQ_HANDLER(int_name)                      void int_name##_Handler(void)
 
 // New short names (for future migration)
-#define GPIO_INT_ENA(name)  /* TODO: Implement EIC for name */
-#define GPIO_INT_DIS(name)  /* TODO: Implement EIC for name */
+#define GPIO_INT_ENA(name)  /* Implemented via EIC in handlers.c */
+#define GPIO_INT_DIS(name)  /* Implemented via EIC in handlers.c */
 #define IRQ_HANDLER(name)   void name##_Handler(void)
 
 
@@ -157,6 +183,9 @@ typedef uint32_t hal_gpio_port_t;
 
 // Clock configuration (48 MHz from DFLL48M)
 void hal_clock_config(void);
+
+// GPIO interrupt initialization (EIC setup for limits/control/probe)
+void hal_gpio_interrupt_init(void);
 
 // Timing functions
 uint32_t hal_millis(void);

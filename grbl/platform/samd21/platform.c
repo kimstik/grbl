@@ -122,6 +122,45 @@ void hal_watchdog_feed(void) {
 void _delay_us(double __us) {}
 void _delay_ms(double __ms) {}
 // ============================================================================
+// GPIO INTERRUPT INITIALIZATION
+// ============================================================================
+
+void hal_gpio_interrupt_init(void) {
+  // Initialize EIC
+  EIC_INIT();
+
+  // Configure LIMIT pins (PA4, PA5, PA7)
+  EIC_PIN_CONFIG(PORT_GROUPA, 4);   // X_LIMIT
+  EIC_PIN_CONFIG(PORT_GROUPA, 5);   // Y_LIMIT
+  EIC_PIN_CONFIG(PORT_GROUPA, 7);   // Z_LIMIT
+  EIC_CONFIG_CHANNEL(4, EIC_CONFIG_SENSE_BOTH);
+  EIC_CONFIG_CHANNEL(5, EIC_CONFIG_SENSE_BOTH);
+  EIC_CONFIG_CHANNEL(7, EIC_CONFIG_SENSE_BOTH);
+  EIC_INT_ENABLE(4);
+  EIC_INT_ENABLE(5);
+  EIC_INT_ENABLE(7);
+
+  // Configure CONTROL pins (PA14, PA15, PA16)
+  EIC_PIN_CONFIG(PORT_GROUPA, 14);  // RESET
+  EIC_PIN_CONFIG(PORT_GROUPA, 15);  // FEED_HOLD
+  EIC_PIN_CONFIG(PORT_GROUPA, 16);  // CYCLE_START
+  EIC_CONFIG_CHANNEL(14, EIC_CONFIG_SENSE_BOTH);
+  EIC_CONFIG_CHANNEL(15, EIC_CONFIG_SENSE_BOTH);
+  EIC_CONFIG_CHANNEL(0, EIC_CONFIG_SENSE_BOTH);  // PA16 -> EXTINT[0]
+  EIC_INT_ENABLE(14);
+  EIC_INT_ENABLE(15);
+  EIC_INT_ENABLE(0);
+
+  // Configure PROBE pin (PA19)
+  EIC_PIN_CONFIG(PORT_GROUPA, 19);  // PROBE
+  EIC_CONFIG_CHANNEL(3, EIC_CONFIG_SENSE_BOTH);  // PA19 -> EXTINT[3]
+  EIC_INT_ENABLE(3);
+
+  // Enable EIC interrupt in NVIC
+  NVIC_EnableIRQ(EIC_IRQn);
+}
+
+// ============================================================================
 // INTERRUPT CONTROL
 // ============================================================================
 
