@@ -52,6 +52,7 @@ STP_TMR_PRESCALER_RESET();
     while (GCLK->STATUS & (1 << 7)); \
     TC3->CTRLA = TC_CTRLA_MODE_COUNT16 | TC_CTRLA_WAVEGEN_MFRQ | TC_CTRLA_PRESCALER_DIV1 | TC_CTRLA_ENABLE; \
     while (TC3->STATUS & (1 << 7)); \
+    NVIC_EnableIRQ(TC3_IRQn); \
   } while(0)
 
 #define STP_TMR_INT_ENA()               (TC3->INTENSET = TC_INTFLAG_MC0)
@@ -71,14 +72,15 @@ STP_TMR_PRESCALER_RESET();
                      GCLK_CLKCTRL_GEN_GCLK0 | GCLK_CLKCTRL_CLKEN; \
     while (GCLK->STATUS & (1 << 7)); \
     TC4->CTRLA = TC_CTRLA_MODE_COUNT16; \
-    TC4->INTENSET = TC_INTFLAG_OVF; \
     while (TC4->STATUS & (1 << 7)); \
+    TC4->INTENSET = TC_INTFLAG_OVF; \
+    NVIC_EnableIRQ(TC4_IRQn); \
   } while(0)
 
-#define STP_PULSE_RESET_START()         (TC4->CTRLA |= TC_CTRLA_ENABLE)
-#define STP_PULSE_RESET_STOP()          (TC4->CTRLA &= ~TC_CTRLA_ENABLE)
-#define STP_PULSE_RESET_COUNT_SET(val)  (TC4->COUNT = (val))
-#define STP_PULSE_RESET_COMPARE_SET(val) (TC4->CC[0] = (val))
+#define STP_PULSE_RESET_START()         do { TC4->CTRLA |= TC_CTRLA_ENABLE; while (TC4->STATUS & (1 << 7)); } while(0)
+#define STP_PULSE_RESET_STOP()          do { TC4->CTRLA &= ~TC_CTRLA_ENABLE; while (TC4->STATUS & (1 << 7)); } while(0)
+#define STP_PULSE_RESET_COUNT_SET(val)  do { TC4->COUNT = (val); while (TC4->STATUS & (1 << 7)); } while(0)
+#define STP_PULSE_RESET_COMPARE_SET(val) do { TC4->CC[0] = (val); while (TC4->STATUS & (1 << 7)); } while(0)
 
 #ifdef STEP_PULSE_DELAY
   #define STP_PULSE_DELAY_INIT()        (TC5->INTENSET = TC_INTFLAG_MC0)
@@ -95,13 +97,14 @@ STP_TMR_PRESCALER_RESET();
                      GCLK_CLKCTRL_GEN_GCLK0 | GCLK_CLKCTRL_CLKEN; \
     while (GCLK->STATUS & (1 << 7)); \
     TCC0->CTRLA = TCC_CTRLA_PRESCALER_DIV64; \
+    while (TCC0->SYNCBUSY & (1 << 3)); \
     TCC0->WAVE = TCC_WAVE_WAVEGEN_NPWM; \
     TCC0->PER = 0xFF; \
     while (TCC0->SYNCBUSY & ((1 << 6) | (1 << 7))); \
   } while(0)
 
-#define PWM_ENABLE()            (TCC0->CTRLA |= TCC_CTRLA_ENABLE)
-#define PWM_DISABLE()           (TCC0->CTRLA &= ~TCC_CTRLA_ENABLE)
+#define PWM_ENABLE()            do { TCC0->CTRLA |= TCC_CTRLA_ENABLE; while (TCC0->SYNCBUSY & (1 << 1)); } while(0)
+#define PWM_DISABLE()           do { TCC0->CTRLA &= ~TCC_CTRLA_ENABLE; while (TCC0->SYNCBUSY & (1 << 1)); } while(0)
 #define PWM_IS_ENABLED()        (TCC0->CTRLA & TCC_CTRLA_ENABLE)
 #define PWM_SET(duty_value) \
   do { \
