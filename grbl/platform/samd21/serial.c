@@ -62,10 +62,11 @@ void serial_init() {
                    SERCOM_USART_CTRLB_RXEN;
   while (SERCOM3->SYNCBUSY);
 
-  // Calculate baud rate for 115200 @ 48MHz
-  // BAUD = 65536 * (1 - 16 * (f_baud / f_ref))
-  // For 115200 @ 48MHz: BAUD = 65536 * (1 - 16 * 115200 / 48000000) = 63019
-  uint16_t baud_value = 65536 - ((65536 * 16.0f * 115200) / 48000000);
+  // Calculate baud rate for 115200 @ 48MHz (arithmetic mode)
+  // Formula: baud = f_ref / (S * (BAUD + 1)), where S = 16
+  // Solving: BAUD = (f_ref / (S * f_baud)) - 1
+  // BAUD = (48000000 / (16 * 115200)) - 1 = 26.04 - 1 = 25
+  uint16_t baud_value = (48000000UL / (16 * 115200)) - 1;  // = 25
   SERCOM3->BAUD = baud_value;
 
   // Enable RX Complete interrupt

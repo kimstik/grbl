@@ -97,7 +97,7 @@ STP_TMR_PRESCALER_RESET();
     TCC0->CTRLA = TCC_CTRLA_PRESCALER_DIV64; \
     TCC0->WAVE = TCC_WAVE_WAVEGEN_NPWM; \
     TCC0->PER = 0xFF; \
-    while (TCC0->SYNCBUSY & (1 << 3)); \
+    while (TCC0->SYNCBUSY & ((1 << 6) | (1 << 7))); \
   } while(0)
 
 #define PWM_ENABLE()            (TCC0->CTRLA |= TCC_CTRLA_ENABLE)
@@ -106,5 +106,5 @@ STP_TMR_PRESCALER_RESET();
 #define PWM_SET(duty_value) \
   do { \
     TCC0->CC[0] = (duty_value); \
-    while (TCC0->SYNCBUSY & (1 << 4)); \
+    while (TCC0->SYNCBUSY & (1 << 8)); \
   } while(0)
