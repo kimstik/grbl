@@ -19,16 +19,7 @@
 // ============================================================================
 // SERIAL INTERRUPT (SERCOM3)
 // ============================================================================
-
-// UART RX interrupt handler
-void SERCOM3_Handler(void) {
-  // Check for RX complete
-  // if (SERCOM3->USART.INTFLAG.bit.RXC) {
-  //   uint8_t data = SERCOM3->USART.DATA.reg;
-  //   extern void serial_rx_interrupt(uint8_t data);
-  //   serial_rx_interrupt(data);
-  // }
-}
+// SERCOM3_Handler is implemented in serial.c
 
 // ============================================================================
 // GPIO INTERRUPTS (EIC - External Interrupt Controller)

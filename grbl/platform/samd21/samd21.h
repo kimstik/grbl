@@ -283,6 +283,10 @@ typedef struct {
 
 #define SYSCTRL ((Sysctrl*)SYSCTRL_BASE)
 
+// SYSCTRL PCLKSR (Power and Clocks Status) bits
+#define SYSCTRL_PCLKSR_DFLLRDY_Pos    4
+#define SYSCTRL_PCLKSR_DFLLRDY        (1 << SYSCTRL_PCLKSR_DFLLRDY_Pos)
+
 // SYSCTRL DFLLCTRL bits
 #define SYSCTRL_DFLLCTRL_ENABLE_Pos   1
 #define SYSCTRL_DFLLCTRL_ENABLE       (1 << SYSCTRL_DFLLCTRL_ENABLE_Pos)
@@ -292,6 +296,30 @@ typedef struct {
 #define SYSCTRL_DFLLCTRL_STABLE       (1 << SYSCTRL_DFLLCTRL_STABLE_Pos)
 #define SYSCTRL_DFLLCTRL_ONDEMAND_Pos 7
 #define SYSCTRL_DFLLCTRL_ONDEMAND     (1 << SYSCTRL_DFLLCTRL_ONDEMAND_Pos)
+
+// SYSCTRL OSC8M bits
+#define SYSCTRL_OSC8M_ENABLE_Pos      1
+#define SYSCTRL_OSC8M_ENABLE          (1 << SYSCTRL_OSC8M_ENABLE_Pos)
+#define SYSCTRL_OSC8M_PRESC_Pos       8
+#define SYSCTRL_OSC8M_PRESC_Msk       (0x3 << SYSCTRL_OSC8M_PRESC_Pos)
+#define SYSCTRL_OSC8M_PRESC_DIV1      (0x0 << SYSCTRL_OSC8M_PRESC_Pos)
+
+// SYSCTRL DFLLVAL - Calibration values (from NVM)
+#define SYSCTRL_DFLLVAL_COARSE_Pos    10
+#define SYSCTRL_DFLLVAL_COARSE_Msk    (0x3F << SYSCTRL_DFLLVAL_COARSE_Pos)
+#define SYSCTRL_DFLLVAL_FINE_Pos      0
+#define SYSCTRL_DFLLVAL_FINE_Msk      (0x3FF << SYSCTRL_DFLLVAL_FINE_Pos)
+
+// SYSCTRL DFLLMUL - Multiplier (48MHz = 32kHz * 1464.84375)
+#define SYSCTRL_DFLLMUL_MUL_Pos       0
+#define SYSCTRL_DFLLMUL_MUL_Msk       (0xFFFF << SYSCTRL_DFLLMUL_MUL_Pos)
+#define SYSCTRL_DFLLMUL_FSTEP_Pos     16
+#define SYSCTRL_DFLLMUL_FSTEP_Msk     (0x3FF << SYSCTRL_DFLLMUL_FSTEP_Pos)
+#define SYSCTRL_DFLLMUL_CSTEP_Pos     26
+#define SYSCTRL_DFLLMUL_CSTEP_Msk     (0x3F << SYSCTRL_DFLLMUL_CSTEP_Pos)
+
+// NVMCTRL Software Calibration Area (factory calibration)
+#define NVMCTRL_CALIBRATION_AREA_ADDR 0x00806020UL
 
 // TC - Timer/Counter (16-bit mode)
 typedef struct {
