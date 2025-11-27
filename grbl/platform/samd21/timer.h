@@ -57,7 +57,7 @@ STP_TMR_PRESCALER_RESET();
 
 #define STP_TMR_INT_ENA()               (TC3->INTENSET = TC_INTFLAG_MC0)
 #define STP_TMR_INT_DIS()               (TC3->INTENCLR = TC_INTFLAG_MC0)
-#define STP_TMR_PERIOD_SET(cycles)      (TC3->CC[0] = (cycles))
+#define STP_TMR_PERIOD_SET(cycles)      do { TC3->CC[0] = (cycles); while (TC3->STATUS & (1 << 7)); } while(0)
 #define STP_TMR_PRESCALER_SET(prescaler) /* SAMD21: Prescaler set in INIT, dynamic change requires reconfiguration */
 #define STP_TMR_PRESCALER_RESET()       /* Not needed on SAMD21 */
 
