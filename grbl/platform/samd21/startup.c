@@ -136,8 +136,9 @@ void SystemInit(void) {
   // Configure NVM wait states for 48 MHz operation (1 wait state required)
   NVMCTRL->CTRLB = (NVMCTRL->CTRLB & ~(0xF << 1)) | (1 << 1);
 
-  // Step 1: Configure OSC8M to run at 8 MHz (default, just ensure enabled)
-  SYSCTRL->OSC8M = SYSCTRL_OSC8M_ENABLE | SYSCTRL_OSC8M_PRESC_DIV1 | (0x3 << 4);
+  // Step 1: Configure OSC8M to run at 8 MHz (always on, not on-demand)
+  // Bit 4 = ONDEMAND (0 = always on), Bit 5 = RUNSTDBY (1 = run in standby)
+  SYSCTRL->OSC8M = SYSCTRL_OSC8M_ENABLE | SYSCTRL_OSC8M_PRESC_DIV1 | (0x2 << 4);
   while (!(SYSCTRL->PCLKSR & (1 << 3))); // Wait for OSC8M ready
 
   // Step 2: Configure GCLK_GEN1 to use OSC8M (temporary source for DFLL reference)
