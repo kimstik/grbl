@@ -11,10 +11,40 @@
 
 #include "../hal.h"
 #include "platform.h"
+#include "timer.h"
 
 // ============================================================================
-// NOTE: TC3_Handler and TC4_Handler are defined in stepper.c
+// TIMER ISR WRAPPERS - Auto-clear interrupt flags before calling implementation
 // ============================================================================
+// ARM Cortex-M requires manual clearing of peripheral INTFLAG registers
+// These wrappers clear flags then call the actual ISR implementation from stepper.c
+
+// Forward declarations of ISR implementations (defined in stepper.c via macros)
+extern void __isr_step_impl(void);
+extern void __isr_step_reset_impl(void);
+#ifdef STEP_PULSE_DELAY
+  extern void __isr_step_delay_impl(void);
+#endif
+
+// TC3 Handler - Stepper timer (MC0 match interrupt)
+void TC3_Handler(void) {
+  TC3->INTFLAG = TC_INTFLAG_MC0;  // Clear MC0 interrupt flag FIRST
+  __isr_step_impl();               // Call stepper ISR implementation
+}
+
+// TC4 Handler - Pulse reset timer (Overflow interrupt)
+void TC4_Handler(void) {
+  TC4->INTFLAG = TC_INTFLAG_OVF;  // Clear OVF interrupt flag FIRST
+  __isr_step_reset_impl();         // Call pulse reset ISR implementation
+}
+
+#ifdef STEP_PULSE_DELAY
+  // TC5 Handler - Step pulse delay timer (MC0 match interrupt)
+  void TC5_Handler(void) {
+    TC5->INTFLAG = TC_INTFLAG_MC0;  // Clear MC0 interrupt flag FIRST
+    __isr_step_delay_impl();         // Call delay ISR implementation
+  }
+#endif
 
 // ============================================================================
 // SERIAL INTERRUPT (SERCOM3)
