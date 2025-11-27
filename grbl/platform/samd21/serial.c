@@ -93,11 +93,15 @@ void serial_write(uint8_t data) {
     }
   }
 
-  // Store data and update head
+  // CRITICAL SECTION: Prevent race with ISR (BUG #12 fix)
+  // Disable DRE interrupt during buffer update to ensure atomic operation
+  // Without this, CPU could reorder: head update before buffer write!
+  SERCOM3->INTENCLR = SERCOM_USART_INTFLAG_DRE;
+
   tx_buffer[tx_buffer_head] = data;
   tx_buffer_head = next_head;
 
-  // Enable TX Data Register Empty interrupt
+  // Re-enable TX Data Register Empty interrupt
   SERCOM3->INTENSET = SERCOM_USART_INTFLAG_DRE;
 }
 
@@ -165,6 +169,7 @@ void SERCOM3_Handler(void) {
     // Store data if buffer not full
     if (next_head != rx_buffer_tail) {
       rx_buffer[rx_buffer_head] = data;
+      __DMB();  // Memory barrier - ensure buffer write completes before head update (BUG #12 fix)
       rx_buffer_head = next_head;
     }
   }
