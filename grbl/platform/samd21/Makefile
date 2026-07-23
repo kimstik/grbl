@@ -182,6 +182,17 @@ flash-bossa: $(BIN_FILE)
 debug: $(ELF_FILE)
 	$(GDB) $<
 
+# Generate compile_commands.json for clangd/LSP (stdlib-only, no bear/compiledb).
+# Re-runs this Makefile as `make -nB` and parses the printed compiler recipe
+# lines - see tools/gen_compile_commands.py for details. To copy this pattern
+# into another platform's Makefile, add:
+#   compdb:
+#   	$(GRBL_DIR)/../tools/gen_compile_commands.py $(PLATFORM_NAME) --build $(BUILD)
+# (adjusting $(GRBL_DIR)/../ to however many levels get you back to the repo
+# root from that Makefile's directory).
+compdb:
+	$(GRBL_DIR)/../tools/gen_compile_commands.py $(PLATFORM_NAME) --board $(BOARD) --build $(BUILD)
+
 # Clean platform-specific files only
 clean:
 	rm -f $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.elf \
@@ -208,6 +219,7 @@ help:
 	@echo "  make flash        - Flash using OpenOCD"
 	@echo "  make flash-bossa  - Flash using BOSSA (Arduino bootloader)"
 	@echo "  make debug        - Start GDB debugger"
+	@echo "  make compdb       - Generate compile_commands.json for clangd/LSP"
 	@echo "  make clean        - Clean current build"
 	@echo "  make clean-all    - Clean all builds"
 	@echo ""
@@ -218,7 +230,7 @@ help:
 	@echo "  Current BUILD = $(BUILD)"
 	@echo "  Output directory = $(BUILD_DIR)"
 
-.PHONY: all clean clean-all flash flash-bossa debug help
+.PHONY: all clean clean-all flash flash-bossa debug help compdb
 
 # Include dependencies
 -include $(BUILD_DIR)/*.d

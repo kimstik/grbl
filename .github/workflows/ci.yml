@@ -1,0 +1,143 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # One matrix row per platform/board/flavor; adding a port = one new row
+  # (plus its ci/warn_baseline_<platform>.txt, which may start empty).
+  # Example future row: platform sg2002 with gcc-riscv64-unknown-elf.
+  build:
+    name: ${{ matrix.platform }}${{ matrix.board && format(' {0}', matrix.board) || '' }} ${{ matrix.build }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # atmega328p reference build has a single flavor (-Os, no BUILD knob)
+          - platform: atmega328p
+            build: RELEASE
+            toolchain-packages: gcc-avr avr-libc binutils-avr
+          - platform: stm32f103
+            build: DEBUG
+            toolchain-packages: gcc-arm-none-eabi libnewlib-arm-none-eabi
+          - platform: stm32f103
+            build: RELEASE
+            toolchain-packages: gcc-arm-none-eabi libnewlib-arm-none-eabi
+          - platform: stm32h523
+            build: DEBUG
+            toolchain-packages: gcc-arm-none-eabi libnewlib-arm-none-eabi
+          - platform: stm32h523
+            build: RELEASE
+            toolchain-packages: gcc-arm-none-eabi libnewlib-arm-none-eabi
+          - platform: samd21
+            board: megarm
+            build: DEBUG
+            toolchain-packages: gcc-arm-none-eabi libnewlib-arm-none-eabi
+          - platform: samd21
+            board: megarm
+            build: RELEASE
+            toolchain-packages: gcc-arm-none-eabi libnewlib-arm-none-eabi
+          - platform: samd21
+            board: generic
+            build: DEBUG
+            toolchain-packages: gcc-arm-none-eabi libnewlib-arm-none-eabi
+          - platform: samd21
+            board: generic
+            build: RELEASE
+            toolchain-packages: gcc-arm-none-eabi libnewlib-arm-none-eabi
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        id: build
+        uses: ./.github/actions/build-platform
+        with:
+          platform: ${{ matrix.platform }}
+          board: ${{ matrix.board }}
+          build: ${{ matrix.build }}
+          toolchain-packages: ${{ matrix.toolchain-packages }}
+
+      # Fails on warnings absent from the checked-in baseline (one-way
+      # ratchet). Runs inside the build job because handing the log to a
+      # separate job would need actions/download-artifact, which is outside
+      # the allowed action set.
+      - name: Warning ratchet
+        run: >
+          python3 ci/warn_ratchet.py
+          --log '${{ steps.build.outputs.log }}'
+          --baseline 'ci/warn_baseline_${{ matrix.platform }}.txt'
+
+  # Byte-diff gate: rebuild upstream gnea/grbl and this repo's AVR port with
+  # the SAME toolchain and flags in one job, then byte-compare the .text
+  # sections. REPORT-ONLY for now (continue-on-error: true); flipping it to
+  # blocking is a tracked ledger item.
+  core-integrity:
+    name: core-integrity
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install AVR toolchain
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends gcc-avr avr-libc binutils-avr
+
+      # Tag verified 2026-07-23 via `git ls-remote https://github.com/gnea/grbl
+      # refs/tags/v1.1h.20190825` -> 40eb439bf2afc4c6f3003836c396e183ba72c45b
+      # (gnea/grbl is archived, so the tag is frozen).
+      - name: Clone upstream gnea/grbl v1.1h.20190825
+        run: git clone --depth 1 --branch v1.1h.20190825 https://github.com/gnea/grbl upstream-grbl
+
+      - name: Build upstream reference
+        # Upstream's default COMPILE uses -flto; this repo's reference build
+        # does not (the golden hashes in grbl/platform/common/chk.py are
+        # no-LTO), so align flags to make the .text sections comparable.
+        run: |
+          make -C upstream-grbl \
+            COMPILE='avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -ffunction-sections'
+
+      - name: Build this repo (atmega328p HAL)
+        run: make -C grbl/platform/atmega328p
+
+      - name: Compare .text sections
+        run: |
+          avr-objcopy -O binary -j .text upstream-grbl/build/main.elf upstream.text.bin
+          avr-objcopy -O binary -j .text build/main.elf hal.text.bin
+          up_size=$(stat -c%s upstream.text.bin)
+          hal_size=$(stat -c%s hal.text.bin)
+          up_sha=$(sha256sum upstream.text.bin | cut -d' ' -f1)
+          hal_sha=$(sha256sum hal.text.bin | cut -d' ' -f1)
+          if cmp -s upstream.text.bin hal.text.bin; then
+            verdict=MATCH
+            detail="byte-identical"
+          else
+            verdict=DRIFT
+            detail=$(cmp upstream.text.bin hal.text.bin 2>&1 || true)
+          fi
+          {
+            echo "## core-integrity: .text byte-diff vs gnea/grbl v1.1h.20190825"
+            echo
+            echo "| binary | size (bytes) | sha256 |"
+            echo "|---|---|---|"
+            echo "| upstream .text | $up_size | \`$up_sha\` |"
+            echo "| this repo .text | $hal_size | \`$hal_sha\` |"
+            echo
+            if [ "$verdict" = MATCH ]; then
+              echo "**MATCH** — HAL core is byte-identical to upstream."
+            else
+              echo "**DRIFT** — first difference: \`$detail\`"
+              echo
+              echo "_Known expected drift: 2 bytes from GRBL_VERSION_BUILD_"
+              echo "_(\"20190825\" upstream vs \"20190830\" in this tree)._"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "core-integrity: $verdict ($detail)"
+          # report-only: a DRIFT exit is absorbed by continue-on-error above
+          [ "$verdict" = MATCH ]

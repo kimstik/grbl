@@ -1,0 +1,11 @@
+# Warning baseline for the stm32f103 build (-Wall -Wextra, arm-none-eabi-gcc).
+# Format: normalized warnings, see ci/warn_ratchet.py header. Ratchet is
+# one-way: only remove lines here manually, after the warning is really gone.
+#
+# Known debt, tracked in grbl/platform/PLAN.md Phase 1 ("Resolve dual-canon /
+# eliminate redefinition warnings"). Entries derived from code inspection
+# (arm-none-eabi-gcc unavailable in the authoring sandbox); if a first CI run
+# reports extras, regenerate with: python3 ci/warn_ratchet.py --log <log> --emit
+hal_gpio.h: warning: "HAL_GPIO_IRQ_HANDLER" redefined
+nvmem.c: warning: '<<' in boolean context, did you mean '<'? [-Wint-in-bool-context]
+system.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
