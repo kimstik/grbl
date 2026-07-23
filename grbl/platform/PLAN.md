@@ -56,8 +56,17 @@ assumptions); BUG #4 (baud arithmetic) — none catchable without stated contrac
 - [ ] Weak-memory porting checklist (ARM/RISC-V): ring buffers, volatile-is-not-atomic,
       ISR flag clearing, SYNCBUSY-class synchronization
 - [ ] `_Static_assert` where contracts are expressible in code
+- [ ] **`_template` platform** — contracts materialized as a stub skeleton
+      (`grbl/platform/_template/`): full canonical port structure (prelude.h, platform.h,
+      gpio.h, timer.h, serial.c, nvmem.c, handlers.c, startup.c, Makefile, boards/generic/).
+      Design: KISS, linker-as-checklist — unimplemented macros expand to calls to
+      undeclared `PORT_TODO_<name>()` so every file compiles immediately but the port
+      links only when complete, and undefined symbols enumerate remaining work by name;
+      file-level `#warning PORT-TODO` marks progress. NO silent no-op stubs (that is the
+      STP_TMR_PRESCALER_SET trap). Each stub carries its contract as a docstring.
+      Reuse: fold common/dummy into the template; dedupe with stm32 common.mk where free.
 
-**Exit criterion**: a new platform can be ported from contracts + checklist alone,
+**Exit criterion**: a new platform can be ported by copying `_template` + contracts alone,
 without reverse-engineering an existing port.
 
 ## Phase 3 — SAMD21 Closure
@@ -74,10 +83,11 @@ without reverse-engineering an existing port.
 ## Phase 4 — Fresh Port by the New Rules (ch32v006)
 
 Cheapest silicon, sharpest differentiation, and RISC-V stresses the abstraction on a new
-axis. Port strictly from Phase-2 contracts. Count every contract gap discovered and fold
-it back into the docs — this is "each port strengthens the system" made operational.
+axis. Port strictly by copying `_template` + Phase-2 contracts. Count every contract gap
+discovered and fold it back into docs/template — "each port strengthens the system"
+made operational.
 
-- [ ] ch32v006 port from contracts + checklist only
+- [ ] ch32v006 port from `_template` + contracts only
 - [ ] Contract amendments merged from discovered gaps
 - [ ] Platform added to CI matrix (build + smoke where emulation exists)
 
@@ -88,6 +98,23 @@ it back into the docs — this is "each port strengthens the system" made operat
 - [ ] README section: what this project is vs grblHAL/FluidNC (pristine core, byte-proven
       non-intrusion, minimal-silicon niche, GRBL 1.1 sender compatibility)
 - [ ] Tag v0.x; invite hardware testers per platform
+
+## Phase 6 — Rolling Ports (standing autopilot loop)
+
+Owner mandate: after Phases 0-5, keep porting while unimplemented platforms remain.
+Loop per platform: copy `_template` → implement → warning-ratchet baseline → CI matrix
+entry (one line, composite action) → fold discovered contract gaps back into
+Phase-2 docs + `_template` → commit, push, tick here, update Current State.
+
+Priority order (revise as hardware/toolchain reality dictates):
+- [ ] stm32f411 (ARM M4, toolchain already in CI, likely large reuse via stm32 common)
+- [ ] hc32f460 (ARM M4, vendor-exotic — tests contract completeness)
+- [ ] sg2002 (RISC-V 64, linux-class — decide scope first: bare-metal vs linux userspace)
+- [ ] any new platform dir that appears — same loop
+
+Standing laws for every port: reuse before write (stm32 common.mk pattern, common/
+helpers); duplication is a defect; KISS; models >= sonnet; all mutation via worktree
+agents; golden AVR checksums untouchable.
 
 ---
 
@@ -110,10 +137,34 @@ uncommitted exploration.
 - 2025-11: no architectural redesign — three surgical corrections only (prelude canon,
   contracts, CI ratchet)
 - 2025-11: hardware validation delegated to community post-Renode; CI-first philosophy
+- 2026-07-23: FULL AUTOPILOT mandate from owner: execute entire plan + Phase 6 rolling
+  ports without stopping for questions; only merge-to-master/PR and physical hardware
+  remain owner touchpoints. Agent model floor: sonnet. ALL file mutation via worktree
+  agents. 5:15 cron cadence, self-re-arming.
+- 2026-07-23: CI is a THIN INVOKER (owner: "Makefile самодостаточный, не изобретай
+  велосипед") — build knowledge lives in Makefiles only; integrity gate = existing
+  verify_hal_avr.sh called as-is; golden checksums are sacred.
+- 2026-07-23: EMPIRICAL PROVENANCE ESTABLISHED: fork .text vs upstream gnea v1.1h
+  (same avr-gcc 7.3.0, -flto stripped for parity) differ by exactly 2 bytes =
+  GRBL_VERSION_BUILD date string "20190825"→"20190830"; ALL machine code byte-identical.
+  Golden checksums (30640 / hex 79af184e... / .text 6134ac92...) reproduce on gcc 7.3.0,
+  not only 9.x. Dual-build-vs-upstream = rare provenance job, NOT the gate.
+- 2026-07-23: `_template` platform design: linker-as-checklist (PORT_TODO_* undefined
+  symbols enumerate unfinished work), file-level #warning progress markers, NO silent
+  no-op stubs; template is Phase-2 contracts materialized as code.
 
 ## Current State (update each session)
 
-- **Phase**: 0 (not started) — next action: CI pipeline skeleton
+- **Phase**: 0 IN PROGRESS — workflow wf_739a839e-97f (recon + 2 worktree authors:
+  ci-pipeline, compdb) running; on return: trim per thin-invoker law, apply, verify, commit
+- Empirical ground truth captured (see Decision Log 2026-07-23 provenance entry);
+  scratch notes: phase0_ground_truth.md (scratchpad, must be folded into repo docs)
+- Makefile self-sufficiency fixes queued for worktree agent: (a) `build/` dir not created
+  on fresh clone (first -MMD write fails), (b) AVR_GCC_PATH default points to
+  nonexistent ~/avr-toolchain — fall back to PATH
+- Local container: avr-gcc 7.3.0 installed (apt); arm-none-eabi ABSENT here (ARM builds
+  verified in CI only); upstream v1.1h clone in scratchpad
 - SAMD21: all 16 review bugs fixed (fc490a6), builds clean at 59876 bytes, never executed;
   known open gap: empty `_delay_us`/`_delay_ms` stubs (Phase 3)
 - stm32f103 production; stm32h523 ready for testing; atmega328p is the reference
+- Cron: one-shot 22:57 UTC armed (eaa096cc), prompt self-re-arms +5:15
