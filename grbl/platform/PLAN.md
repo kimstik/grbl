@@ -102,9 +102,9 @@ made operational.
 
 ## Phase 5 — Positioning & Release
 
-- [ ] README section: what this project is vs grblHAL/FluidNC (pristine core, byte-proven
-      non-intrusion, minimal-silicon niche, GRBL 1.1 sender compatibility)
-- [ ] Tag v0.x; invite hardware testers per platform
+- [x] README section "Why this fork" (landed early via parallel track): byte-proof
+      thesis, grblHAL/FluidNC contrast, platform matrix, CI gate links
+- [ ] Tag v0.x; invite hardware testers per platform (END of plan, after phases 1-4)
 
 ## Phase 6 — Rolling Ports (standing autopilot loop)
 
