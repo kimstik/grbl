@@ -1,0 +1,8 @@
+# Warning baseline for the atmega328p reference build (repo-root Makefile).
+# Format: normalized warnings, see ci/warn_ratchet.py header. Ratchet is
+# one-way: only remove lines here manually, after the warning is really gone.
+#
+# Observed with avr-gcc 7.3.0 (grbl/nvmem.c:127 and :149, "(checksum << 1) ||").
+# gcc-avr 5.4.0 (Ubuntu apt) predates -Wint-in-bool-context and does not emit
+# it; a stale-but-unmatched baseline entry is harmless by design.
+nvmem.c: warning: '<<' in boolean context, did you mean '<'? [-Wint-in-bool-context]

@@ -1,0 +1,67 @@
+name: build-platform
+description: >
+  Install a cross toolchain via apt, build one GRBL platform with
+  make -C grbl/platform/<platform>, and upload hex/bin/map artifacts
+  plus the raw build log.
+
+inputs:
+  platform:
+    description: Directory name under grbl/platform/ (e.g. stm32f103)
+    required: true
+  board:
+    description: Board variant for platforms with a BOARD= knob (samd21 today)
+    required: false
+    default: ''
+  build:
+    description: DEBUG or RELEASE
+    required: false
+    default: DEBUG
+  toolchain-packages:
+    description: apt packages that provide the cross toolchain
+    required: true
+
+outputs:
+  log:
+    description: Path of the captured build log (input for ci/warn_ratchet.py)
+    value: ${{ steps.build.outputs.log }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install toolchain
+      shell: bash
+      run: |
+        sudo apt-get update -q
+        sudo apt-get install -y -q --no-install-recommends ${{ inputs.toolchain-packages }}
+
+    - name: Build
+      id: build
+      shell: bash
+      # composite `shell: bash` runs with -o pipefail, so a failed make is
+      # not masked by the tee.
+      run: |
+        tag="${{ inputs.platform }}-${{ inputs.build }}"
+        board="${{ inputs.board }}"
+        if [ -n "$board" ]; then
+          tag="${{ inputs.platform }}-${board}-${{ inputs.build }}"
+        fi
+        log="build/${tag}.log"
+        mkdir -p build
+        make -C "grbl/platform/${{ inputs.platform }}" \
+          BUILD="${{ inputs.build }}" ${board:+BOARD="$board"} 2>&1 | tee "$log"
+        echo "log=$log" >> "$GITHUB_OUTPUT"
+        echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: grbl-${{ steps.build.outputs.tag }}
+        # atmega328p emits grbl.hex at the repo root; the other platforms
+        # emit grbl_<platform>[_dbg].{hex,bin,map} into build/.
+        path: |
+          build/*.hex
+          build/*.bin
+          build/*.map
+          build/*.log
+          grbl.hex
+        if-no-files-found: error

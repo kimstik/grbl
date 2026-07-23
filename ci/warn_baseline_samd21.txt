@@ -1,0 +1,18 @@
+# Warning baseline for the samd21 build (-Wall -Wextra, arm-none-eabi-gcc).
+# Shared by both boards (megarm, generic).
+# Format: normalized warnings, see ci/warn_ratchet.py header. Ratchet is
+# one-way: only remove lines here manually, after the warning is really gone.
+#
+# Known debt, tracked in grbl/platform/PLAN.md Phase 1. Notes:
+#  - "EEPROM_SIZE" redefined: platform/samd21/nvmem.c:20 vs platform.h:52
+#  - unused __us/__ms: empty _delay stubs in platform/samd21/platform.c
+#  - core grbl/nvmem.c is NOT compiled here (platform override), so no
+#    -Wint-in-bool-context entry.
+# Entries derived from code inspection (arm-none-eabi-gcc unavailable in the
+# authoring sandbox); if a first CI run reports extras, regenerate with:
+# python3 ci/warn_ratchet.py --log <log> --emit
+hal_gpio.h: warning: "HAL_GPIO_IRQ_HANDLER" redefined
+nvmem.c: warning: "EEPROM_SIZE" redefined
+platform.c: warning: unused parameter '__us' [-Wunused-parameter]
+platform.c: warning: unused parameter '__ms' [-Wunused-parameter]
+system.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
