@@ -21,13 +21,20 @@ reading this file and ends by updating it. Plans live here, not in chat history.
 
 The single highest-leverage phase. Converts manual review marathons into automation.
 
-- [ ] CI pipeline: build ALL platforms on every push (atmega328p, stm32f103, stm32h523, samd21)
-- [ ] **Byte-diff gate**: atmega328p `.text` section compared against reference GRBL 1.1h
-      build. Mechanizes the core non-intrusion principle forever.
-- [ ] `-Werror` for platform/ layer (core files get a frozen warning baseline, not edits)
-- [ ] `compile_commands.json` make target (fixes LSP navigation through `-include` injection)
+- [x] CI pipeline: 9-row matrix via composite action (atmega328p; stm32f103/h523 ×D/R;
+      samd21 megarm/generic ×D/R). Thin invoker — build truth stays in Makefiles.
+      sg2002 row deferred to Phase 6 (riscv toolchain decision).
+- [x] **Golden gate (BLOCKING)**: `make validate` vs golden MD5 on every push.
+      Provenance dual-build vs live upstream v1.1h → weekly workflow (provenance.yml,
+      report-only; expected drift = 2 bytes VERSION_BUILD date).
+- [x] Warning ratchet (chosen over -Werror: one-way baseline per platform,
+      ci/warn_ratchet.py selftest 12/12). ARM baselines inspection-derived —
+      first real CI run may need recalibration (expected, not a defect).
+- [x] `compile_commands.json`: tools/gen_compile_commands.py + `make compdb` (samd21),
+      -include flags preserved verbatim, 21 entries verified locally.
 
-**Exit criterion**: green pipeline on push; byte-diff gate proves core integrity.
+**Exit criterion**: green pipeline on push — PENDING first GitHub Actions run
+(verify at next cron session; recalibrate ARM warn baselines if needed).
 
 ## Phase 1 — Injection Canon (prelude refactor)
 
@@ -162,16 +169,17 @@ uncommitted exploration.
 
 ## Current State (update each session)
 
-- **Phase**: 0 IN PROGRESS — workflow wf_739a839e-97f (recon + 2 worktree authors:
-  ci-pipeline, compdb) running; on return: trim per thin-invoker law, apply, verify, commit
-- Empirical ground truth captured (see Decision Log 2026-07-23 provenance entry);
-  scratch notes: phase0_ground_truth.md (scratchpad, must be folded into repo docs)
-- Makefile self-sufficiency fixes queued for worktree agent: (a) `build/` dir not created
-  on fresh clone (first -MMD write fails), (b) AVR_GCC_PATH default points to
-  nonexistent ~/avr-toolchain — fall back to PATH
-- Local container: avr-gcc 7.3.0 installed (apt); arm-none-eabi ABSENT here (ARM builds
-  verified in CI only); upstream v1.1h clone in scratchpad
-- SAMD21: all 16 review bugs fixed (fc490a6), builds clean at 59876 bytes, never executed;
-  known open gap: empty `_delay_us`/`_delay_ms` stubs (Phase 3)
-- stm32f103 production; stm32h523 ready for testing; atmega328p is the reference
+- **Phase**: 0 DONE (pending first-CI-run confirmation) → **Phase 1 launched**
+  (prelude canon workflow running; roadmap truth-update in same batch)
+- Phase 0 landed: c3c42b6 (pipeline+ratchet+compdb+AVR shim) + follow-up (golden gate
+  blocking, provenance weekly). Local: make validate PASSED, ratchet selftest 12/12,
+  compdb 21 entries. NEXT CRON SESSION: check GitHub Actions result of these pushes;
+  recalibrate ci/warn_baseline_{stm32f103,stm32h523,samd21}.txt from real logs if red.
+- Makefile self-sufficiency fixes DONE via atmega328p shim (root Makefile untouched)
+- Local container: avr-gcc 7.3.0 OK; gcc-arm-none-eabi apt install running in background
+  (if it lands, ARM platforms verifiable locally; else CI-only)
+- Phase 1 constraint (HARD): AVR golden bytes must NOT change — every prelude/naming
+  edit gets `make validate` in the authoring worktree; a changed golden = rejected edit
+- SAMD21: 16 bugs fixed, builds 59876 bytes, never executed; `_delay_us/_delay_ms`
+  stubs empty (Phase 3)
 - Cron: one-shot 22:57 UTC armed (eaa096cc), prompt self-re-arms +5:15
