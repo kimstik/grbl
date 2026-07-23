@@ -173,6 +173,11 @@ Integration order when batches queue up: lower phase number first.
 - 2026-07-23: `_template` platform design: linker-as-checklist (PORT_TODO_* undefined
   symbols enumerate unfinished work), file-level #warning progress markers, NO silent
   no-op stubs; template is Phase-2 contracts materialized as code.
+- 2026-07-23 (FINAL MANDATE): owner fully hands off ("умываю руки до конца") —
+  execute everything through end of plan autonomously. Parallel doctrine active,
+  6 tracks in flight. GitHub Actions API shows no runs for the branch yet
+  (Actions possibly disabled on fork — VERIFY at cron sessions; if permanently
+  disabled, local gates remain authoritative and note it here).
 
 ## Current State (update each session)
 
