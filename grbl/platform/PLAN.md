@@ -108,6 +108,13 @@ Phase-2 docs + `_template` → commit, push, tick here, update Current State.
 
 Priority order (revise as hardware/toolchain reality dictates):
 - [ ] stm32f411 (ARM M4, toolchain already in CI, likely large reuse via stm32 common)
+- [ ] **dsPIC33AK128MC102** (owner-requested 2026-07-23; chip chosen by executor:
+      28-pin = ATmega328p DIP-28 heir, 200 MHz, DP-FPU, motor-control PWM + SCCP/MCCP,
+      PPS pin remap eases 28-pin budget; MC106 Curiosity = community hardware variant.
+      Third ISA family (non-ARM, non-RISC-V) — hardest portability stress test.
+      Toolchain: MPLAB XC-DSC, recently free incl. optimizations; NOT apt-installable —
+      CI via cached Microchip installer silent-mode, fallback build-only-local with
+      ledger note, same pattern as ch32v006)
 - [ ] hc32f460 (ARM M4, vendor-exotic — tests contract completeness)
 - [ ] sg2002 (RISC-V 64, linux-class — decide scope first: bare-metal vs linux userspace)
 - [ ] any new platform dir that appears — same loop
