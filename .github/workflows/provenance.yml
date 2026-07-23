@@ -1,0 +1,80 @@
+# Provenance job: dual-build vs live upstream gnea v1.1h. NOT the gate (the
+# gate is `make validate` golden hashes in ci.yml) — this weekly job proves
+# the goldens themselves remain upstream-derived. Expected known drift:
+# 2 bytes of GRBL_VERSION_BUILD date.
+name: provenance
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '43 4 * * 1'   # weekly, Monday 04:43 UTC (off-peak minute)
+
+jobs:
+  # Byte-diff gate: rebuild upstream gnea/grbl and this repo's AVR port with
+  # the SAME toolchain and flags in one job, then byte-compare the .text
+  # sections. REPORT-ONLY for now (continue-on-error: true); flipping it to
+  # blocking is a tracked ledger item.
+  core-integrity:
+    name: core-integrity
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install AVR toolchain
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends gcc-avr avr-libc binutils-avr
+
+      # Tag verified 2026-07-23 via `git ls-remote https://github.com/gnea/grbl
+      # refs/tags/v1.1h.20190825` -> 40eb439bf2afc4c6f3003836c396e183ba72c45b
+      # (gnea/grbl is archived, so the tag is frozen).
+      - name: Clone upstream gnea/grbl v1.1h.20190825
+        run: git clone --depth 1 --branch v1.1h.20190825 https://github.com/gnea/grbl upstream-grbl
+
+      - name: Build upstream reference
+        # Upstream's default COMPILE uses -flto; this repo's reference build
+        # does not (the golden hashes in grbl/platform/common/chk.py are
+        # no-LTO), so align flags to make the .text sections comparable.
+        run: |
+          make -C upstream-grbl \
+            COMPILE='avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -ffunction-sections'
+
+      - name: Build this repo (atmega328p HAL)
+        run: make -C grbl/platform/atmega328p
+
+      - name: Compare .text sections
+        run: |
+          avr-objcopy -O binary -j .text upstream-grbl/build/main.elf upstream.text.bin
+          avr-objcopy -O binary -j .text build/main.elf hal.text.bin
+          up_size=$(stat -c%s upstream.text.bin)
+          hal_size=$(stat -c%s hal.text.bin)
+          up_sha=$(sha256sum upstream.text.bin | cut -d' ' -f1)
+          hal_sha=$(sha256sum hal.text.bin | cut -d' ' -f1)
+          if cmp -s upstream.text.bin hal.text.bin; then
+            verdict=MATCH
+            detail="byte-identical"
+          else
+            verdict=DRIFT
+            detail=$(cmp upstream.text.bin hal.text.bin 2>&1 || true)
+          fi
+          {
+            echo "## core-integrity: .text byte-diff vs gnea/grbl v1.1h.20190825"
+            echo
+            echo "| binary | size (bytes) | sha256 |"
+            echo "|---|---|---|"
+            echo "| upstream .text | $up_size | \`$up_sha\` |"
+            echo "| this repo .text | $hal_size | \`$hal_sha\` |"
+            echo
+            if [ "$verdict" = MATCH ]; then
+              echo "**MATCH** — HAL core is byte-identical to upstream."
+            else
+              echo "**DRIFT** — first difference: \`$detail\`"
+              echo
+              echo "_Known expected drift: 2 bytes from GRBL_VERSION_BUILD_"
+              echo "_(\"20190825\" upstream vs \"20190830\" in this tree)._"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "core-integrity: $verdict ($detail)"
+          # report-only: a DRIFT exit is absorbed by continue-on-error above
+          [ "$verdict" = MATCH ]
