@@ -144,6 +144,13 @@ uncommitted exploration.
 
 **Unit of work**: one checkbox → one commit (or small commit series) → green CI.
 
+**Parallel doctrine** (owner directive 2026-07-23): authoring runs CONCURRENTLY across
+phases whenever file overlap is small — worktrees make even overlapping authoring safe.
+Serialization lives at exactly one point: integration into the branch, done by the
+orchestrator batch-by-batch, each batch passing the gates (AVR golden `make validate`,
+samd21 size-proxy 59876/296/6160, zero new ratchet warnings) before the next lands.
+Integration order when batches queue up: lower phase number first.
+
 ## Decision Log
 
 - 2025-11: `-include` injection is THE canon; obviousness restored via single prelude.h
