@@ -109,9 +109,20 @@ without reverse-engineering an existing port.
 - [ ] Regenerate ci/warn_baseline_samd21.txt from a REAL build log — 8 pre-existing
       core warnings missing (gcode/settings/stepper/motion_control/report/config.h);
       first CI run will trip the ratchet until then
-- [ ] Renode smoke test in CI: boot binary → assert banner `Grbl 1.1h ['$' for help]` →
-      `$$` settings dump → jog command ack. CI-native hardware substitute; catches the
-      "compiles but dead" class (TC4-no-clock, wrong baud) that static analysis cannot.
+- [x] **Renode smoke test — FIRST EXECUTION OF THE PORT EVER (2026-07-23): PASSED.**
+      Full boot: blank-EEPROM error:7 → settings_restore (~100 NVMCTRL row rewrites) →
+      banner → interactive `$$` via RXC interrupt → full stock-correct dump → ok.
+      TX via DRE drain, RX via ring buffer — BUG #12 fixes exercised live. 3× repro
+      (Renode 1.16.1 stable + nightly). Negative test: hang forensics captures
+      PC+symbol (verified on OSC8M poll startup.c:143). Delivered: ci/renode/
+      {samd21_grbl.repl,samd21_smoke.resc,smoke.sh,uart_probe.py} +
+      .github/workflows/smoke.yml (non-blocking until GH-runner green streak).
+      Emu workarounds via Renode Tags only (SYSCTRL_PCLKSR, NVMCTRL_INTFLAG) —
+      zero port source changes.
+- [ ] **VTOR never programmed** (found by smoke work): startup.c relies on bootloader
+      setting SCB->VTOR before jump; bare-flashed part at 0x200 takes interrupts via
+      0x0. One-liner candidate in Reset_Handler; smoke.resc uses cpu VectorTableOffset
+      0x200 meanwhile. Fix + re-run smoke as evidence.
 - [ ] Mark SAMD21 "ready for hardware validation" in roadmap; community does hardware.
 
 **Exit criterion**: Renode boot test green in CI.
