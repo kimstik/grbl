@@ -256,6 +256,7 @@ the reviewer catches plausible-but-wrong. A batch is DONE only after both.
   edit gets `make validate` in the authoring worktree; a changed golden = rejected edit
 - SAMD21: 16 bugs fixed, builds 59876 bytes, never executed; `_delay_us/_delay_ms`
   stubs empty (Phase 3)
-- Cron: UNCONDITIONAL recurring 6h (owner directive) — fires 01:09/07:09/13:09/19:09 UTC
-  (job 0f9cf51f; session-only, auto-expires after 7 days; prior 5:15 one-shot chain
-  did not survive a context compaction — unconditional recurrence replaces it)
+- Cron: UNCONDITIONAL recurring 6h (owner directive) — fires 05:27/11:27/17:27/23:27 UTC
+  (job 92bf6ea9; grid shifted per owner so nearest fire is +5h, 2026-07-23 23:27;
+  session-only, auto-expires after 7 days; prior 5:15 one-shot chain did not survive
+  a context compaction — unconditional recurrence replaces it)
