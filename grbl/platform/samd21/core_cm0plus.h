@@ -153,7 +153,10 @@ __STATIC_INLINE uint32_t SysTick_Config(uint32_t ticks) {
 typedef struct {
   volatile const uint32_t CPUID;    // CPUID Base Register
   volatile uint32_t ICSR;           // Interrupt Control and State Register
-  uint32_t RESERVED0;
+  volatile uint32_t VTOR;           // Vector Table Offset Register (0xE000ED08).
+                                    // Optional on ARMv6-M; implemented on SAMD21's
+                                    // M0+. Only bits [31:8] are writable, so the
+                                    // vector table must be 256-byte aligned.
   volatile uint32_t AIRCR;          // Application Interrupt and Reset Control Register
   volatile uint32_t SCR;            // System Control Register
   volatile uint32_t CCR;            // Configuration Control Register

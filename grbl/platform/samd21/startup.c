@@ -193,6 +193,14 @@ void Reset_Handler(void) {
   // Data Synchronization Barrier - ensure BSS init completes before SystemInit (BUG #13 fix)
   __DSB();
 
+  // Point VTOR at this image's vector table (the app links above the rSamba
+  // bootloader, so out of reset VTOR still targets the bootloader's table at
+  // 0x0). Done before SystemInit so any fault during clock bring-up - and any
+  // IRQ enabled later - vectors into this image; linker symbol, not a
+  // hard-coded address, so the code works at any (256-byte aligned) link base.
+  SCB->VTOR = (uint32_t)vector_table;
+  __DSB();
+
   // Initialize system clocks (48 MHz)
   SystemInit();
 

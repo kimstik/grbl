@@ -16,10 +16,14 @@ machine LoadPlatformDescription @ci/renode/samd21_grbl.repl
 macro reset
 """
     sysbus LoadELF $elf
-    # The application is linked at 0x200 (first 512 B are reserved for the
-    # rSamba bootloader) and startup.c does not program SCB->VTOR itself, so
-    # point the core's vector table at the application explicitly.
-    cpu VectorTableOffset 0x200
+    # No VectorTableOffset override needed:
+    #  - reset entry (initial SP/PC): Renode guesses the vector base 0x200
+    #    from the ELF ("Guessing VectorTableOffset value to be 0x200") - the
+    #    emulation analogue of the rSamba bootloader handing off to the app;
+    #  - interrupt dispatch: startup.c programs SCB->VTOR = vector_table
+    #    itself. Renode models the 0xE000ED08 write; verified by booting with
+    #    VectorTableOffset forced to 0x0 plus only a stub SP/PC pair at 0x0 -
+    #    banner and "$$" still worked and VecBase read back 0x200.
 """
 runMacro $reset
 

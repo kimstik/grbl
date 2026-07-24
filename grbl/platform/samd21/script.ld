@@ -36,6 +36,10 @@ SECTIONS
   /* Vector table and code */
   .text :
   {
+    /* ARMv6-M VTOR implements only bits [31:8]: the vector table must sit on
+       a 256-byte boundary. FLASH ORIGIN (0x200) already satisfies this, so
+       the ALIGN is a no-op today; it keeps the guarantee if ORIGIN changes. */
+    . = ALIGN(256);
     KEEP(*(.isr_vector))    /* Vector table must be first */
     *(.text)                /* Program code */
     *(.text*)
@@ -128,3 +132,6 @@ SECTIONS
   .debug_pubnames   0 : { *(.debug_pubnames) }
   .debug_aranges    0 : { *(.debug_aranges) }
 }
+
+/* Reset_Handler programs SCB->VTOR = vector_table; ARMv6-M ignores VTOR[7:0]. */
+ASSERT((vector_table & 0xFF) == 0, "vector_table must be 256-byte aligned for VTOR")
