@@ -5,7 +5,6 @@
 #
 # Known debt, tracked in grbl/platform/PLAN.md Phase 1. Notes:
 #  - "EEPROM_SIZE" redefined: platform/samd21/nvmem.c:20 vs platform.h:52
-#  - unused __us/__ms: empty _delay stubs in platform/samd21/platform.c
 #  - core grbl/nvmem.c is NOT compiled here (platform override), so no
 #    -Wint-in-bool-context entry.
 # Entries derived from code inspection (arm-none-eabi-gcc unavailable in the
@@ -13,6 +12,4 @@
 # python3 ci/warn_ratchet.py --log <log> --emit
 hal_gpio.h: warning: "HAL_GPIO_IRQ_HANDLER" redefined
 nvmem.c: warning: "EEPROM_SIZE" redefined
-platform.c: warning: unused parameter '__us' [-Wunused-parameter]
-platform.c: warning: unused parameter '__ms' [-Wunused-parameter]
 system.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
