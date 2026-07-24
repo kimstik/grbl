@@ -17,6 +17,9 @@
 // PLATFORM IDENTIFICATION
 // ============================================================================
 
+// hal.h pre-defines PLATFORM_NAME "STM32H523" before including this file;
+// the board-specific name below is the intended final value.
+#undef PLATFORM_NAME
 #define PLATFORM_NAME     "STM32H523C8T6"
 #define PLATFORM_CPU      "ARM Cortex-M3"
 #define PLATFORM_ARCH     "ARM"

@@ -23,14 +23,11 @@ BOARD         ?= megarm
 # Platform-specific avr/ overrides common/dummy/avr/
 CFLAGS_EXTRA   = -I. -I../common/dummy -I$(BOARD) 
 
-# Auto-include gpio.h for all platforms (invisible porting)
-# Platform-specific gpio.h MUST come before common/gpio.h
-CFLAGS_EXTRA  += -include gpio.h -include ../common/gpio.h
-
-# Include board-specific config
-CFLAGS_EXTRA  += -include $(BOARD)/config.h
-
-CFLAGS_EXTRA  += -include platform.h
+# Build prelude: ONE injected header per board (invisible porting).
+# Replaces the former chain of four -include flags (gpio.h, ../common/gpio.h,
+# $(BOARD)/config.h, platform.h); the prelude chains exactly those headers in
+# exactly that order - see $(BOARD)/prelude.h for why the order is load-bearing.
+CFLAGS_EXTRA  += -include $(BOARD)/prelude.h
 
 # Toolchain
 TOOLCHAIN_PATH ?=

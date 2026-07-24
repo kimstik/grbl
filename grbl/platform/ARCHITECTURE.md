@@ -103,6 +103,25 @@ The include order is critical for proper abstraction:
 #include "hal_system.h"
 ```
 
+## Build Prelude (non-AVR platforms)
+
+Non-AVR platform Makefiles inject ONE header into every translation unit via
+GCC's `-include` flag, before any of the file's own code:
+
+- samd21: `-include $(BOARD)/prelude.h` (board-selectable: `megarm/`, `generic/`)
+- stm32f103, stm32h523, sg2002: `-include prelude.h`
+
+The prelude defines `GRBL_PRELUDE` and, where the platform needs it (samd21),
+chains the platform's GPIO register accessors, `common/gpio.h` helpers, the
+board pin map and `platform.h` in a load-bearing order. `hal.h` fails with a
+`#error` on any non-AVR compile that did not inject a prelude — building by
+invoking the compiler manually (without the platform Makefile) is unsupported.
+New `-include` needs go INTO the platform's prelude.h, never as additional
+Makefile flags.
+
+The AVR reference build is exempt: the root Makefile is golden-frozen and its
+single `-include grbl/platform/common/gpio.h` stays as-is.
+
 ## Platform Selection
 
 Platforms are selected via compiler flags:

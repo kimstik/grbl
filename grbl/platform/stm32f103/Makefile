@@ -17,7 +17,9 @@ OPENOCD_TARGET = stm32f1x.cfg
 
 # AVR stubs (temporary workaround for grbl.h AVR includes)
 # Platform dir must be first to override cpu_map.h
-CFLAGS_EXTRA   = -I. -I../common/dummy
+# prelude.h is the single injected build prelude (defines GRBL_PRELUDE,
+# checked by grbl/platform/hal.h) - same pattern as samd21's $(BOARD)/prelude.h
+CFLAGS_EXTRA   = -I. -I../common/dummy -include prelude.h
 
 # Include common build rules
 include ../common/stm32/common.mk

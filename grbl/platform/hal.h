@@ -38,6 +38,19 @@
 #define GRBL_HAL_H
 
 // ============================================================================
+// BUILD PRELUDE CHECK (non-AVR platforms)
+// ============================================================================
+// Every non-AVR platform Makefile injects a build prelude into each
+// translation unit via `-include <board>/prelude.h` (samd21) or
+// `-include prelude.h` (stm32f103, stm32h523, sg2002); the prelude defines
+// GRBL_PRELUDE. Compiling without it silently loses the injected macro chain
+// (GPIO register accessors, board pin map, platform.h ordering), so fail
+// loudly instead of mis-building:
+#if !defined(__AVR__) && !defined(GRBL_PRELUDE)
+  #error "No build prelude injected - build via the platform Makefile (it passes -include <board>/prelude.h); see grbl/platform/ARCHITECTURE.md"
+#endif
+
+// ============================================================================
 // STANDARD LIBRARY INCLUDES (platform-specific)
 // ============================================================================
 
@@ -50,9 +63,19 @@
   #include <math.h>
   #include <inttypes.h>
 
-  // Define AVR compatibility macros (to avoid modifying original code)
-  #define sei()  HAL_INTERRUPTS_ENABLE()
-  #define cli()  HAL_INTERRUPTS_DISABLE()
+  // Define AVR compatibility macros (to avoid modifying original code).
+  // Guarded: the platform's own avr/io.h stub (pulled in by grbl.h BEFORE
+  // this header) already defines sei()/cli() as CPSIE/CPSID inline asm and
+  // owns those names. The fallbacks below only apply to a TU that includes
+  // hal.h without grbl.h. (Note: HAL_INTERRUPTS_ENABLE/DISABLE currently
+  // exist only in atmega328p/platform.h, so the fallback expansion is a
+  // compile error if ever reached on ARM - better loud than silent.)
+  #ifndef sei
+    #define sei()  HAL_INTERRUPTS_ENABLE()
+  #endif
+  #ifndef cli
+    #define cli()  HAL_INTERRUPTS_DISABLE()
+  #endif
   #define __flash const  // AVR __flash (program memory) -> ARM const (in flash anyway)
 
 #else

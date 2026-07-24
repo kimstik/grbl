@@ -3,15 +3,17 @@
 # Format: normalized warnings, see ci/warn_ratchet.py header. Ratchet is
 # one-way: only remove lines here manually, after the warning is really gone.
 #
-# Known debt, tracked in grbl/platform/PLAN.md Phase 1. Notes:
-#  - "EEPROM_SIZE" redefined: platform/samd21/nvmem.c:20 vs platform.h:52
-#  - core grbl/nvmem.c is NOT compiled here (platform override), so no
-#    -Wint-in-bool-context entry.
-# Entries derived from code inspection, not a real build log; toolchain is
-# now available, so this baseline still needs regeneration from a real full
-# build log (tracked in grbl/platform/PLAN.md Phase 3). If a CI run reports
-# extras, regenerate with:
-# python3 ci/warn_ratchet.py --log <log> --emit
-hal_gpio.h: warning: "HAL_GPIO_IRQ_HANDLER" redefined
-nvmem.c: warning: "EEPROM_SIZE" redefined
+# Entries regenerated from a REAL full DEBUG build log (arm-none-eabi-gcc
+# 13.2.1) after Phase-1 prelude canon killed both redefinition classes.
+# All remaining entries are pre-existing CORE debt (fallthrough style,
+# suspected pin-mask truncation tracked in PLAN.md Phase 3).
+# To extend after a legit new warning: python3 ci/warn_ratchet.py --log <log> --emit
+config.h: warning: unsigned conversion from 'int' to 'uint8_t' {aka 'unsigned char'} changes value from '65535' to '255' [-Woverflow]
+gcode.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
+motion_control.c: warning: unused parameter 'cycle_mask' [-Wunused-parameter]
+report.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
+settings.c: warning: unsigned conversion from 'int' to 'uint8_t' {aka 'unsigned char'} changes value from '134217728' to '0' [-Woverflow]
+settings.c: warning: unsigned conversion from 'int' to 'uint8_t' {aka 'unsigned char'} changes value from '268435456' to '0' [-Woverflow]
+settings.c: warning: unsigned conversion from 'int' to 'uint8_t' {aka 'unsigned char'} changes value from '33554432' to '0' [-Woverflow]
+stepper.c: warning: integer overflow in expression of type 'int' results in '-1414967296' [-Woverflow]
 system.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
