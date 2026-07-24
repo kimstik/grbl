@@ -7,8 +7,10 @@
 #  - "EEPROM_SIZE" redefined: platform/samd21/nvmem.c:20 vs platform.h:52
 #  - core grbl/nvmem.c is NOT compiled here (platform override), so no
 #    -Wint-in-bool-context entry.
-# Entries derived from code inspection (arm-none-eabi-gcc unavailable in the
-# authoring sandbox); if a first CI run reports extras, regenerate with:
+# Entries derived from code inspection, not a real build log; toolchain is
+# now available, so this baseline still needs regeneration from a real full
+# build log (tracked in grbl/platform/PLAN.md Phase 3). If a CI run reports
+# extras, regenerate with:
 # python3 ci/warn_ratchet.py --log <log> --emit
 hal_gpio.h: warning: "HAL_GPIO_IRQ_HANDLER" redefined
 nvmem.c: warning: "EEPROM_SIZE" redefined

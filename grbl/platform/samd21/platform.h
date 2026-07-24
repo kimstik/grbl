@@ -47,6 +47,8 @@
   #define CPU_FREQ        48000000UL  // 48 MHz
 #endif
 
+_Static_assert(CPU_FREQ % 3000000UL == 0, "DELAY_LOOP_ITERS_PER_US truncates: CPU_FREQ must be divisible by 3 MHz");
+
 #define RAM_SIZE          32768       // 32 KB
 #define FLASH_SIZE        262144      // 256 KB
 #define EEPROM_SIZE       0           // No hardware EEPROM
