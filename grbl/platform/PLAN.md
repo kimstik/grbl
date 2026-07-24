@@ -208,6 +208,22 @@ the reviewer catches plausible-but-wrong. A batch is DONE only after both.
 - 2026-07-23: `_template` platform design: linker-as-checklist (PORT_TODO_* undefined
   symbols enumerate unfinished work), file-level #warning progress markers, NO silent
   no-op stubs; template is Phase-2 contracts materialized as code.
+- 2026-07-23 TOOLCHAIN RECON (verified live end-to-end, full transcripts in recon agent):
+  * ch32v006: **CI-ready via apt today** — `apt install gcc-riscv64-unknown-elf
+    picolibc-riscv64-unknown-elf` (GCC 13.2.0; rv32e multilibs present; flags
+    `-march=rv32ec -mabi=ilp32e -specs=picolibc.specs`; E-extension enforcement
+    verified by codegen — no a6/a7 usage; full -lm link works). Write clean-room
+    register headers from TRM (ch32fun precedent) — do NOT vendor WCH headers.
+    PFIC (custom fast-interrupt, not CLINT/PLIC) needs its own vector handling.
+  * dsPIC33AK: CI-ready via custom fetch, verified: XC-DSC v3.30 unattended install
+    (`--mode unattended --unattendedmodeui none --LicenseType FreeMode
+    --netservername ""` — last flag required but undocumented), 83MB from
+    ww1.microchip.com (SHA-256 0df20c1a...) + SEPARATE DFP
+    Microchip.dsPIC33AK-MC_DFP.1.5.263.atpack (Apache-2.0, has 33AK128MC102);
+    compile needs `-mcpu=33AK128MC102 -mdfp=<dfp>/xc16` AND explicit
+    `-Wl,--script=<dfp>/.../p33AK128MC102.gld` (default ldscript is 30F-era).
+    ⚠ EULA "single computer" clause with no CI carve-out — OWNER REVIEW required
+    before wiring XC-DSC into shared CI (one of the few genuine owner touchpoints).
 - 2026-07-23 (FINAL MANDATE): owner fully hands off ("умываю руки до конца") —
   execute everything through end of plan autonomously. Parallel doctrine active,
   6 tracks in flight. GitHub Actions API shows no runs for the branch yet
