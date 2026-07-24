@@ -42,7 +42,25 @@ Agreed design: one `-include $(BOARD)/prelude.h` per platform instead of four fl
 prelude explicitly chains config.h → platform.h → gpio.h with comments (order documented
 in one readable file). Kill the dual channel (`grbl.h` → `platform/hal.h` vs `-include`).
 
+GROUND TRUTH from Phase-1 recon (wf_42380eec-412, empirical builds, full injection map
+in its journal): (a) atmega328p clean — zero redefinitions, golden PASSED; (b) samd21:
+hal_gpio.h:129 silently OVERWRITES platform.h:172's HAL_GPIO_IRQ_HANDLER — the macro in
+effect at limits.c/system.c is the `_IRQHandler` variant (matches handlers.c externs);
+(c) **stm32f103 DOES NOT BUILD** — spindle_control.c: SPINDLE_PWM/GPIO_DIR_OUT/PWM_*
+undeclared (pre-existing defect; roadmap's "production ready" is false); also
+PLATFORM_NAME + sei/cli redefinitions, LIMIT_DDR self-collisions in platform.h;
+(d) **stm32h523 DOES NOT BUILD** — Makefile never sets CFLAGS_EXTRA (missing
+-I../common/dummy → avr/pgmspace.h not found), copy/paste omission;
+(e) ci/warn_baseline_stm32f103.txt entry for HAL_GPIO_IRQ_HANDLER is FALSIFIED by real
+build (warning does not occur there); (f) generic BOARD of samd21 has pre-existing
+config error (SPINDLE_PWM_MIN_VALUE must be > 0).
+
 - [ ] `prelude.h` for samd21 (megarm + generic boards), collapse 4 `-include` flags to 1
+- [ ] stm32h523: restore CFLAGS_EXTRA (-I. -I../common/dummy) — build currently broken
+- [ ] stm32f103: fix spindle macro naming defect (SPINDLE_PWM/PWM_* undeclared) — build
+      currently broken; fix PLATFORM_NAME/sei/cli redefinitions + LIMIT_DDR self-collision
+- [ ] Correct falsified baseline entries (stm32f103) from real CI logs
+- [ ] samd21 generic board: fix SPINDLE_PWM_MIN_VALUE config error
 - [ ] Resolve dual-canon: `-include` becomes THE mechanism; eliminate redefinition warnings
       (currently: `HAL_GPIO_IRQ_HANDLER` redefined, `EEPROM_SIZE` redefined)
 - [ ] Loud-failure guard: `#error` in hal.h if prelude marker missing
@@ -78,8 +96,19 @@ without reverse-engineering an existing port.
 
 ## Phase 3 — SAMD21 Closure
 
-- [ ] **Known open gap**: `_delay_us()` / `_delay_ms()` are empty stubs in platform.c —
-      real functional bug (homing, stepper enable delays, spindle ramp depend on them)
+- [x] `_delay_us()` / `_delay_ms()` implemented (calibrated 3-cycle asm loop +
+      hal_millis poll with handler-mode/PRIMASK/no-SysTick fallback; disasm-verified)
+- [ ] **Wire SysTick_Config(48e6/1000) into startup** — discovered during delay work:
+      SysTick is NEVER configured in this port, so SysTick_Handler never fires and
+      hal_millis() is frozen at 0 (delay fallback keeps things functional meanwhile)
+- [ ] **Investigate pin-mask uint8_t truncation** (suspected REAL ARM bug): settings.c
+      get_step_pin_mask/get_direction_pin_mask/get_limit_pin_mask return uint8_t;
+      samd21 pin bits are >7 (e.g. bit 25) → -Woverflow shows masks truncate to 0.
+      Find consumers (limits.c homing per-axis?), assess impact, fix in PLATFORM layer
+      (core stays pristine — golden gate arbitrates any core-side proposal)
+- [ ] Regenerate ci/warn_baseline_samd21.txt from a REAL build log — 8 pre-existing
+      core warnings missing (gcode/settings/stepper/motion_control/report/config.h);
+      first CI run will trip the ratchet until then
 - [ ] Renode smoke test in CI: boot binary → assert banner `Grbl 1.1h ['$' for help]` →
       `$$` settings dump → jog command ack. CI-native hardware substitute; catches the
       "compiles but dead" class (TC4-no-clock, wrong baud) that static analysis cannot.
@@ -148,8 +177,14 @@ uncommitted exploration.
 phases whenever file overlap is small — worktrees make even overlapping authoring safe.
 Serialization lives at exactly one point: integration into the branch, done by the
 orchestrator batch-by-batch, each batch passing the gates (AVR golden `make validate`,
-samd21 size-proxy 59876/296/6160, zero new ratchet warnings) before the next lands.
+samd21 size-proxy, zero new ratchet warnings) before the next lands.
 Integration order when batches queue up: lower phase number first.
+
+**Review doctrine** (owner directive 2026-07-23): every landed batch ALSO gets an
+adversarial reviewer agent (>= sonnet; fable for ISR/asm/memory-ordering content) —
+prompt: REFUTE the batch (wrong cycle math? contract violated? claim not backed by
+repo?). Findings → fix batch or ledger entry. Mechanical gates catch regressions;
+the reviewer catches plausible-but-wrong. A batch is DONE only after both.
 
 ## Decision Log
 
