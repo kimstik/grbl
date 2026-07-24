@@ -122,11 +122,23 @@ typedef enum {
   void hal_gpio_irq_enable(hal_gpio_port_t port, uint8_t pin);
   void hal_gpio_irq_disable(hal_gpio_port_t port, uint8_t pin);
 
-  #define HAL_GPIO_IRQ_ENABLE(port, pin)   hal_gpio_irq_enable(port, pin)
-  #define HAL_GPIO_IRQ_DISABLE(port, pin)  hal_gpio_irq_disable(port, pin)
+  #ifndef HAL_GPIO_IRQ_ENABLE
+    #define HAL_GPIO_IRQ_ENABLE(port, pin)   hal_gpio_irq_enable(port, pin)
+  #endif
+  #ifndef HAL_GPIO_IRQ_DISABLE
+    #define HAL_GPIO_IRQ_DISABLE(port, pin)  hal_gpio_irq_disable(port, pin)
+  #endif
 
-  // Interrupt handler definition
-  #define HAL_GPIO_IRQ_HANDLER(name)  void name##_IRQHandler(void)
+  // Interrupt handler definition - SINGLE definition point for all non-AVR
+  // platforms (AVR gets its ISR() form from atmega328p/platform.h). Core
+  // limits.c/system.c expand this to `void <name>_IRQHandler(void)` and
+  // platform ISR dispatchers (e.g. samd21/handlers.c) declare and call the
+  // handlers by exactly that name, so a platform must NOT redefine this to
+  // another suffix - that would break linking. The #ifndef (guard style of
+  // the rest of this file) makes any future platform override explicit-only.
+  #ifndef HAL_GPIO_IRQ_HANDLER
+    #define HAL_GPIO_IRQ_HANDLER(name)  void name##_IRQHandler(void)
+  #endif
 #endif
 
 // ============================================================================

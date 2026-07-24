@@ -51,7 +51,10 @@ _Static_assert(CPU_FREQ % 3000000UL == 0, "DELAY_LOOP_ITERS_PER_US truncates: CP
 
 #define RAM_SIZE          32768       // 32 KB
 #define FLASH_SIZE        262144      // 256 KB
-#define EEPROM_SIZE       0           // No hardware EEPROM
+// Capability flag, HAL_-prefixed like every other platform's. The bare name
+// EEPROM_SIZE is owned by nvmem.c (bytes of flash reserved for EEPROM
+// emulation, 4096) - a different quantity; the two used to collide here.
+#define HAL_EEPROM_SIZE   0           // No hardware EEPROM
 
 // Timer resolution
 #define HAL_TIMER_RESOLUTION_NS   20      // 20.8 ns @ 48 MHz
@@ -171,12 +174,13 @@ typedef uint32_t hal_gpio_port_t;
 // Backward compatibility for base code (used in cpu_map.h)
 #define HAL_GPIO_INTERRUPT_ENABLE(pcmsk, interrupt, mask)   /* Handled by EIC_INIT + pin setup */
 #define HAL_GPIO_INTERRUPT_DISABLE(pcmsk, interrupt, mask)  /* Handled by EIC_INT_DISABLE */
-#define HAL_GPIO_IRQ_HANDLER(int_name)                      void int_name##_Handler(void)
 
-// New short names (for future migration)
-#define GPIO_INT_ENA(name)  /* Implemented via EIC in handlers.c */
-#define GPIO_INT_DIS(name)  /* Implemented via EIC in handlers.c */
-#define IRQ_HANDLER(name)   void name##_Handler(void)
+// HAL_GPIO_IRQ_HANDLER is deliberately NOT defined here - platform/hal_gpio.h
+// is its single owner and expands it to `void <name>_IRQHandler(void)`.
+// handlers.c's EIC dispatcher declares and calls LIMIT_INT_IRQHandler /
+// CONTROL_INT_IRQHandler by exactly that name; a platform-local redefinition
+// (e.g. with a *_Handler suffix, as once lived here) is shadowed by
+// hal_gpio.h in every core TU and would only break the link if it ever won.
 
 
 // ============================================================================

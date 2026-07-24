@@ -17,6 +17,9 @@
 // PLATFORM IDENTIFICATION
 // ============================================================================
 
+// hal.h pre-defines PLATFORM_NAME "STM32F103" before including this file;
+// the board-specific name below is the intended final value.
+#undef PLATFORM_NAME
 #define PLATFORM_NAME     "STM32F103C8T6"
 #define PLATFORM_CPU      "ARM Cortex-M3"
 #define PLATFORM_ARCH     "ARM"
@@ -490,7 +493,14 @@ void hal_nvmem_flush(void);  // Flush dirty cache to flash
 // Platform-specific values override dummy/cpu_map.h defaults via #ifndef
 
 // Map AVR pin definitions to STM32 GPIO ports
+// NOTE: LIMIT_DDR/LIMIT_PORT/CONTROL_PORT/PROBE_PORT get real values earlier
+// in this file; these AVR-compat dummies overwrite them, and always have
+// (the #undefs below just make that explicit instead of a -Wredefined
+// warning). Whether dummy-wins is the RIGHT semantics is a pre-existing
+// question for the GPIO macro cleanup phase, not changed here.
+#undef LIMIT_DDR
 #define LIMIT_DDR     0      // Not used on STM32 (DDR is for AVR only)
+#undef LIMIT_PORT
 #define LIMIT_PORT    0      // Not used on STM32 (PORT is for AVR pullup)
 #define LIMIT_PCMSK   0      // Not used on STM32
 #define LIMIT_INT     0      // Not used on STM32
@@ -499,6 +509,7 @@ void hal_nvmem_flush(void);  // Flush dirty cache to flash
 // LIMIT_MASK already defined above (uses pin numbers)
 
 #define CONTROL_DDR   0      // Not used on STM32
+#undef CONTROL_PORT
 #define CONTROL_PORT  0      // Not used on STM32
 #define CONTROL_PCMSK 0      // Not used on STM32
 #define CONTROL_INT   0      // Not used on STM32
@@ -508,6 +519,7 @@ void hal_nvmem_flush(void);  // Flush dirty cache to flash
 #define CONTROL_MASK  ((1<<3)|(1<<4)|(1<<5)|(1<<6))  // PB3-PB6 (bits, not pins)
 
 #define PROBE_DDR     0      // Not used on STM32
+#undef PROBE_PORT
 #define PROBE_PORT    0      // Not used on STM32
 #undef PROBE_PIN
 #define PROBE_PIN     GPIOC  // Used for reading probe pin (redefine as PORT)

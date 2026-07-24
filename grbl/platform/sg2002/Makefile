@@ -54,8 +54,10 @@ vpath %.c $(GRBL_DIR)
 vpath %.c $(PLATFORM_DIR)
 
 # AVR stubs (temporary workaround for grbl.h AVR includes)
+# prelude.h is the single injected build prelude (defines GRBL_PRELUDE,
+# checked by grbl/platform/hal.h) - same pattern as samd21's $(BOARD)/prelude.h
 # Platform dir must be first to override cpu_map.h
-CFLAGS_EXTRA   = -I. -I../common/dummy
+CFLAGS_EXTRA   = -I. -I../common/dummy -include prelude.h
 
 # Base compiler flags
 CFLAGS  = -march=$(ARCH) -mabi=$(ABI) -mcmodel=$(CMODEL)

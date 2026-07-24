@@ -16,6 +16,9 @@
 #include "../../nvmem.h"
 
 // EEPROM emulation area (last 4KB of 256KB Flash)
+// This file owns the bare EEPROM_SIZE name (emulated-EEPROM byte count).
+// The platform.h capability flag is HAL_EEPROM_SIZE (= 0, no hardware
+// EEPROM) - a different quantity that once collided with this name.
 #define EEPROM_FLASH_BASE  (0x0003F000UL)  // 256KB - 4KB
 #define EEPROM_SIZE        4096
 #define FLASH_PAGE_SIZE    64
