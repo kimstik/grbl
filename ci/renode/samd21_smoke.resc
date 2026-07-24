@@ -1,0 +1,30 @@
+:name: SAMD21 GRBL smoke
+:description: Boots the GRBL SAMD21 port and exposes SERCOM3 UART on a TCP socket terminal.
+
+# Variables (override before including this script):
+#   $elf       - ELF to load  (default: build/grbl_samd21_dbg.elf)
+#   $uart_port - TCP port for the SERCOM3 UART socket terminal (default: 3456)
+
+using sysbus
+
+$elf?=@build/grbl_samd21_dbg.elf
+$uart_port?=3456
+
+mach create "grbl-samd21"
+machine LoadPlatformDescription @ci/renode/samd21_grbl.repl
+
+macro reset
+"""
+    sysbus LoadELF $elf
+    # The application is linked at 0x200 (first 512 B are reserved for the
+    # rSamba bootloader) and startup.c does not program SCB->VTOR itself, so
+    # point the core's vector table at the application explicitly.
+    cpu VectorTableOffset 0x200
+"""
+runMacro $reset
+
+emulation CreateServerSocketTerminal $uart_port "uartsrv" false
+connector Connect sysbus.sercom3 uartsrv
+
+echo "SAMD21 GRBL smoke machine ready; UART on socket port:"
+echo $uart_port

@@ -1,0 +1,61 @@
+name: Smoke (Renode)
+
+# Boots the SAMD21 GRBL port on an emulated ATSAMD21G18A (Renode) and asserts
+# the "Grbl 1.1h" banner + "$$" settings dump on the SERCOM3 UART.
+# See ci/renode/smoke.sh for the runner and ci/renode/samd21_grbl.repl for the
+# platform model (including the SYSCTRL PCLKSR / NVMCTRL READY tag
+# workarounds required because Renode has no SYSCTRL/NVMCTRL models).
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  RENODE_VERSION: 1.16.1
+
+jobs:
+  samd21-renode-smoke:
+    name: samd21 boot smoke (Renode)
+    runs-on: ubuntu-latest
+    # NON-BLOCKING until this job shows a stable green streak in CI.
+    # Evidence baseline (2026-07-24, local run, Renode 1.16.1 stable and
+    # 1.16.1+20260723 nightly): boot banner, blank-EEPROM error:7 +
+    # settings_restore dump, and interactive "$$" -> $0..$132 + ok, all on
+    # SERCOM3. Flip continue-on-error to false once proven in this runner.
+    continue-on-error: true
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build samd21 DEBUG elf
+        uses: ./.github/actions/build-platform
+        with:
+          platform: samd21
+          board: megarm
+          build: DEBUG
+          toolchain-packages: gcc-arm-none-eabi libnewlib-arm-none-eabi
+
+      - name: Fetch Renode portable (pinned ${{ env.RENODE_VERSION }})
+        run: |
+          curl -fsSL -o renode.tar.gz \
+            "https://github.com/renode/renode/releases/download/v${RENODE_VERSION}/renode-${RENODE_VERSION}.linux-portable.tar.gz" \
+          || curl -fsSL -o renode.tar.gz \
+            "https://builds.renode.io/renode-${RENODE_VERSION}.linux-portable.tar.gz"
+          mkdir -p renode-portable
+          tar xzf renode.tar.gz -C renode-portable --strip-components=1
+
+      - name: Run smoke test
+        run: RENODE="$PWD/renode-portable/renode" ci/renode/smoke.sh
+
+      - name: Upload smoke logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: samd21-smoke-logs
+          path: |
+            build/smoke/renode.log
+            build/smoke/uart_transcript.txt
+          if-no-files-found: warn
