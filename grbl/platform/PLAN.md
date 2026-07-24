@@ -119,10 +119,12 @@ without reverse-engineering an existing port.
       .github/workflows/smoke.yml (non-blocking until GH-runner green streak).
       Emu workarounds via Renode Tags only (SYSCTRL_PCLKSR, NVMCTRL_INTFLAG) —
       zero port source changes.
-- [ ] **VTOR never programmed** (found by smoke work): startup.c relies on bootloader
-      setting SCB->VTOR before jump; bare-flashed part at 0x200 takes interrupts via
-      0x0. One-liner candidate in Reset_Handler; smoke.resc uses cpu VectorTableOffset
-      0x200 meanwhile. Fix + re-run smoke as evidence.
+- [x] **VTOR fix landed**: Reset_Handler programs SCB->VTOR = vector_table (linker
+      symbol, works at any 256-aligned base) + __DSB before SystemInit; script.ld
+      ALIGN(256) + link-time ASSERT; core_cm0plus.h RESERVED0→VTOR (real CMSIS layout).
+      Renode VTOR modeling PROVEN by isolation test (VecBase forced 0 + stub SP/PC →
+      boots, VecBase reads back 0x200) → .resc override removed. Smoke exit 0 ×2.
+      samd21 DEBUG size-proxy now 60196/296/6160 (+24, str+dsb+literal pool).
 - [ ] Mark SAMD21 "ready for hardware validation" in roadmap; community does hardware.
 
 **Exit criterion**: Renode boot test green in CI.
