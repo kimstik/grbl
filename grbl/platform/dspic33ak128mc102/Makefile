@@ -1,0 +1,257 @@
+#  Makefile for GRBL on dsPIC33AK128MC102 (dsPIC33A 32-bit DSC core)
+#  Part of Grbl
+#
+#  Phase 6 rolling port #2 - THE THIRD ISA FAMILY (neither ARM nor RISC-V).
+#  Modeled on grbl/platform/ch32v006/Makefile (the newest non-ARM port);
+#  see _template/README.md for the general copy/rename/fill-in order.
+#
+#  TOOLCHAIN (PLAN.md Decision Log recipe, re-verified end-to-end this
+#  session - xc-dsc-gcc 8.3.1 / XC-DSC v3.30, EULA approved by owner
+#  2026-07-24):
+#
+#    1. Download (83 MB, SHA-256
+#       0df20c1a552bf0ce08aa139b9cb1efd71bf65b9d9f37e3982763f4f8738bfa11):
+#       https://ww1.microchip.com/downloads/aemDocuments/documents/DEV/ProductDocuments/SoftwareTools/xc-dsc-v3.30-full-install-linux64-installer.run
+#    2. Unattended install (the trailing --netservername "" is REQUIRED
+#       though undocumented - installer hangs/fails without it):
+#       ./xc-dsc-v3.30-full-install-linux64-installer.run --mode unattended \
+#         --unattendedmodeui none --prefix /opt/xc-dsc --LicenseType FreeMode \
+#         --ModifyAll 0 --netservername ""
+#    3. Device Family Pack (SEPARATE download, Apache-2.0 licensed - see
+#       gpio.h header for why this port uses DFP headers instead of the
+#       samd21 clean-room route):
+#       https://packs.download.microchip.com/Microchip.dsPIC33AK-MC_DFP.1.5.263.atpack
+#       unzip into $(DFP_PATH) (an .atpack is a plain zip).
+#
+#  COMPILE PATTERN (Decision Log, verified): -mcpu=33AK128MC102
+#  -mdfp=$(DFP_PATH)/xc16 AND an explicit -Wl,--script=<dfp .gld> - the
+#  toolchain's built-in default linker script is 30F-era and does not fit
+#  this device.
+#
+#  NOT IN CI YET: unattended toolchain fetch in CI is a separate ledger
+#  item (PLAN.md Phase 6) - this Makefile is CI-shaped (all knowledge here,
+#  thin-invoker compatible) but no .github/workflows/ci.yml row exists.
+
+# ============================================================================
+# Chip identification
+# ============================================================================
+
+PLATFORM_NAME  = dspic33ak128mc102
+DEVICE         = DSPIC33AK128MC102
+# -mcpu drives codegen AND predefines __dsPIC33AK128MC102__ (which <xc.h>
+# dispatches on); there is no -march/-mabi split on this toolchain.
+MCPU           = 33AK128MC102
+# Verified system clock in Hz - feeds F_CPU (PORTING-CHECKLIST Step 1).
+# 200 MHz = FRC 8 MHz -> PLL1 (FBDIV=200, PRE=1, POSTDIV1=4, POSTDIV2=2)
+# -> CLKGEN1 NOSC=5. Sequence encoded in platform.c from Microchip's own
+# dsPIC33A clock documentation; UNVERIFIED ON SILICON (no emulator exists
+# for dsPIC33A) - hardware validation item, see platform.c banner.
+CLOCK          = 200000000
+
+# Board selection (only "generic" ships with this port)
+BOARD         ?= generic
+BOARD_DIR      = boards/$(BOARD)
+
+# Include paths (platform dir first to override common/dummy defaults).
+# common/dummy supplies the AVR compatibility stubs every non-AVR platform
+# needs (avr/io.h, cpu_map.h, util/delay.h, ...) - reused as-is.
+CFLAGS_EXTRA   = -I. -I../common/dummy -I$(BOARD_DIR)
+
+# Build prelude: ONE injected header per board (CONTRACTS.md #0).
+CFLAGS_EXTRA  += -include $(BOARD_DIR)/prelude.h
+
+# Toolchain. XC-DSC is never on PATH by default - point TOOLCHAIN_PATH at
+# the install prefix's bin directory (recipe above) or add it to PATH.
+TOOLCHAIN_PATH ?= /opt/xc-dsc/bin
+ifneq ($(TOOLCHAIN_PATH),)
+  PREFIX     = $(TOOLCHAIN_PATH)/xc-dsc-
+else
+  PREFIX     = xc-dsc-
+endif
+CC         = $(PREFIX)gcc
+OBJCOPY    = $(PREFIX)objcopy
+OBJDUMP    = $(PREFIX)objdump
+BIN2HEX    = $(PREFIX)bin2hex
+NM         = $(PREFIX)nm
+
+# Device Family Pack root (the unzipped .atpack - must contain xc16/).
+DFP_PATH  ?= /opt/Microchip.dsPIC33AK-MC_DFP.1.5.263
+DFP_XC16   = $(DFP_PATH)/xc16
+GLD_SCRIPT = $(DFP_XC16)/support/dsPIC33A/gld/p$(MCPU).gld
+
+# Paths
+GRBL_DIR   = ../..
+# Keyed by BUILD flavor: DEBUG/RELEASE object dirs never alias, so switching
+# flavors without `make clean` can't silently relink stale objects under the
+# wrong name (thrice-bitten repo-wide fix - see PLAN.md).
+BUILD_DIR  = ../../../build/$(PLATFORM_NAME)/$(BUILD)
+OUTPUT_DIR = ../../../build
+PLATFORM_DIR = .
+
+# GRBL core sources. Excludes serial.c/nvmem.c/eeprom.c: TU-replacement
+# route (CONTRACTS.md #0/#7/#10), same as samd21/_template/ch32v006.
+GRBL_SOURCES = main.c motion_control.c gcode.c spindle_control.c coolant_control.c   \
+               protocol.c stepper.c settings.c planner.c nuts_bolts.c limits.c jog.c \
+               print.c probe.c report.c system.c
+
+# Platform-specific sources. NO startup.c: unlike every ARM/RISC-V port,
+# the XC-DSC toolchain's own crt0 is used deliberately (verified by
+# disassembly this session: __reset sets W15/SPLIM/IVTBASE, runs __data_init
+# over .dinit, then calls __user_init-marked functions, then main -
+# platform.c's hal_clock_config carries __attribute__((user_init))).
+# See platform.c's "startup model" banner for the full writeup.
+PLATFORM_SOURCES = platform.c handlers.c serial.c nvmem.c
+
+# All sources
+SOURCES = $(addprefix $(GRBL_DIR)/,$(GRBL_SOURCES)) \
+          $(PLATFORM_SOURCES)
+
+OBJECTS = $(addprefix $(BUILD_DIR)/,$(notdir $(SOURCES:.c=.o)))
+
+# Search paths for sources (platform dir first to override grbl/ files)
+vpath %.c $(PLATFORM_DIR)
+vpath %.c $(GRBL_DIR)
+
+# Base compiler flags.
+# -std=gnu11: XC-DSC v3.30 is GCC 8.3.1 - full C11 (_Static_assert et al)
+# is available but the toolchain default is gnu99-era; pin it explicitly.
+ARCHFLAGS = -mcpu=$(MCPU) -mdfp=$(DFP_XC16)
+CFLAGS  = $(ARCHFLAGS) -std=gnu11
+CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)UL
+CFLAGS += -Wall -Wextra
+
+# CFLAGS_EXTRA must be ABSOLUTELY FIRST to override grbl headers (cpu_map.h, etc)
+CFLAGS += $(CFLAGS_EXTRA) -I$(PLATFORM_DIR) -I$(GRBL_DIR)/platform -I$(GRBL_DIR)
+
+# Build-specific flags
+BUILD ?= DEBUG
+ifeq ($(BUILD),RELEASE)
+  CFLAGS += -Os -g0
+else
+  # -O0, NOT -Og: xc-dsc-gcc 8.3.1 ICEs ("insn does not satisfy its
+  # constraints ... movfpsf_32 ... during RTL pass: postreload",
+  # gcode.c:1133) at -Og AND -O1 - an FPU float-store-to-static pattern.
+  # Probed empirically this session: -O0/-O2/-O3/-Os all clean, only
+  # -O1/-Og trip it. 128 KB flash absorbs -O0 (no ch32-class squeeze).
+  # Logged in CONTRACTS.md #16.
+  CFLAGS += -O0 -g3
+  CFLAGS += -DDEBUG
+endif
+
+# Linker flags. The explicit DFP .gld is load-bearing (see header). No
+# --gc-sections anywhere on this toolchain (verified: `xc-dsc-gcc
+# -dumpspecs` contains no gc-sections rule, unlike picolibc's - the
+# CONTRACTS.md #14.3 hazard does not apply here), so the linker's undefined-
+# symbol report is the complete PORT_TODO_* checklist by construction.
+LDFLAGS  = $(ARCHFLAGS)
+LDFLAGS += -Wl,--script=$(GLD_SCRIPT)
+LDFLAGS += -Wl,-Map=$(MAP_FILE)
+
+# libm: core grbl is float-heavy (planner/gcode/motion_control); the
+# dsPIC33A hardware FPU (single+double precision) is used automatically by
+# -mcpu codegen. DFP/xc-dsc supply the matching libm.
+LIBS = -lm
+
+# Output file naming: release gets clean name, debug gets _dbg suffix
+ifeq ($(BUILD),RELEASE)
+  BINARY_NAME = grbl_$(PLATFORM_NAME)
+else
+  BINARY_NAME = grbl_$(PLATFORM_NAME)_dbg
+endif
+
+# Output files - artifacts go to /build, object files to /build/$(PLATFORM_NAME)/$(BUILD)
+ELF_FILE  = $(OUTPUT_DIR)/$(BINARY_NAME).elf
+HEX_FILE  = $(OUTPUT_DIR)/$(BINARY_NAME).hex
+DUMP_FILE = $(OUTPUT_DIR)/$(BINARY_NAME).dump
+MAP_FILE  = $(OUTPUT_DIR)/$(BINARY_NAME).map
+
+# ============================================================================
+# TARGETS
+# ============================================================================
+
+# M1-M3 posture (same as ch32v006's M3 era): default target compiles all
+# objects; `make link` is the linker-as-checklist diagnostic - it MUST fail
+# listing exactly the PORT_TODO_* symbols for timers/serial/nvmem/handlers
+# (Steps 3-6, next batch). Flip `all` to the full ELF+hex once zero remain.
+all: $(BUILD_DIR) $(OUTPUT_DIR) $(OBJECTS)
+
+objects: $(BUILD_DIR) $(OUTPUT_DIR) $(OBJECTS)
+
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
+
+$(OUTPUT_DIR):
+	mkdir -p $(OUTPUT_DIR)
+
+# Compile GRBL core files
+$(BUILD_DIR)/%.o: $(GRBL_DIR)/%.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+# Compile platform-specific files
+$(BUILD_DIR)/platform.o: platform.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+$(BUILD_DIR)/handlers.o: handlers.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+$(BUILD_DIR)/serial.o: serial.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+$(BUILD_DIR)/nvmem.o: nvmem.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+# Link diagnostic (M3: enumerates remaining PORT_TODO_* work by name).
+link: $(ELF_FILE)
+
+$(ELF_FILE): objects
+	$(CC) $(LDFLAGS) -o $(ELF_FILE) $(OBJECTS) $(LIBS)
+
+# Create hex file (xc-dsc-bin2hex writes alongside the ELF)
+$(HEX_FILE): $(ELF_FILE)
+	$(BIN2HEX) $<
+
+# Create disassembly dump (objdump needs the DFP for SFR symbolization)
+$(DUMP_FILE): $(ELF_FILE)
+	$(OBJDUMP) -mdfp=$(DFP_XC16) -Sxdstr $< >$@
+
+# Generate compile_commands.json for clangd/LSP
+compdb:
+	$(GRBL_DIR)/../tools/gen_compile_commands.py $(PLATFORM_NAME) --board $(BOARD) --build $(BUILD)
+
+# Clean platform-specific files only
+clean:
+	rm -f $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.elf \
+	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.hex \
+	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.dump \
+	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.map
+	rm -rf $(BUILD_DIR)
+
+# Clean all build artifacts
+clean-all:
+	rm -rf $(OUTPUT_DIR)
+
+# Help
+help:
+	@echo "GRBL $(PLATFORM_NAME) Build System (Phase 6 rolling #2 - M1-M3)"
+	@echo ""
+	@echo "Usage:"
+	@echo "  make               - Compile all objects (DEBUG, default)"
+	@echo "  make BUILD=RELEASE - Compile all objects, optimized"
+	@echo "  make link          - Linker-as-checklist: lists PORT_TODO_* remaining"
+	@echo "  make compdb        - Generate compile_commands.json for clangd/LSP"
+	@echo "  make clean         - Clean current build"
+	@echo ""
+	@echo "Build configuration:"
+	@echo "  Platform = $(PLATFORM_NAME)"
+	@echo "  Board    = $(BOARD)"
+	@echo "  CPU      = $(MCPU) (dsPIC33A 32-bit DSC)"
+	@echo "  Clock    = $(CLOCK) Hz"
+	@echo "  Toolchain= $(PREFIX)gcc"
+	@echo "  DFP      = $(DFP_PATH)"
+	@echo "  Current BUILD = $(BUILD)"
+	@echo "  Output directory = $(BUILD_DIR)"
+
+.PHONY: all objects link clean clean-all help compdb
+
+# Include dependencies
+-include $(BUILD_DIR)/*.d

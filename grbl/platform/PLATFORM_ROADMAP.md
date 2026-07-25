@@ -139,8 +139,8 @@ There was no CI when this roadmap was first written; there is now (landed 2026-0
   - MPLAB XC-DSC compiler is now free including optimizations, removing what used to be a licensing barrier to porting here
   - Community hardware reference: MC106 Curiosity board
 - **Why it matters**: this would be the third distinct ISA family in the platform matrix, after ARM and RISC-V — the sharpest portability stress test yet for the macro/contract abstraction, since dsPIC's instruction set and toolchain conventions diverge furthest from AVR/ARM/RISC-V.
-- **Toolchain note**: XC-DSC isn't apt-installable; CI plan is a cached Microchip silent-mode installer, falling back to build-only-local with a ledger note if that doesn't pan out (same pattern already used for CH32V006).
-- **Current status**: chip selected, nothing built yet — no directory exists
+- **Toolchain note**: XC-DSC isn't apt-installable; verified unattended-install recipe (URL, SHA-256, the undocumented `--netservername ""` flag, Apache-2.0 DFP) lives in `dspic33ak128mc102/platform.md` and PLAN.md's Decision Log. EULA owner-approved 2026-07-24; CI wiring is a separate ledger item — no CI rows yet.
+- **Current status**: **M1–M3 COMPLETE (2026-07-25)** — `grbl/platform/dspic33ak128mc102/` exists; both flavors compile all core+platform objects with xc-dsc-gcc 8.3.1; `make link` lists exactly 33 `PORT_TODO_*` (timers/serial/nvmem/handlers = Steps 3–6, next batch); clock 200 MHz FRC→PLL1 encoded (UNVERIFIED on silicon — no dsPIC33A emulator exists); GPIO model done. Gap log folded into CONTRACTS.md §16 (11 items — the third-ISA holes ARM/RISC-V never hit: linker-synthesized IVT, compiler-won't-emit-bset atomicity, no-barrier ISA, -O1/-Og ICE, TRIS/ANSEL traps, config words).
 - **Target use case**: CNC/motor-control applications wanting a hardware FPU and purpose-built motor PWM in a 328p-sized footprint
 
 ### 3. CH32V006 (RISC-V Microcontroller)
