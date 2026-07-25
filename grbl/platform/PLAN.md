@@ -246,13 +246,23 @@ Priority order (revise as hardware/toolchain reality dictates):
         warn baseline from real logs
 - [ ] hc32f460 (ARM M4, vendor-exotic — tests contract completeness)
 - [ ] sg2002 (RISC-V 64, linux-class — decide scope first: bare-metal vs linux userspace)
-- [ ] **ch570** (owner-requested 2026-07-24: "много памяти, недорогой"): shaped as
-      WCH-family sub-target — extract common/wch/ layer (stm32-common precedent),
-      ch32v006 refactor gated by its own zero-PORT_TODO + size invariance (common
-      code is PROVEN OUT of working code, not written); ch570 = chip dir consuming
-      common/wch + delta. Recon (commonality matrix, core/ISA/flash-model/PFIC
-      deltas, ch32fun cross-check) in flight; extraction batch AFTER ch32-diet
-      lands (Makefile conflict avoidance).
+- [ ] **ch570** RECON DONE (matrix in recon report): QingKe V3C RV32IMBC (full
+      I+M — hw mul/div!, exact rv32im/ilp32 picolibc multilib exists), 240K user
+      flash + 12K RAM (owner claim confirmed, ~$0.10 — cheaper than V006).
+      SURPRISE: peripherals are ENTIRELY different IP vs V006 (16550-style UART,
+      AVR-style discrete-reg GPIO with per-port vectors, FIFO/DMA timers ALL with
+      IRQs, 4KB-sector flash w/ RWA unlock) -> honest common/wch reuse = 15-20%,
+      NOT stm32's 60%: extract only wch_pfic.h (layout byte-identical, 2 indep
+      sources), wch_critical.h (mstatus/fence), wch_vectors.h (mtvec MODE 1/1).
+      Friendlier chip overall: no E-quirks, no EXTI collision class, no dead
+      timers. openwch/ch570 SDK is Apache-2.0 — headers vendorable (unlike CH32V
+      EVT). ⛔ BLOCKER before handlers.c: QingKe V3C may do UNCONDITIONAL hw
+      register stacking on interrupt entry (secondary source) — if so, GCC
+      __attribute__((interrupt)) double-saves/corrupts; PRIMARY datasheet TRM
+      chapter required first (403'd this session). Slot: after dsPIC Steps 3-6.
+      Side-note for docs-truth backlog: common/stm32/ARCHITECTURE.md is
+      marketing-toned ("A+ 97%" self-grading, 60%/2hr claims) — needs the
+      evidence-first rewrite treatment eventually.
 - [ ] any new platform dir that appears — same loop
 
 Standing laws for every port: reuse before write (stm32 common.mk pattern, common/
