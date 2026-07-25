@@ -276,6 +276,15 @@ the reviewer catches plausible-but-wrong. A batch is DONE only after both.
 - ALARM SEMANTICS (owner directive 2026-07-23): the 6h cron is FALLBACK RECOVERY
   ONLY — never a scheduler/heartbeat. Work is dispatched immediately when known;
   limit-killed agents are retried immediately, not parked for the next cron.
+- ADVERSARIAL REVIEW #2 verdicts (prelude+contracts): Batch A (22aa27c prelude)
+  SURVIVED ALL refutations — preprocess byte-identical old-vs-new chain, single
+  IRQ_HANDLER canon proven via -dD + link map, EEPROM_SIZE clean, golden intact.
+  Batch B (contracts docs): content accurate, citations into the 4 Phase-1-touched
+  files systematically stale (authored pre-landing) — doc-fix batch dispatched.
+- ~19:50 UTC: heavy-pool limit wall until 09:50 UTC tomorrow killed BUG#17 fix,
+  f103-spindle, _template(2nd). ALL FOUR RELAUNCHED ON SONNET immediately
+  (owner floor; salvage pointers to dead worktrees included). If sonnet pool
+  also walls: ledger current, 6h cron is the fallback recovery.
 - 2026-07-23 ~19:20 UTC snapshot: 6 tracks in flight — _template resume
   (wf_e7f22066-e3b), adversarial review of prelude+contracts batches, stm32h523 +
   samd21-generic fix, stm32f103 spindle-macro fix, pin-mask truncation
