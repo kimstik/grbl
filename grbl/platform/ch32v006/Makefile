@@ -125,27 +125,46 @@ else
   CFLAGS += -DDEBUG
 endif
 
-# Linker flags. NOTE: --gc-sections is deliberately COUNTERED here with an
-# explicit -Wl,--no-gc-sections - NOT merely "omitted" like _template's
-# Makefile. GAP found empirically this session: `-specs=picolibc.specs`
-# unconditionally appends `--gc-sections` to the link line itself (see
-# `riscv64-unknown-elf-gcc ... -dumpspecs`'s `*link:` rule) - a Makefile
-# that just doesn't mention --gc-sections (the template's stated
-# strategy) still gets it, silently. Proven the hard way: without
-# --no-gc-sections below, handlers.c's stepper_timer_irq_dispatch /
-# pulse_reset_timer_irq_dispatch / gpio_irq_dispatch (and _delay_us) are
-# unreached from main()'s call graph (nothing wires them into a vector
-# yet - Step 3+), so the linker's reachability pass drops their sections
-# BEFORE checking whether their PORT_TODO_* calls resolve - the
-# `__keep_alive[]` array (`__attribute__((used))`, `_template`'s stated
-# insurance against exactly this) was NOT sufficient by itself on this
-# toolchain/version to keep them reachable. Confirmed via `nm -u` on
-# handlers.o (6 undefined PORT_TODO_* symbols present in the object) vs.
-# `make link`'s reported list (those 6 silently absent) before this flag
-# was added. Folded into CONTRACTS.md's new RISC-V section - every
-# picolibc-based port needs this, not just this one.
+# Linker flags.
+#
+# --gc-sections LIFECYCLE (CONTRACTS.md #14.3): during porting, this
+# Makefile carried an explicit -Wl,--no-gc-sections COUNTERING
+# `-specs=picolibc.specs`'s own unconditional `--gc-sections` append
+# (see `riscv64-unknown-elf-gcc ... -dumpspecs`'s `*link:` rule) - not
+# merely "omitted" the way _template's (non-picolibc) Makefile gets away
+# with. Reason at the time: with gc-sections live, handlers.c's
+# stepper_timer_irq_dispatch / pulse_reset_timer_irq_dispatch /
+# gpio_irq_dispatch (and _delay_us) were unreached from main()'s call
+# graph (nothing wired them into a vector yet - pre Step 3), so the
+# linker's reachability pass dropped their sections BEFORE checking
+# whether their PORT_TODO_* calls resolved - `__keep_alive[]`
+# (`__attribute__((used))`, _template's stated insurance against exactly
+# this) was NOT sufficient by itself on this toolchain/version to keep
+# them reachable. Confirmed via `nm -u` on handlers.o (6 undefined
+# PORT_TODO_* symbols present in the object) vs. `make link`'s reported
+# list (those 6 silently absent) before --no-gc-sections was added.
+#
+# Port is now COMPLETE (zero PORT_TODO_* at link, every handler wired
+# into PFIC_Vector) - the reachability hazard that motivated
+# --no-gc-sections no longer applies, and --gc-sections is now a real
+# size win (dead/unreached code no longer gets a free pass). Re-enabled
+# below. Vector table survives this because it's protected independently
+# of reachability: PFIC_Vector is `__attribute__((used, section(".vectors")))`
+# and script.ld KEEP()s `.vectors`/`.init` explicitly (see script.ld
+# header comment) - verified post-flip via `nm`/`readelf` (IVT symbols
+# and .init/.vectors sections identical before/after). The NVMEM window
+# is untouched by either setting - it's addressed directly by physical
+# address (nvmem.c), not placed via a linker section.
+#
+# General rule for any picolibc-based port (folded into CONTRACTS.md
+# #14.3): --no-gc-sections while PORT_TODO_* is non-empty (so the
+# linker-as-checklist mechanism can't be defeated by silent section
+# discard), switch to --gc-sections once the port reaches zero
+# PORT_TODO_* (so the release binary isn't paying rent on dead code
+# forever). Do the flip in ONE place, not per-BUILD-flavor: DEBUG has no
+# reason to retain unreached code once the same completeness holds.
 LDFLAGS  = $(ARCHFLAGS) -nostartfiles -specs=picolibc.specs
-LDFLAGS += -Wl,--no-gc-sections
+LDFLAGS += -Wl,--gc-sections
 LDFLAGS += -Wl,-Map=$(MAP_FILE)
 LDFLAGS += -T script.ld
 
