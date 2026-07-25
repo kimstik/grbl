@@ -343,6 +343,16 @@ the reviewer catches plausible-but-wrong. A batch is DONE only after both.
   (context+worktrees intact). If resumes die again: 15:13 cron recovers with
   this note. Owner directive active: "аккуратно развиваем прогресс по плану".
 
+- REVIEW #4 (ch32v006 final): ALL 6 items REFUTED — independent rebuild, mret+
+  full-spill disasm, disjoint EXTI masks, HPRE/2WS verified, 11-row matrix clean.
+  Item 2 (STK semantics) self-consistent; final arbiter = silicon (hardware item).
+  Incidental: BUILD_DIR flavor contamination bit a THIRD time -> two-strike rule
+  invoked, uniform fix dispatched (all platform Makefiles + _template + common.mk).
+- Worktree hygiene: all landed worktrees removed, Renode asset kept.
+- PHASE 6 ROLLING STARTED: stm32f411 port dispatched (f103+common donors, F4
+  specifics briefed: PLL/FPU/MODER/SR-DR, all contract lessons enumerated).
+  Next in queue after f411: dsPIC33AK128MC102 (EULA approved, recipe verified).
+
 ## Current State (update each session)
 
 - ALARM SEMANTICS (owner directive 2026-07-23): the 6h cron is FALLBACK RECOVERY
