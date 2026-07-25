@@ -126,16 +126,16 @@ without reverse-engineering an existing port.
       with no motion (position lie, reachable at $22=1); $2/$3 silently dead.
       Renode smoke (banner+$$) exercises no motion — couldn't catch it. Full
       call-site table + disasm proof in investigation report.
-- [ ] **BUG #17 FIX (in flight): logical port-image contract** — boards define
-      logical STEP/DIR bits 0..7 (core's native assumption), samd21 gpio.h
-      translates logical↔physical in GPIO_MWO/MRD (shift for contiguous fields,
-      scatter/gather for megarm 25/27/28); platform overrides MDIR/PULLUP for
-      remapped groups; STEP_MASK becomes logical. Zero core edits; AVR unaffected
-      (logical==physical there — golden gate arbitrates).
-- [ ] **BUG #18: stepper.c:1015 int overflow on ARM** — (TICKS_PER_MICROSECOND*
-      1000000*60) = 2.88e9 > INT32_MAX at 48MHz (AVR's 9.6e8 fit). Platform-side
-      fix direction: make TICKS_PER_MICROSECOND expand unsigned (UL) so the
-      product is computed in uint32; verify where macro is defined, no core edit.
+- [x] **BUG #17 FIXED: logical port-image contract landed.** Boards: logical
+      STEP/DIR bits 0..2 + physical *_PIN; samd21 gpio.h token-pasting dispatch —
+      megarm branch-free 3-term gather/scatter (PA25/27/28), generic pure shift;
+      common/gpio.h only gained #ifndef guards. Evidence: preprocess before/after,
+      get_step_pin_mask disasm movs #1/2/4, RELEASE LTO ISR branch-free. 10
+      overflow warnings gone from baseline, ratchet OK 4/4. megarm 60428/42836.
+      Golden AVR byte-identical; f103 unchanged. MOTION SMOKE dispatched (with
+      negative control: pre-fix tree must FAIL the motion stage).
+- [x] **BUG #18 FIXED**: -DF_CPU=$(CLOCK)UL — stepper.c:1015 computes unsigned,
+      warning gone.
 - [ ] Regenerate ci/warn_baseline_samd21.txt from a REAL build log — 8 pre-existing
       core warnings missing (gcode/settings/stepper/motion_control/report/config.h);
       first CI run will trip the ratchet until then
