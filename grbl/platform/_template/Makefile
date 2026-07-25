@@ -147,6 +147,24 @@ endif
 # definitions for exactly those five, so the self-test's undefined-symbol
 # list stays 100% PORT_TODO_* signal. It does NOT switch to newlib-nano (no
 # feature/size tradeoff) - just the syscall layer.
+#
+# --gc-sections LIFECYCLE (CONTRACTS.md #14.3): "omit while PORT_TODO_* is
+# non-empty, re-add once it's zero" applies to every port copied from this
+# template, this Makefile included - a porter should flip the comment
+# above (and re-add -Wl,--gc-sections) the same session the port's
+# `make link` first reports zero PORT_TODO_*, not leave it omitted
+# forever "because the template did it that way." ch32v006/Makefile is
+# the reference: it started with this template's exact posture, then
+# needed an *explicit* -Wl,--no-gc-sections (not just omission) because
+# its picolibc-based toolchain's `-specs=picolibc.specs` unconditionally
+# re-appends --gc-sections to the link line regardless of what this
+# Makefile passes (a hazard this nosys.specs/arm-none-eabi toolchain does
+# NOT have - confirmed via -dumpspecs; that's why plain omission is
+# sufficient here and picolibc needed the stronger override) - then, once
+# the port reached zero PORT_TODO_* (all handlers wired into a real
+# vector table), switched to -Wl,--gc-sections for the size win with no
+# regression, verified by KEEP()ing the vector table in script.ld and
+# comparing nm/readelf on the IVT symbols before/after the flip.
 LDFLAGS  = -mcpu=$(CPU) -mthumb $(FPU) -nostartfiles --specs=nosys.specs
 LDFLAGS += -Wl,-Map=$(MAP_FILE)
 LDFLAGS += -T script.ld

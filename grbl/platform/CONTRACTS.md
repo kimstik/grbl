@@ -501,11 +501,46 @@ when a real RISC-V chip hit it. All found empirically this session
    symbol resolution ever ran, and `_template`'s own documented insurance
    against this (`static ... __keep_alive[] __attribute__((used))`) was
    NOT sufficient by itself to stop it on this toolchain/version.
-   Fix: `-Wl,--no-gc-sections` explicitly in LDFLAGS (ch32v006/Makefile
-   does this now). **Any future picolibc-based port must do the same**,
-   or `make link`'s PORT_TODO_* list is silently incomplete — a correct-
-   looking but false "fewer things left to do" reading, exactly the kind
-   of silent failure this whole design exists to prevent.
+   Fix: `-Wl,--no-gc-sections` explicitly in LDFLAGS. **Any future
+   picolibc-based port must do the same while it still has PORT_TODO_*
+   stubs**, or `make link`'s PORT_TODO_* list is silently incomplete — a
+   correct-looking but false "fewer things left to do" reading, exactly
+   the kind of silent failure this whole design exists to prevent.
+   **LIFECYCLE (compactness-drive update, post Phase 4 completion)**:
+   `--no-gc-sections`/omission is a PORTING-TIME posture, not a permanent
+   one — it exists solely to keep the linker-as-checklist mechanism
+   honest while PORT_TODO_* stubs are still being replaced. Once a port
+   reaches zero PORT_TODO_* (every dispatcher genuinely wired into a real
+   vector table, not just kept alive by an override flag), the
+   reachability hazard this item describes no longer applies, and
+   `--gc-sections` should be RE-ENABLED — every picolibc-based release
+   binary is otherwise permanently paying for dead/unreached code with no
+   corresponding benefit. ch32v006/Makefile made this flip after Phase 4
+   (zero PORT_TODO_* at link): `-Wl,--no-gc-sections` → `-Wl,--gc-sections`,
+   in both BUILD flavors (RELEASE and DEBUG share one LDFLAGS block — no
+   reason for DEBUG to keep unreached code once completeness holds).
+   RELEASE went 55560 → 54904 bytes .text (656 B, ~1.2%); DEBUG went
+   61360 → 60648 bytes .text (712 B, ~1.2%) (see CH32V006_PLAN.md /
+   PLAN.md compactness-drive entry for the full map-diff killed-list).
+   Verified safe: the vector table survives gc-sections regardless of
+   reachability, because it's protected structurally, not by luck —
+   `PFIC_Vector` is `__attribute__((used, section(".vectors")))` and
+   `ch32v006/script.ld`'s `.init` output section does `KEEP(*(.init))
+   KEEP(*(.vectors))` explicitly (`KEEP()` overrides `--gc-sections`
+   unconditionally, by design — that's what it's for). Confirmed via
+   `nm`/`readelf` before/after: `_start` stays at `0x0`, `PFIC_Vector`
+   stays at `0xc`, `.init` section identical offset/size, zero foreign
+   undefined symbols at link. The NVMEM window is unaffected either way —
+   it's addressed directly by physical address in `nvmem.c`, never placed
+   via a linker input section, so section-reachability analysis never
+   touches it. **General rule for any picolibc-based port**: flip
+   `--no-gc-sections` → `--gc-sections` the same session `make link`
+   first reports zero PORT_TODO_*, provided (a) the vector table has an
+   independent `KEEP()` anchor (not just `__attribute__((used))` alone —
+   proven insufficient by itself, see above) and (b) nothing else in the
+   image is reached only by address rather than by call graph. Do not
+   leave `--no-gc-sections` in place indefinitely "to be safe" once those
+   two conditions hold — it is not free.
 4. **`_template/script.ld`'s blanket `/DISCARD/ { libc.a(*) libm.a(*)
    libgcc.a(*) }` is a latent bug for any chip without hardware
    multiply/float**: harmless in the template only because its link
