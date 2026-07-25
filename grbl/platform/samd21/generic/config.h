@@ -26,39 +26,62 @@
 // ============================================================================
 // STEP PINS
 // ============================================================================
+// LOGICAL PORT-IMAGE CONTRACT (BUG #17, PLAN.md Phase 3 / CONTRACTS.md #1):
+// see samd21/megarm/config.h for the full rationale. X/Y/Z_STEP_BIT are
+// LOGICAL (core's native uint8_t port image, stepper.c get_step_pin_mask());
+// the real silicon pin is X/Y/Z_STEP_PIN. This board's physical pins happen
+// to be contiguous, so gpio.h's translation collapses to a pure shift
+// (STEP_L2P/STEP_P2L below) instead of megarm's 3-term gather/scatter.
 
 #define X_STEP_PORT         PORT_GROUPA
-#define X_STEP_PIN          16
-#define X_STEP_BIT          16
+#define X_STEP_PIN          16   // real silicon pin
+#define X_STEP_BIT          0    // LOGICAL
 
 #define Y_STEP_PORT         PORT_GROUPA
 #define Y_STEP_PIN          17
-#define Y_STEP_BIT          17
+#define Y_STEP_BIT          1
 
 #define Z_STEP_PORT         PORT_GROUPA
 #define Z_STEP_PIN          18
-#define Z_STEP_BIT          18
+#define Z_STEP_BIT          2
 
-#define STEP_MASK_A         ((1UL<<X_STEP_PIN)|(1UL<<Y_STEP_PIN)|(1UL<<Z_STEP_PIN))
+// Physical register mask - consumed only by gpio.h's GPIO_MWO_STEP/
+// GPIO_MDIR_OUT_STEP/GPIO_MRD_STEP; core never sees it.
+#define STEP_MASK_PHYS      ((1UL<<X_STEP_PIN)|(1UL<<Y_STEP_PIN)|(1UL<<Z_STEP_PIN))
+
+// Logical <-> physical: pins are contiguous (16,17,18 for bits 0,1,2), so
+// this is a pure shift by the X pin's offset - no gather/scatter needed.
+#define STEP_L2P(v)         ((uint32_t)(v) << X_STEP_PIN)
+#define STEP_P2L(v)         ((uint32_t)(v) >> X_STEP_PIN)
+
+// Combined step mask (all on PORT A) - LOGICAL, this is the core-visible
+// STEP_MASK aliased below (limits.c:342, stepper.c:499,561)
+#define STEP_MASK_A         ((1UL<<X_STEP_BIT)|(1UL<<Y_STEP_BIT)|(1UL<<Z_STEP_BIT))
 #define STEP_MASK_B         0
 
 // ============================================================================
 // DIRECTION PINS
 // ============================================================================
+// Same contract, same contiguous-shift shape as STEP above.
 
 #define X_DIRECTION_PORT    PORT_GROUPA
-#define X_DIRECTION_PIN     19
-#define X_DIRECTION_BIT     19
+#define X_DIRECTION_PIN     19   // real silicon pin
+#define X_DIRECTION_BIT     0    // LOGICAL
 
 #define Y_DIRECTION_PORT    PORT_GROUPA
 #define Y_DIRECTION_PIN     20
-#define Y_DIRECTION_BIT     20
+#define Y_DIRECTION_BIT     1
 
 #define Z_DIRECTION_PORT    PORT_GROUPA
 #define Z_DIRECTION_PIN     21
-#define Z_DIRECTION_BIT     21
+#define Z_DIRECTION_BIT     2
 
-#define DIRECTION_MASK_A    ((1UL<<X_DIRECTION_PIN)|(1UL<<Y_DIRECTION_PIN)|(1UL<<Z_DIRECTION_PIN))
+#define DIRECTION_MASK_PHYS ((1UL<<X_DIRECTION_PIN)|(1UL<<Y_DIRECTION_PIN)|(1UL<<Z_DIRECTION_PIN))
+#define DIRECTION_L2P(v)    ((uint32_t)(v) << X_DIRECTION_PIN)
+#define DIRECTION_P2L(v)    ((uint32_t)(v) >> X_DIRECTION_PIN)
+
+// Combined direction mask (all on PORT A) - LOGICAL
+#define DIRECTION_MASK_A    ((1UL<<X_DIRECTION_BIT)|(1UL<<Y_DIRECTION_BIT)|(1UL<<Z_DIRECTION_BIT))
 #define DIRECTION_MASK_B    0
 
 // ============================================================================

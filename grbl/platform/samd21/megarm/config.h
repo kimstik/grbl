@@ -29,36 +29,77 @@
 // STEP PINS (D2, D3, D4 on Arduino Mega pinout)
 // ============================================================================
 
-// ISSUE #8 (RESOLVED): Removed redundant PIN definitions
-// Only *_BIT definitions are used - cleaner and less error-prone
+// LOGICAL PORT-IMAGE CONTRACT (BUG #17, PLAN.md Phase 3 / CONTRACTS.md #1):
+// core packs step_outbits/dir_outbits/axislock into a uint8_t and derives
+// per-axis bits as `1<<X_STEP_BIT` (stepper.c get_step_pin_mask(), limits.c:342
+// `STEP_MASK & axislock`). X/Y/Z_STEP_BIT MUST be logical bits 0..2 on every
+// board - MegARM's real pins (PA25/27/28) don't fit a byte and silently
+// truncated in the ISR's compound |= when used directly here (that was the
+// bug: zero step output, ever, on this board). The real silicon pin now
+// lives in the matching *_STEP_PIN define; samd21/gpio.h's GPIO_MWO_STEP/
+// GPIO_MDIR_OUT_STEP translate logical<->physical via STEP_L2P/STEP_P2L
+// (3-term OR-of-shifts gather/scatter - branch-free, ISR-hot safe).
+
+#define X_STEP_PIN          25   // PA25 (D2) - real silicon pin
+#define Y_STEP_PIN          27   // PA27 (D3)
+#define Z_STEP_PIN          28   // PA28 (D4)
 
 #define X_STEP_PORT         PORT_GROUPA
-#define X_STEP_BIT          25   // PA25 (D2)
+#define X_STEP_BIT          0    // LOGICAL (core's native uint8_t port image)
 
 #define Y_STEP_PORT         PORT_GROUPA
-#define Y_STEP_BIT          27   // PA27 (D3)
+#define Y_STEP_BIT          1
 
 #define Z_STEP_PORT         PORT_GROUPA
-#define Z_STEP_BIT          28   // PA28 (D4)
+#define Z_STEP_BIT          2
 
-// Combined step mask (all on PORT A)
+// Physical register mask (real PA25/27/28) - consumed only by gpio.h's
+// GPIO_MWO_STEP/GPIO_MDIR_OUT_STEP/GPIO_MRD_STEP; core never sees it.
+#define STEP_MASK_PHYS      ((1UL<<X_STEP_PIN)|(1UL<<Y_STEP_PIN)|(1UL<<Z_STEP_PIN))
+
+// Logical <-> physical: PA25/27/28 scatter, so this is a 3-term gather/
+// scatter (OR of independently shifted single bits) - no data-dependent
+// branch, safe inside the ISR-hot GPIO_MWO_STEP path.
+#define STEP_L2P(v) ( \
+    ((((uint32_t)(v) >> 0) & 1UL) << 25) | \
+    ((((uint32_t)(v) >> 1) & 1UL) << 27) | \
+    ((((uint32_t)(v) >> 2) & 1UL) << 28) )
+#define STEP_P2L(v) ( \
+    ((((uint32_t)(v) >> 25) & 1UL) << 0) | \
+    ((((uint32_t)(v) >> 27) & 1UL) << 1) | \
+    ((((uint32_t)(v) >> 28) & 1UL) << 2) )
+
+// Combined step mask (all on PORT A) - LOGICAL, this is the core-visible
+// STEP_MASK aliased below (limits.c:342, stepper.c:499,561)
 #define STEP_MASK_A         ((1UL<<X_STEP_BIT)|(1UL<<Y_STEP_BIT)|(1UL<<Z_STEP_BIT))
 #define STEP_MASK_B         0
 
 // ============================================================================
 // DIRECTION PINS (D5, D6, D7)
 // ============================================================================
+// Real silicon pins (PA0/1/2) already sit at bits 0..2, so logical ==
+// physical here - DIRECTION_L2P/P2L are identity. Kept explicit (rather
+// than skipping the override) so gpio.h's dispatch is uniform across groups
+// and boards; costs nothing (folds to the identity at -O0 and vanishes at -Os).
+
+#define X_DIRECTION_PIN     0    // PA0 (D5) - real silicon pin
+#define Y_DIRECTION_PIN     1    // PA1 (D6)
+#define Z_DIRECTION_PIN     2    // PA2 (D7)
 
 #define X_DIRECTION_PORT    PORT_GROUPA
-#define X_DIRECTION_BIT     0    // PA0 (D5)
+#define X_DIRECTION_BIT     0    // LOGICAL - identical to physical on this board
 
 #define Y_DIRECTION_PORT    PORT_GROUPA
-#define Y_DIRECTION_BIT     1    // PA1 (D6)
+#define Y_DIRECTION_BIT     1
 
 #define Z_DIRECTION_PORT    PORT_GROUPA
-#define Z_DIRECTION_BIT     2    // PA2 (D7)
+#define Z_DIRECTION_BIT     2
 
-// Combined direction mask (all on PORT A)
+#define DIRECTION_MASK_PHYS ((1UL<<X_DIRECTION_PIN)|(1UL<<Y_DIRECTION_PIN)|(1UL<<Z_DIRECTION_PIN))
+#define DIRECTION_L2P(v)    ((uint32_t)(v))
+#define DIRECTION_P2L(v)    ((uint32_t)(v))
+
+// Combined direction mask (all on PORT A) - LOGICAL
 #define DIRECTION_MASK_A    ((1UL<<X_DIRECTION_BIT)|(1UL<<Y_DIRECTION_BIT)|(1UL<<Z_DIRECTION_BIT))
 #define DIRECTION_MASK_B    0
 

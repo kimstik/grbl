@@ -68,7 +68,16 @@ vpath %.c $(GRBL_DIR)
 
 # Base compiler flags
 CFLAGS  = -mcpu=$(CPU) -mthumb $(FPU)
-CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)
+# BUG #18: F_CPU feeds TICKS_PER_MICROSECOND (grbl/nuts_bolts.h:47,
+# `(F_CPU/1000000)`, core file - not editable). On AVR the 1000000 literal
+# doesn't fit avr-gcc's 16-bit int, so the compiler auto-promotes to (32-bit)
+# long and stepper.c:1015's `TICKS_PER_MICROSECOND*1000000*60` stays in
+# range. On this platform's 32-bit int, 1000000 fits as plain int, so that
+# same expression (2.88e9 @ 48MHz) overflows signed int32 - UB plus a
+# compiler warning. The UL suffix here makes F_CPU (and therefore
+# TICKS_PER_MICROSECOND's expansion) unsigned long, so the product is
+# computed in uint32 - no core edit, no more overflow.
+CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)UL
 CFLAGS += -D__$(DEVICE)__
 CFLAGS += -Wall -Wextra
 CFLAGS += -ffunction-sections -fdata-sections

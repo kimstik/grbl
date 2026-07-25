@@ -5,21 +5,15 @@
 #
 # Entries regenerated from a REAL full DEBUG build log (arm-none-eabi-gcc
 # 13.2.1) after Phase-1 prelude canon killed both redefinition classes.
-# All remaining entries are pre-existing CORE debt (fallthrough style,
-# suspected pin-mask truncation tracked in PLAN.md Phase 3).
+# All remaining entries are pre-existing CORE debt (fallthrough style).
+# 2026-07-25: removed 10 entries (9x settings.c get_step_pin_mask/
+# get_direction_pin_mask uint8_t truncation + stepper.c:1015 int overflow) -
+# BUG #17 (logical port-image contract, samd21 gpio.h) + BUG #18 (F_CPU UL
+# suffix, samd21/Makefile) fixed; confirmed gone from fresh build logs,
+# all 4 board x build-type combos (megarm/generic x DEBUG/RELEASE).
 # To extend after a legit new warning: python3 ci/warn_ratchet.py --log <log> --emit
 config.h: warning: unsigned conversion from 'int' to 'uint8_t' {aka 'unsigned char'} changes value from '65535' to '255' [-Woverflow]
 gcode.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
 motion_control.c: warning: unused parameter 'cycle_mask' [-Wunused-parameter]
 report.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
-settings.c: warning: unsigned conversion from 'int' to 'uint8_t' {aka 'unsigned char'} changes value from '1048576' to '0' [-Woverflow]
-settings.c: warning: unsigned conversion from 'int' to 'uint8_t' {aka 'unsigned char'} changes value from '131072' to '0' [-Woverflow]
-settings.c: warning: unsigned conversion from 'int' to 'uint8_t' {aka 'unsigned char'} changes value from '134217728' to '0' [-Woverflow]
-settings.c: warning: unsigned conversion from 'int' to 'uint8_t' {aka 'unsigned char'} changes value from '2097152' to '0' [-Woverflow]
-settings.c: warning: unsigned conversion from 'int' to 'uint8_t' {aka 'unsigned char'} changes value from '262144' to '0' [-Woverflow]
-settings.c: warning: unsigned conversion from 'int' to 'uint8_t' {aka 'unsigned char'} changes value from '268435456' to '0' [-Woverflow]
-settings.c: warning: unsigned conversion from 'int' to 'uint8_t' {aka 'unsigned char'} changes value from '33554432' to '0' [-Woverflow]
-settings.c: warning: unsigned conversion from 'int' to 'uint8_t' {aka 'unsigned char'} changes value from '524288' to '0' [-Woverflow]
-settings.c: warning: unsigned conversion from 'int' to 'uint8_t' {aka 'unsigned char'} changes value from '65536' to '0' [-Woverflow]
-stepper.c: warning: integer overflow in expression of type 'int' results in '-1414967296' [-Woverflow]
 system.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
