@@ -62,8 +62,13 @@ config error (SPINDLE_PWM_MIN_VALUE must be > 0).
 - [x] Roadmap truth-update landed (SAMD21 40%→~95%, stale claims refreshed at integration)
 - [x] stm32h523: hal_gpio_port_t typedef restored (real root cause, not CFLAGS) —
       build advances to the shared spindle-macro defect; blocked on f103-class fix
-- [ ] stm32f103 (+h523 after): fix spindle macro naming defect (SPINDLE_PWM/PWM_*
-      undeclared) — in flight; PLATFORM_NAME/sei/cli redefs + LIMIT_DDR collision too
+- [x] stm32f103 BUILDS: spindle macros per CONTRACTS §1/§6, handlers.c deduped to
+      core-supplied ISRs (samd21 pattern), redefs/collisions gone, baseline from
+      real logs (22 entries). DEBUG 48836/80/19376, RELEASE 29900/80/19376.
+- [ ] stm32h523 RESCOPED (register gap, not naming): author TIM1 regs in regs.h,
+      implement spindle PWM init (BDTR/MOE), rewrite handlers.c for its EXTI model
+      (FPR1/RPR1 per-edge, per-line vectors) + same core-ISR dedup; gpio.h/timer.h
+      port over cleanly from f103 minus PWM
 - [x] samd21 generic board BUILDS (60236/296/6160): PWM_MIN 0->1, PWM_RANGE, alias
       block restored; baseline union megarm+generic (15 entries), ratchet OK both
 - [ ] NOTE (minor): samd21 BUILD_DIR shared between DEBUG/RELEASE — stale-object
