@@ -433,6 +433,20 @@ the reviewer catches plausible-but-wrong. A batch is DONE only after both.
   NOTE: FP knob (in-flight probe) doubles as samd21 size lever: DP-arithmetic
   subset of the tax bucket vanishes under FP=SINGLE + Renode runtime arbiter.
 
+- **BUG #21 CONFIRMED (CRITICAL — biggest catch of the project): all three STM32
+  RELEASE binaries ship WITHOUT A VECTOR TABLE** — LTO deletes unreferenced
+  vector_table[] before codegen (KEEP() powerless: ltrans never emits the
+  section); cascade: no ISRs -> serial RX dead -> LTO const-props empty buffer
+  -> gc_execute_line path eliminated; .bin word0 = code bytes, not SP -> CANNOT
+  BOOT on hardware. DEBUG (no LTO) innocent-looking — the signature is
+  DEBUG-works/RELEASE-bricks. samd21 immune BY ACCIDENT: the VTOR fix (d5a2227)
+  created the IR anchor — it unknowingly saved the port. f103's "small" 29900
+  was missing 4KB of ISRs; honest size ~33916. Fix dispatched (used-attr +
+  VTOR-set all three + post-link BOOT-INTEGRITY check in common.mk/_template
+  per ratchet rule) + CONTRACTS §18. Size table to be re-canonicalized after.
+- FP twin (samd21) re-dispatched to fresh agent (Renode-agent pool walled to
+  20:50; harness is landed in ci/renode — any agent can drive it now).
+
 ## Current State (update each session)
 
 - ALARM SEMANTICS (owner directive 2026-07-23): the 6h cron is FALLBACK RECOVERY
