@@ -57,6 +57,14 @@ namespace Antmicro.Renode.Peripherals.Timers
         public new void WriteByte(long offset, byte value)
         {
             base.WriteByte(offset, value);
+            if(offset == CtrlA0Offset && (value & SwrstBit) != 0)
+            {
+                // CTRLA.SWRST resets the base model (compare0Value -> 0); the
+                // mirror must follow or a stale value would suppress the
+                // bootstrap kick after a peripheral reset.
+                cc0Mirror = 0;
+                return;
+            }
             if(offset == IntenSetOffset && (value & Mc0Bit) != 0 && cc0Mirror == 0)
             {
                 // GRBL semantics inherited from AVR CTC: the stepper wakes by
@@ -68,6 +76,17 @@ namespace Antmicro.Renode.Peripherals.Timers
                 // IRQ line once: the NVIC latches the edge, the ISR runs,
                 // writes CC0 (through WriteWord above) and from then on the
                 // model generates MC0 itself.
+                //
+                // Deliberately one pulse PER ENABLE, not once per lifetime
+                // (adversarial review A3): real MFRQ silicon fires MC0
+                // continuously while CC0==0 and the interrupt is enabled, so
+                // one edge per INTENSET.MC0 write is the minimal faithful
+                // subset - bounded (one ISR per enable, NVIC coalesces), and
+                // measured in Renode: N enables -> exactly N single ISR
+                // entries, zero kicks from firmware-reachable idle churn.
+                // A lifetime latch would deadlock a wake->no-segment->idle
+                // cycle followed by real motion (latch spent, CC0 still 0,
+                // first interrupt never arrives).
                 IRQ.Set(true);
                 IRQ.Set(false);
             }
@@ -78,11 +97,22 @@ namespace Antmicro.Renode.Peripherals.Timers
             return base.ReadByte(offset);
         }
 
+        // Machine/peripheral reset: base compare0Value returns to 0, so the
+        // mirror must too (subclass re-lists IPeripheral via IWordPeripheral/
+        // IBytePeripheral, remapping IPeripheral.Reset to this method).
+        public new void Reset()
+        {
+            base.Reset();
+            cc0Mirror = 0;
+        }
+
         // COUNT/CC[] live at 0x10 and above (COUNT16 layout).
         private const long CounterBlockStart = 0x10;
         private const long Cc0Offset = 0x18;
+        private const long CtrlA0Offset = 0x00;
         private const long IntenSetOffset = 0x0D;
         private const byte Mc0Bit = 0x10;
+        private const byte SwrstBit = 0x01;
 
         private ushort cc0Mirror;
     }
