@@ -166,7 +166,7 @@ without reverse-engineering an existing port.
 
 **Exit criterion**: Renode boot test green in CI.
 
-## Phase 4 — Fresh Port by the New Rules (ch32v006)   [M1-M3 DONE]
+## Phase 4 — Fresh Port by the New Rules (ch32v006)   [COMPLETE 2026-07-24]
 
 M1-M3 landed 2026-07-23: skeleton+clock+GPIO compile for rv32ec_zicsr; 32
 PORT_TODO_* remain (timers/serial/nvmem/handlers = Steps 3-6, next batch);
@@ -178,9 +178,12 @@ axis. Port strictly by copying `_template` + Phase-2 contracts. Count every cont
 discovered and fold it back into docs/template — "each port strengthens the system"
 made operational.
 
-- [ ] ch32v006 port from `_template` + contracts only
-- [ ] Contract amendments merged from discovered gaps
-- [ ] Platform added to CI matrix (build + smoke where emulation exists)
+- [x] ch32v006 port COMPLETE: zero PORT_TODO at link (both flavors), RELEASE
+      55560 fits 61K window; RM-mining caught 3 silicon bugs pre-write (PFIC
+      offsets, HPRE /3 trap, 2WS); TIM3-no-IRQ -> STK HCLK/8 == AVR F_CPU/8;
+      all BUG#12/13/17/19 lessons applied; 2 CI rows + baseline added
+- [x] Contract amendments: §14 items 2/7/8 closed (TRM cites), 6 upgraded, NEW 9-13
+- [x] Platform in CI matrix (2 rows); emulation smoke: Renode has no QingKe model — hardware/community item
 
 **Exit criterion**: builds in CI; contract docs measurably improved (gaps logged → fixed).
 
