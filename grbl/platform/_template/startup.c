@@ -12,6 +12,19 @@
   the PORT-TODO gap below vector_table[15], in whatever order your
   datasheet's vector table assigns them, aliased to the *_irq_dispatch()
   functions in handlers.c.
+
+  ARM-ONLY WARNING (added after the ch32v006/RISC-V port, Phase 4 M1-M3 -
+  CONTRACTS.md #14): everything in this file assumes ARM Cortex-M
+  hardware vector fetch - `vector_table[0]` = initial SP and
+  `vector_table[1]` = Reset_Handler, loaded into the core automatically
+  on reset, no software involved. RISC-V (including this repo's
+  ch32v006) has NO equivalent mechanism at all: there is no hardware SP
+  autoload, and a data-pointer array is not a valid `mtvec` target in
+  standard direct mode. If you are porting to a non-ARM core, do NOT
+  start from this file - read `ch32v006/startup.c` instead for a worked
+  RISC-V alternative (naked `_start` that sets `sp` itself, an
+  `__attribute__((interrupt))` C trap entry, `mtvec` written via `csrw`)
+  and CONTRACTS.md #14 for the full list of what else does not transfer.
 */
 
 #include <stdint.h>
