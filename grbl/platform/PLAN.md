@@ -314,13 +314,24 @@ the reviewer catches plausible-but-wrong. A batch is DONE only after both.
 observed, without waiting for the owner):
 
 1. INVENTORY the whole front, do not just retry the one agent that reported: list
-   `.claude/worktrees/*`, cross-check against dispatched agents, and check each
-   one's liveness by FACTS — transcript file size growth in the tasks/ dir and
-   `git status --porcelain` in the worktree. Absence of a completion notification
-   is NOT evidence of life: an agent killed at a limit-window boundary can sit
-   silent and idle-looking indefinitely (observed 2026-07-24: two agents stuck
-   at a 115-byte stub transcript with zero worktree changes for 28 minutes, no
-   notification ever arrived).
+   `.claude/worktrees/*` and cross-check against dispatched agents. Transcript
+   file size and `git status --porcelain` diffs are LAGGING indicators, NOT a
+   liveness test — an agent doing a long tool call (a download, a clean
+   rebuild, an emulator run) legitimately produces zero transcript growth and
+   zero worktree diff for many minutes while very much alive. Death is proven
+   ONLY by (a) an explicit failure/kill notification, or (b) silence far
+   exceeding the batch's plausible runtime — hours, not minutes. NEVER declare
+   an agent dead on silence alone, and NEVER `git worktree remove` a worktree
+   whose agent has not reported terminal status; pruning is for worktrees
+   whose bytes are already in origin, full stop. (Observed 2026-07-25: two
+   agents sat at a 115-byte stub transcript with zero worktree changes for
+   6+ minutes; the orchestrator declared them dead, relaunched duplicates, and
+   ordered `git worktree remove --force` on both. Both were alive — one was
+   downloading a 102MB emulator, the other probing builds — and both later
+   completed successfully with full evidence (the FP=SINGLE arbitration and
+   the BUG #21 fix). The worktrees survived only because git refused to
+   remove directories still in use; a duplicate pair of agents was spawned for
+   work that was already in progress.)
 2. SALVAGE before relaunch: a killed agent's worktree may hold real work (partial
    diffs) or expensive assets (an extracted datasheet, a downloaded emulator, a
    reference commit). Inspect it, and pass its path to the replacement agent so
@@ -331,6 +342,14 @@ observed, without waiting for the owner):
 4. PRUNE only worktrees whose bytes are already in origin, or that hold zero
    changes. Never delete an unlanded worktree.
 5. VERIFY the relaunch actually started (transcript growth), then continue.
+
+**GIT APPLY CAUTION** (same incident, 2026-07-25): `git apply` is ATOMIC — a
+conflict in any one file rolls back the WHOLE patch, and the per-file "Applied
+cleanly" lines it prints before hitting the failing file are misleading
+survivors of that rollback, not evidence of a partial apply. Never truncate its
+output with `head`; always check `git status` afterward to confirm what
+actually landed, and prefer `--3way` so a conflict surfaces as resolvable
+markers in the tree instead of a silent no-op.
 
 ## Decision Log
 
@@ -501,6 +520,15 @@ observed, without waiting for the owner):
   not just the one agent that reported, salvage worktree assets before relaunch, and
   relaunch immediately — never wait for the owner or park it for the cron. Procedure
   codified in Orchestration Protocol.
+
+- LIMIT-RECOVERY CORRECTION 2026-07-25 (near-miss, no data lost): the 2026-07-24
+  liveness test itself was wrong — two live agents (downloading an emulator,
+  probing builds) were declared dead on transcript/worktree silence alone and a
+  `git worktree remove --force` was ordered on both; only git's in-use refusal
+  saved them. Liveness now requires a failure notification or hours of silence,
+  never minutes. Same incident: `git apply` is atomic (one file's conflict rolls
+  back the whole patch, pre-failure "Applied cleanly" lines are misleading) —
+  always check `git status` after, use `--3way`, never `head`-truncate its output.
 
 ## Current State (update each session)
 
