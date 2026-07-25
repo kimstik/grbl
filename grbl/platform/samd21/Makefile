@@ -85,6 +85,40 @@ CFLAGS += -D__$(DEVICE)__
 CFLAGS += -Wall -Wextra
 CFLAGS += -ffunction-sections -fdata-sections
 
+# FP PRECISION KNOB (CONTRACTS #17: "FP precision is a declared port
+# property"). GRBL core is float-typed throughout but was written against
+# avr-gcc, where double==float (32-bit) - so its unsuffixed double literals
+# (0.5*x, 1.0-y) and unsuffixed libm calls (sqrt/atan2/sin/cos/floor/ceil/
+# round/lround/trunc/fabs) were ALWAYS single precision on the origin AVR.
+# Cortex-M0+ has no FPU at all and double is a real 64-bit type here, so
+# those same expressions promote for real and drag in DP soft-float
+# (__aeabi_dadd/dsub/dmul/ddiv, __eqdf2) plus DP libm (__ieee754_atan2,
+# __ieee754_sqrt, __ieee754_rem_pio2, __kernel_sin/cos, atan, ...) that the
+# AVR binary never contained - all of it computing precision core
+# immediately truncates back to float.
+#
+#   FP=SINGLE (default): template-faithful AVR double==float semantics.
+#     - -fsingle-precision-constant keeps unsuffixed FP literals float
+#     - GRBL_FP_SINGLE arms the board prelude's SP libm call-site mapping
+#     - post-link, tools/assert_no_double.sh FAILS the build listing
+#       offenders if any DP machinery still linked in - the linker is the
+#       truth, not the compile flags.
+#   FP=DOUBLE: conscious opt-in deviation - MORE precise than the template,
+#     must be declared in the port's docs. No SP pins, assert disarmed.
+#     Intended for ports with a native DP FPU, which the M0+ is not.
+#
+# Applied to BOTH build flavors - it is a semantics pin, not an
+# optimization, and DEBUG must debug the same arithmetic RELEASE ships.
+FP ?= SINGLE
+ifeq ($(FP),SINGLE)
+  CFLAGS += -fsingle-precision-constant -DGRBL_FP_SINGLE
+  ASSERT_FP = ../../../tools/assert_no_double.sh $(PREFIX)nm $(ELF_FILE)
+else ifeq ($(FP),DOUBLE)
+  ASSERT_FP = @echo "FP=DOUBLE: declared-double port build, no-DP assert disarmed"
+else
+  $(error FP must be SINGLE or DOUBLE, got "$(FP)")
+endif
+
 # Floating point: default is float (single precision) - software emulation on M0+
 # CFLAGS_EXTRA must be ABSOLUTELY FIRST to override grbl headers (cpu_map.h, etc)
 CFLAGS += $(CFLAGS_EXTRA) -I$(PLATFORM_DIR) -I$(GRBL_DIR)/platform -I$(GRBL_DIR)
@@ -165,6 +199,7 @@ $(BUILD_DIR)/nvmem.o: nvmem.c | $(BUILD_DIR)
 $(ELF_FILE): $(OBJECTS)
 	$(CC) $(LDFLAGS) -o $@ $(OBJECTS) $(LIBS)
 	$(SIZE) --format=berkeley $@
+	$(ASSERT_FP)
 
 # Create hex file
 $(HEX_FILE): $(ELF_FILE)
@@ -223,6 +258,8 @@ help:
 	@echo "  make              - Build DEBUG version (default)"
 	@echo "  make BUILD=DEBUG  - Build with debugging symbols"
 	@echo "  make BUILD=RELEASE - Build optimized for production"
+	@echo "  make FP=SINGLE    - AVR-faithful double==float semantics (default)"
+	@echo "  make FP=DOUBLE    - declared-double deviation, no-DP assert disarmed"
 	@echo ""
 	@echo "Other targets:"
 	@echo "  make flash        - Flash using OpenOCD"
@@ -237,6 +274,7 @@ help:
 	@echo "  CPU = $(CPU)"
 	@echo "  Clock = $(CLOCK) Hz"
 	@echo "  Current BUILD = $(BUILD)"
+	@echo "  FP precision = $(FP)"
 	@echo "  Output directory = $(BUILD_DIR)"
 
 .PHONY: all clean clean-all flash flash-bossa debug help compdb

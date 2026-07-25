@@ -863,3 +863,110 @@ disassembly. RM-only facts that could not be locally verified are marked.
    truth, so vendoring against it removes a whole transcription-error
    class instead of adding one. Precedent: license-check the vendor
    pack FIRST; clean-room is the fallback, not the default.
+
+
+## 17. FP precision is a DECLARED port property (found dieting ch32v006 —
+    **RUNTIME-PROVEN on samd21 under Renode, 2026-07-25**)
+
+1. **The origin semantics**: avr-gcc has `double == float` (32-bit).
+   Every unsuffixed double literal in core (`0.5*x`, `1.0-y`) and every
+   unsuffixed libm call (`sqrt`, `atan2`, `sin`, `cos`, `floor`, `ceil`,
+   `round`, `lround`, `trunc`, `fabs`) has therefore been SINGLE
+   precision on the origin AVR since 2009. The AVR semantics ARE the
+   template semantics — core is float-typed throughout and its authors
+   never bought 64-bit math; the unsuffixed spellings are an avr-gcc
+   idiom, not a precision request.
+2. **What happens if a port ignores this**: on any target where double
+   is a real 64-bit type, those same expressions promote for real.
+   Measured on ch32v006 (rv32ec soft-float, RELEASE): ~13.5KB of text.
+   Measured on samd21 (Cortex-M0+, no FPU, RELEASE, `-Os -flto`):
+   **43036 → 31952 text, −11084 bytes (−25.8%)** — DP soft-float
+   (`__aeabi_dadd/dsub/dmul/ddiv`, the `__aeabi_dcmp*`/`__*df2` compare
+   set, `__aeabi_i2d/ui2d/f2d/d2iz/d2uiz`) plus DP libm
+   (`__ieee754_atan2`, `__ieee754_sqrt`, `__ieee754_rem_pio2`,
+   `__kernel_sin/cos/rem_pio2`, `atan`, `sin`, `cos`, `sqrt`, `floor`,
+   `ceil`, `round`, `lround`, `trunc`, `fabs`, `scalbn`) — 43 defined
+   DP symbols gone, all of it code the AVR binary never contained,
+   computing precision core immediately truncates back to float. Two
+   independent ports, two architectures, the same ~25%: this is not a
+   ch32 quirk, it is what the promotion costs.
+3. **The knob** (reference: ch32v006/Makefile + boards/generic/prelude.h,
+   samd21/Makefile + {megarm,generic}/prelude.h; inherited pattern:
+   `_template`): `FP ?= SINGLE`.
+   - `FP=SINGLE` (default) = template-faithful AVR `double==float`
+     semantics, pinned by two platform-side mechanisms (ZERO core
+     edits): `-fsingle-precision-constant` (unsuffixed literals stay
+     float) and a prelude libm mapping (`#include <math.h>` first, then
+     function-like macros `#define sqrt(x) sqrtf(x)` ... — call-site
+     rewriting only; prototypes and bare identifiers untouched; beats
+     `-Wl,--wrap`, which would keep the double ABI at every call site
+     plus pay for narrowing wrappers). The shim goes in EVERY board's
+     prelude, not one of them — boards are selected by which prelude the
+     Makefile injects, so a board without the shim silently opts out.
+   - `FP=DOUBLE` = conscious deviation, MORE precise than the template,
+     and must be declared in the port's docs. Intended for ports with a
+     native DP FPU (dsPIC33AK class) where DP costs cycles, not
+     kilobytes. The M0+/rv32ec class is exactly who should never use it.
+   - There is NO libc-side escape hatch: picolibc/newlib on rv32/ARM
+     have no 32-bit-double build option — double width is fixed by the
+     ABI (`ilp32e`/AAPCS), confirmed on this toolchain. The knob is the
+     mechanism.
+4. **Enforcement — the linker is the truth**: under `FP=SINGLE`,
+   `tools/assert_no_double.sh <nm> <elf>` runs post-link and FAILS the
+   build listing offenders if any DP arithmetic/compare soft-float or
+   DP libm symbol is DEFINED in the image. Pure format conversions
+   (`__aeabi_d2f`, `__extendsfdf2`, `__truncdfsf2`, `__fix*dfsi`,
+   `__float*df`) are deliberately tolerated: a conversion cannot
+   compute, and they legitimately survive at legacy double-typed ABI
+   boundaries. Under `FP=DOUBLE` the assert is disarmed — that's the
+   declaration.
+   **The assert earns its keep — samd21 proved it.** The compile flags
+   alone left `__aeabi_dsub/dcmpgt/dmul` in the image (35892 text, assert
+   RED) because `_delay_ms()` still did its sub-millisecond remainder in
+   double (`__ms - (double)ms`, `rem > 0.0`, `rem * 1000.0`) *behind* a
+   boundary that had already been "narrowed at entry". Narrowing at entry
+   is necessary and NOT sufficient: what matters is that no DP
+   **arithmetic** exists anywhere past the boundary. Fixing it (a float
+   worker `delay_us_f()`; `_delay_us/_delay_ms` narrow once via
+   `__aeabi_d2f` and never widen again) took the remaining 3940 bytes and
+   left exactly ONE tolerated symbol in the whole image: `__aeabi_d2f`.
+   Verified both directions this session: armed → PASS on the SINGLE
+   ELF; the same script run against the `FP=DOUBLE` ELF (43020 text)
+   correctly lists 21 offenders and exits 1.
+5. **Accuracy is not a regression — NOW PROVEN AT RUNTIME, not just at
+   compile time.** The samd21 twin is the arbiter for this change class
+   because it has the Renode motion smoke, and the smoke was extended
+   with the paths that hammer SP libm hardest. Evidence, `FP=SINGLE`
+   DEBUG ELF on emulated ATSAMD21G18A (`ci/renode/smoke.sh --arc`,
+   Renode 1.16.1):
+   - boot + `Grbl 1.1h` banner on SERCOM3; `$$` settings dump complete
+     through `$132=`;
+   - linear stage `G91` + `G0 X1`: MPos 0.000 → 1.000, monotonic, Idle;
+   - **arc stage `G2 X2 I1 F200`** — the only core path calling
+     `atan2`/`sqrt` (arc geometry) and `cos`/`sin` (per-segment rotation
+     matrix, re-corrected every `N_ARC_CORRECTION` segments). A CW
+     semicircle from (1,0) about centre (2,0). Result across 40+ status
+     samples: **no NaN/inf, no error:/ALARM:**, Y rose 0 → **peak exactly
+     1.000** at X≈1.99 (true radius 1.000 — the arc was genuinely
+     interpolated, not degenerated to its chord) and came back down to
+     land on **(3.000, 0.000, 0.000), Idle** — the exact commanded
+     endpoint, zero drift;
+   - **dwell `G4 P0.5`** (float-seconds `delay_sec` → `_delay_ms`, the
+     last double-typed ABI boundary): `ok` in 0.44 s wall, back to Idle;
+   - physical step evidence throughout: X STEP (PA25) driven high **410
+     times** (PORT-write hook in `samd21_smoke.resc`) — real pin toggles,
+     not the BUG #17 phantom-motion class;
+   - reproduced across runs, and the arc/dwell stages also passed on a
+     `BOARD=generic` DEBUG image (only the PA25 pin assertion is
+     megarm-specific) — both boards' prelude shims are exercised.
+   Verdict: **SP-RUNTIME-PROVEN**. Single-precision arc/junction/stepper
+   math is contract-faithful — it is what every AVR machine has run since
+   2009, and it now demonstrably produces the same trajectory on a
+   64-bit-double target. The compile-only embargo on other ports
+   shipping `FP=SINGLE` pins is LIFTED; `assert_no_double.sh` PASSING is
+   the bar, and any port whose motion smoke exists should still run it.
+6. **AVR golden untouched by construction**: on avr-gcc the knob's
+   mechanisms are no-ops (`double==float` regardless), and the AVR build
+   doesn't include platform preludes anyway. Re-verified this session:
+   text 30640 / grbl.hex MD5 79af184e67b27defd27a39309ac53563, exact
+   golden match.

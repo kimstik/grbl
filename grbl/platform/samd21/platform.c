@@ -122,9 +122,12 @@ void hal_watchdog_feed(void) {
 //                               stepper idle lock, report flush)
 //   nuts_bolts.c delay_us()  -> _delay_us(1 / 10 / 100), _delay_ms(1)
 //   nuts_bolts.c delay_sec() -> _delay_ms(DWELL_TIME_STEP == 50)
-// Signatures keep AVR's double parameter for core compatibility; each function
-// performs exactly ONE double->integer conversion up front (soft-float on
-// M0+), after that the wait loops are pure integer code.
+// Signatures keep AVR's double parameter for core compatibility (on avr-gcc
+// that `double` IS a float - see CONTRACTS #17). Each entry point performs
+// exactly ONE double->float narrowing up front (__aeabi_d2f, a pure format
+// conversion) and then stays in float/uint32 forever; no double-precision
+// ARITHMETIC exists behind the boundary, which is what
+// tools/assert_no_double.sh enforces post-link under FP=SINGLE.
 
 // --- Calibrated busy-wait core ----------------------------------------------
 //
@@ -166,13 +169,19 @@ static void delay_busy_loop(uint32_t iterations) {
   );
 }
 
+// Float-typed worker: everything past the ABI boundary is single precision.
+static void delay_us_f(float us) {
+  uint32_t n = (uint32_t)us;     // truncates, SP->int
+  if (n) { delay_busy_loop(n * DELAY_LOOP_ITERS_PER_US); }
+}
+
 void _delay_us(double __us) {
-  uint32_t us = (uint32_t)__us;  // single soft-float conversion (truncates)
-  if (us) { delay_busy_loop(us * DELAY_LOOP_ITERS_PER_US); }
+  delay_us_f((float)__us);       // the ONE narrowing (__aeabi_d2f)
 }
 
 void _delay_ms(double __ms) {
-  uint32_t ms = (uint32_t)__ms;  // single soft-float conversion (truncates)
+  float    ms_f = (float)__ms;   // the ONE narrowing (__aeabi_d2f)
+  uint32_t ms   = (uint32_t)ms_f;
 
   if (ms) {
     // Preferred path: poll the SysTick-driven millisecond counter. Robust and
@@ -206,9 +215,15 @@ void _delay_ms(double __ms) {
 
   // Sub-1ms remainder (e.g. _delay_ms(0.5)): delegate to the busy-wait. All
   // current core callers pass integral values, so this normally costs one
-  // soft-float compare outside any wait loop and calls nothing.
-  double rem = __ms - (double)ms;
-  if (rem > 0.0) { _delay_us(rem * 1000.0); }
+  // single-precision compare outside any wait loop and calls nothing.
+  // Kept in float deliberately: doing this subtract/compare/multiply in
+  // double relinks __aeabi_dsub/dcmpgt/dmul and the DP support they pull
+  // with them - measured +3940 bytes of RELEASE text (35892 vs 31952) for
+  // arithmetic the origin AVR performed in 32 bits. This is the leak
+  // tools/assert_no_double.sh caught after the compile flags alone looked
+  // "done": narrowing at entry is necessary, not sufficient.
+  float rem = ms_f - (float)ms;
+  if (rem > 0.0f) { delay_us_f(rem * 1000.0f); }
 }
 // ============================================================================
 // GPIO INTERRUPT INITIALIZATION

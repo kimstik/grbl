@@ -15,14 +15,21 @@
 #   SMOKE_BANNER_ONLY=1  skip the "$$" settings check
 #   SMOKE_MOTION=1   (or pass --motion) also run the motion stage:
 #                    G91 + G0 X1, '?' polling, assert MPos X reaches 1.000
+#   SMOKE_ARC=1      (or pass --arc; implies --motion) also run the FP
+#                    precision arbiter stage: G2 X2 I1 F200 semicircle +
+#                    G4 P0.5 dwell. This is the runtime proof behind
+#                    CONTRACTS #17 FP=SINGLE - arcs are the only core path
+#                    that calls atan2/sqrt/cos/sin.
 #
-# Exit code: 0 on success (banner + settings [+ motion]), non-zero otherwise.
+# Exit code: 0 on success (banner + settings [+ motion] [+ arc]), non-zero
+# otherwise.
 
 set -u
 
 for arg in "$@"; do
   case "$arg" in
     --motion) SMOKE_MOTION=1 ;;
+    --arc) SMOKE_ARC=1; SMOKE_MOTION=1 ;;
     *) echo "smoke.sh: unknown argument '$arg'" >&2; exit 3 ;;
   esac
 done
@@ -56,6 +63,11 @@ MOTION_FLAG=""
 if [ "${SMOKE_MOTION:-0}" = "1" ]; then
   MOTION_FLAG="--motion"
 fi
+ARC_FLAG=""
+if [ "${SMOKE_ARC:-0}" = "1" ]; then
+  ARC_FLAG="--arc"
+  SMOKE_MOTION=1
+fi
 
 echo "smoke.sh: starting renode (uart=$UART_PORT monitor=$MON_PORT)"
 "$RENODE" --disable-gui --plain -P "$MON_PORT" \
@@ -74,7 +86,7 @@ python3 ci/renode/uart_probe.py \
   --monitor-port "$MON_PORT" \
   --banner-timeout "$BANNER_TIMEOUT" \
   --transcript "$LOG_DIR/uart_transcript.txt" \
-  $BANNER_ONLY_FLAG $MOTION_FLAG
+  $BANNER_ONLY_FLAG $MOTION_FLAG $ARC_FLAG
 RC=$?
 
 # Motion mode: MPos reaching 1.000 proves the TC3 stepper ISR ran, but NOT
