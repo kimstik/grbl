@@ -315,6 +315,18 @@ the reviewer catches plausible-but-wrong. A batch is DONE only after both.
   not spend review/test cycles hunting core bugs (aligns with byte-proven
   template philosophy).
 
+- REVIEW #3 verdicts (motion/#19 + h523 + ch32 M1-M3, port-code scope):
+  motion batch SOUND (realtime switch verbatim vs core, __DMB intact, exit
+  contract consistent); A3 NEEDS-EVIDENCE: Renode timer-shim kick may double-
+  fire on idle/wake pre-first-segment (CI model only) -> hardening dispatched
+  to Renode agent w/ repro-first mandate. B3 CONFIRMED-DEFECT: h523 spindle
+  duty capped 25.5% (config.h:105 PWM_MAX=1000 overrides contract 255,
+  ARR=1000 vs CCR1<=255) -> fix agent dispatched. C1: UNVERIFIED-constants
+  dependency list forwarded mid-flight to ch32 Steps 3-6 agent (PLL shape
+  verify-FIRST — poisons clocks/baud downstream). C2: ch32 DIRECTION physical
+  bits confirmed contract-shape violation, §14-item-8 closure now MANDATORY
+  in the in-flight batch.
+
 ## Current State (update each session)
 
 - ALARM SEMANTICS (owner directive 2026-07-23): the 6h cron is FALLBACK RECOVERY
