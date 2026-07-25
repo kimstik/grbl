@@ -308,6 +308,30 @@ prompt: REFUTE the batch (wrong cycle math? contract violated? claim not backed 
 repo?). Findings → fix batch or ledger entry. Mechanical gates catch regressions;
 the reviewer catches plausible-but-wrong. A batch is DONE only after both.
 
+**LIMIT-RECOVERY PROCEDURE** (mandatory, unprompted — owner correction 2026-07-24,
+"Далее не жди пинка. Восстановление после лимитов подразумевает восстановление
+ворктри. Логично??": the orchestrator runs this the moment any limit/kill is
+observed, without waiting for the owner):
+
+1. INVENTORY the whole front, do not just retry the one agent that reported: list
+   `.claude/worktrees/*`, cross-check against dispatched agents, and check each
+   one's liveness by FACTS — transcript file size growth in the tasks/ dir and
+   `git status --porcelain` in the worktree. Absence of a completion notification
+   is NOT evidence of life: an agent killed at a limit-window boundary can sit
+   silent and idle-looking indefinitely (observed 2026-07-24: two agents stuck
+   at a 115-byte stub transcript with zero worktree changes for 28 minutes, no
+   notification ever arrived).
+2. SALVAGE before relaunch: a killed agent's worktree may hold real work (partial
+   diffs) or expensive assets (an extracted datasheet, a downloaded emulator, a
+   reference commit). Inspect it, and pass its path to the replacement agent so
+   the work is reused, not redone.
+3. RELAUNCH the dead ones immediately with the same brief plus the salvage
+   pointer. Do not park work for the cron alarm — the alarm is fallback recovery
+   for the orchestrator's own death, never a scheduler.
+4. PRUNE only worktrees whose bytes are already in origin, or that hold zero
+   changes. Never delete an unlanded worktree.
+5. VERIFY the relaunch actually started (transcript growth), then continue.
+
 ## Decision Log
 
 - 2025-11: `-include` injection is THE canon; obviousness restored via single prelude.h
@@ -467,6 +491,13 @@ the reviewer catches plausible-but-wrong. A batch is DONE only after both.
   deltas (checkboxes, Current State, Decision Log) inside their batch worktree;
   cross-batch ledger notes go through a scribe agent. Prior "ledger = orchestrator
   bookkeeping" exception REVOKED.
+
+- LIMIT-RECOVERY CORRECTION 2026-07-24 (owner: "Далее не жди пинка. Восстановление
+  после лимитов подразумевает восстановление ворктри. Логично??"): recovery from a
+  limit/kill = inventory the whole front by FACTS (transcript growth + git status),
+  not just the one agent that reported, salvage worktree assets before relaunch, and
+  relaunch immediately — never wait for the owner or park it for the cron. Procedure
+  codified in Orchestration Protocol.
 
 ## Current State (update each session)
 
