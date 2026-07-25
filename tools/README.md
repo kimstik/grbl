@@ -10,9 +10,10 @@ grbl/platform/<platform> -nB BUILD=<build> [BOARD=<board>]` prints every
 compile recipe line without running the compiler (`-n` = dry run, `-B` =
 rebuild everything so no line is skipped as "up to date"). The script parses
 those printed lines for compiler invocations and keeps every flag verbatim,
-including the `-include gpio.h -include ../common/gpio.h ...` chain each
-platform uses for its "invisible porting" (see `grbl/platform/common/gpio.h`)
-- clangd needs those to resolve the same headers the real build sees.
+including the single `-include $(BOARD)/prelude.h` each platform uses for its
+"invisible porting" (the injected header chain itself is documented inside
+each platform's `prelude.h`, e.g. `grbl/platform/samd21/megarm/prelude.h`) -
+clangd needs that flag to resolve the same headers the real build sees.
 
 Because it only ever runs `make -n`, it works even when the target
 toolchain (`arm-none-eabi-gcc`, `avr-gcc`, `riscv64-unknown-elf-gcc`, ...)
