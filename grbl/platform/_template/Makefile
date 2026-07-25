@@ -236,8 +236,32 @@ $(HEX_FILE): $(ELF_FILE)
 	$(OBJCOPY) -O ihex $< $@
 
 # Create binary file
+#
+# BOOT INTEGRITY (BUG #21 ratchet, CONTRACTS.md S18) - DO NOT DELETE THIS.
+# On a RELEASE (-flto) build the linker will happily produce an image with no
+# vector table: KEEP(*(.isr_vector)) acts at link time, but LTO's whole-program
+# IPA deletes an unreferenced vector_table[] before codegen, so there is no
+# input section left for KEEP to match. The link succeeds, `size` looks normal,
+# and the chip cannot boot because word0 of the .bin is code instead of the
+# initial SP. DEBUG (no LTO) looks fine - "DEBUG works / RELEASE bricks" is the
+# signature. This check reads word0/word1 of the finished image and fails the
+# build unless they are a real (SP, Thumb reset vector) pair.
+#
+# The image-side half of the fix lives in startup.c: Reset_Handler must write
+# SCB->VTOR = (uint32_t)vector_table, and vector_table must carry
+# __attribute__((used)).
+#
+# PORT-TODO: set FLASH_ORIGIN/FLASH_LENGTH to match script.ld MEMORY{FLASH}.
+# PORT-TODO: on a non-ARM target (RISC-V has no SP-in-word0 convention) replace
+#            this with an equivalent entry-point assertion rather than deleting
+#            it - see ch32v006/Makefile for how that is written up.
+BOOT_CHECK   = ../common/boot_check.sh
+FLASH_ORIGIN = 0x00000000
+FLASH_LENGTH = 65536
+
 $(BIN_FILE): $(ELF_FILE)
 	$(OBJCOPY) -O binary $< $@
+	@sh $(BOOT_CHECK) $@ $(FLASH_ORIGIN) $(FLASH_LENGTH)
 
 # Create disassembly dump
 $(DUMP_FILE): $(ELF_FILE)

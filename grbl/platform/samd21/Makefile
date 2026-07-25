@@ -206,8 +206,21 @@ $(HEX_FILE): $(ELF_FILE)
 	$(OBJCOPY) -O ihex $< $@
 
 # Create binary file
+#
+# BOOT INTEGRITY (BUG #21 ratchet): objcopy will happily emit a .bin with no
+# vector table in it - KEEP(*(.isr_vector)) does not survive -flto, and nothing
+# else in the build fails when the table is gone. samd21 already survives by
+# construction (Reset_Handler writes SCB->VTOR = vector_table, which anchors
+# the table against LTO's IPA), so this check passes today - it is here so the
+# guarantee stays checked rather than accidental. See CONTRACTS.md S18.
+# FLASH window must match script.ld MEMORY{FLASH}: 0x200, 255488 bytes.
+BOOT_CHECK   = ../common/boot_check.sh
+FLASH_ORIGIN = 0x00000200
+FLASH_LENGTH = 255488
+
 $(BIN_FILE): $(ELF_FILE)
 	$(OBJCOPY) -O binary $< $@
+	@sh $(BOOT_CHECK) $@ $(FLASH_ORIGIN) $(FLASH_LENGTH)
 
 # Create disassembly dump
 $(DUMP_FILE): $(ELF_FILE)

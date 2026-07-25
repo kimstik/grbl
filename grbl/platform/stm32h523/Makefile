@@ -15,6 +15,11 @@ CLOCK          = 250000000
 FPU            = -mfpu=fpv5-sp-d16 -mfloat-abi=hard
 OPENOCD_TARGET = stm32h5x.cfg
 
+# Flash window for the post-link BOOT INTEGRITY check. Must match script.ld's
+# MEMORY{FLASH} - 0x08000000, 128K. (BUG #21 ratchet, CONTRACTS.md S18)
+FLASH_ORIGIN   = 0x08000000
+FLASH_LENGTH   = 131072
+
 # AVR stubs (temporary workaround for grbl.h AVR includes)
 # Platform dir must be first to override cpu_map.h
 # NOTE: this line was missing entirely (copy/paste omission vs stm32f103's

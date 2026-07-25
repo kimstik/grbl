@@ -21,7 +21,12 @@ SECTIONS
   /* Code and read-only data */
   .text :
   {
-    . = ALIGN(4);
+    /* ARMv7-M VTOR ignores bits [6:0], so the table needs at least 128-byte
+       alignment; the architectural rule is "next power of two >= 4*vectors".
+       F411 has 60 vectors = 240 bytes -> 256. FLASH ORIGIN is already 256-byte
+       aligned so the ALIGN is a no-op today; it keeps the guarantee if ORIGIN
+       moves (bootloader offset). The ASSERT at the bottom enforces it. */
+    . = ALIGN(256);
     KEEP(*(.isr_vector))  /* Vector table */
     *(.text)              /* Code */
     *(.text*)
@@ -75,3 +80,13 @@ SECTIONS
     _eheap = .;
   } > RAM
 }
+
+/* BUG #21 ratchet: Reset_Handler programs SCB->VTOR = vector_table.
+ * ARMv7-M VTOR ignores bits [6:0]; 60 vectors * 4 = 240 bytes -> 256-byte
+ * alignment.
+ * NOTE: this ASSERT does NOT catch a vanished table. Verified empirically:
+ * with the fix reverted, ld resolves the undefined `vector_table` to 0, and
+ * (0 & 0xFF) == 0 passes. Alignment is all it guards. The thing that actually
+ * catches a dropped vector table is the post-link BOOT INTEGRITY check in the
+ * Makefile (common/boot_check.sh). Do not treat this ASSERT as that guard. */
+ASSERT((vector_table & 0xFF) == 0, "vector_table must be 256-byte aligned for VTOR")

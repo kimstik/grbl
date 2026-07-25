@@ -13,6 +13,8 @@
 #    FPU           - FPU flags (empty for M3, -mfpu=... for M4/M33)
 #    DEVICE        - Device define (e.g., STM32F103xB, STM32H523xx)
 #    OPENOCD_TARGET - OpenOCD target config (e.g., stm32f1x.cfg, stm32h5x.cfg)
+#    FLASH_ORIGIN  - Flash base address, must match script.ld (e.g. 0x08000000)
+#    FLASH_LENGTH  - Flash size in bytes, must match script.ld (e.g. 65536)
 
 # Build configuration
 BUILD ?= DEBUG
@@ -165,8 +167,18 @@ $(HEX_FILE): $(ELF_FILE)
 	$(OBJCOPY) -O ihex $< $@
 
 # Create binary file
+#
+# BOOT INTEGRITY (BUG #21 ratchet): objcopy will happily emit a .bin with no
+# vector table in it - KEEP(*(.isr_vector)) does not survive -flto, and nothing
+# else in the build fails when the table is gone. The image links, `size` looks
+# normal, and the chip bricks. boot_check.sh reads word0/word1 of the finished
+# image and fails the build unless they are a real (SP, Thumb reset vector)
+# pair. See CONTRACTS.md S18.
+BOOT_CHECK = ../common/boot_check.sh
+
 $(BIN_FILE): $(ELF_FILE)
 	$(OBJCOPY) -O binary $< $@
+	@sh $(BOOT_CHECK) $@ $(FLASH_ORIGIN) $(FLASH_LENGTH)
 
 # Create disassembly dump
 $(DUMP_FILE): $(ELF_FILE)

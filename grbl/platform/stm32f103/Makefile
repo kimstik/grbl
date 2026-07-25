@@ -15,6 +15,11 @@ CLOCK          = 72000000
 FPU            =
 OPENOCD_TARGET = stm32f1x.cfg
 
+# Flash window for the post-link BOOT INTEGRITY check. Must match script.ld's
+# MEMORY{FLASH} - 0x08000000, 64K. (BUG #21 ratchet, CONTRACTS.md S18)
+FLASH_ORIGIN   = 0x08000000
+FLASH_LENGTH   = 65536
+
 # AVR stubs (temporary workaround for grbl.h AVR includes)
 # Platform dir must be first to override cpu_map.h
 # prelude.h is the single injected build prelude (defines GRBL_PRELUDE,
