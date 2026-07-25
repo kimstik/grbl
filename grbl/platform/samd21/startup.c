@@ -204,6 +204,20 @@ void Reset_Handler(void) {
   // Initialize system clocks (48 MHz)
   SystemInit();
 
+  // Start the 1 kHz system timebase now that GCLK0 runs at 48 MHz (SysTick
+  // counts CPU cycles, CLKSOURCE=1): feeds SysTick_Handler/hal_millis() and
+  // lets _delay_ms() take its tick-polling path instead of the busy-wait
+  // fallback. Safe here: VTOR already points at this image's vector table.
+  SysTick_Config(CPU_FREQ / 1000u);
+
+  // Demote SysTick to the lowest ARMv6-M priority (3). Every device IRQ in
+  // this port (TC3/TC4 stepper, SERCOM3 serial, EIC limits/controls) stays at
+  // default priority 0; ARMv6-M does not preempt between equal priorities, so
+  // the only effect of priorities is simultaneous-arrival arbitration - which
+  // must always favor motion/serial over a bookkeeping tick. A postponed tick
+  // merely delays a counter increment (hal_millis tolerates jitter).
+  SCB->SHP[1] = (SCB->SHP[1] & ~(0xFFul << 24)) | (0xC0ul << 24); // SHPR3.PRI_15 (SysTick) = 3
+
   // Call main program
   main();
 
