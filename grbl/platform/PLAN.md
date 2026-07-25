@@ -422,6 +422,17 @@ the reviewer catches plausible-but-wrong. A batch is DONE only after both.
   tax vs cold zones; DIVAS savings estimate WITHOUT implementing (runtime change
   = own batch + Renode motion re-verify). NEVER-push clause restored in briefs.
 
+- SAMD21 AUTOPSY verdict: 82% of +44% vs f103 = structural Thumb-1 tax (soft-
+  float primitives 2-3x wider; M0+ lacks SDIV/CLZ) — honest, not fat. DIVAS
+  estimate ~650-700B only (deferred, behavior-change class). newlib-nano = red
+  herring (0B text, killed empirically). No cold zones, KEEP() minimal-correct.
+  main() 4.7x anomaly (2292B) = LTO inlining divergence, fix candidates known.
+  ⚠ SIDE-FINDING ESCALATED: f103 binary shows ZERO traceable callers of
+  gc_execute_line (G-code path possibly SEVERED — potential BUG #21 CRITICAL).
+  Reachability investigation dispatched — GATES all further stm32 work.
+  NOTE: FP knob (in-flight probe) doubles as samd21 size lever: DP-arithmetic
+  subset of the tax bucket vanishes under FP=SINGLE + Renode runtime arbiter.
+
 ## Current State (update each session)
 
 - ALARM SEMANTICS (owner directive 2026-07-23): the 6h cron is FALLBACK RECOVERY
