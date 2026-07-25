@@ -357,11 +357,11 @@ the reviewer catches plausible-but-wrong. A batch is DONE only after both.
   specifics briefed: PLL/FPU/MODER/SR-DR, all contract lessons enumerated).
   Next in queue after f411: dsPIC33AK128MC102 (EULA approved, recipe verified).
 
-- **BUG #20 (HIGH, h523)**: NVMEM window 8192B > shared stm32_nvmem.c hardcoded
-  4096B cache -> silent 0xFF reads, settings never persist. Found by f411 port
-  work. Fix dispatched (parametrize-or-shrink + _Static_assert so the CLASS
-  cannot recur). dsPIC33AK M1-M3 dispatched (third ISA, EULA ok, recipe from
-  Decision Log; §16 gap-log expected).
+- BUG #20 FIXED+LANDED: h523 NVMEM was FULLY DEAD (LTO stripped it in RELEASE
+  — bss +8192 = subsystem alive first time). NVMEM_WINDOW_SIZE parametrized,
+  _Static_assert guards the class in h523+f411 (force-fail proven). 8KB window
+  is H523 minimum erase sector — unshrinkable, so parametrize was the only fix.
+  dsPIC33AK M1-M3 in flight (third ISA; §16 gap-log expected).
 
 ## Current State (update each session)
 
