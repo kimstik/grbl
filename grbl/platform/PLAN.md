@@ -395,6 +395,16 @@ the reviewer catches plausible-but-wrong. A batch is DONE only after both.
   is H523 minimum erase sector — unshrinkable, so parametrize was the only fix.
   dsPIC33AK M1-M3 in flight (third ISA; §16 gap-log expected).
 
+- REPORTING DOCTRINE (owner 2026-07-24): owner-facing size metric = RELEASE
+  flash body (text+data) per port; DEBUG sizes are internal gate proxies only.
+  Canonical table: h523 28692 / f411 28724 / f103 29980 / AVR 30640(golden) /
+  samd21 43332 / ch32v006 55560. COMPACTNESS drive dispatched: (1) ch32 diet —
+  --no-gc-sections is now unjustified (port complete, PORT_TODO gone; lifecycle
+  rule: no-gc during porting, gc after zero-PORT_TODO -> to _template+§14.3);
+  (2) samd21 autopsy (report-first): decompose +44% vs f103 into Thumb-1/soft-div
+  tax vs cold zones; DIVAS savings estimate WITHOUT implementing (runtime change
+  = own batch + Renode motion re-verify). NEVER-push clause restored in briefs.
+
 ## Current State (update each session)
 
 - ALARM SEMANTICS (owner directive 2026-07-23): the 6h cron is FALLBACK RECOVERY
