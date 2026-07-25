@@ -206,7 +206,15 @@ Priority order (revise as hardware/toolchain reality dictates):
       R 28644), 13-row CI matrix, baseline real-log (14). Old dir was fiction
       (never built, duty-cap twin inside). CONTRACTS §15: 7 family-mix traps
       (F4 = H5-GPIO + F1-EXTI/USART hybrid; TIM1@0x40010000 else SDIO hit).
-- [ ] **dsPIC33AK128MC102** (owner-requested 2026-07-23; chip chosen by executor:
+- [~] **dsPIC33AK128MC102** M1-M3 DONE (rolling #2, THE THIRD ISA): XC-DSC 3.30
+      installed per recipe, 33 PORT_TODO remain (Steps 3-6 next batch), CONTRACTS
+      §16 = 11 items (linker-owned IVT — third startup model; barrier-free ISA;
+      compiler won't emit atomic bset -> critical-wrapped BSET/BCLR; -O1/-Og ICE;
+      ANSEL analog trap; native priority nesting first!). NO CI rows yet — XC-DSC
+      fetch-in-CI = separate item. NOTE: agent pushed directly (protocol deviation,
+      my prompt omission) — post-hoc gates ALL GREEN (golden, samd21 60864,
+      h523 48644); accepted. Future briefs re-state: NEVER push, return diffs.
+      (original entry: owner-requested 2026-07-23; chip chosen by executor:
       28-pin = ATmega328p DIP-28 heir, 200 MHz, DP-FPU, motor-control PWM + SCCP/MCCP,
       PPS pin remap eases 28-pin budget; MC106 Curiosity = community hardware variant.
       Third ISA family (non-ARM, non-RISC-V) — hardest portability stress test.
