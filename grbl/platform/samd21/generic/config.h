@@ -145,8 +145,9 @@
 #define SPINDLE_ENABLE_BIT     23
 
 #define SPINDLE_PWM_MAX_VALUE  65535
-#define SPINDLE_PWM_MIN_VALUE  0
+#define SPINDLE_PWM_MIN_VALUE  1      // Must be > 0 to avoid floating
 #define SPINDLE_PWM_OFF_VALUE  0
+#define SPINDLE_PWM_RANGE      (SPINDLE_PWM_MAX_VALUE - SPINDLE_PWM_MIN_VALUE)
 
 // ============================================================================
 // COOLANT CONTROL PINS
@@ -195,5 +196,23 @@
 #define STEPPER_TIMER_GCLK_ID  GCLK_CLKCTRL_ID_TC3_TC4
 #define SPINDLE_PWM_GCLK_ID    GCLK_CLKCTRL_ID_TCC0_TCC1
 #define UART_GCLK_ID           GCLK_CLKCTRL_ID_SERCOM0_CORE
+
+// ============================================================================
+// SINGLE-PORT ALIASES (for gpio.h compatibility)
+// ============================================================================
+// generic board uses single port (PORT A), so map _MASK to _MASK_A
+
+#define STEP_MASK               STEP_MASK_A
+#define DIRECTION_MASK          DIRECTION_MASK_A
+#define STEPPERS_DISABLE_MASK   STEPPERS_DISABLE_MASK_A
+#define LIMIT_MASK              LIMIT_MASK_A
+#define CONTROL_MASK            CONTROL_MASK_A
+#define PROBE_MASK              PROBE_MASK_A
+
+#define STEP_PORT               PORT_GROUPA
+#define DIRECTION_PORT          PORT_GROUPA
+#define LIMIT_PORT              PORT_GROUPA
+#define CONTROL_PORT            PORT_GROUPA
+#define STEPPERS_DISABLE_PORT_ALIAS   PORT_GROUPA
 
 #endif // BOARD_GENERIC_CONFIG_H

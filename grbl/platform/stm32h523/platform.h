@@ -58,6 +58,11 @@
 // This allows GRBL to build standalone without external CMSIS pack
 #include "regs.h"
 
+// Define hal_gpio_port_t before hal_gpio.h includes it
+// This ensures our GPIO_TypeDef* is used instead of void*
+typedef GPIO_TypeDef* hal_gpio_port_t;
+#define HAL_GPIO_PORT_T_DEFINED
+
 // ============================================================================
 // PIN MAPPING - GPIO DEFINITIONS
 // ============================================================================
