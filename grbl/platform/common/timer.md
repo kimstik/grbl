@@ -1,4 +1,12 @@
-﻿
+﻿# Timer macro name mapping (HAL_TIMER_* -> STP_*/PWM_*/ISR_*)
+
+This file is the historical name-mapping record only. The binding interface
+contracts for every macro below — signatures, pre/post-conditions, ISR/timing
+context, atomicity and memory-ordering obligations, no-op legality — live in
+`../CONTRACTS.md` (§3 stepper timer, §4 pulse-reset timer, §5 ISR definition
+macros, §6 spindle PWM). Porting order and definition of done:
+`../PORTING-CHECKLIST.md`.
+
 /* usage map
 spindle_control.c:	HAL_TIMER_SPINDLE_PWM_INIT();
 spindle_control.c:	  if (HAL_TIMER_SPINDLE_PWM_IS_ENABLED()) {

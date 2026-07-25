@@ -55,12 +55,18 @@ PLATFORM_NAME + sei/cli redefinitions, LIMIT_DDR self-collisions in platform.h;
 build (warning does not occur there); (f) generic BOARD of samd21 has pre-existing
 config error (SPINDLE_PWM_MIN_VALUE must be > 0).
 
-- [ ] `prelude.h` for samd21 (megarm + generic boards), collapse 4 `-include` flags to 1
-- [ ] stm32h523: restore CFLAGS_EXTRA (-I. -I../common/dummy) — build currently broken
+- [x] `prelude.h` for samd21 (megarm + generic): 4 `-include` flags → 1; preprocessed
+      limits.c proven byte-identical; redefinitions 19 → 0; dual-canon killed in
+      hal.h/hal_gpio.h; sizes bit-identical (60196 DEBUG / 42556 RELEASE); golden PASSED
+- [x] samd21 warn baseline regenerated from REAL build log (9 entries, ratchet OK live)
+- [x] Roadmap truth-update landed (SAMD21 40%→~95%, stale claims refreshed at integration)
+- [ ] stm32h523: restore CFLAGS_EXTRA — prelude scaffolding landed, build STILL broken
+      (main.o error), finish the fix
 - [ ] stm32f103: fix spindle macro naming defect (SPINDLE_PWM/PWM_* undeclared) — build
-      currently broken; fix PLATFORM_NAME/sei/cli redefinitions + LIMIT_DDR self-collision
-- [ ] Correct falsified baseline entries (stm32f103) from real CI logs
+      still broken; PLATFORM_NAME/sei/cli redefinitions + LIMIT_DDR self-collision remain
 - [ ] samd21 generic board: fix SPINDLE_PWM_MIN_VALUE config error
+- [ ] NOTE (minor): samd21 BUILD_DIR shared between DEBUG/RELEASE — stale-object
+      cross-contamination without clean; key BUILD_DIR by build type
 - [ ] Resolve dual-canon: `-include` becomes THE mechanism; eliminate redefinition warnings
       (currently: `HAL_GPIO_IRQ_HANDLER` redefined, `EEPROM_SIZE` redefined)
 - [ ] Loud-failure guard: `#error` in hal.h if prelude marker missing
@@ -76,11 +82,13 @@ The macro boundary isolates code but cannot express contracts. Write them down.
 Lesson source: STP_TMR_PRESCALER_SET is a silent no-op on SAMD21; BUG #12 (atomicity
 assumptions); BUG #4 (baud arithmetic) — none catchable without stated contracts.
 
-- [ ] Contract doc per macro family (extend timer.md): pre/post-conditions, atomicity and
-      memory-ordering obligations, whether no-op implementations are permitted
-- [ ] Weak-memory porting checklist (ARM/RISC-V): ring buffers, volatile-is-not-atomic,
-      ISR flag clearing, SYNCBUSY-class synchronization
-- [ ] `_Static_assert` where contracts are expressible in code
+- [x] CONTRACTS.md landed (427 lines): per-macro contracts §1-13 with file:line
+      citations, no-op legality per macro (STP_TMR_PRESCALER_SET = canonical violation),
+      BUG #12/#13 lessons codified, ISR-hot budgets, TU-replacement route documented
+- [x] PORTING-CHECKLIST.md landed (157 lines): ordered bring-up with per-step exit
+      tests, weak-memory checklist, definition of done incl. golden MD5 + ratchet
+- [ ] `_Static_assert` where contracts are expressible in code (CPU_FREQ one landed;
+      sweep for more as _template work proceeds)
 - [ ] **`_template` platform** — contracts materialized as a stub skeleton
       (`grbl/platform/_template/`): full canonical port structure (prelude.h, platform.h,
       gpio.h, timer.h, serial.c, nvmem.c, handlers.c, startup.c, Makefile, boards/generic/).
@@ -244,6 +252,16 @@ the reviewer catches plausible-but-wrong. A batch is DONE only after both.
   disabled, local gates remain authoritative and note it here).
 
 ## Current State (update each session)
+
+- 2026-07-23 ~19:10 UTC snapshot: Phases 0+3(SAMD21 core)+5(README) essentially done;
+  Phase 1 samd21-side done (stm32 pair still broken, open items above); Phase 2
+  contracts LANDED, `_template` author died on subagent limits (resets 23:00 UTC) —
+  **cron 23:27 session: resume via Workflow resumeFromRunId wf_e7f22066-e3b**
+  (contracts agent replays from cache, template author re-runs)
+- ALSO for cron session: adversarial review (doctrine) still owed for two landed
+  batches: Phase-1 prelude batch + CONTRACTS/PORTING docs batch
+- Subagent limit windows observed today: 16:00 / 21:50 / 23:00 UTC resets (pools
+  differ per model); main loop unaffected
 
 - **Phase**: 0 DONE (pending first-CI-run confirmation) → **Phase 1 launched**
   (prelude canon workflow running; roadmap truth-update in same batch)
