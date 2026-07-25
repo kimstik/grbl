@@ -2,83 +2,87 @@
   ch32v006.h - CH32V006 clean-room register definitions
   Part of Grbl
 
-  Written from scratch against publicly documented WCH QingKe/CH32V00x
-  peripheral facts (address map conventions shared across the V003/V005/
-  V006/V007 family, and the well-known QingKe V2 PFIC/STK core-peripheral
-  addresses) - NOT copied from any WCH-licensed header (EvtBoard, EVT,
-  ch32v00x.h, etc). Modeled in shape on ../samd21/samd21.h: a minimal stub
-  struct-per-peripheral header, not a full vendor CMSIS pack.
+  Written from scratch against the publicly available CH32V00X Reference
+  Manual V1.5 (wch-ic.com, covers CH32V002/004/005/006/007) and the
+  CH32V006 datasheet - register FACTS transcribed from documentation,
+  NOT copied from any WCH-licensed header (EVT, ch32v00x.h, etc).
+  Modeled in shape on ../samd21/samd21.h: a minimal struct-per-peripheral
+  header, not a full vendor CMSIS pack.
 
-  VERIFICATION STATUS (read before trusting a number below):
-  - GPIO/RCC/FLASH/AFIO/EXTI/USART1/TIM1/TIM2 base addresses: this is the
-    STM32F1-style layout WCH's QingKe V00x line clones almost verbatim
-    (public knowledge, matches every open community port of CH32V003 -
-    e.g. the ch32fun/ch32v003fun family of clean-room bring-up projects).
-    CH32V006-specific offsets are NOT independently re-verified against a
-    real CH32V006 TRM in this session - treat every *_BASE below as
-    PLAUSIBLE, not silicon-confirmed. GAP (see CONTRACTS.md's new RISC-V
-    section, folded back from this port).
-  - PFIC_BASE (0xE000E000) / STK_BASE (0xE000F000): well-known QingKe V2
-    core-peripheral addresses (same across the whole QingKe V2 family per
-    public knowledge) - higher confidence than the AHB/APB peripheral
-    offsets above, still UNVERIFIED against the real CH32V006 TRM.
-  - PFIC/STK *register layout* (field-for-field) is a best-effort
-    approximation good enough to compile against; nothing in this batch
-    (Phase 4 M1-M3) touches these fields at runtime - Step 3+ (timers/
-    serial/handlers) MUST re-verify every field here before relying on it.
+  VERIFICATION STATUS (Phase 4 Step 3 re-verification pass - supersedes
+  the M1-M3 "best-effort placeholder" state):
+  - Peripheral base addresses, PFIC/STK register offsets, the interrupt
+    vector table, RCC/FLASH/GPIO/AFIO/EXTI/USART/TIM bit positions below
+    were all read out of CH32V00X RM V1.5 directly (section numbers cited
+    inline). Items that could NOT be verified are marked UNVERIFIED
+    individually - the blanket "everything here is a guess" caveat from
+    M1-M3 no longer applies.
+  - Cross-check: Zephyr's community ch32v006.dtsi (Apache-2.0) agrees on
+    every base address and IRQ number used by this port.
 */
 
 #ifndef CH32V006_H
 #define CH32V006_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 // ============================================================================
-// MEMORY MAP
+// MEMORY MAP (RM figure 1-8)
 // ============================================================================
+// Code flash physically lives at 0x08000000 and is aliased at 0x00000000
+// (boot configuration). Code links/runs at the 0x0 alias (script.ld);
+// the FLASH controller's ADDR register and programming pointer writes use
+// the PHYSICAL 0x08000000 address (RM 18.4.5 example uses 0x08000000).
 
-#define FLASH_BASE            0x00000000UL
+#define FLASH_BASE             0x00000000UL   // execution alias
+#define FLASH_PHYS_BASE        0x08000000UL   // physical main-flash base (programming)
 #define SRAM_BASE              0x20000000UL
 #define PERIPH_BASE            0x40000000UL
 
 // ============================================================================
-// PERIPHERAL BASE ADDRESSES (STM32F1-style layout - GAP: see file header)
+// PERIPHERAL BASE ADDRESSES (RM register lists, cited per block below)
 // ============================================================================
 
-#define TIM2_BASE              (PERIPH_BASE + 0x00000UL)
-#define TIM3_BASE              (PERIPH_BASE + 0x00400UL)  // UNVERIFIED offset (family convention guess)
-#define AFIO_BASE              (PERIPH_BASE + 0x10000UL)
-#define EXTI_BASE              (PERIPH_BASE + 0x10400UL)
-#define GPIOA_BASE             (PERIPH_BASE + 0x10800UL)
-#define GPIOB_BASE             (PERIPH_BASE + 0x10C00UL)  // UNVERIFIED: may not be bonded out on this package
-#define GPIOC_BASE             (PERIPH_BASE + 0x11000UL)
-#define GPIOD_BASE             (PERIPH_BASE + 0x11400UL)
-#define USART1_BASE            (PERIPH_BASE + 0x13800UL)
-#define TIM1_BASE              (PERIPH_BASE + 0x12C00UL)
-#define RCC_BASE               (PERIPH_BASE + 0x21000UL)
-#define FLASH_R_BASE           (PERIPH_BASE + 0x22000UL)
+#define TIM2_BASE              (PERIPH_BASE + 0x00000UL)  // RM 12: R16_TIM2_* at 0x40000000
+#define TIM3_BASE              (PERIPH_BASE + 0x00800UL)  // RM 13 "streamlined timer" - NO interrupt output
+#define USART2_BASE            (PERIPH_BASE + 0x04400UL)
+#define AFIO_BASE              (PERIPH_BASE + 0x10000UL)  // RM 7.3.2: EXTICR at 0x40010008
+#define EXTI_BASE              (PERIPH_BASE + 0x10400UL)  // RM 6.5.1
+#define GPIOA_BASE             (PERIPH_BASE + 0x10800UL)  // RM 7.3.1 (8 pins)
+#define GPIOB_BASE             (PERIPH_BASE + 0x10C00UL)  // 7 pins bonded (PB0-PB6)
+#define GPIOC_BASE             (PERIPH_BASE + 0x11000UL)  // 8 pins
+#define GPIOD_BASE             (PERIPH_BASE + 0x11400UL)  // 8 pins
+#define TIM1_BASE              (PERIPH_BASE + 0x12C00UL)  // RM 11: R16_TIM1_* at 0x40012C00
+#define USART1_BASE            (PERIPH_BASE + 0x13800UL)  // RM 14: 0x40013800
+#define RCC_BASE               (PERIPH_BASE + 0x21000UL)  // RM 3.4
+#define FLASH_R_BASE           (PERIPH_BASE + 0x22000UL)  // RM 18.3
 
-// QingKe V2 core peripherals (higher-confidence, still unverified - see header)
+// QingKe V2 core peripherals (RM 6.5.2 / 6.5.4 - address-verified)
 #define PFIC_BASE              0xE000E000UL
 #define STK_BASE               0xE000F000UL
 
 // ============================================================================
-// GPIO - CFGLR/CFGHR (4 bits/pin: CNF1 CNF0 MODE1 MODE0), INDR, OUTDR,
-// BSHR (atomic set/reset, upper 16 bits = reset - identical shape to
-// STM32F1 BSRR), BCR (reset-only), LCKR. Same register SHAPE as
-// stm32f103/regs.h's GPIO_TypeDef (WCH clones the F1 GPIO block) - named
-// per the CH32 datasheet's own register names (CFGLR not CRL, etc), which
-// is why this is a distinct struct rather than a #include of stm32f103's.
+// GPIO (RM 7.3.1). V00X ports are 8-pin wide: there is NO CFGHR - CFGLR
+// covers pins 0-7 and offset 0x04 is reserved. Per-pin nibble in CFGLR:
+//   [3:2] CNF, [1] reserved, [0] MODE   (DIFFERENT from STM32F1: MODE is
+//   a single bit here - 1 = output (max 30MHz), 0 = input; F1's 2-bit
+//   speed field does not exist)
+//   input  (MODE=0): CNF 00 analog, 01 floating, 10 pull-up/down
+//                    (pull direction via OUTDR bit: 1 = up, 0 = down),
+//                    11 reserved
+//   output (MODE=1): CNF 00 GP push-pull, 01 GP open-drain,
+//                    10 AF push-pull, 11 AF open-drain
 // ============================================================================
 
 typedef struct {
-  volatile uint32_t CFGLR;   // 0x00 Port configuration low  (pins 0-7)
-  volatile uint32_t CFGHR;   // 0x04 Port configuration high (pins 8-15)
-  volatile uint32_t INDR;    // 0x08 Port input data
-  volatile uint32_t OUTDR;   // 0x0C Port output data
-  volatile uint32_t BSHR;    // 0x10 Port bit set/reset (low16=set, high16=reset)
-  volatile uint32_t BCR;     // 0x14 Port bit reset only
-  volatile uint32_t LCKR;    // 0x18 Port config lock
+  volatile uint32_t CFGLR;   // 0x00 Port configuration (pins 0-7)
+  uint32_t RESERVED0;        // 0x04 (no CFGHR on V00X - 8-pin ports)
+  volatile uint32_t INDR;    // 0x08 Input data (bits 0-7)
+  volatile uint32_t OUTDR;   // 0x0C Output data (bits 0-7; pull select on CNF=10 inputs)
+  volatile uint32_t BSHR;    // 0x10 BS[7:0] set, BR[23:16] reset
+  volatile uint32_t BCR;     // 0x14 Bit reset only
+  volatile uint32_t LCKR;    // 0x18 Config lock
 } GPIO_TypeDef;
 
 #define GPIOA   ((GPIO_TypeDef*)GPIOA_BASE)
@@ -86,72 +90,74 @@ typedef struct {
 #define GPIOC   ((GPIO_TypeDef*)GPIOC_BASE)
 #define GPIOD   ((GPIO_TypeDef*)GPIOD_BASE)
 
-// CFGLR/CFGHR per-pin nibble encoding (shared with STM32F1 - WCH clone):
-//   CNF[1:0] MODE[1:0], 4 bits per pin, pin N's nibble at bit (N%8)*4
-//   Output:  MODE = 0b01 (10MHz) - CNF = 0b00 push-pull / 0b01 open-drain
-//   Input:   MODE = 0b00          - CNF = 0b01 floating / 0b10 pull-up-down
-// Pull direction for CNF=0b10 input is set by ODR: 1 = pull-up, 0 = pull-down.
-#define GPIO_CFG_MODE_INPUT        0x0u
-#define GPIO_CFG_MODE_OUTPUT_10MHZ 0x1u
-#define GPIO_CFG_CNF_IN_ANALOG     0x0u
-#define GPIO_CFG_CNF_IN_FLOATING   0x1u
-#define GPIO_CFG_CNF_IN_PULL       0x2u
-#define GPIO_CFG_CNF_OUT_PUSHPULL  0x0u
-#define GPIO_CFG_CNF_OUT_OPENDRAIN 0x1u
+// Whole 4-bit config nibbles (CNF<<2 | MODE) - see table above
+#define GPIO_CFG_IN_ANALOG      0x0u
+#define GPIO_CFG_OUT_PP         0x1u  // GP push-pull output, 30MHz
+#define GPIO_CFG_IN_FLOATING    0x4u
+#define GPIO_CFG_OUT_OD         0x5u
+#define GPIO_CFG_IN_PULL        0x8u  // + OUTDR bit: 1 = pull-up, 0 = pull-down
+#define GPIO_CFG_OUT_AF_PP      0x9u  // alternate-function push-pull (USART TX, TIM1 CH1)
 
-// AFIO - Alternate Function I/O (remap + EXTI line source select)
+// AFIO (RM 7.3.2) - registers start at offset 0x08
 typedef struct {
-  volatile uint32_t ECR;       // 0x00 Event control
-  volatile uint32_t PCFR1;     // 0x04 Remap register
-  volatile uint32_t EXTICR[4]; // 0x08-0x14 EXTI line source select
+  uint32_t RESERVED0[2];     // 0x00-0x04
+  volatile uint32_t EXTICR;  // 0x08 EXTI line source select: 2 bits/line x 8 lines
+                             //      00=PA 01=PB 10=PC 11=PD (RM 7.3.2.1)
+  volatile uint32_t PCFR1;   // 0x0C Remap register 1 (RM 7.3.2.2)
 } AFIO_TypeDef;
 
 #define AFIO ((AFIO_TypeDef*)AFIO_BASE)
 
-// EXTI - External interrupt/event controller (same shape as STM32F1)
+// PCFR1 fields this port uses (RM 7.3.2.2 bit layout:
+// TIM2_RM[1:0]@15:14, TIM1_RM[3:0]@13:10, USART1_RM[3:0]@9:6,
+// I2C1_RM[2:0]@5:3, SPI1_RM[2:0]@2:0)
+#define AFIO_PCFR1_TIM1_RM_Pos    10
+#define AFIO_PCFR1_TIM1_RM_Msk    (0xFUL << AFIO_PCFR1_TIM1_RM_Pos)
+#define AFIO_PCFR1_USART1_RM_Pos  6
+#define AFIO_PCFR1_USART1_RM_Msk  (0xFUL << AFIO_PCFR1_USART1_RM_Pos)
+
+// EXTI (RM 6.5.1) - 10 lines: 0-7 = GPIO pins 0-7, 8/9 internal (PVD/AWU)
 typedef struct {
   volatile uint32_t INTENR;  // 0x00 Interrupt enable
   volatile uint32_t EVENR;   // 0x04 Event enable
   volatile uint32_t RTENR;   // 0x08 Rising trigger enable
   volatile uint32_t FTENR;   // 0x0C Falling trigger enable
   volatile uint32_t SWIEVR;  // 0x10 Software interrupt event
-  volatile uint32_t INTFR;   // 0x14 Pending flags (write-1-to-clear)
+  volatile uint32_t INTFR;   // 0x14 IF[9:0], write-1-to-clear (RM 6.5.1.6)
 } EXTI_TypeDef;
 
 #define EXTI ((EXTI_TypeDef*)EXTI_BASE)
 
 // ============================================================================
-// RCC - Reset and Clock Control
+// RCC (RM 3.4)
 // ============================================================================
 
 typedef struct {
-  volatile uint32_t CTLR;       // 0x00 Clock control (HSION/HSIRDY/PLLON/PLLRDY/...)
-  volatile uint32_t CFGR0;      // 0x04 Clock configuration (SW/SWS/PLLSRC/HPRE/...)
+  volatile uint32_t CTLR;       // 0x00 Clock control
+  volatile uint32_t CFGR0;      // 0x04 Clock configuration
   volatile uint32_t INTR;       // 0x08 Clock interrupt
-  volatile uint32_t APB2PRSTR;  // 0x0C APB2 peripheral reset
-  volatile uint32_t APB1PRSTR;  // 0x10 APB1 peripheral reset
-  volatile uint32_t AHBPCENR;   // 0x14 AHB peripheral clock enable
-  volatile uint32_t APB2PCENR;  // 0x18 APB2 peripheral clock enable
-  volatile uint32_t APB1PCENR;  // 0x1C APB1 peripheral clock enable
+  volatile uint32_t PB2PRSTR;   // 0x0C PB2 (APB2-analog) peripheral reset
+  volatile uint32_t PB1PRSTR;   // 0x10 PB1 peripheral reset
+  volatile uint32_t HBPCENR;    // 0x14 HB peripheral clock enable (DMA/SRAM)
+  volatile uint32_t PB2PCENR;   // 0x18 PB2 peripheral clock enable
+  volatile uint32_t PB1PCENR;   // 0x1C PB1 peripheral clock enable
+  uint32_t RESERVED0;           // 0x20
+  volatile uint32_t RSTSCKR;    // 0x24 Control/status (reset flags, LSI)
 } RCC_TypeDef;
 
 #define RCC ((RCC_TypeDef*)RCC_BASE)
 
-// RCC_CTLR bits
-#define RCC_CTLR_HSION_Pos      0
-#define RCC_CTLR_HSION          (1UL << RCC_CTLR_HSION_Pos)
-#define RCC_CTLR_HSIRDY_Pos     1
-#define RCC_CTLR_HSIRDY         (1UL << RCC_CTLR_HSIRDY_Pos)
-#define RCC_CTLR_PLLON_Pos      24
-#define RCC_CTLR_PLLON         (1UL << RCC_CTLR_PLLON_Pos)
-#define RCC_CTLR_PLLRDY_Pos     25
-#define RCC_CTLR_PLLRDY         (1UL << RCC_CTLR_PLLRDY_Pos)
+// RCC_CTLR bits (RM 3.4.1)
+#define RCC_CTLR_HSION          (1UL << 0)
+#define RCC_CTLR_HSIRDY         (1UL << 1)
+#define RCC_CTLR_PLLON          (1UL << 24)
+#define RCC_CTLR_PLLRDY         (1UL << 25)
 
-// RCC_CFGR0 bits. UNVERIFIED for V006: the V003 family's PLL is a FIXED x2
-// multiplier (no PLLMUL field) per public bring-up references; assumed
-// identical here (48MHz = 24MHz HSI * 2). If V006 has a real PLLMUL field
-// (plausible - it has far more flash/RAM than V003, may be a beefier
-// clock tree), this whole SystemInit() clock path needs re-deriving - GAP.
+// RCC_CFGR0 bits (RM 3.4.2). PLL is a FIXED x2 multiplier (clock-tree
+// figure: HSI/HSE -> "*2" -> PLLCLK, 48MHz max) - there is no PLLMUL
+// field on V00X. HSI = 24 MHz (RM 3.3.2 "internal 24MHz RC oscillator").
+// TRAP (found this session): HPRE[3:0] RESET VALUE is 0b0010 = SYSCLK/3,
+// NOT /1 - clock init MUST clear HPRE or HCLK is 3x slower than F_CPU.
 #define RCC_CFGR0_SW_Pos        0
 #define RCC_CFGR0_SW_Msk        (0x3UL << RCC_CFGR0_SW_Pos)
 #define RCC_CFGR0_SW_HSI        (0x0UL << RCC_CFGR0_SW_Pos)
@@ -160,59 +166,80 @@ typedef struct {
 #define RCC_CFGR0_SWS_Msk       (0x3UL << RCC_CFGR0_SWS_Pos)
 #define RCC_CFGR0_SWS_PLL       (0x2UL << RCC_CFGR0_SWS_Pos)
 #define RCC_CFGR0_HPRE_Pos      4
-#define RCC_CFGR0_HPRE_DIV1     (0x0UL << RCC_CFGR0_HPRE_Pos)
-#define RCC_CFGR0_PLLSRC_Pos    16
-#define RCC_CFGR0_PLLSRC        (1UL << RCC_CFGR0_PLLSRC_Pos)  // 0=HSI/2->PLL(V003 quirk, see below), 1=HSE
+#define RCC_CFGR0_HPRE_Msk      (0xFUL << RCC_CFGR0_HPRE_Pos)   // 0000 = prescaler off
+#define RCC_CFGR0_PLLSRC        (1UL << 16)   // 0 = HSI (undivided), 1 = HSE
 
-// RCC_*PCENR bits actually used by this port
-#define RCC_APB2PCENR_AFIOEN_Pos   0
-#define RCC_APB2PCENR_AFIOEN       (1UL << RCC_APB2PCENR_AFIOEN_Pos)
-#define RCC_APB2PCENR_IOPAEN_Pos   2
-#define RCC_APB2PCENR_IOPAEN       (1UL << RCC_APB2PCENR_IOPAEN_Pos)
-#define RCC_APB2PCENR_IOPCEN_Pos   4
-#define RCC_APB2PCENR_IOPCEN       (1UL << RCC_APB2PCENR_IOPCEN_Pos)
-#define RCC_APB2PCENR_IOPDEN_Pos   5
-#define RCC_APB2PCENR_IOPDEN       (1UL << RCC_APB2PCENR_IOPDEN_Pos)
-#define RCC_APB2PCENR_USART1EN_Pos 14
-#define RCC_APB2PCENR_USART1EN     (1UL << RCC_APB2PCENR_USART1EN_Pos)
-#define RCC_APB2PCENR_TIM1EN_Pos   11
-#define RCC_APB2PCENR_TIM1EN       (1UL << RCC_APB2PCENR_TIM1EN_Pos)
-#define RCC_APB1PCENR_TIM2EN_Pos   0
-#define RCC_APB1PCENR_TIM2EN       (1UL << RCC_APB1PCENR_TIM2EN_Pos)
-#define RCC_APB1PCENR_TIM3EN_Pos   1
-#define RCC_APB1PCENR_TIM3EN       (1UL << RCC_APB1PCENR_TIM3EN_Pos)
+// RCC_PB2PCENR bits (RM 3.4.7)
+#define RCC_PB2PCENR_AFIOEN     (1UL << 0)
+#define RCC_PB2PCENR_IOPAEN     (1UL << 2)
+#define RCC_PB2PCENR_IOPBEN     (1UL << 3)
+#define RCC_PB2PCENR_IOPCEN     (1UL << 4)
+#define RCC_PB2PCENR_IOPDEN     (1UL << 5)
+#define RCC_PB2PCENR_TIM1EN     (1UL << 11)
+#define RCC_PB2PCENR_USART1EN   (1UL << 14)
+
+// RCC_PB1PCENR bits (RM 3.4.8). NOTE: TIM3EN is bit 2, not bit 1.
+#define RCC_PB1PCENR_TIM2EN     (1UL << 0)
+#define RCC_PB1PCENR_TIM3EN     (1UL << 2)
 
 // ============================================================================
-// FLASH controller - wait-state register. WCH names it ACTLR (not ACR);
-// bit position of the LATENCY field is assumed identical to STM32F1 (bits
-// [2:0]) - UNVERIFIED for V006's larger 62KB flash macro.
+// FLASH controller (RM 18.3). Main flash: 62KB, 256-byte pages (0-247).
+// Programming model: fast page program/erase ONLY (no F1-style halfword
+// PG bit) - unlock LOCK (KEYR) then FLOCK (MODEKEYR), FTPG/FTER + STRT.
 // ============================================================================
 
 typedef struct {
-  volatile uint32_t ACTLR;   // 0x00 Access control (latency)
-  volatile uint32_t KEYR;    // 0x04 Flash key
-  volatile uint32_t OBKEYR;  // 0x08 Option byte key
-  volatile uint32_t STATR;   // 0x0C Status
-  volatile uint32_t CTLR;    // 0x10 Control
-  volatile uint32_t ADDR;    // 0x14 Address
-  uint32_t RESERVED0;
-  volatile uint32_t OBR;     // 0x1C Option byte
-  volatile uint32_t WPR;     // 0x20 Write protection
+  volatile uint32_t ACTLR;     // 0x00 LATENCY[1:0]
+  volatile uint32_t KEYR;      // 0x04 FPEC key
+  volatile uint32_t OBKEYR;    // 0x08 Option byte key
+  volatile uint32_t STATR;     // 0x0C Status
+  volatile uint32_t CTLR;      // 0x10 Control
+  volatile uint32_t ADDR;      // 0x14 Address (physical 0x08xxxxxx)
+  uint32_t RESERVED0;          // 0x18
+  volatile uint32_t OBR;       // 0x1C Option byte
+  volatile uint32_t WPR;       // 0x20 Write protection
+  volatile uint32_t MODEKEYR;  // 0x24 Fast-mode key (RM 18.3.9)
 } FLASH_TypeDef;
 
 #define FLASH ((FLASH_TypeDef*)FLASH_R_BASE)
 
-#define FLASH_ACTLR_LATENCY_Pos  0
-#define FLASH_ACTLR_LATENCY_Msk  (0x7UL << FLASH_ACTLR_LATENCY_Pos)
-#define FLASH_ACTLR_LATENCY_1    (0x1UL << FLASH_ACTLR_LATENCY_Pos)
+// ACTLR (RM 18.3.1): 00 <=15MHz, 01 <=24MHz, 10 <=48MHz
+#define FLASH_ACTLR_LATENCY_Msk  (0x3UL << 0)
+#define FLASH_ACTLR_LATENCY_0    (0x0UL << 0)
+#define FLASH_ACTLR_LATENCY_1    (0x1UL << 0)
+#define FLASH_ACTLR_LATENCY_2    (0x2UL << 0)   // required at 48 MHz
+
+// STATR (RM 18.3.4)
+#define FLASH_STATR_BSY          (1UL << 0)
+#define FLASH_STATR_WRPRTERR     (1UL << 4)   // write 1 to clear
+#define FLASH_STATR_EOP          (1UL << 5)   // write 1 to clear
+
+// CTLR (RM 18.3.5)
+#define FLASH_CTLR_PER           (1UL << 1)   // 1K sector erase
+#define FLASH_CTLR_MER           (1UL << 2)
+#define FLASH_CTLR_OBER          (1UL << 5)
+#define FLASH_CTLR_STRT          (1UL << 6)
+#define FLASH_CTLR_LOCK          (1UL << 7)
+#define FLASH_CTLR_FLOCK         (1UL << 15)  // fast-mode lock
+#define FLASH_CTLR_FTPG          (1UL << 16)  // fast page (256B) program
+#define FLASH_CTLR_FTER          (1UL << 17)  // fast page (256B) erase
+#define FLASH_CTLR_BUFLOAD       (1UL << 18)
+#define FLASH_CTLR_BUFRST        (1UL << 19)
+
+#define FLASH_KEY1               0x45670123UL
+#define FLASH_KEY2               0xCDEF89ABUL
+
+#define FLASH_PAGE_SIZE_BYTES    256u
 
 // ============================================================================
-// USART1 (STM32F1-shape - SR/DR/BRR/CR1/CR2/CR3/GTPR)
+// USART (RM 14) - F1-shape SR/DR/BRR/CR1..., WCH names. Baud (RM 14.3):
+// baud = HCLK / (16 * USARTDIV), BRR = mantissa[15:4] + fraction[3:0]/16.
+// USART1 default pin map (RM table 7-10, USART1_RM=0000): TX=PD5, RX=PD6.
 // ============================================================================
 
 typedef struct {
   volatile uint32_t STATR;  // 0x00 Status
-  volatile uint32_t DATAR;  // 0x04 Data
+  volatile uint32_t DATAR;  // 0x04 Data (read clears RXNE, write clears TXE)
   volatile uint32_t BRR;    // 0x08 Baud rate
   volatile uint32_t CTLR1;  // 0x0C Control 1
   volatile uint32_t CTLR2;  // 0x10 Control 2
@@ -222,134 +249,176 @@ typedef struct {
 
 #define USART1 ((USART_TypeDef*)USART1_BASE)
 
-#define USART_STATR_RXNE_Pos   5
-#define USART_STATR_RXNE       (1UL << USART_STATR_RXNE_Pos)
-#define USART_STATR_TXE_Pos    7
-#define USART_STATR_TXE        (1UL << USART_STATR_TXE_Pos)
-#define USART_CTLR1_RE_Pos     2
-#define USART_CTLR1_RE         (1UL << USART_CTLR1_RE_Pos)
-#define USART_CTLR1_TE_Pos     3
-#define USART_CTLR1_TE         (1UL << USART_CTLR1_TE_Pos)
-#define USART_CTLR1_RXNEIE_Pos 5
-#define USART_CTLR1_RXNEIE     (1UL << USART_CTLR1_RXNEIE_Pos)
-#define USART_CTLR1_TXEIE_Pos  7
-#define USART_CTLR1_TXEIE      (1UL << USART_CTLR1_TXEIE_Pos)
-#define USART_CTLR1_UE_Pos     13
-#define USART_CTLR1_UE         (1UL << USART_CTLR1_UE_Pos)
+// STATR bits (RM 14.8.1)
+#define USART_STATR_RXNE       (1UL << 5)
+#define USART_STATR_TC         (1UL << 6)
+#define USART_STATR_TXE        (1UL << 7)
+// CTLR1 bits (RM 14.8.4)
+#define USART_CTLR1_RE         (1UL << 2)
+#define USART_CTLR1_TE         (1UL << 3)
+#define USART_CTLR1_RXNEIE     (1UL << 5)
+#define USART_CTLR1_TCIE       (1UL << 6)
+#define USART_CTLR1_TXEIE      (1UL << 7)
+#define USART_CTLR1_UE         (1UL << 13)
 
 // ============================================================================
-// TIM1 (advanced, PWM+deadtime) / TIM2 (general purpose) - fields this
-// port will eventually need; STM32F1-shape 16-bit timer.
+// TIM1 (advanced, RM 11) / TIM2 (general purpose, RM 12) - 16-bit, F1-shape
+// register order confirmed against RM register lists (offsets identical for
+// both; RPTCR/BDTR are TIM1-only, reserved on TIM2).
+// TIM3 (RM 13) is a "streamlined" compare-only timer with NO interrupt
+// output - it is deliberately NOT given a macro here so nobody wires an ISR
+// to it by mistake (this port's pulse-reset timer is the core STK instead).
 // ============================================================================
 
 typedef struct {
-  volatile uint32_t CTLR1;   // 0x00
-  volatile uint32_t CTLR2;   // 0x04
-  volatile uint32_t SMCFGR;  // 0x08
-  volatile uint32_t DMAINTENR; // 0x0C
-  volatile uint32_t INTFR;   // 0x10
-  volatile uint32_t SWEVGR;  // 0x14
-  volatile uint32_t CHCTLR1; // 0x18
-  volatile uint32_t CHCTLR2; // 0x1C
-  volatile uint32_t CCER;    // 0x20
-  volatile uint32_t CNT;     // 0x24
-  volatile uint32_t PSC;     // 0x28
-  volatile uint32_t ATRLR;   // 0x2C  (ARR)
-  volatile uint32_t RPTCR;   // 0x30  (TIM1 repetition counter only)
-  volatile uint32_t CH1CVR;  // 0x34
-  volatile uint32_t CH2CVR;  // 0x38
-  volatile uint32_t CH3CVR;  // 0x3C
-  volatile uint32_t CH4CVR;  // 0x40
-  volatile uint32_t BDTR;    // 0x44  (TIM1 only)
-  volatile uint32_t DMACFGR; // 0x48
-  volatile uint32_t DMAADR;  // 0x4C
+  volatile uint32_t CTLR1;     // 0x00
+  volatile uint32_t CTLR2;     // 0x04
+  volatile uint32_t SMCFGR;    // 0x08
+  volatile uint32_t DMAINTENR; // 0x0C  (DIER)
+  volatile uint32_t INTFR;     // 0x10  (SR) - UIF etc, write-0-to-clear (RW0)
+  volatile uint32_t SWEVGR;    // 0x14  (EGR)
+  volatile uint32_t CHCTLR1;   // 0x18  (CCMR1)
+  volatile uint32_t CHCTLR2;   // 0x1C  (CCMR2)
+  volatile uint32_t CCER;      // 0x20
+  volatile uint32_t CNT;       // 0x24
+  volatile uint32_t PSC;       // 0x28
+  volatile uint32_t ATRLR;     // 0x2C  (ARR) - reset value 0xFFFF
+  volatile uint32_t RPTCR;     // 0x30  (TIM1 only)
+  volatile uint32_t CH1CVR;    // 0x34  (CCR1)
+  volatile uint32_t CH2CVR;    // 0x38
+  volatile uint32_t CH3CVR;    // 0x3C
+  volatile uint32_t CH4CVR;    // 0x40
+  volatile uint32_t BDTR;      // 0x44  (TIM1 only; TIM2 has DTCR here)
+  volatile uint32_t DMACFGR;   // 0x48
+  volatile uint32_t DMAADR;    // 0x4C
 } TIM_TypeDef;
 
 #define TIM1 ((TIM_TypeDef*)TIM1_BASE)
 #define TIM2 ((TIM_TypeDef*)TIM2_BASE)
-#define TIM3 ((TIM_TypeDef*)TIM3_BASE)
 
-#define TIM_CTLR1_CEN_Pos   0
-#define TIM_CTLR1_CEN       (1UL << TIM_CTLR1_CEN_Pos)
-#define TIM_DMAINTENR_UIE_Pos 0
-#define TIM_DMAINTENR_UIE   (1UL << TIM_DMAINTENR_UIE_Pos)
-#define TIM_INTFR_UIF_Pos   0
-#define TIM_INTFR_UIF       (1UL << TIM_INTFR_UIF_Pos)
-#define TIM_BDTR_MOE_Pos    15
-#define TIM_BDTR_MOE        (1UL << TIM_BDTR_MOE_Pos)
+#define TIM_CTLR1_CEN          (1UL << 0)
+#define TIM_DMAINTENR_UIE      (1UL << 0)
+#define TIM_INTFR_UIF          (1UL << 0)
+#define TIM_SWEVGR_UG          (1UL << 0)
+#define TIM_CHCTLR1_OC1PE      (1UL << 3)
+#define TIM_CHCTLR1_OC1M_PWM1  (0x6UL << 4)   // OC1M[2:0]=110 PWM mode 1 (RM 11.4.7)
+#define TIM_CCER_CC1E          (1UL << 0)
+#define TIM_BDTR_MOE           (1UL << 15)
 
 // ============================================================================
-// PFIC - Programmable Fast Interrupt Controller (QingKe V2 core peripheral,
-// NOT the RISC-V standard CLINT/PLIC). Register shape below is a
-// best-effort approximation sized for compiling this batch's code
-// (nothing calls into it yet - see file header). Re-verify field-by-field
-// before Step 3+ (real IRQ enable/priority) relies on it.
+// PFIC (RM 6.5.2) - offsets confirmed against the RM register list.
+// Two 32-bit words cover all sources (<= 64 IRQs on QingKe V2).
 // ============================================================================
 
 typedef struct {
-  volatile uint32_t ISR[8];      // 0x000 Interrupt status (pending, RO)
-  volatile uint32_t IPR[8];      // 0x020 Interrupt pending (RO, per-source)
-  volatile uint32_t ITHRESDR;    // 0x040 Interrupt priority threshold
-  uint32_t RESERVED0;
-  volatile uint32_t CFGR;        // 0x048 Configuration (key-gated system control)
-  volatile uint32_t GISR;        // 0x04C Global interrupt status
-  uint32_t RESERVED1[8];
-  volatile uint32_t IENR[8];     // 0x100 Interrupt enable (write-1-to-set)
-  uint32_t RESERVED2[24];
-  volatile uint32_t IRER[8];     // 0x180 Interrupt enable clear (write-1-to-clear)
-  uint32_t RESERVED3[24];
-  volatile uint32_t IPSR[8];     // 0x200 Interrupt pending set
-  uint32_t RESERVED4[24];
-  volatile uint32_t IPRR[8];     // 0x280 Interrupt pending clear
-  uint32_t RESERVED5[24];
-  volatile uint32_t IACTR[8];    // 0x300 Interrupt active status (RO)
-  uint32_t RESERVED6[56];
-  volatile uint8_t  IPRIOR[256]; // 0x400 Per-IRQ priority byte
-  uint32_t RESERVED7[516];
-  volatile uint32_t SCTLR;       // 0xD10 System control (SLEEPONEXIT/SEVONPEND/SYSRESET/...)
+  volatile uint32_t ISR[2];       // 0x000 enable status (RO; ISR1 reset 0xC: NMI+EXC)
+  uint32_t RESERVED0[6];
+  volatile uint32_t IPR[2];       // 0x020 pending status (RO)
+  uint32_t RESERVED1[6];
+  volatile uint32_t ITHRESDR;     // 0x040 priority threshold
+  uint32_t RESERVED2;
+  volatile uint32_t CFGR;         // 0x048 (key-gated system reset)
+  volatile uint32_t GISR;         // 0x04C global interrupt status
+  volatile uint32_t VTFIDR;       // 0x050 VTF channel ID select
+  uint32_t RESERVED3[3];
+  volatile uint32_t VTFADDRR[2];  // 0x060 VTF 0/1 address
+  uint32_t RESERVED4[38];
+  volatile uint32_t IENR[2];      // 0x100 enable set (write-1)
+  uint32_t RESERVED5[30];
+  volatile uint32_t IRER[2];      // 0x180 enable clear (write-1)
+  uint32_t RESERVED6[30];
+  volatile uint32_t IPSR[2];      // 0x200 pending set
+  uint32_t RESERVED7[30];
+  volatile uint32_t IPRR[2];      // 0x280 pending clear
+  uint32_t RESERVED8[30];
+  volatile uint32_t IACTR[2];     // 0x300 active status (RO)
+  uint32_t RESERVED9[62];
+  volatile uint8_t  IPRIOR[256];  // 0x400 per-IRQ priority byte
+  uint32_t RESERVED10[516];
+  volatile uint32_t SCTLR;        // 0xD10 system control
 } PFIC_TypeDef;
 
 #define PFIC ((PFIC_TypeDef*)PFIC_BASE)
 
+// Compile-time layout proof (the M1-M3 placeholder struct had these wrong)
+_Static_assert(offsetof(PFIC_TypeDef, IENR)   == 0x100, "PFIC IENR offset");
+_Static_assert(offsetof(PFIC_TypeDef, IRER)   == 0x180, "PFIC IRER offset");
+_Static_assert(offsetof(PFIC_TypeDef, IPRR)   == 0x280, "PFIC IPRR offset");
+_Static_assert(offsetof(PFIC_TypeDef, IPRIOR) == 0x400, "PFIC IPRIOR offset");
+_Static_assert(offsetof(PFIC_TypeDef, SCTLR)  == 0xD10, "PFIC SCTLR offset");
+
 // ============================================================================
-// STK - the QingKe "SysTick-analog" (64-bit free-running/compare counter,
-// split into CNTL/CNTH and CMPLR/CMPHR halves because RV32E registers are
-// 32 bits wide). NOT the ARM SysTick_Type - different register set
-// entirely; kept as its own struct so no code accidentally assumes ARM
-// SysTick semantics (24-bit down-counter, COUNTFLAG, etc - none of that
-// applies here).
+// STK - QingKe V2 SysTick (RM 6.5.4). 32-bit up-counter + 32-bit compare.
+// SR.CNTIF is WRITE-0-TO-CLEAR (RW0) - the opposite polarity of most W1C
+// flag registers on this chip; `STK->SR = 0` is the whole clear idiom.
 // ============================================================================
 
 typedef struct {
   volatile uint32_t CTLR;    // 0x00 Control
-  volatile uint32_t SR;      // 0x04 Status (COUNTFLAG-equivalent)
-  volatile uint32_t CNTL;    // 0x08 Counter low 32 bits
-  volatile uint32_t CNTH;    // 0x0C Counter high 32 bits
-  volatile uint32_t CMPLR;   // 0x10 Compare low 32 bits
-  volatile uint32_t CMPHR;   // 0x14 Compare high 32 bits
+  volatile uint32_t SR;      // 0x04 CNTIF (bit 0, write-0-clear)
+  volatile uint32_t CNTL;    // 0x08 Counter (32-bit)
+  uint32_t RESERVED0;        // 0x0C (CNTH on 64-bit QingKe cores - absent on V2)
+  volatile uint32_t CMPLR;   // 0x10 Compare (32-bit)
+  uint32_t RESERVED1;        // 0x14 (CMPHR - absent on V2)
 } STK_TypeDef;
 
 #define STK ((STK_TypeDef*)STK_BASE)
 
-#define STK_CTLR_STE_Pos    0   // counter enable
-#define STK_CTLR_STE        (1UL << STK_CTLR_STE_Pos)
-#define STK_CTLR_STIE_Pos   1   // interrupt enable
-#define STK_CTLR_STIE       (1UL << STK_CTLR_STIE_Pos)
-#define STK_CTLR_STCLK_Pos  2   // 0 = HCLK/8, 1 = HCLK
-#define STK_CTLR_STCLK      (1UL << STK_CTLR_STCLK_Pos)
+#define STK_CTLR_STE        (1UL << 0)   // counter enable
+#define STK_CTLR_STIE       (1UL << 1)   // interrupt enable
+#define STK_CTLR_STCLK      (1UL << 2)   // 0 = HCLK/8, 1 = HCLK
+#define STK_CTLR_STRE       (1UL << 3)   // auto-reload to 0 on compare
+#define STK_CTLR_SWIE       (1UL << 31)  // software interrupt trigger
 
 // ============================================================================
-// IRQ NUMBERS - PFIC "external interrupt" indices (into ISR/IENR/IPRIOR).
-// UNVERIFIED for V006 (see file header): the peripheral SET on V006 is
-// richer than V003 (more flash/RAM implies a bigger part), so its IRQ
-// table almost certainly does not match V003's 1:1. Left sparse/commented
-// on purpose - Step 3+ (real timer/serial ISRs) must confirm the real
-// numbers against a CH32V006 datasheet before enabling any of these in
-// PFIC->IENR[]. Nothing in this batch (M1-M3) enables a peripheral IRQ.
+// IRQ NUMBERS (RM table 6-1, CH32V00X series vector table - VERIFIED).
+// 25 peripheral channels + 4 kernel channels; entry address = number * 4.
 // ============================================================================
 
 typedef enum {
-  ch32v006_IRQn_UNVERIFIED_PLACEHOLDER = 0  // see comment above
+  SysTick_IRQn      = 12,   // STK compare - this port's pulse-reset timer
+  SW_IRQn           = 14,
+  WWDG_IRQn         = 16,
+  PVD_IRQn          = 17,
+  FLASH_IRQn        = 18,
+  RCC_IRQn          = 19,
+  EXTI7_0_IRQn      = 20,   // ALL GPIO lines 0-7 share this one vector
+  AWU_IRQn          = 21,
+  DMA1_CH1_IRQn     = 22,
+  DMA1_CH2_IRQn     = 23,
+  DMA1_CH3_IRQn     = 24,
+  DMA1_CH4_IRQn     = 25,
+  DMA1_CH5_IRQn     = 26,
+  DMA1_CH6_IRQn     = 27,
+  DMA1_CH7_IRQn     = 28,
+  ADC_IRQn          = 29,
+  I2C1_EV_IRQn      = 30,
+  I2C1_ER_IRQn      = 31,
+  USART1_IRQn       = 32,
+  SPI1_IRQn         = 33,
+  TIM1_BRK_IRQn     = 34,
+  TIM1_UP_IRQn      = 35,
+  TIM1_TRG_IRQn     = 36,
+  TIM1_CC_IRQn      = 37,
+  TIM2_IRQn         = 38,
+  USART2_IRQn       = 39,
+  OPCM_IRQn         = 40,
+  // NOTE: no TIM3 vector exists - RM 13's streamlined timer has no
+  // interrupt line at all. Highest vector number = 40.
 } IRQn_Type;
+
+#define PFIC_VECTOR_COUNT   41   // vectors 0..40 per RM table 6-1
+
+// PFIC enable/disable. RM 6.5.2 note: "When using the PFIC_IENRx register
+// to mask any interrupt ... add a 'fence.i' instruction for synchronization
+// between the core control state and the interrupt enable state." - the
+// fence.i in the disable path is therefore TRM-mandated, not decorative.
+static inline void PFIC_EnableIRQ(IRQn_Type irqn) {
+  PFIC->IENR[(uint32_t)irqn >> 5] = 1UL << ((uint32_t)irqn & 0x1F);
+}
+static inline void PFIC_DisableIRQ(IRQn_Type irqn) {
+  PFIC->IRER[(uint32_t)irqn >> 5] = 1UL << ((uint32_t)irqn & 0x1F);
+  __asm volatile ("fence.i" ::: "memory");
+}
 
 #endif // CH32V006_H

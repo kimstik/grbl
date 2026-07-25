@@ -114,7 +114,11 @@ BUILD ?= DEBUG
 ifeq ($(BUILD),RELEASE)
   CFLAGS += -Os -g0
 else
-  CFLAGS += -O0 -g3
+  # -Og, not -O0: soft-float rv32ec grbl at -O0 is ~77KB of .text and the
+  # chip has 62KB (61K after the NVMEM window). -Og keeps single-stepping
+  # sane while fitting the part - found the day `make link` first became
+  # a hard gate for this port.
+  CFLAGS += -Og -g3
   CFLAGS += -DDEBUG
 endif
 
@@ -163,12 +167,9 @@ MAP_FILE  = $(OUTPUT_DIR)/$(BINARY_NAME).map
 # TARGETS
 # ============================================================================
 
-# NOTE: "all" intentionally builds only object files, not the linked ELF -
-# same posture as _template (see its Makefile's design note) since this
-# port's Step 3-6 macros are still PORT_TODO. M3 exit test: this target
-# succeeds; `make link` is expected to fail, and its failure output is the
-# remaining-work checklist.
-all: objects
+# Steps 3-6 complete: full build (ELF + hex + bin), samd21 posture. The
+# M3-era "objects only" default is gone - zero PORT_TODO_* remain.
+all: $(BUILD_DIR) $(OUTPUT_DIR) $(HEX_FILE) $(BIN_FILE)
 
 objects: $(BUILD_DIR) $(OUTPUT_DIR) $(OBJECTS)
 
@@ -198,10 +199,11 @@ $(BUILD_DIR)/serial.o: serial.c | $(BUILD_DIR)
 $(BUILD_DIR)/nvmem.o: nvmem.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
-# Diagnostic full link: expected to FAIL with a list of undefined
-# PORT_TODO_* symbols (Steps 3-6 not implemented this batch) - that
-# failure IS the M3 exit test.
-link: objects
+# Full link. Historically the M3 "linker-as-checklist" diagnostic; now
+# (Steps 3-6 done) it must succeed with ZERO undefined PORT_TODO_*.
+link: $(ELF_FILE)
+
+$(ELF_FILE): objects
 	$(CC) $(LDFLAGS) -o $(ELF_FILE) $(OBJECTS) $(LIBS)
 	$(SIZE) --format=berkeley $(ELF_FILE)
 
@@ -240,13 +242,12 @@ clean-all:
 
 # Help
 help:
-	@echo "GRBL $(PLATFORM_NAME) Build System (Phase 4 - Steps 0-2 real, 3-6 PORT_TODO)"
+	@echo "GRBL $(PLATFORM_NAME) Build System (Phase 4 - Steps 0-6 complete)"
 	@echo ""
 	@echo "Usage:"
-	@echo "  make              - Compile all object files (DEBUG, default)"
-	@echo "  make BUILD=RELEASE - Compile all object files, optimized"
-	@echo "  make link         - Attempt full link (EXPECTED TO FAIL - lists"
-	@echo "                      remaining PORT_TODO_* work by name)"
+	@echo "  make              - Full build: ELF + hex + bin (DEBUG, default)"
+	@echo "  make BUILD=RELEASE - Full build, optimized"
+	@echo "  make link         - Link only (must show zero PORT_TODO_*)"
 	@echo "  make compdb       - Generate compile_commands.json for clangd/LSP"
 	@echo "  make clean        - Clean current build"
 	@echo "  make clean-all    - Clean all builds"
