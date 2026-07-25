@@ -274,8 +274,20 @@ agents; golden AVR checksums untouchable.
 ## Orchestration Protocol
 
 **Roles**: owner holds the canon (naming, taste, architectural forks — decisions recorded
-below). Executor (AI sessions) proposes, implements, reviews; routine work is autonomous,
-only genuine forks go to the owner.
+below). Split is now strict:
+
+- ORCHESTRATOR (main loop): mechanics with ZERO authorship — git integration of
+  agent-authored bytes (fetch/apply/cherry-pick/cp from worktrees), running gates/
+  verification commands, commit/push, reading. NEVER authors file content, including
+  the ledger.
+- AGENTS: every authored byte — code, docs, baselines, AND ledger updates: each batch
+  agent updates this file's relevant entries (its checkboxes, Current State delta,
+  Decision Log if a decision was made) INSIDE its own worktree as part of its batch;
+  standalone cross-batch ledger notes go through a scribe agent.
+
+Owner correction 2026-07-24 ("Сам? Ты же оркестратор!!") after the orchestrator was
+caught authoring ledger edits/baseline merges/roadmap refreshes inline — the early
+"ledger = orchestrator bookkeeping" exception is REVOKED.
 
 **Session template**: ~10% load state (read this file + TODO.md), ~70% execute current
 phase items, ~20% review + commit + update this ledger. Never end a session with
@@ -447,6 +459,15 @@ the reviewer catches plausible-but-wrong. A batch is DONE only after both.
 - FP twin (samd21) re-dispatched to fresh agent (Renode-agent pool walled to
   20:50; harness is landed in ci/renode — any agent can drive it now).
 
+- ORCHESTRATOR-PURITY CORRECTION 2026-07-24 (owner: "Сам? Ты же оркестратор!!"):
+  orchestrator was caught authoring ledger edits/baseline merges/roadmap refreshes
+  inline instead of dispatching them as agent batches. Roles tightened in
+  Orchestration Protocol: orchestrator = git mechanics + gates + commit/push only,
+  ZERO authorship, ever; agents author every byte including their own PLAN.md
+  deltas (checkboxes, Current State, Decision Log) inside their batch worktree;
+  cross-batch ledger notes go through a scribe agent. Prior "ledger = orchestrator
+  bookkeeping" exception REVOKED.
+
 ## Current State (update each session)
 
 - ALARM SEMANTICS (owner directive 2026-07-23): the 6h cron is FALLBACK RECOVERY
@@ -487,3 +508,6 @@ the reviewer catches plausible-but-wrong. A batch is DONE only after both.
   (job 92bf6ea9; grid shifted per owner so nearest fire is +5h, 2026-07-23 23:27;
   session-only, auto-expires after 7 days; prior 5:15 one-shot chain did not survive
   a context compaction — unconditional recurrence replaces it)
+- In-flight agents (BUG#21 stm32 vector fix, samd21 FP twin arbiter) were briefed
+  before the 2026-07-24 orchestrator-purity correction — their PLAN.md deltas will
+  be authored by follow-up/scribe until new briefs embed the rule.
