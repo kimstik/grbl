@@ -14,9 +14,10 @@ avr-gcc/riscv64-unknown-elf-gcc present).
 
 It then parses the printed recipe lines for compiler invocations and turns
 each one into a compile_commands.json entry, preserving every flag - notably
-the `-include gpio.h -include ../common/gpio.h ...` chain that is this
-project's "invisible porting" mechanism (see grbl/platform/common/gpio.h) -
-verbatim, so clangd sees exactly what the real build sees.
+the single `-include $(BOARD)/prelude.h` that is this project's "invisible
+porting" mechanism (the injected header chain is documented inside each
+platform's prelude.h, e.g. grbl/platform/samd21/megarm/prelude.h) - verbatim,
+so clangd sees exactly what the real build sees.
 
 Usage:
     tools/gen_compile_commands.py <platform> [<platform> ...] [options]

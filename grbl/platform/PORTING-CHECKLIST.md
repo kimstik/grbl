@@ -5,9 +5,9 @@ Contracts for each macro family: `CONTRACTS.md` (section numbers cited as §N).
 Do steps in order — each layer's exit test depends on the previous layer.
 
 Ground rules (PLAN.md, standing laws):
-- Copy the `_template` skeleton (or the closest existing port) — never start
-  from a blank directory. Reuse `common/` and `common/stm32/common.mk`-style
-  sharing before writing anything new.
+- Copy the `_template` skeleton (planned) (or the closest existing port) —
+  never start from a blank directory. Reuse `common/` and
+  `common/stm32/common.mk`-style sharing before writing anything new.
 - NO silent no-op stubs. Unimplemented macro = call to undeclared
   `PORT_TODO_<name>()` so the port compiles immediately but links only when
   complete (linker-as-checklist).
@@ -19,10 +19,11 @@ Ground rules (PLAN.md, standing laws):
 - [ ] `grbl/platform/<name>/`: Makefile, platform.h, gpio.h, timer.h,
       startup/vector code, linker script, `<board>/config.h`.
 - [ ] Makefile follows the samd21 pattern (samd21/Makefile): core sources
-      listed explicitly; `-include` order is platform gpio.h ->
-      `../common/gpio.h` -> `$(BOARD)/config.h` -> `platform.h`
-      (samd21/Makefile:28-33). Decide per subsystem: macro route vs
-      TU-replacement route (CONTRACTS.md §0) and set GRBL_SOURCES accordingly.
+      listed explicitly; a single `-include $(BOARD)/prelude.h`
+      (samd21/Makefile:30) — the injection order is documented inside
+      `prelude.h` itself, not the Makefile. Decide per subsystem: macro route
+      vs TU-replacement route (CONTRACTS.md §0) and set GRBL_SOURCES
+      accordingly.
 - [ ] `make BUILD=DEBUG` and `make BUILD=RELEASE` compile all objects
       (link may still fail on PORT_TODO symbols — that is the checklist).
 

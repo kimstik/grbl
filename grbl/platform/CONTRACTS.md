@@ -33,16 +33,18 @@ ever. A port that cannot implement a macro must fail at link time
 
 ## 0. How the boundary is wired
 
-Two injection routes exist today (Phase 1 unifies them):
+Phase 1 landed: every platform now injects its whole macro chain via ONE
+`-include`, not a hand-maintained flag list.
 
 - AVR: root Makefile `-include grbl/platform/common/gpio.h` (Makefile:53);
   `grbl.h:49` includes `platform/hal.h`, which pulls `atmega328p/platform.h`
-  (hal.h:145-146) and `atmega328p/timer.h` (platform.h:14). Pin names come from
+  (hal.h:168-169) and `atmega328p/timer.h` (platform.h:14). Pin names come from
   `cpu_map.h` (grbl.h:53).
-- SAMD21: `samd21/Makefile:28-33` injects, in order: platform `gpio.h` ->
-  `common/gpio.h` -> `$(BOARD)/config.h` -> `platform.h`. Platform accessor
-  overrides MUST precede `common/gpio.h` (its defaults are `#ifndef`-guarded,
-  common/gpio.h:32-50).
+- SAMD21: `samd21/Makefile:30` injects a single
+  `-include $(BOARD)/prelude.h`. `prelude.h` chains, in this load-bearing
+  order (`$(BOARD)/prelude.h:36-39`): platform `gpio.h` -> `common/gpio.h` ->
+  `config.h` -> `platform.h`. Platform accessor overrides MUST precede
+  `common/gpio.h` (its defaults are `#ifndef`-guarded, common/gpio.h:32-50).
 
 Two compliance routes per subsystem:
 - **Macro route**: core .c file is compiled; platform supplies macros (AVR serial).
@@ -113,8 +115,8 @@ Contracts:
 
 | Macro | Semantics | Context | Core use sites |
 |---|---|---|---|
-| `GPIO_INT_ON(pcmsk, int, mask)` | arm pin-change interrupt for all `mask` bits (hal_gpio.h:172 -> `HAL_GPIO_INTERRUPT_ENABLE`) | init + main | limits.c:53 (limits_init, re-run on every `$` settings write); system.c:33 |
-| `GPIO_INT_OFF(pcmsk, int, mask)` | disarm (hal_gpio.h:173) | main | limits.c:67 (`limits_disable()` — called before homing) |
+| `GPIO_INT_ON(pcmsk, int, mask)` | arm pin-change interrupt for all `mask` bits (hal_gpio.h:184 -> `HAL_GPIO_INTERRUPT_ENABLE`) | init + main | limits.c:53 (limits_init, re-run on every `$` settings write); system.c:33 |
+| `GPIO_INT_OFF(pcmsk, int, mask)` | disarm (hal_gpio.h:185) | main | limits.c:67 (`limits_disable()` — called before homing) |
 | `HAL_GPIO_IRQ_HANDLER(name)` | function-definition macro: core supplies the handler *body* | defines ISR | limits.c:107,131; system.c:64 |
 
 References: AVR atmega328p/platform.h:130-132 (`PCMSK |= mask, PCICR |= bit` /
@@ -128,14 +130,16 @@ Contracts:
    cheap, idempotent, and actually gate delivery. A "handled at init" no-op for
    `GPIO_INT_OFF` is ILLEGAL — homing would trip a hard-limit alarm on its own
    switches (limits.c:102-105 note). SAMD21 currently defines both as empty
-   comments (samd21/platform.h:170-171) and its EIC channel arming function
+   comments (samd21/platform.h:175-176) and its EIC channel arming function
    `hal_gpio_interrupt_init()` (platform.c:217) **has no caller** in the build —
    limit/control interrupts are never armed at runtime. Known gap.
 2. `HAL_GPIO_IRQ_HANDLER(name)` effective non-AVR expansion is
-   `void name##_IRQHandler(void)` — hal_gpio.h:129 is included *after*
-   samd21/platform.h:172 (hal.h:161 vs hal.h:182) and its unguarded redefine
-   wins (the "HAL_GPIO_IRQ_HANDLER redefined" warning tracked in PLAN.md
-   Phase 1). SAMD21 `EIC_Handler` matches that: it calls
+   `void name##_IRQHandler(void)` — hal_gpio.h:139-140 is its single owner,
+   guarded by `#ifndef HAL_GPIO_IRQ_HANDLER` so any platform override must be
+   explicit (the prior unguarded-redefine hazard, "HAL_GPIO_IRQ_HANDLER
+   redefined", was closed in Phase 1). SAMD21 `platform.h` deliberately
+   defines nothing here (samd21/platform.h:178-183 comment). SAMD21
+   `EIC_Handler` matches that: it calls
    `LIMIT_INT_IRQHandler()`/`CONTROL_INT_IRQHandler()` (handlers.c:61-92).
 3. **Flag clearing (INTFLAG lesson)**: on ARM the platform wrapper must clear
    the peripheral interrupt flag BEFORE invoking the core body
@@ -302,7 +306,7 @@ Contract:
    reference exists at samd21/platform.c:24-33.
 3. BEGIN may declare a local (AVR does); core only uses the pair at block scope.
    Nesting is not required by core (all uses are flat pairs in leaf functions).
-4. No-op: ILLEGAL. SAMD21 currently defines both empty (samd21/platform.h:203-204)
+4. No-op: ILLEGAL. SAMD21 currently defines both empty (samd21/platform.h:209-210)
    while `hal_critical_enter/exit` sit unused in platform.c — lost-update races
    on `sys_rt_exec_state` between mainline and EIC/SERCOM ISRs. Known gap.
 
@@ -380,7 +384,7 @@ Contracts:
 ## 11. Interrupt global control (`sei`/`cli`)
 
 Core calls bare `sei()` (main.c:48, stepper.c:355). AVR: native. Non-AVR must
-define both (samd21/platform.h:200-201: `cpsie i`/`cpsid i` with `"memory"`
+define both (samd21/platform.h:206-207: `cpsie i`/`cpsid i` with `"memory"`
 clobber — the clobber is mandatory: it is the compiler barrier that keeps
 stores from floating across the interrupt-enable boundary).
 
@@ -409,7 +413,7 @@ origin needed none of it, so nothing in core will remind you:
    one — a SYNCBUSY wait on a peripheral whose clock is not running hangs
    forever (the "compiles but dead" class, PLAN.md Phase 3).
 6. **Interrupt-enable boundaries**: `sei`/`cli`/PRIMASK asm needs `"memory"`
-   clobber (samd21/platform.h:200-201).
+   clobber (samd21/platform.h:206-207).
 
 ## 13. Known contract gaps in the SAMD21 reference (do not copy blindly)
 
