@@ -30,6 +30,15 @@ Ground rules (PLAN.md, standing laws):
 Exit: object files build; undefined `PORT_TODO_*` symbols enumerate the
 remaining work by name.
 
+**Non-ARM core?** `_template/startup.c`'s vector table is ARM Cortex-M
+hardware-vector-fetch specific (CONTRACTS.md #14, added after the
+ch32v006/RISC-V port) - it does not transfer to RISC-V or any other ISA
+without hardware SP/PC autoload from a data table. Read
+`ch32v006/startup.c` for a worked non-ARM alternative and CONTRACTS.md
+#14 for the full gap list (toolchain flags, `-specs=picolibc.specs`
+silently re-enabling `--gc-sections` and defeating the "just omit it"
+strategy below, the GPIO 4-bit-packed-config-register pattern, etc).
+
 ## Step 1 — Clock
 
 - [ ] Startup code: vector table, `.data` copy, `.bss` zero — with `__DSB()`

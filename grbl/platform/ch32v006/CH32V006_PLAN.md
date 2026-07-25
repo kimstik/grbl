@@ -1,8 +1,28 @@
 # CH32V006 Platform Implementation Plan
 
+> **CORRECTION (Phase 4 M1-M3, ch32v006 port landed)**: this document was
+> authored against **CH32V003** facts (16KB flash / 2KB SRAM, QingKe V2A,
+> `CH32V003F4P6`) under the CH32V006 filename - a chip mismatch discovered
+> when Phase 4 actually implemented the port. The REAL target is
+> **CH32V006**: 62KB flash / 8KB SRAM, QingKe V2C, per PLAN.md's Decision
+> Log and `grbl/platform/CONTRACTS.md` #14. Sections 1-2 and the specific
+> byte counts throughout this file (16KB/2KB, buffer-reduction advice,
+> etc) are WRONG for the actual chip and kept only for historical
+> context - do not use them for sizing decisions.
+>
+> **Everything below sections 3-12 (register layout sketches, startup
+> code shape, clock config) is ALSO superseded** by the real, gap-logged
+> implementation: see `ch32v006.h`, `platform.h`, `platform.c`,
+> `startup.c`, `gpio.h`, `Makefile`, `script.ld` in this directory, and
+> `grbl/platform/CONTRACTS.md` #14 for every verified-vs-unverified fact
+> and every gap found while replacing this sketch with working code.
+> Toolchain section (3) IS still accurate (apt packages, `-march=rv32ec
+> -mabi=ilp32e` base) except it is missing the `_zicsr` extension
+> requirement - see CONTRACTS.md #14 item 1.
+
 **Platform**: CH32V006 (RISC-V RV32EC)
 **Vendor**: WCH (Nanjing Qinheng Microelectronics)
-**Status**: 🚧 Planning Phase
+**Status**: 🚧 Planning Phase (superseded by landed Phase 4 M1-M3 port - see correction banner above)
 **Priority**: HIGH (First RISC-V port)
 
 ---

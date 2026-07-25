@@ -429,3 +429,107 @@ Closed: `_delay_us/_delay_ms` empty stubs — real calibrated busy-wait
 implementations landed (samd21/platform.c:169-214, commit dd5c5e7). The
 lesson stands: empty delay stubs compile and break homing debounce and
 spindle ramp silently.
+
+## 14. RISC-V gaps found porting ch32v006 (Phase 4 M1-M3, first non-ARM port)
+
+PLAN.md Phase 4 law: "each port strengthens the system" — every gap below
+is something `_template`/this file/PORTING-CHECKLIST.md failed to answer
+when a real RISC-V chip hit it. All found empirically this session
+(toolchain evidence: `riscv64-unknown-elf-gcc` 13.2.0 + picolibc, real
+`make`/`make link` runs in `grbl/platform/ch32v006/`) — not theoretical.
+
+1. **Toolchain recipe incomplete**: PLAN.md's Decision Log records
+   `-march=rv32ec -mabi=ilp32e` as the verified flag set. That is
+   sufficient to compile plain C, but ANY `csr*` instruction (interrupt
+   enable/disable, critical sections — i.e. most of a real platform.h)
+   fails to assemble: `Error: unrecognized opcode 'csrw mtvec,a5',
+   extension 'zicsr' required`. This binutils treats Zicsr as unbundled
+   from the base ISA (post-20191213 ISA-string convention) rather than
+   implied by `_zicsr`-less `rv32ec`. Fix: `-march=rv32ec_zicsr`. Every
+   future RISC-V port on this toolchain generation needs this appended;
+   PLAN.md's recipe should be read as amended.
+2. **`_template`'s entire startup.c/script.ld model is ARM-only and does
+   not transfer**: the template's vector table is literally
+   `void (* const vector_table[])(void)` with slot 0 = initial SP and
+   slot 1 = Reset_Handler, loaded by ARM Cortex-M hardware automatically
+   on reset. RISC-V has no equivalent mechanism at all — not even
+   standard RV, let alone QingKe's PFIC. A RISC-V port needs, from
+   scratch: (a) a `naked` `_start` that sets `sp` itself before calling
+   any C function (no hardware SP autoload — ch32v006/startup.c's `_start`
+   is the reference now), (b) an `mtvec`-based trap entry written with
+   `__attribute__((interrupt))` so GCC emits correct register
+   save/restore + `mret` (verified by disassembly:
+   `csrw mtvec,a5` / opcode `0x30200073` = `mret`), (c) a decision between
+   RISC-V standard direct mode (mtvec mode=00, one trap entry, `mcause`
+   dispatch in C — spec-portable on any RV32/64 core) and a vendor
+   vectored/absolute-address mode (WCH's PFIC reportedly supports one,
+   per public ch32fun-class references) that could NOT be verified
+   against a real CH32V006 TRM this session. ch32v006/startup.c uses
+   direct mode for exactly this reason and documents the vectored-mode
+   question as open for Step 3+ (real peripheral IRQs). **Template
+   action item**: `_template/startup.c`'s header comment should say
+   outright "this file's vector-table model is ARM-specific" instead of
+   presenting itself as architecture-neutral — a RISC-V porter copying it
+   verbatim will write code that cannot work at all (no hardware SP
+   autoload, and a data-pointer array is not a valid `mtvec` target in
+   direct mode).
+3. **`-specs=picolibc.specs` silently re-enables `--gc-sections`,
+   defeating `_template`'s stated Makefile strategy of "just don't pass
+   --gc-sections"**: picolibc's own linker spec (`*link:` rule, visible
+   via `-dumpspecs`) unconditionally appends `--gc-sections` to the link
+   line regardless of what the platform Makefile itself passes. Proven
+   concretely: with only "omit --gc-sections" (the `_template` posture),
+   `make link` reported an INCOMPLETE PORT_TODO_* list — 6 real undefined
+   references inside `handlers.c` (confirmed present via `nm -u` on the
+   object file) silently vanished from the linker's error output because
+   `--gc-sections` discarded their whole functions as unreached before
+   symbol resolution ever ran, and `_template`'s own documented insurance
+   against this (`static ... __keep_alive[] __attribute__((used))`) was
+   NOT sufficient by itself to stop it on this toolchain/version.
+   Fix: `-Wl,--no-gc-sections` explicitly in LDFLAGS (ch32v006/Makefile
+   does this now). **Any future picolibc-based port must do the same**,
+   or `make link`'s PORT_TODO_* list is silently incomplete — a correct-
+   looking but false "fewer things left to do" reading, exactly the kind
+   of silent failure this whole design exists to prevent.
+4. **`_template/script.ld`'s blanket `/DISCARD/ { libc.a(*) libm.a(*)
+   libgcc.a(*) }` is a latent bug for any chip without hardware
+   multiply/float**: harmless in the template only because its link
+   never gets far enough to need a pulled-in libgcc routine. rv32ec has
+   no M (multiply/divide) or F (float) extension, and core grbl uses
+   floating point throughout (planner/gcode/motion_control) — a real
+   future link on this chip WILL need real libgcc/libm code, which the
+   inherited DISCARD block would silently strip to nothing rather than
+   erroring loudly. ch32v006/script.ld does not reproduce this DISCARD
+   block; other non-FPU/non-multiply ports (and any ARM port without a
+   hardware FPU) should audit their own copy of this script.ld pattern.
+5. **GPIO direction/pull-up cannot be a `GPIO_DREG`/`GPIO_PREG` bit-op
+   macro on this chip** — CFGLR/CFGHR pack 4 bits (CNF+MODE) per pin, so
+   a single-bit OR/AND (common/gpio.h's default `GPIO_BWR`/`GPIO_MWR`
+   formula) would corrupt neighboring pins' nibbles. Not a new
+   discovery — stm32f103 solved the identical problem (its CRL/CRH is the
+   same shape) by making direction/pull-up real function calls instead
+   of macros; ch32v006/gpio.h reuses that pattern rather than
+   reinventing it. Worth stating explicitly in `_template/gpio.h`'s own
+   comment (currently only mentions the RMW-atomicity axis of GPIO
+   design, not the "4-bit-packed config register" axis) since this will
+   recur on every WCH/ST-family chip, not just these two.
+6. **Memory-barrier semantics unverified for QingKe**: `__DSB()`/`__DMB()`
+   are implemented as real `fence rw,rw` (ch32v006/platform.h) rather
+   than assumed unnecessary, but whether QingKe V2C actually reorders
+   ordinary loads/stores (the ARM Cortex-M reason these exist at all) is
+   NOT confirmed against a TRM this session — correctness-first stance,
+   flagged rather than asserted either way.
+7. **IRQ numbering / PFIC register fields are unverified placeholders**
+   (ch32v006.h's `IRQn_Type` is deliberately left almost empty, PFIC/STK
+   struct fields are best-effort) — Step 3+ (real timer/serial ISRs) must
+   confirm every field against a real CH32V006 datasheet before enabling
+   any `PFIC->IENR[]` bit. Nothing in Steps 0-2 (this batch) touches
+   these registers, so nothing here was exercisable yet.
+8. **DIRECTION group physical≠logical translation not yet built**: this
+   port's `boards/generic/config.h` documents but does not yet implement
+   the samd21-style `GPIO_MWO_DIRECTION`/`L2P`/`P2L` dispatch (BUG #17
+   contract, §1 above) — `gpio.h` only has the plain `GPIO_OREG`/`GPIO_IREG`
+   accessors this batch. Step 3 (timers) MUST add it before `ISR_STEP`
+   goes live, or DIRECTION output silently writes the wrong bits the
+   same way BUG #17 did on SAMD21 — this is a known, logged gap, not a
+   rediscovery risk.
