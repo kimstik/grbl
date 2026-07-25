@@ -276,7 +276,11 @@ the reviewer catches plausible-but-wrong. A batch is DONE only after both.
   (Actions possibly disabled on fork — VERIFY at cron sessions; if permanently
   disabled, local gates remain authoritative and note it here).
 
-- 2026-07-23 OWNER PROPOSAL under probe: weakify core .o via objcopy --weaken for
+- 2026-07-23 OWNER RULING on weakify: LTO is the owner's working tool — sand in
+  the tool outweighs copy-paste cleanliness. Weak = CAREFUL, SPECIAL-PURPOSE ONLY
+  (curated allowlist per case), NOT a universal mechanism. Probe continues as
+  decision-support for the narrow cases (serial/nvmem dedup candidates).
+- (superseded context) 2026-07-23 proposal record: weakify core .o via objcopy --weaken for
   per-function platform overrides. Executor position (pending probe data):
   blanket = NO (LTO-inline partial-interposition hazard; silent typo-override =
   anti-linker-as-checklist; 300-function undesigned surface, static-state coupling);
