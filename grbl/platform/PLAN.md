@@ -95,15 +95,12 @@ assumptions); BUG #4 (baud arithmetic) — none catchable without stated contrac
       tests, weak-memory checklist, definition of done incl. golden MD5 + ratchet
 - [ ] `_Static_assert` where contracts are expressible in code (CPU_FREQ one landed;
       sweep for more as _template work proceeds)
-- [ ] **`_template` platform** — contracts materialized as a stub skeleton
-      (`grbl/platform/_template/`): full canonical port structure (prelude.h, platform.h,
-      gpio.h, timer.h, serial.c, nvmem.c, handlers.c, startup.c, Makefile, boards/generic/).
-      Design: KISS, linker-as-checklist — unimplemented macros expand to calls to
-      undeclared `PORT_TODO_<name>()` so every file compiles immediately but the port
-      links only when complete, and undefined symbols enumerate remaining work by name;
-      file-level `#warning PORT-TODO` marks progress. NO silent no-op stubs (that is the
-      STP_TMR_PRESCALER_SET trap). Each stub carries its contract as a docstring.
-      Reuse: fold common/dummy into the template; dedupe with stm32 common.mk where free.
+- [x] **`_template` platform LANDED — mechanism PROVEN**: 37 distinct PORT_TODO_*
+      undefined symbols enumerate all work by name, zero foreign undefineds; all
+      .c compile immediately (#warning sea = progress meter); GPIO accessors stay
+      lvalue via declared-never-defined extern array; reuses common/*; not in CI
+      matrix by design. Bonus: .gitignore silently ate platform READMEs (fixed);
+      Makefile inline-comment whitespace trap documented.
 
 **Exit criterion**: a new platform can be ported by copying `_template` + contracts alone,
 without reverse-engineering an existing port.
@@ -162,7 +159,7 @@ without reverse-engineering an existing port.
 
 **Exit criterion**: Renode boot test green in CI.
 
-## Phase 4 — Fresh Port by the New Rules (ch32v006)
+## Phase 4 — Fresh Port by the New Rules (ch32v006)   [STARTED]
 
 Cheapest silicon, sharpest differentiation, and RISC-V stresses the abstraction on a new
 axis. Port strictly by copying `_template` + Phase-2 contracts. Count every contract gap
