@@ -60,11 +60,12 @@ config error (SPINDLE_PWM_MIN_VALUE must be > 0).
       hal.h/hal_gpio.h; sizes bit-identical (60196 DEBUG / 42556 RELEASE); golden PASSED
 - [x] samd21 warn baseline regenerated from REAL build log (9 entries, ratchet OK live)
 - [x] Roadmap truth-update landed (SAMD21 40%→~95%, stale claims refreshed at integration)
-- [ ] stm32h523: restore CFLAGS_EXTRA — prelude scaffolding landed, build STILL broken
-      (main.o error), finish the fix
-- [ ] stm32f103: fix spindle macro naming defect (SPINDLE_PWM/PWM_* undeclared) — build
-      still broken; PLATFORM_NAME/sei/cli redefinitions + LIMIT_DDR self-collision remain
-- [ ] samd21 generic board: fix SPINDLE_PWM_MIN_VALUE config error
+- [x] stm32h523: hal_gpio_port_t typedef restored (real root cause, not CFLAGS) —
+      build advances to the shared spindle-macro defect; blocked on f103-class fix
+- [ ] stm32f103 (+h523 after): fix spindle macro naming defect (SPINDLE_PWM/PWM_*
+      undeclared) — in flight; PLATFORM_NAME/sei/cli redefs + LIMIT_DDR collision too
+- [x] samd21 generic board BUILDS (60236/296/6160): PWM_MIN 0->1, PWM_RANGE, alias
+      block restored; baseline union megarm+generic (15 entries), ratchet OK both
 - [ ] NOTE (minor): samd21 BUILD_DIR shared between DEBUG/RELEASE — stale-object
       cross-contamination without clean; key BUILD_DIR by build type
 - [ ] Resolve dual-canon: `-include` becomes THE mechanism; eliminate redefinition warnings
