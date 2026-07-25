@@ -327,6 +327,13 @@ the reviewer catches plausible-but-wrong. A batch is DONE only after both.
   bits confirmed contract-shape violation, §14-item-8 closure now MANDATORY
   in the in-flight batch.
 
+- A3 CLOSED (Renode shim): reviewer hypothesis empirically REFUTED (0 firmware-
+  reachable double-fires; bus-level N->N bounded, self-recovering); proposed
+  lifetime-latch rejected (would deadlock captured sequence); REAL adjacent gap
+  fixed instead: cc0Mirror now resets on machine Reset/SWRST (was: motion
+  deadlock on emulated reboot). Smoke+negative control re-verified, elf
+  byte-identical (CI-only). B3 h523 landed; f103 twin fix in flight.
+
 ## Current State (update each session)
 
 - ALARM SEMANTICS (owner directive 2026-07-23): the 6h cron is FALLBACK RECOVERY
