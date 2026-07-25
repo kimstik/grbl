@@ -212,6 +212,30 @@ Priority order (revise as hardware/toolchain reality dictates):
       Third ISA family (non-ARM, non-RISC-V) — hardest portability stress test.
       Toolchain: XC-DSC verified recipe in Decision Log. **EULA APPROVED BY OWNER
       2026-07-24** — unattended CI wiring authorized, no remaining blockers)
+      * [x] **M1-M3 LANDED 2026-07-25**: toolchain reinstalled per recipe end-to-end
+        (xc-dsc-gcc 8.3.1 / XC-DSC v3.30, SHA-256 match; DFP 1.5.263 unzipped to
+        /opt); skeleton+clock+GPIO real, all 20 objects compile both flavors,
+        `make link` = exactly 33 PORT_TODO_* (timers/serial/nvmem/handlers,
+        Steps 3-6), nm-vs-link diff proves list complete. NO startup.c by design
+        (toolchain crt0 + linker-synthesized IVT + user_init clock hook — see
+        platform.c banner). 200 MHz FRC->PLL1 from Microchip's own docs,
+        UNVERIFIED on silicon (no dsPIC33A emulator exists — hardware item).
+        Gap log: CONTRACTS.md NEW §16, 11 items (3rd-ISA holes: linker-owned IVT,
+        compiler-won't-emit-bset atomicity, barrier-free ISA, xc-dsc -O1/-Og ICE
+        on gcode.c -> DEBUG=-O0, TRIS/ANSEL double trap, config-word WDT,
+        19-vs-20 pin budget via AVR's own PWM/enable share precedent, DFP
+        Apache-2.0 headers over clean-room). Gates: golden AVR MD5 PASSED,
+        sibling RELEASE sizes byte-identical (ch32 55560, samd21 43036,
+        f103 29900). **NO CI ROWS YET — unattended XC-DSC fetch in CI is a
+        separate item** (installer is 83 MB from ww1.microchip.com; needs a
+        cache strategy decision). Warn baseline: deferred with the CI row.
+      * [ ] Steps 3-6: T1 stepper timer + SCCP1 pulse-reset + SCCP2/PG1 PWM +
+        UART1 + NVM flash window + CN interrupts + delays; FIRST verify from RM:
+        which CLKGEN feeds the peripherals (F_CPU-lie hazard, §16.10), NVM page
+        size/sequence (§16.3 residue), IPCx priorities (pulse-reset > stepper,
+        §16.7)
+      * [ ] CI wiring: cached XC-DSC installer or fetch step + 2 matrix rows +
+        warn baseline from real logs
 - [ ] hc32f460 (ARM M4, vendor-exotic — tests contract completeness)
 - [ ] sg2002 (RISC-V 64, linux-class — decide scope first: bare-metal vs linux userspace)
 - [ ] any new platform dir that appears — same loop

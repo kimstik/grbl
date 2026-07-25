@@ -711,3 +711,120 @@ inline in `stm32f411/regs.h`'s file header).
    confirming this port touched only `grbl/platform/stm32f411/`,
    `grbl/platform/CONTRACTS.md`, `grbl/platform/PLATFORM_ROADMAP.md`,
    `ci/warn_baseline_stm32f411.txt`, and `.github/workflows/ci.yml`.
+
+## 16. Gaps found porting dsPIC33AK128MC102 (Phase 6 rolling port #2 —
+THE THIRD ISA FAMILY: dsPIC33A 32-bit DSC, neither ARM nor RISC-V. This
+is the port the `_template`/contract system was supposed to be stressed
+by, and it found holes on axes no ARM or RISC-V chip could. Everything
+below is empirical from this session: real `xc-dsc-gcc` 8.3.1 (XC-DSC
+v3.30) builds in `grbl/platform/dspic33ak128mc102/` (M1–M3: both flavors
+compile all 20 objects; `make link` lists exactly 33 undefined symbols,
+all `PORT_TODO_*`), DFP 1.5.263 header/gld/atdf mining, and toolchain
+disassembly. RM-only facts that could not be locally verified are marked.
+
+1. **A third startup/IVT model exists and neither donor transfers**:
+   dsPIC33A reset is a fixed-location ADDRESS slot (`.gld` places
+   `LONG(ABSOLUTE(__reset))` at 0x800000 — not ARM's SP+PC hardware
+   fetch, not RISC-V's naked `_start`), and the interrupt vector table
+   is SYNTHESIZED BY THE LINKER (section `__ivt_0`, 286 address entries)
+   from canonical ISR symbol names (`__attribute__((interrupt))
+   _T1Interrupt` …), relocatable at runtime via the IVTBASE SFR (this
+   replaces classic-dsPIC AIVT — no alternate-table config-word dance on
+   33A). Consequence: a port-authored `vector_table[]` array — the thing
+   BOTH existing template models teach — would FIGHT the toolchain.
+   Correct move: no `startup.c` at all; use the toolchain crt0
+   (disasm-verified: sets W15/SPLIM, programs IVTBASE, runs `__data_init`
+   over `.dinit`, calls `__attribute__((user_init))` functions, then
+   `main`) and hang pre-main clock config on `user_init`
+   (dspic33ak128mc102/platform.c banner is the worked example).
+2. **"The chip has atomic bit-ops" does not mean the COMPILER emits
+   them**: dsPIC33A has single-instruction `bset/bclr` on SFR memory
+   (interrupt-atomic, the AVR-SBI analog), and xc-dsc even uses them for
+   its own interrupt builtins — but `LATB |= (1u<<3)` compiles to a
+   THREE-instruction load/modify/store at `-Og` AND `-Os`
+   (disasm-proven), and dsPIC33A has no LATxSET/LATxCLR alias registers
+   (grepped the DFP header). So the §1.2 mixed-writer hazard
+   (STEPPERS_DISABLE/SPINDLE/COOLANT from mainline + `st_go_idle()`
+   inside ISR_STEP) is REAL on a chip whose ISA looks AVR-safe on paper.
+   Fix shape: GPIO_BSET/BCLR wrapped in the save/restore critical
+   section (gpio.h); GPIO_MWO stays bare RMW under the ISR-only writer
+   discipline. `_template/gpio.h`'s §1.2 audit box now has its first
+   "ISA has the instruction, codegen won't promise it" reproducer.
+3. **"What barriers exist?" can legitimately answer NONE**: the dsPIC33A
+   instruction set has no fence/DSB/DMB-class instruction. Single core,
+   single bus master (DMA unused), no cache, in-order pipeline — the
+   compiler is the only reordering agent, so `__DSB()/__DMB()` are
+   compiler barriers (`asm volatile("":::"memory")`), which is exactly
+   what §12.1/§12.4 need here. SFR read-after-write pipeline hazards are
+   the COMPILER's job (xc-dsc inserts visible `neop` padding after SFR
+   stores). UNVERIFIED residue for Step 5: whether NVMCON command
+   sequencing wants the classic-PIC SFR-readback idiom — the RM is not
+   vendored; do not trust store order into the NVM controller until
+   checked.
+4. **Toolchain ICE is a porting-surface item, not a footnote**:
+   xc-dsc-gcc 8.3.1 ICEs (`insn does not satisfy its constraints …
+   movfpsf_32 … postreload`, gcode.c:1133 — an FPU float-store-to-static
+   pattern) at `-O1` and `-Og` but is clean at `-O0/-O2/-O3/-Os`
+   (probed all six on gcode.c). DEBUG therefore uses `-O0 -g3` (128 KB
+   flash absorbs it; contrast §14.13 where small flash forced the
+   opposite call). Checklist lesson: on a niche-vendor GCC fork, probe
+   the optimization matrix against the float-heaviest core file (gcode.c)
+   BEFORE writing any port code. Also: XC-DSC v3.30 is GCC 8.3.1 —
+   C11/`_Static_assert` fine, but pin `-std=gnu11` explicitly.
+5. **TRIS polarity + analog-default is a double GPIO trap**: dsPIC TRIS
+   is 1 = INPUT (inverted vs AVR DDR — common/gpio.h's DREG defaults
+   would set every direction BACKWARDS, silently), and analog-capable
+   pins RESET TO ANALOG (digital reads stuck at 0 until ANSELx is
+   cleared; ANSEL exists only for ports A/B on this device). Both folded
+   into function-call direction helpers that clear ANSEL unconditionally
+   (stm32f103/ch32v006 function-call precedent, new reason). CNPUx is a
+   real bit-per-pin pull-up register — §1.4 satisfied by construction,
+   first port where the pull-up contract cost zero thought.
+6. **The §14.3 gc-sections hazard is ABSENT here, and the check method
+   is now proven**: xc-dsc specs contain no gc-sections rule
+   (`-dumpspecs` grepped), and the M3 link's 33-symbol PORT_TODO list
+   was diffed IDENTICAL against `nm -u` over all 20 objects — the
+   linker-as-checklist is complete by construction on this toolchain.
+   Every future port should run that same nm-vs-link diff once before
+   trusting its M3 list.
+7. **dsPIC33A interrupt model upgrades on classic dsPIC in ways that
+   matter to §5.2**: INTCON1 has a real GIE bit (global enable — classic
+   16-bit dsPIC had only IPL games), `__builtin_get_isr_state/
+   set_isr_state/disable_interrupts` map to SR.IPL + GIE save/restore
+   with a single atomic `bclr` for disable (all disasm-verified → sei/
+   cli/critical sections are real code, zero PORT_TODO). Priority
+   nesting is native (NSTDIS=0 at reset): core's `sei()` inside ISR_STEP
+   can genuinely nest the pulse-reset IRQ if Step 3 gives it a higher
+   IPC priority — the first port that can honor the AVR preemption
+   semantic properly instead of the M0+ "defer, don't nest" posture.
+8. **Device config words join the "compiles but dead" surface**: an
+   unprogrammed/default FWDT can leave the hardware watchdog running and
+   reset GRBL mid-job with zero build-time signal. Minimal safe set
+   (`#pragma config WDTEN = SW`, `JTAGEN = OFF`) lives in platform.c;
+   the DFP's own `xc16/docs/config_docs/<device>.html` is the field
+   reference. Non-Microchip analogs (option bytes, fuses) deserve the
+   same Step-0 question on any future port.
+9. **Pin-budget arithmetic is a contract input**: 28-pin MC102 = 19 GPIO
+   (counted from the DFP atdf) vs GRBL's 20 signals; resolved by the
+   AVR Uno's own precedent (cpu_map.h:110-152 — SPINDLE_ENABLE and
+   SPINDLE_PWM share a pin under VARIABLE_SPINDLE), and ENABLE_M7
+   `#error`s instead of silently vanishing. Boards that cannot fit a
+   signal must fail loudly at compile, not drop it.
+10. **Separate peripheral clock generators = a new "F_CPU lie" vector**
+   (§14.9's class, third variant): on dsPIC33A the CPU clock (CLKGEN1)
+   and peripheral clocks are independent clock generators; which CLKGEN
+   feeds Timer1/SCCP/UART and at what ratio is RM-only and NOT yet
+   verified. Flagged loudly in platform.h/timer.h: Step 3 must re-derive
+   the stepper-timer tick from the RM before any period math — F_CPU
+   describing the CPU does not describe the timers here. Also open for
+   Step 1-on-silicon: the 200 MHz PLL sequence is encoded verbatim from
+   Microchip's own dsPIC33A clock documentation (developerhelp), but no
+   emulator exists for dsPIC33A — first hardware run must scope-verify
+   the clock before anything else is trusted.
+11. **DFP headers over clean-room, decided and justified**: the
+   dsPIC33AK-MC DFP is Apache-2.0 (LICENSE.txt in the .atpack) — unlike
+   the proprietary Atmel/ASF headers that forced samd21's clean-room
+   route — AND the DFP is the compiler's own `-mdfp` source of device
+   truth, so vendoring against it removes a whole transcription-error
+   class instead of adding one. Precedent: license-check the vendor
+   pack FIRST; clean-room is the fallback, not the default.

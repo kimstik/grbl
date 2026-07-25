@@ -122,6 +122,9 @@
 #elif defined(PLATFORM_CH32V006)
   #define PLATFORM_NAME "CH32V006"
 
+#elif defined(PLATFORM_DSPIC33AK128MC102)
+  #define PLATFORM_NAME "dsPIC33AK128MC102"
+
 #elif defined(PLATFORM_HC32F460)
   #define PLATFORM_NAME "HC32F460"
 
@@ -191,6 +194,9 @@
 
 #elif defined(PLATFORM_CH32V006)
   #include "ch32v006/platform.h"
+
+#elif defined(PLATFORM_DSPIC33AK128MC102)
+  #include "dspic33ak128mc102/platform.h"
 
 #elif defined(PLATFORM_HC32F460)
   #include "hc32f460/platform.h"
