@@ -102,7 +102,12 @@
 #define PULSE_TIMER_IRQn    TIM3_IRQn
 
 // Spindle PWM: TIM1 CH1
-#define SPINDLE_PWM_MAX_VALUE   1000  // Default PWM period (can be changed)
+// SPINDLE_PWM_MAX_VALUE is NOT redefined here - it is canonically defined in
+// platform.h (255, CONTRACTS.md section 6.2: core plumbs duty as uint8_t
+// end-to-end). A value here previously shadowed platform.h's 255 with 1000
+// (config.h is included after platform.h in platform.c), so TIM1's ARR ran
+// to 1000 while CCR1 was only ever driven up to 255 - capping real spindle
+// duty at 25.5% of commanded. Do not reintroduce this definition here.
 
 // ============================================================================
 // SERIAL CONFIGURATION
