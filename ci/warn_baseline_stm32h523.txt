@@ -20,7 +20,6 @@ config.h: warning: "LIMIT_MASK" redefined
 config.h: warning: "PROBE_MASK" redefined
 config.h: warning: "SPINDLE_DIRECTION_PIN" redefined
 config.h: warning: "SPINDLE_ENABLE_PIN" redefined
-config.h: warning: "SPINDLE_PWM_MAX_VALUE" redefined
 config.h: warning: "STEPPERS_DISABLE_MASK" redefined
 config.h: warning: "STEP_MASK" redefined
 #
