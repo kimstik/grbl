@@ -65,10 +65,10 @@ config error (SPINDLE_PWM_MIN_VALUE must be > 0).
 - [x] stm32f103 BUILDS: spindle macros per CONTRACTS §1/§6, handlers.c deduped to
       core-supplied ISRs (samd21 pattern), redefs/collisions gone, baseline from
       real logs (22 entries). DEBUG 48836/80/19376, RELEASE 29900/80/19376.
-- [ ] stm32h523 RESCOPED (register gap, not naming): author TIM1 regs in regs.h,
-      implement spindle PWM init (BDTR/MOE), rewrite handlers.c for its EXTI model
-      (FPR1/RPR1 per-edge, per-line vectors) + same core-ISR dedup; gpio.h/timer.h
-      port over cleanly from f103 minus PWM
+- [x] stm32h523 BUILDS (DEBUG 48648, RELEASE 28596): TIM1 authored (RM0481),
+      per-line EXTI handlers + core-ISR dedup, contract fixes (PWM_MAX->255 per
+      CONTRACTS 6.2, H5 USART fields, CRITICAL START->BEGIN), baseline from real
+      logs. ALL 9 CI MATRIX ROWS NOW BUILD. Inspection-era "ready" claim falsified.
 - [x] samd21 generic board BUILDS (60236/296/6160): PWM_MIN 0->1, PWM_RANGE, alias
       block restored; baseline union megarm+generic (15 entries), ratchet OK both
 - [ ] NOTE (minor): samd21 BUILD_DIR shared between DEBUG/RELEASE — stale-object
@@ -166,7 +166,12 @@ without reverse-engineering an existing port.
 
 **Exit criterion**: Renode boot test green in CI.
 
-## Phase 4 — Fresh Port by the New Rules (ch32v006)   [STARTED]
+## Phase 4 — Fresh Port by the New Rules (ch32v006)   [M1-M3 DONE]
+
+M1-M3 landed 2026-07-23: skeleton+clock+GPIO compile for rv32ec_zicsr; 32
+PORT_TODO_* remain (timers/serial/nvmem/handlers = Steps 3-6, next batch);
+GAP LOG (8 items) folded into CONTRACTS.md §14 — the "each port strengthens
+the system" loop closed for the first time. PFIC regs UNVERIFIED placeholders.
 
 Cheapest silicon, sharpest differentiation, and RISC-V stresses the abstraction on a new
 axis. Port strictly by copying `_template` + Phase-2 contracts. Count every contract gap
