@@ -480,6 +480,9 @@ observed, without waiting for the owner):
   was missing 4KB of ISRs; honest size ~33916. Fix dispatched (used-attr +
   VTOR-set all three + post-link BOOT-INTEGRITY check in common.mk/_template
   per ratchet rule) + CONTRACTS §18. Size table to be re-canonicalized after.
+  **-> FIXED AND VERIFIED 2026-07-25** (evidence + new size table in Current
+  State; CONTRACTS §18 landed; boot_check.sh ratchet landed on all ARM ports +
+  _template, RISC-V variant on ch32v006).
 - FP twin (samd21) re-dispatched to fresh agent (Renode-agent pool walled to
   20:50; harness is landed in ci/renode — any agent can drive it now).
 
@@ -500,6 +503,67 @@ observed, without waiting for the owner):
   codified in Orchestration Protocol.
 
 ## Current State (update each session)
+
+- **[x] BUG #21 FIXED (2026-07-25) — vector table restored on all three STM32
+  ports.** Mechanism re-verified before fixing, not taken on faith: baseline
+  f103 RELEASE `.bin` word0 = `0x785a4b08` (code bytes, not an SP), `.isr_vector`
+  ABSENT from `objdump -h` entirely, `nm | grep -c Handler` = **1**, no
+  `serial_rx_buffer_head` symbol at all, exactly **1** `bl` site to
+  `gc_execute_line` (the G-code dispatch path from `protocol.c` was gone).
+  f411/h523 identical (`0x785a4b08` / `0x785a4b07`, 1 handler each).
+  Fix, all three `startup.c`: `SCB->VTOR = (uint32_t)vector_table;` as the first
+  statement of `Reset_Handler` (the real code reference LTO's IPA cannot ignore
+  — this is exactly what made samd21 immune by accident via d5a2227) PLUS
+  `__attribute__((used))` on the table. Minimal 3-register `SCB` typedef added
+  to each `regs.h` (none of the three had one; reuse-before-write found nothing
+  to reuse). `script.ld`: `. = ALIGN(256)` f103/f411, `ALIGN(512)` h523, before
+  `KEEP(*(.isr_vector))`, each with a matching alignment `ASSERT`.
+  After: word0/word1 = `20001458 0800461d` (f103), `20001c60 080045f5` (f411),
+  `20008000 080046a5` (h523); handler counts 1 -> **51 / 45 / 68**;
+  `serial_rx_buffer`, `_head` and `_tail` all present in BSS; 4 `bl` sites to
+  `gc_execute_line` on each; `vector_table` at `0x08000000` on all three
+  (h523 `.isr_vector` = 0x134 = 308 B = 77 entries, in FLASH).
+- **RATCHET shipped with the fix**: new `grbl/platform/common/boot_check.sh`
+  runs after every `objcopy` and fails the build unless `.bin` word0 is a
+  plausible initial SP (`0x2xxxxxxx`, aligned) and word1 a Thumb reset vector
+  inside the image's flash window. Wired into `common/stm32/common.mk` (all
+  three STM32 ports inherit), `samd21/Makefile` (passes immediately, as
+  predicted) and `_template/Makefile` (future ports inherit the guard, with a
+  PORT-TODO telling non-ARM ports to translate it, not delete it). ch32v006
+  gets the RISC-V-appropriate form — asserts `_start` links at the flash base —
+  with a Makefile comment on why the word0 convention is N/A there.
+  NEGATIVE TEST RUN: f103 fix reverted -> `BOOT INTEGRITY: FAIL` printing
+  `word0 = 0x785a4b08`, make exit 2; fix restored -> OK.
+  ⚠ FINDING WORTH KEEPING: the linker `ASSERT` is NOT a second line of defence.
+  With the fix reverted, `ld` resolved the undefined `vector_table` to 0 and
+  `(0 & 0xFF) == 0` PASSED. The ASSERT guards alignment only; the post-link
+  check is the sole thing that catches a vanished table. Comments in all three
+  `script.ld` files corrected to say so.
+- **SIZE TABLE MUST BE RE-CANONICALIZED** — the old STM32 numbers were measuring
+  binaries with the ISRs and G-code path missing. New honest RELEASE flash body
+  (text+data), owner-facing metric per the 2026-07-24 reporting doctrine:
+
+  | port      | old (dishonest) | new (honest) | delta |
+  |-----------|-----------------|--------------|-------|
+  | h523      | 28692           | **32836**    | +4144 |
+  | f411      | 28724           | **32740**    | +4016 |
+  | f103      | 29980           | **34004**    | +4024 |
+  | AVR       | 30640 (golden)  | 30640        | 0     |
+  | samd21    | 43332           | 43332        | 0     |
+  | ch32v006  | 55560           | 54904        | -656  |
+
+  The +4K on each STM32 is the vector table plus ~40-70 ISRs plus the serial RX
+  path plus the G-code dispatch path — i.e. the firmware that was supposed to be
+  there all along. f103 is no longer the "compact" port; it never was.
+  samd21 and AVR are byte-identical (gate). ch32v006's -656 is NOT from this
+  batch (Makefile-only change here, post-objcopy): 55560 predates the ch32
+  `--gc-sections` diet that has since landed — re-measured at HEAD for accuracy.
+  DEBUG sizes moved +16 bytes on each STM32 (48836->48852 f103, 48472->48488
+  f411, 48644->48660 h523) — that is the single VTOR store, nothing else.
+- BUG #21 gates: AVR golden `make -C grbl/platform/atmega328p validate` PASSED
+  (MD5 79af184e67b27defd27a39309ac53563). Warning ratchet clean on all of
+  stm32f103 (21 warns) / stm32f411 (14) / stm32h523 (18) / samd21 (0) — no new
+  entries against any `ci/warn_baseline_*`. CONTRACTS.md §18 authored.
 
 - ALARM SEMANTICS (owner directive 2026-07-23): the 6h cron is FALLBACK RECOVERY
   ONLY — never a scheduler/heartbeat. Work is dispatched immediately when known;

@@ -234,8 +234,39 @@ $(HEX_FILE): $(ELF_FILE)
 	$(OBJCOPY) -O ihex $< $@
 
 # Create binary file
+#
+# BOOT INTEGRITY (BUG #21 ratchet, CONTRACTS.md S18).
+# The ARM form of this check (../common/boot_check.sh) is N/A here: RISC-V has
+# no SP-in-word0 convention. A QingKe RV32EC does not autoload SP/PC from a
+# table - it just starts executing at the flash base, and _start (naked, in
+# .init) sets SP itself. So word0 of the .bin is an instruction by design, and
+# testing it for 0x2xxxxxxx would be meaningless.
+#
+# The failure the ARM check exists to catch is still possible here, though:
+# -flto can delete an unreferenced table/entry stub before codegen and leave
+# KEEP() nothing to match. The equivalent assertion for this architecture is
+# "the reset entry is where the hardware will look for it", i.e. _start must be
+# linked at the flash base. That is what is checked below.
+BOOT_ENTRY_ADDR = 00000000
+
 $(BIN_FILE): $(ELF_FILE)
 	$(OBJCOPY) -O binary $< $@
+	@start=$$($(PREFIX)nm $(ELF_FILE) | grep ' _start$$' | cut -d' ' -f1); \
+	 if [ "$$start" != "$(BOOT_ENTRY_ADDR)" ]; then \
+	   echo ""; \
+	   echo "====================================================================="; \
+	   echo "BOOT INTEGRITY: FAIL - _start is not at the flash base"; \
+	   echo "  _start   = 0x$${start:-<missing>}"; \
+	   echo "  expected = 0x$(BOOT_ENTRY_ADDR) (script.ld MEMORY{FLASH} ORIGIN)"; \
+	   echo "  first 16 bytes of $@:"; \
+	   od -An -tx4 -N16 $@; \
+	   echo "  RISC-V has no SP-in-word0 convention, so this - not a word0"; \
+	   echo "  check - is the boot-integrity assertion for this port."; \
+	   echo "  See CONTRACTS.md S18 / BUG #21."; \
+	   echo "====================================================================="; \
+	   exit 1; \
+	 fi; \
+	 echo "BOOT INTEGRITY: OK  _start=0x$$start  ($@)"
 
 # Create disassembly dump
 $(DUMP_FILE): $(ELF_FILE)

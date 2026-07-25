@@ -970,3 +970,90 @@ disassembly. RM-only facts that could not be locally verified are marked.
    doesn't include platform preludes anyway. Re-verified this session:
    text 30640 / grbl.hex MD5 79af184e67b27defd27a39309ac53563, exact
    golden match.
+## 18. KEEP() does not survive LTO: vector tables need a real code reference
+
+*(Section number assigned by the BUG #21 work item; §17 is reserved by a
+concurrent workstream.)*
+
+Empirical, from BUG #21: stm32f103, stm32f411 and stm32h523 RELEASE
+binaries shipped with **no vector table at all**. Not a corrupted table —
+absent. The `.bin`'s first word was code, so the core loaded garbage into
+SP and PC and the chip could not boot. Every one of those ports had the
+supposedly-canonical guard in place:
+
+```ld
+KEEP(*(.isr_vector))    /* Vector table */
+```
+
+**Why the guard is not a guard.** `KEEP()` is a *link-time* instruction:
+it tells `ld` not to garbage-collect an input section it can see. Under
+`-flto` the deletion happens one stage earlier. GCC's whole-program IPA
+runs over the LTO bytecode before codegen, sees that nothing in the
+program reads `vector_table[]`, and drops the object. `ltrans` then never
+emits a `.isr_vector` input section, so `KEEP()` matches zero sections
+and has nothing to protect. The link succeeds. `--gc-sections` is happy.
+`size` reports a plausible number.
+
+**The cascade is worse than a missing table.** With no table, nothing
+references the ISRs, so LTO deletes those too (`nm | grep -c Handler`
+went from ~40-70 down to **1**). With the serial RX ISR gone, nothing
+ever writes the RX ring buffer, so LTO const-propagates it empty and
+deletes `serial_rx_buffer_head` outright. With the buffer provably empty,
+the G-code dispatch path (`protocol.c:98-101` → `gc_execute_line`) is
+unreachable and gets dead-path-eliminated. One missing reference silently
+strips the interpreter out of a CNC firmware. On f103 that showed up as a
+*smaller* binary — 29900 bytes of text where the honest figure is 33924.
+**A RELEASE build that shrinks for no reason is a symptom, not a win.**
+
+**Signature: DEBUG works / RELEASE bricks.** DEBUG builds have no `-flto`,
+so IPA never runs, the table is emitted, `KEEP()` works, and everything
+looks correct. Any bug report of this shape should be checked here first.
+
+### Required, all three of these
+
+1. **A real code reference.** `Reset_Handler` must write
+   `SCB->VTOR = (uint32_t)vector_table;` as its first action. Taking the
+   address in emitted code is what makes the table reachable to IPA. This
+   is why samd21 was immune by accident (commit d5a2227 added the VTOR
+   write for bootloader-offset reasons and anchored the table as a side
+   effect). It also earns its keep: it makes the image robust to being
+   entered from a bootloader whose VTOR still points at its own table.
+2. **`__attribute__((used))` on the table.** Belt to the VTOR write's
+   braces — states the liveness directly rather than relying on IPA
+   tracing the address-taking.
+3. **A post-link BOOT INTEGRITY check. Mandatory, not optional.** (1) and
+   (2) fix today's build; only (3) notices when a future change breaks it
+   again. Every ARM port runs `grbl/platform/common/boot_check.sh` after
+   `objcopy`: read word0/word1 of the finished `.bin`, require word0 to
+   look like an initial SP (`0x2xxxxxxx`, 4-byte aligned) and word1 to
+   look like a Thumb reset vector (odd, inside the image's flash window),
+   fail the build printing the actual bytes otherwise. Wired into
+   `common/stm32/common.mk` (all STM32 ports inherit it), `samd21/Makefile`
+   and `_template/Makefile` (every future port inherits it).
+
+### A linker ASSERT is NOT a substitute — verified, not assumed
+
+`ASSERT((vector_table & 0xFF) == 0, ...)` does **not** catch a vanished
+table. Tested by reverting the fix: `ld` resolves the now-undefined
+`vector_table` to 0, and `(0 & 0xFF) == 0` passes. The ASSERT guards
+alignment only. Keep it for that, and do not mistake it for the guard.
+
+### VTOR alignment (ARMv7-M / ARMv8-M)
+
+VTOR ignores bits [6:0], so the table needs **at least** 128-byte
+alignment, and architecturally the next power of two ≥ `4 × vector_count`:
+f103/f411 (60 vectors, 240 B) → 256; h523 (78 vectors, 312 B) → 512;
+samd21 → 256. Each `script.ld` carries the matching `. = ALIGN(n)` before
+`KEEP(*(.isr_vector))` plus an `ASSERT` on the resulting address. The
+ALIGNs are no-ops at today's `FLASH ORIGIN` values — they exist so the
+guarantee survives an ORIGIN move for a bootloader.
+
+### Non-ARM ports
+
+RISC-V has no SP-in-word0 convention: a QingKe RV32EC just begins
+executing at the flash base and `_start` (naked, in `.init`) sets SP
+itself, so word0 is an instruction by design. The *class* of failure is
+still live, so ch32v006 asserts the architecture-appropriate invariant
+instead — `_start` must link at the flash base — and its Makefile
+documents why the word0 form is N/A. **A port may translate this check;
+it may not drop it.**

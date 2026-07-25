@@ -27,6 +27,15 @@ extern uint32_t _sbss, _ebss;
 // Main function
 extern int main(void);
 
+// Interrupt vector table (defined at the bottom of this file). Forward-declared
+// here so Reset_Handler can take its address. That address-taking is the ONLY
+// thing that keeps the table alive under -flto: KEEP() in script.ld runs at
+// link time, but LTO's whole-program IPA deletes an unreferenced vector_table[]
+// before codegen, so ltrans never emits a .isr_vector input section for KEEP()
+// to match. Result: a RELEASE .bin whose first word is code, not the initial
+// SP - the chip cannot boot. DEBUG (no LTO) looks fine. See CONTRACTS.md S18.
+extern const void *vector_table[];
+
 // Fault handler helper - safe shutdown and indicate fault via blink pattern
 static void handle_fault(uint32_t fault_code) {
   __disable_irq();
@@ -55,6 +64,13 @@ void Default_Handler(void) {
 // Reset handler - copies data, clears BSS, calls main
 void Reset_Handler(void) {
   uint32_t *src, *dst;
+
+  // Point VTOR at this image's vector table. Two jobs, both load-bearing:
+  //   1. It is the real code reference that survives LTO and forces the table
+  //      into .isr_vector (BUG #21).
+  //   2. It makes the image bootloader-offset-robust: if something jumps here
+  //      with VTOR still pointing at a bootloader table, we retarget it.
+  SCB->VTOR = (uint32_t)vector_table;
 
   // Copy .data section from flash to RAM
   src = &_sidata;
@@ -132,7 +148,9 @@ void OTG_FS_WKUP_IRQHandler(void)    __attribute__((weak, alias("Default_Handler
 
 // Interrupt vector table (positions match the real STM32F411 CMSIS layout;
 // 0 = reserved slot for a peripheral absent on this part - see file header)
-__attribute__((section(".isr_vector")))
+// `used` is belt to the VTOR write's braces: it tells LTO/IPA the object is
+// live even though nothing in C reads its elements (BUG #21, CONTRACTS.md S18).
+__attribute__((section(".isr_vector"), used))
 const void *vector_table[] = {
   // Cortex-M4 core interrupts
   &_estack,                    // 0:  Initial stack pointer

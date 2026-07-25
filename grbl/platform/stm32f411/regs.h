@@ -326,6 +326,22 @@ typedef struct {
 #define USART_CR1_UE     (1UL << 13)
 
 // ============================================================================
+// SCB (System Control Block) - only the registers startup.c needs
+// ============================================================================
+// VTOR is what makes the vector table a *referenced* object: without a real
+// code reference GCC's LTO deletes vector_table[] before codegen and the
+// linker's KEEP(*(.isr_vector)) then matches nothing (see CONTRACTS.md S18).
+
+typedef struct {
+  volatile uint32_t CPUID;    // CPUID base register            (0xE000ED00)
+  volatile uint32_t ICSR;     // Interrupt control and state    (0xE000ED04)
+  volatile uint32_t VTOR;     // Vector table offset register   (0xE000ED08)
+} SCB_Type;
+
+#define SCB_BASE  (0xE000ED00UL)
+#define SCB       ((SCB_Type*)SCB_BASE)
+
+// ============================================================================
 // SYSTICK
 // ============================================================================
 
