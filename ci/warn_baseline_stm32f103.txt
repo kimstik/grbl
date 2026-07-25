@@ -2,10 +2,39 @@
 # Format: normalized warnings, see ci/warn_ratchet.py header. Ratchet is
 # one-way: only remove lines here manually, after the warning is really gone.
 #
-# Known debt, tracked in grbl/platform/PLAN.md Phase 1 ("Resolve dual-canon /
-# eliminate redefinition warnings"). Entries derived from code inspection
-# (arm-none-eabi-gcc unavailable in the authoring sandbox); if a first CI run
-# reports extras, regenerate with: python3 ci/warn_ratchet.py --log <log> --emit
-hal_gpio.h: warning: "HAL_GPIO_IRQ_HANDLER" redefined
+# Regenerated from a REAL build (grbl/platform/PLAN.md Phase 1 fixed the
+# spindle_control.c / handlers.c build breakage that previously prevented
+# arm-none-eabi-gcc from ever reaching this file list). Union of BUILD=DEBUG
+# and BUILD=RELEASE logs - both produced the identical warning set. Command:
+#   make -C grbl/platform/stm32f103 BUILD=<DEBUG|RELEASE> > build.log 2>&1
+#   python3 ci/warn_ratchet.py --log build.log --emit
+#
+# Known debt (config.h vs platform.h dual pin-map canon, PLAN.md Phase 1/2):
+config.h: warning: "CONTROL_MASK" redefined
+config.h: warning: "COOLANT_FLOOD_PIN" redefined
+config.h: warning: "DIRECTION_MASK" redefined
+config.h: warning: "LIMIT_MASK" redefined
+config.h: warning: "PROBE_MASK" redefined
+config.h: warning: "SPINDLE_DIRECTION_PIN" redefined
+config.h: warning: "SPINDLE_ENABLE_PIN" redefined
+config.h: warning: "SPINDLE_PWM_MAX_VALUE" redefined
+config.h: warning: "STEPPERS_DISABLE_MASK" redefined
+config.h: warning: "STEP_MASK" redefined
+#
+# common/stm32 shared code (regs.h vs CMSIS-style headers, both stm32 ports):
+stm32_platform.h: warning: comparison of unsigned expression in '< 0' is always false [-Wtype-limits]
+stm32_timing.c: warning: "CoreDebug_DEMCR_TRCENA_Msk" redefined
+stm32_timing.c: warning: "DWT_CTRL_CYCCNTENA_Msk" redefined
+stm32_watchdog.c: warning: "IWDG_BASE" redefined
+#
+# stm32f103 platform code:
+platform.c: warning: unused parameter 'port' [-Wunused-parameter]
+#
+# GRBL core (shared with every platform; not stm32f103-specific):
+gcode.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
+motion_control.c: warning: unused parameter 'cycle_mask' [-Wunused-parameter]
 nvmem.c: warning: '<<' in boolean context, did you mean '<'? [-Wint-in-bool-context]
+report.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
+settings.c: warning: unsigned conversion from 'int' to 'uint8_t' {aka 'unsigned char'} changes value from '1024' to '0' [-Woverflow]
+stepper.c: warning: integer overflow in expression of type 'int' results in '25032704' [-Woverflow]
 system.c: warning: this statement may fall through [-Wimplicit-fallthrough=]

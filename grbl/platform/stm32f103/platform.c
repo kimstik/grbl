@@ -98,8 +98,7 @@ void hal_gpio_set_output(GPIO_TypeDef* port, uint32_t mask) {
   }
 }
 
-void hal_gpio_set_input(hal_gpio_port_t port, uint32_t mask) {
-  GPIO_TypeDef* gpio = (GPIO_TypeDef*)port;
+void hal_gpio_set_input(GPIO_TypeDef* port, uint32_t mask) {
   // Configure pins as floating input
   // Mode: 0b0100 = Input mode, floating
   for (uint8_t pin = 0; pin < 16; pin++) {

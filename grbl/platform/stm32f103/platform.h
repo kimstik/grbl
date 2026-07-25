@@ -58,6 +58,9 @@
 // This allows GRBL to build standalone without external CMSIS pack
 #include "regs.h"
 
+// Timer primitives with contract naming (STP_*/PWM_*/ISR_*), see CONTRACTS.md
+#include "timer.h"
+
 // Define hal_gpio_port_t before hal_gpio.h includes it
 // This ensures our GPIO_TypeDef* is used instead of void*
 typedef GPIO_TypeDef* hal_gpio_port_t;
@@ -167,11 +170,11 @@ typedef GPIO_TypeDef* hal_gpio_port_t;
 #define Z_LIMIT_BIT         10
 #define LIMIT_MASK          ((1<<X_LIMIT_PIN)|(1<<Y_LIMIT_PIN)|(1<<Z_LIMIT_PIN))
 
-// AVR compatibility: DDR (Data Direction Register) macros
-#define STEP_DDR                STEP_PORT
-#define DIRECTION_DDR           DIRECTION_PORT
-#define STEPPERS_DISABLE_DDR    STEPPERS_DISABLE_PORT
-#define LIMIT_DDR               LIMIT_PORT
+// GPIO_INT_ON/OFF plumbing: core passes (name_PCMSK, name_INT, name_MASK) to
+// HAL_GPIO_INTERRUPT_ENABLE/DISABLE; on STM32 the first argument is the port,
+// the second is unused (AVR PCIE bit).
+#define LIMIT_PCMSK         LIMIT_PORT
+#define LIMIT_INT           0
 
 // EXTI lines for limit switches
 #define LIMIT_EXTI_LINE_X   EXTI_Line0
@@ -194,6 +197,10 @@ typedef GPIO_TypeDef* hal_gpio_port_t;
 #define CONTROL_SAFETY_DOOR_BIT   6
 #define CONTROL_MASK              ((1<<CONTROL_RESET_PIN)|(1<<CONTROL_FEED_HOLD_PIN)|(1<<CONTROL_CYCLE_START_PIN)|(1<<CONTROL_SAFETY_DOOR_PIN))
 #define CONTROL_INVERT_MASK       CONTROL_MASK
+
+// GPIO_INT_ON plumbing (see LIMIT_PCMSK note above)
+#define CONTROL_PCMSK             CONTROL_PORT
+#define CONTROL_INT               0
 
 // EXTI lines for control pins
 #define CONTROL_EXTI_LINE_RESET       EXTI_Line3
@@ -231,14 +238,10 @@ typedef GPIO_TypeDef* hal_gpio_port_t;
 #define SPINDLE_DIRECTION_PIN   13
 #define SPINDLE_DIRECTION_BIT   13
 
-// AVR compatibility: DDR (Data Direction Register) = PORT for STM32
-#define SPINDLE_PWM_DDR         SPINDLE_PWM_PORT
-#define SPINDLE_ENABLE_DDR      SPINDLE_ENABLE_PORT
-#define SPINDLE_DIRECTION_DDR   SPINDLE_DIRECTION_PORT
-
-// PWM resolution (16-bit timer)
-// Always define for compatibility (spindle_control.c uses these unconditionally)
-#define SPINDLE_PWM_MAX_VALUE     65535  // 16-bit PWM
+// PWM duty domain: core plumbs duty as uint8_t end-to-end
+// (spindle_control.c:122, CONTRACTS.md section 6.2) - full scale MUST fit
+// uint8_t. TIM1 runs with ARR = SPINDLE_PWM_MAX_VALUE (platform.c).
+#define SPINDLE_PWM_MAX_VALUE     255
 #define SPINDLE_PWM_MIN_VALUE     1
 #define SPINDLE_PWM_OFF_VALUE     0
 #define SPINDLE_PWM_RANGE         (SPINDLE_PWM_MAX_VALUE - SPINDLE_PWM_MIN_VALUE)
@@ -255,12 +258,6 @@ typedef GPIO_TypeDef* hal_gpio_port_t;
   #define COOLANT_MIST_PORT     GPIOC
   #define COOLANT_MIST_PIN      14
   #define COOLANT_MIST_BIT      14
-#endif
-
-// AVR compatibility: DDR macros
-#define COOLANT_FLOOD_DDR       COOLANT_FLOOD_PORT
-#ifdef ENABLE_M7
-  #define COOLANT_MIST_DDR      COOLANT_MIST_PORT
 #endif
 
 // ============================================================================
@@ -332,75 +329,9 @@ void hal_gpio_interrupt_disable(GPIO_TypeDef* port, uint32_t mask);
 // ============================================================================
 // HAL TIMER MACROS
 // ============================================================================
-
-// ----------------------------------------------------------------------------
-// TIM2: Stepper Driver Interrupt (32-bit timer for high resolution)
-// ----------------------------------------------------------------------------
-
-#define HAL_TIMER_STEPPER_ISR()                 void TIM2_IRQHandler(void)
-
-void hal_timer_stepper_init(void);
-#define HAL_TIMER_STEPPER_INIT()                hal_timer_stepper_init()
-
-#define HAL_TIMER_STEPPER_SET_PERIOD(cycles)    (TIM2->ARR = (cycles))
-#define HAL_TIMER_STEPPER_GET_PERIOD()          (TIM2->ARR)
-#define HAL_TIMER_STEPPER_GET_COUNT()           (TIM2->CNT)
-
-void hal_timer_stepper_set_prescaler(uint16_t prescaler);
-#define HAL_TIMER_STEPPER_SET_PRESCALER(prescaler)  hal_timer_stepper_set_prescaler(prescaler)
-#define HAL_TIMER_STEPPER_RESET_PRESCALER()         hal_timer_stepper_set_prescaler(0)
-
-#define HAL_TIMER_STEPPER_INTERRUPT_ENABLE()    (TIM2->DIER |= TIM_DIER_UIE)
-#define HAL_TIMER_STEPPER_INTERRUPT_DISABLE()   (TIM2->DIER &= ~TIM_DIER_UIE)
-
-// Clear interrupt flag in ISR
-// FIXED: Was (TIM2->SR = ~TIM_SR_UIF) which SETS all other flags causing interrupt storm!
-// REVIEW: CRITICAL #3 - Timer interrupt flag clearing bug
-#define HAL_TIMER_STEPPER_CLEAR_FLAG()          (TIM2->SR = 0)
-
-// ----------------------------------------------------------------------------
-// TIM3: Step Pulse Reset Interrupt
-// ----------------------------------------------------------------------------
-
-#define HAL_TIMER_PULSE_RESET_ISR()             void TIM3_IRQHandler(void)
-
-void hal_timer_pulse_reset_init(void);
-#define HAL_TIMER_PULSE_RESET_INIT()            hal_timer_pulse_reset_init()
-
-#define HAL_TIMER_PULSE_RESET_SET_COUNT(count)  (TIM3->CNT = (count))
-#define HAL_TIMER_PULSE_RESET_SET_COMPARE(val)  (TIM3->ARR = (val))
-#define HAL_TIMER_PULSE_RESET_START()           (TIM3->CR1 |= TIM_CR1_CEN)
-#define HAL_TIMER_PULSE_RESET_STOP()            (TIM3->CR1 &= ~TIM_CR1_CEN)
-
-// Clear interrupt flag
-// FIXED: Was (TIM3->SR = ~TIM_SR_UIF) - same interrupt storm bug as TIM2
-// REVIEW: CRITICAL #3 - Timer interrupt flag clearing bug
-#define HAL_TIMER_PULSE_RESET_CLEAR_FLAG()      (TIM3->SR = 0)
-
-// Step pulse delay (if STEP_PULSE_DELAY is defined)
-#ifdef STEP_PULSE_DELAY
-  #define HAL_TIMER_PULSE_DELAY_ISR()           void TIM4_IRQHandler(void)
-  void hal_timer_pulse_delay_init(void);
-  #define HAL_TIMER_PULSE_DELAY_INIT()          hal_timer_pulse_delay_init()
-#endif
-
-// ----------------------------------------------------------------------------
-// TIM1: Spindle PWM (16-bit advanced timer with PWM on CH1)
-// ----------------------------------------------------------------------------
-
-#ifdef VARIABLE_SPINDLE
-
-void hal_timer_spindle_pwm_init(void);
-#define HAL_TIMER_SPINDLE_PWM_INIT()            hal_timer_spindle_pwm_init()
-
-#define HAL_TIMER_SPINDLE_PWM_SET_DUTY(duty)    (TIM1->CCR1 = (duty))
-#define HAL_TIMER_SPINDLE_PWM_GET_DUTY()        (TIM1->CCR1)
-
-#define HAL_TIMER_SPINDLE_PWM_ENABLE()          (TIM1->CCER |= TIM_CCER_CC1E)
-#define HAL_TIMER_SPINDLE_PWM_DISABLE()         (TIM1->CCER &= ~TIM_CCER_CC1E)
-#define HAL_TIMER_SPINDLE_PWM_IS_ENABLED()      (TIM1->CCER & TIM_CCER_CC1E)
-
-#endif // VARIABLE_SPINDLE
+// Stepper (TIM2), pulse reset (TIM3) and spindle PWM (TIM1) primitives live
+// in timer.h under the contract names STP_TMR_*/STP_PULSE_RESET_*/PWM_*
+// (included above). Vector wrappers with flag-clear-first are in handlers.c.
 
 // ============================================================================
 // HAL SERIAL/UART MACROS
@@ -439,8 +370,9 @@ void hal_serial_init(uint32_t baud_rate);
 #define HAL_ENABLE_INTERRUPTS()                 __enable_irq()
 #define HAL_DISABLE_INTERRUPTS()                __disable_irq()
 
-// Critical section
-#define HAL_CRITICAL_SECTION_START()            uint32_t __primask = __get_PRIMASK(); __disable_irq()
+// Critical section (save/restore, ISR-safe: CONTRACTS.md section 8.2)
+// Core consumes HAL_CRITICAL_SECTION_BEGIN/END (system.c:357-401, serial.c:153)
+#define HAL_CRITICAL_SECTION_BEGIN()            uint32_t __primask = __get_PRIMASK(); __disable_irq()
 #define HAL_CRITICAL_SECTION_END()              __set_PRIMASK(__primask)
 
 // Delay functions
@@ -485,45 +417,5 @@ void hal_gpio_init(void);
 // NVMEM (Flash emulation) functions
 void hal_nvmem_init(void);
 void hal_nvmem_flush(void);  // Flush dirty cache to flash
-
-// ============================================================================
-// AVR COMPATIBILITY - cpu_map.h stubs
-// ============================================================================
-// These are used by core GRBL code (limits.c, probe.c, system.c)
-// Platform-specific values override dummy/cpu_map.h defaults via #ifndef
-
-// Map AVR pin definitions to STM32 GPIO ports
-// NOTE: LIMIT_DDR/LIMIT_PORT/CONTROL_PORT/PROBE_PORT get real values earlier
-// in this file; these AVR-compat dummies overwrite them, and always have
-// (the #undefs below just make that explicit instead of a -Wredefined
-// warning). Whether dummy-wins is the RIGHT semantics is a pre-existing
-// question for the GPIO macro cleanup phase, not changed here.
-#undef LIMIT_DDR
-#define LIMIT_DDR     0      // Not used on STM32 (DDR is for AVR only)
-#undef LIMIT_PORT
-#define LIMIT_PORT    0      // Not used on STM32 (PORT is for AVR pullup)
-#define LIMIT_PCMSK   0      // Not used on STM32
-#define LIMIT_INT     0      // Not used on STM32
-#undef LIMIT_PIN
-#define LIMIT_PIN     GPIOB  // Used for reading limit switches (redefine as PORT)
-// LIMIT_MASK already defined above (uses pin numbers)
-
-#define CONTROL_DDR   0      // Not used on STM32
-#undef CONTROL_PORT
-#define CONTROL_PORT  0      // Not used on STM32
-#define CONTROL_PCMSK 0      // Not used on STM32
-#define CONTROL_INT   0      // Not used on STM32
-#undef CONTROL_PIN
-#define CONTROL_PIN   GPIOB  // Used for reading control pins (redefine as PORT)
-#undef CONTROL_MASK
-#define CONTROL_MASK  ((1<<3)|(1<<4)|(1<<5)|(1<<6))  // PB3-PB6 (bits, not pins)
-
-#define PROBE_DDR     0      // Not used on STM32
-#undef PROBE_PORT
-#define PROBE_PORT    0      // Not used on STM32
-#undef PROBE_PIN
-#define PROBE_PIN     GPIOC  // Used for reading probe pin (redefine as PORT)
-#undef PROBE_MASK
-#define PROBE_MASK    (1<<PROBE_BIT)  // Redefine using BIT instead of PIN
 
 #endif // PLATFORM_STM32F103_H
