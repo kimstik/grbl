@@ -110,11 +110,24 @@ without reverse-engineering an existing port.
 - [ ] **Wire SysTick_Config(48e6/1000) into startup** — discovered during delay work:
       SysTick is NEVER configured in this port, so SysTick_Handler never fires and
       hal_millis() is frozen at 0 (delay fallback keeps things functional meanwhile)
-- [ ] **Investigate pin-mask uint8_t truncation** (suspected REAL ARM bug): settings.c
-      get_step_pin_mask/get_direction_pin_mask/get_limit_pin_mask return uint8_t;
-      samd21 pin bits are >7 (e.g. bit 25) → -Woverflow shows masks truncate to 0.
-      Find consumers (limits.c homing per-axis?), assess impact, fix in PLATFORM layer
-      (core stays pristine — golden gate arbitrates any core-side proposal)
+- [x] Pin-mask truncation INVESTIGATED — verdict far worse than suspected:
+      **BUG #17 (CRITICAL): samd21 has NO WORKING MOTION PATH.** Core step pipeline
+      is a uint8_t port image (st.step_outbits/dir_outbits/axislock/invert masks);
+      STEP bits 25/27/28 (megarm) silently truncate in the ISR (compound |= gives
+      no -Woverflow) → zero step output ever; $H falsely reports homing success
+      with no motion (position lie, reachable at $22=1); $2/$3 silently dead.
+      Renode smoke (banner+$$) exercises no motion — couldn't catch it. Full
+      call-site table + disasm proof in investigation report.
+- [ ] **BUG #17 FIX (in flight): logical port-image contract** — boards define
+      logical STEP/DIR bits 0..7 (core's native assumption), samd21 gpio.h
+      translates logical↔physical in GPIO_MWO/MRD (shift for contiguous fields,
+      scatter/gather for megarm 25/27/28); platform overrides MDIR/PULLUP for
+      remapped groups; STEP_MASK becomes logical. Zero core edits; AVR unaffected
+      (logical==physical there — golden gate arbitrates).
+- [ ] **BUG #18: stepper.c:1015 int overflow on ARM** — (TICKS_PER_MICROSECOND*
+      1000000*60) = 2.88e9 > INT32_MAX at 48MHz (AVR's 9.6e8 fit). Platform-side
+      fix direction: make TICKS_PER_MICROSECOND expand unsigned (UL) so the
+      product is computed in uint32; verify where macro is defined, no core edit.
 - [ ] Regenerate ci/warn_baseline_samd21.txt from a REAL build log — 8 pre-existing
       core warnings missing (gcode/settings/stepper/motion_control/report/config.h);
       first CI run will trip the ratchet until then
