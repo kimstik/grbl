@@ -542,3 +542,52 @@ observed, without waiting for the owner):
 - In-flight agents (BUG#21 stm32 vector fix, samd21 FP twin arbiter) were briefed
   before the 2026-07-24 orchestrator-purity correction — their PLAN.md deltas will
   be authored by follow-up/scribe until new briefs embed the rule.
+- **2026-07-25 — samd21 FP=SINGLE knob applied AND runtime-arbitrated. Verdict:
+  SP-RUNTIME-PROVEN.** (agent-authored entry, per orchestrator-purity doctrine)
+  - Applied faithfully from the ch32v006 reference (89aa691): `FP ?= SINGLE`
+    Makefile knob (SINGLE|DOUBLE, applied to BOTH build flavors), the SP libm
+    prelude shim in **both** boards' preludes (`megarm/`, `generic/` — boards
+    are selected by which prelude is injected, so one-board-only would silently
+    opt the other out), and `tools/assert_no_double.sh` wired as a post-link
+    step on `$(ELF_FILE)`.
+  - **NEW CANONICAL RELEASE SIZE: 31952 text** (was 43036) — **−11084 bytes,
+    −25.8%**, 296 data / 6160 bss unchanged. 43 defined DP symbols vanished
+    (`__aeabi_dadd/dsub/dmul/ddiv`, the `__aeabi_dcmp*`/`__*df2` compare set,
+    `__ieee754_atan2/sqrt/rem_pio2`, `__kernel_sin/cos/rem_pio2`, `atan`,
+    `sin`, `cos`, `sqrt`, `floor`, `ceil`, `round`, `lround`, `trunc`, `fabs`,
+    `scalbn`, …). Exactly ONE tolerated conversion symbol remains in the whole
+    image: `__aeabi_d2f`. DEBUG (megarm): 48112 text. `FP=DOUBLE` still builds
+    (43020 text) with the assert disarmed, and the assert run by hand against
+    that ELF correctly lists 21 offenders and exits 1 — both directions proven.
+  - **The assert caught a real leak the ch32 experience predicted.** Flags +
+    shim alone landed at 35892 text with the assert RED: `_delay_ms()`'s
+    sub-millisecond remainder (`__ms - (double)ms`, `rem > 0.0`,
+    `rem * 1000.0`) was still genuine DP **arithmetic** sitting behind a
+    boundary that already "narrowed at entry" (dd5c5e7). Narrowing at entry is
+    necessary, not sufficient. Fix (platform.c): float worker `delay_us_f()`;
+    `_delay_us`/`_delay_ms` narrow exactly once via `__aeabi_d2f` and stay in
+    float/uint32 forever. That recovered the remaining 3940 bytes.
+  - **RUNTIME ARBITRATION (the point of the batch).** Renode 1.16.1 portable,
+    `ci/renode/smoke.sh` reused as-is and extended with a new arc stage
+    (`--arc` / `SMOKE_ARC=1` in smoke.sh; `arc_stage()` in `uart_probe.py`,
+    new exit code 5). On the FP=SINGLE megarm DEBUG image: banner + `$$`
+    (through `$132=`) + `G91`/`G0 X1` (MPos 0→1.000, Idle) + **`G2 X2 I1 F200`
+    — the only core path touching atan2/sqrt/cos/sin — traced a true
+    semicircle: Y peaked at exactly 1.000 (radius 1.000), no NaN/inf, no
+    error:/ALARM:, landed on (3.000, 0.000, 0.000) Idle with zero drift** +
+    `G4 P0.5` float-seconds dwell `ok` in 0.44 s + X STEP (PA25) driven high
+    410 times. Exit 0. Reproduced; arc/dwell also green on a BOARD=generic
+    image.
+  - CONTRACTS §17 authored here and marked **RUNTIME-PROVEN** (was
+    PROBE-VERIFIED-COMPILE-ONLY on the ch32 branch) — the compile-only embargo
+    on other ports shipping `FP=SINGLE` pins is lifted, with
+    `assert_no_double.sh` PASSING as the bar.
+  - Gates: AVR golden `make -C grbl/platform/atmega328p validate` **PASSED**
+    (text 30640, MD5 79af184e67b27defd27a39309ac53563); warn ratchet vs
+    `ci/warn_baseline_samd21.txt` **OK** across all 4 megarm/generic ×
+    DEBUG/RELEASE combos (5 distinct warnings, all baselined, 0 new); sibling
+    platforms untouched (diff is samd21/, ci/renode/, tools/ only).
+  - Watch-out recorded for future smoke runs: sweeping `BOARD=generic` builds
+    overwrite `build/grbl_samd21_dbg.elf`, and the PA25 STEP assertion is
+    megarm-specific — always rebuild megarm DEBUG immediately before the smoke
+    or the pin check reads as a false phantom-motion FAIL.
