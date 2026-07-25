@@ -271,6 +271,14 @@ the reviewer catches plausible-but-wrong. A batch is DONE only after both.
   (Actions possibly disabled on fork — VERIFY at cron sessions; if permanently
   disabled, local gates remain authoritative and note it here).
 
+- 2026-07-23 OWNER PROPOSAL under probe: weakify core .o via objcopy --weaken for
+  per-function platform overrides. Executor position (pending probe data):
+  blanket = NO (LTO-inline partial-interposition hazard; silent typo-override =
+  anti-linker-as-checklist; 300-function undesigned surface, static-state coupling);
+  curated allowlist = YES if probe passes (weaken.list registry + CI typo guard +
+  LTO parity via -fno-lto on overridable TUs). Real payoff target: delete the
+  duplicated samd21 serial.c/nvmem.c whole-file copies. Probe measures all three.
+
 ## Current State (update each session)
 
 - ALARM SEMANTICS (owner directive 2026-07-23): the 6h cron is FALLBACK RECOVERY
