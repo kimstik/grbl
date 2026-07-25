@@ -41,6 +41,15 @@ const stm32_platform_config_t stm32_config = {
   .gpio_model             = STM32H523_GPIO_MODEL,
 };
 
+// Ratchet for BUG #20: stm32_nvmem.c's static cache buffer is sized from
+// NVMEM_WINDOW_SIZE (Makefile define, defaults to 4096 - see stm32_nvmem.h).
+// If this platform's actual flash window ever grows past whatever
+// NVMEM_WINDOW_SIZE the Makefile supplies, fail the build instead of letting
+// stm32_nvmem_init() silently reject the write and every setting read back
+// as 0xFF at runtime.
+_Static_assert(STM32H523_FLASH_PAGE_SIZE * STM32H523_FLASH_NUM_PAGES <= NVMEM_WINDOW_SIZE,
+               "STM32H523 NVMEM window exceeds stm32_nvmem.c cache buffer (NVMEM_WINDOW_SIZE) - BUG #20 class");
+
 // ============================================================================
 // CLOCK CONFIGURATION (250 MHz from HSE 8MHz)
 // ============================================================================
