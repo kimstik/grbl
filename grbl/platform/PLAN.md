@@ -71,8 +71,9 @@ config error (SPINDLE_PWM_MIN_VALUE must be > 0).
       logs. ALL 9 CI MATRIX ROWS NOW BUILD. Inspection-era "ready" claim falsified.
 - [x] samd21 generic board BUILDS (60236/296/6160): PWM_MIN 0->1, PWM_RANGE, alias
       block restored; baseline union megarm+generic (15 entries), ratchet OK both
-- [ ] NOTE (minor): samd21 BUILD_DIR shared between DEBUG/RELEASE — stale-object
-      cross-contamination without clean; key BUILD_DIR by build type
+- [x] BUILD_DIR flavor contamination FIXED repo-wide (two-strike rule after 3rd
+      bite): BUILD_DIR/$(BUILD) in samd21, stm32 common.mk, ch32v006, sg2002,
+      _template; no-clean flavor-switch proof landed; CI/smoke/compdb unaffected
 - [ ] Resolve dual-canon: `-include` becomes THE mechanism; eliminate redefinition warnings
       (currently: `HAL_GPIO_IRQ_HANDLER` redefined, `EEPROM_SIZE` redefined)
 - [ ] Loud-failure guard: `#error` in hal.h if prelude marker missing
