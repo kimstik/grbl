@@ -9,7 +9,13 @@
 //            port uses: CTRLA 0x00, CTRLB 0x04, BAUD 0x0C, INTENCLR 0x14,
 //            INTENSET 0x16, INTFLAG 0x18, SYNCBUSY 0x1C, DATA 0x28)
 //   portA/B  GPIOPort.SAMD21_GPIO
-//   tc3/tc4  Timers.SAMD21_Timer (stepper + pulse-reset timers)
+//   tc3/tc4  Timers.SAMD21_Timer16 (stepper + pulse-reset timers).
+//            SAMD21_Timer16 is ci/renode/SAMD21_Timer16.cs - a subclass of the
+//            stock SAMD21_Timer adding native 16-bit access to COUNT/CC[]
+//            (the stock model only handles them as 32-bit; GRBL's COUNT16-mode
+//            strh writes would otherwise be dropped and TC3 MC0 - the stepper
+//            interrupt - would never fire). The .resc includes the .cs before
+//            loading this platform.
 //
 // Unmodeled peripherals are tagged so reads return a chosen constant:
 //   SYSCTRL PCLKSR  -> 0x0000FFFF : SystemInit() busy-waits on OSC8MRDY (bit 3)
@@ -51,11 +57,11 @@ portA: GPIOPort.SAMD21_GPIO @ sysbus 0x41004400
 
 portB: GPIOPort.SAMD21_GPIO @ sysbus 0x41004480
 
-tc3: Timers.SAMD21_Timer @ sysbus 0x42002C00
+tc3: Timers.SAMD21_Timer16 @ sysbus 0x42002C00
     baseFrequency: 48000000
     IRQ -> nvic@18
 
-tc4: Timers.SAMD21_Timer @ sysbus 0x42003000
+tc4: Timers.SAMD21_Timer16 @ sysbus 0x42003000
     baseFrequency: 48000000
     IRQ -> nvic@19
 

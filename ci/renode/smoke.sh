@@ -13,10 +13,19 @@
 #   MON_PORT         TCP port for the Renode monitor (default: 3457)
 #   BANNER_TIMEOUT   seconds to wait for the banner (default: 90)
 #   SMOKE_BANNER_ONLY=1  skip the "$$" settings check
+#   SMOKE_MOTION=1   (or pass --motion) also run the motion stage:
+#                    G91 + G0 X1, '?' polling, assert MPos X reaches 1.000
 #
-# Exit code: 0 on success (banner + settings), non-zero otherwise.
+# Exit code: 0 on success (banner + settings [+ motion]), non-zero otherwise.
 
 set -u
+
+for arg in "$@"; do
+  case "$arg" in
+    --motion) SMOKE_MOTION=1 ;;
+    *) echo "smoke.sh: unknown argument '$arg'" >&2; exit 3 ;;
+  esac
+done
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO_ROOT"
@@ -43,6 +52,10 @@ BANNER_ONLY_FLAG=""
 if [ "${SMOKE_BANNER_ONLY:-0}" = "1" ]; then
   BANNER_ONLY_FLAG="--banner-only"
 fi
+MOTION_FLAG=""
+if [ "${SMOKE_MOTION:-0}" = "1" ]; then
+  MOTION_FLAG="--motion"
+fi
 
 echo "smoke.sh: starting renode (uart=$UART_PORT monitor=$MON_PORT)"
 "$RENODE" --disable-gui --plain -P "$MON_PORT" \
@@ -61,8 +74,22 @@ python3 ci/renode/uart_probe.py \
   --monitor-port "$MON_PORT" \
   --banner-timeout "$BANNER_TIMEOUT" \
   --transcript "$LOG_DIR/uart_transcript.txt" \
-  $BANNER_ONLY_FLAG
+  $BANNER_ONLY_FLAG $MOTION_FLAG
 RC=$?
+
+# Motion mode: MPos reaching 1.000 proves the TC3 stepper ISR ran, but NOT
+# that step pins moved - sys_position increments even when the step-bit OR
+# truncates (BUG #17 phantom motion). Require physical X STEP (PA25) writes,
+# logged as XSTEP_HIGH by the PORT write hook in samd21_smoke.resc.
+if [ "$RC" -eq 0 ] && [ "${SMOKE_MOTION:-0}" = "1" ]; then
+  XSTEP_COUNT=$(grep -c 'XSTEP_HIGH' "$LOG_DIR/renode.log" 2>/dev/null || true)
+  if [ "${XSTEP_COUNT:-0}" -gt 0 ]; then
+    echo "PASS: X STEP pin (PA25) driven high $XSTEP_COUNT times during motion"
+  else
+    echo "FAIL: MPos advanced but X STEP pin (PA25) never went high - phantom motion (BUG #17 class)"
+    RC=4
+  fi
+fi
 
 if [ "$RC" -ne 0 ]; then
   echo "--- last 60 lines of renode.log ---"
