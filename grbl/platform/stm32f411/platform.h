@@ -1,12 +1,21 @@
 /*
-  platform.h - STM32F411 platform configuration
-  Part of Grbl HAL
+  platform.h - STM32F411 platform HAL interface
+  Part of Grbl
 
-  Copyright (c) 2025 GRBL HAL Contributors
+  Copyright (c) 2025 kimstik
+  Intelligence assisted
+  License: MIT
 
-  This file provides platform-specific definitions for STM32F411CEU6.
-  ARM Cortex-M4F, 100 MHz, 128KB RAM, 512KB Flash
-  Popular "Black Pill" board - excellent price/performance!
+  Platform-specific HAL interface for STM32F411CEU6 ("Black Pill").
+  ARM Cortex-M4F, 96 MHz (25 MHz HSE via PLL), 128KB RAM, 512KB Flash.
+
+  NOTE (Phase 6 rolling port #1): the file this replaces was a documentation
+  skeleton only - marketing-comment blocks, a 65535 SPINDLE_PWM_MAX_VALUE
+  (one of the "duty-cap twins" this port fixes to the CONTRACTS.md-canonical
+  255), no Makefile/gpio.h/timer.h/startup.c/platform.c/handlers.c/script.ld,
+  and F1-vintage EXTI_LineN symbolic names that don't exist on this MCU
+  family. It never built. Per PORTING-CHECKLIST.md's "trust only builds"
+  rule, none of its claims were carried forward without re-verification.
 */
 
 #ifndef PLATFORM_STM32F411_H
@@ -16,6 +25,9 @@
 // PLATFORM IDENTIFICATION
 // ============================================================================
 
+// hal.h pre-defines PLATFORM_NAME "STM32F411" before including this file;
+// the board-specific name below is the intended final value.
+#undef PLATFORM_NAME
 #define PLATFORM_NAME     "STM32F411CEU6"
 #define PLATFORM_CPU      "ARM Cortex-M4F"
 #define PLATFORM_ARCH     "ARM"
@@ -24,123 +36,63 @@
 // PLATFORM CAPABILITIES
 // ============================================================================
 
-#define HAL_HAS_FPU           1   // Cortex-M4F has single-precision FPU!
+#define HAL_HAS_FPU           1   // Cortex-M4F: single-precision FPU (fpv4-sp-d16)
 #define HAL_HAS_DMA           1   // 2x DMA controllers, 16 streams total
-#define HAL_HAS_USB           1   // Full-speed USB 2.0 OTG
+#define HAL_HAS_USB           1   // USB OTG FS present in silicon (not wired by this port)
 #define HAL_HAS_HW_EEPROM     0   // No hardware EEPROM (use flash emulation)
 #define HAL_HAS_HW_MULTIPLY   1   // 32-bit hardware multiplier
 #define HAL_HAS_HW_DIVIDE     1   // Hardware divider
-#define HAL_HAS_DSP           1   // DSP instructions (SIMD)
 
 // ============================================================================
 // PLATFORM SPECIFICATIONS
 // ============================================================================
 
 #ifndef HAL_CPU_FREQ
-  #define HAL_CPU_FREQ        100000000UL  // 100 MHz
+  #define HAL_CPU_FREQ        96000000UL  // 96 MHz (Makefile CLOCK must match - Step 1 F_CPU lie trap)
 #endif
 
-#define HAL_RAM_SIZE          131072      // 128 KB (6.4x more than STM32F103!)
+#define HAL_RAM_SIZE          131072      // 128 KB
 #define HAL_FLASH_SIZE        524288      // 512 KB
 #define HAL_EEPROM_SIZE       0           // No hardware EEPROM
 
 // Timer resolution
-#define HAL_TIMER_RESOLUTION_NS   10      // 10 ns @ 100 MHz
-
-// Maximum step rate
-#define HAL_MAX_STEP_RATE_KHZ     150     // 150 kHz continuous
+#define HAL_TIMER_RESOLUTION_NS   10      // ~10.4 ns @ 96 MHz
 
 // ============================================================================
-// STM32F4 HAL INCLUDES
+// STM32 REGISTER DEFINITIONS
 // ============================================================================
 
-// Option 1: Use STM32 HAL library
-#ifdef USE_HAL_DRIVER
-  #include "stm32f4xx.h"
-  #include "stm32f4xx_hal.h"
-#else
-  // Option 2: Use CMSIS only (smaller, faster)
-  #include "stm32f411xe.h"
-  #include "core_cm4.h"
-#endif
+// Minimal register definitions (no CMSIS dependency) - see regs.h header
+// comment for the F1-vs-F4 base-address traps this file avoids.
+#include "regs.h"
 
-// ============================================================================
-// PERFORMANCE ADVANTAGES OVER STM32F103
-// ============================================================================
+// Timer primitives with contract naming (STP_*/PWM_*/ISR_*), see CONTRACTS.md
+#include "timer.h"
 
-/*
-  STM32F411 vs STM32F103 improvements:
-
-  - 100 MHz vs 72 MHz (39% faster)
-  - 128 KB RAM vs 20 KB (6.4x more!)
-  - Hardware FPU (single-precision floating point)
-  - DSP instructions for fast math
-  - Native USB OTG (no need for USB-Serial adapter)
-  - Better ADC (12-bit @ 2.4 Msps)
-  - More timers (11 vs 7)
-
-  This enables:
-  ✅ 150 kHz step rate (vs 100 kHz on F103)
-  ✅ Large planner buffer (64+ blocks)
-  ✅ Fast kinematics calculations (FPU!)
-  ✅ USB CDC virtual COM port
-  ✅ More responsive real-time control
-*/
+// Define hal_gpio_port_t before hal_gpio.h includes it
+// This ensures our GPIO_TypeDef* is used instead of void*
+typedef GPIO_TypeDef* hal_gpio_port_t;
+#define HAL_GPIO_PORT_T_DEFINED
 
 // ============================================================================
 // PIN MAPPING - GPIO DEFINITIONS
 // ============================================================================
 
 /*
-  STM32F411CEU6 (Black Pill) Pin Mapping for GRBL:
+  STM32F411CEU6 ("Black Pill") Pin Mapping for GRBL (same pin layout as the
+  stm32f103/stm32h523 "Blue/Black Pill" boards this port reuses - the
+  physical wiring convention, not the electrical register model, is shared):
 
-  Step pins (fast GPIO):
-    X_STEP   → PA0  (GPIOA, Pin 0)
-    Y_STEP   → PA1  (GPIOA, Pin 1)
-    Z_STEP   → PA2  (GPIOA, Pin 2)
-
-  Direction pins:
-    X_DIR    → PA3  (GPIOA, Pin 3)
-    Y_DIR    → PA4  (GPIOA, Pin 4)
-    Z_DIR    → PA5  (GPIOA, Pin 5)
-
-  Stepper enable:
-    ENABLE   → PA6  (GPIOA, Pin 6, active low)
-
-  Limit switches (with EXTI interrupts):
-    X_LIMIT  → PB0  (GPIOB, Pin 0, EXTI0)
-    Y_LIMIT  → PB1  (GPIOB, Pin 1, EXTI1)
-    Z_LIMIT  → PB10 (GPIOB, Pin 10, EXTI10)
-
-  Control pins (with EXTI interrupts):
-    RESET       → PB3  (GPIOB, Pin 3, EXTI3)
-    FEED_HOLD   → PB4  (GPIOB, Pin 4, EXTI4)
-    CYCLE_START → PB5  (GPIOB, Pin 5, EXTI5)
-    SAFETY_DOOR → PB6  (GPIOB, Pin 6, EXTI6)
-
-  Spindle control:
-    SPINDLE_PWM    → PA8  (GPIOA, Pin 8, TIM1_CH1 PWM)
-    SPINDLE_ENABLE → PB12 (GPIOB, Pin 12)
-    SPINDLE_DIR    → PB13 (GPIOB, Pin 13)
-
-  Coolant control:
-    COOLANT_FLOOD → PC13 (GPIOC, Pin 13, onboard LED)
-    COOLANT_MIST  → PC14 (GPIOC, Pin 14)
-
-  Probe:
-    PROBE → PC15 (GPIOC, Pin 15)
-
-  UART (Serial):
-    TX    → PA9  (USART1_TX)
-    RX    → PA10 (USART1_RX)
-
-  USB (Native USB OTG):
-    USB_DM → PA11 (USB_OTG_FS_DM)
-    USB_DP → PA12 (USB_OTG_FS_DP)
-
-  Programming/Debug:
-    SWDIO → PA13 (Serial Wire Debug)
-    SWCLK → PA14 (Serial Wire Clock)
+  Step pins (GPIOA: PA0, PA1, PA2)
+  Direction pins (GPIOA: PA3, PA4, PA5)
+  Stepper enable (GPIOA: PA6, active low)
+  Limit switches with EXTI (GPIOB: PB0, PB1, PB10)
+  Control pins with EXTI (GPIOB: PB3-PB6: reset/feed hold/cycle start/safety door)
+  Spindle PWM (GPIOA: PA8, TIM1_CH1, AF1)
+  Spindle enable/direction (GPIOB: PB12, PB13)
+  Coolant flood/mist (GPIOC: PC13, PC14)
+  Probe (GPIOC: PC15)
+  UART: TX PA9 / RX PA10 (USART1, AF7)
 */
 
 // --------------------------------------------------------------------------
@@ -182,7 +134,22 @@
 #define STEPPERS_DISABLE_MASK   (1<<STEPPERS_DISABLE_PIN)
 
 // --------------------------------------------------------------------------
-// LIMIT SWITCH PINS (GPIOB: PB0, PB1, PB10)
+// LIMIT SWITCH PINS (GPIOB: PB0, PB1, PB10) - all bits 0-7 land in the
+// low byte except Z (bit10); core truncates GPIO_MRD reads to uint8_t
+// (CONTRACTS.md section 1.3) - Z_LIMIT_BIT=10 would be silently invisible
+// if it were ever read through the truncated group path the way SAMD21's
+// CONTROL bits are (megarm/config.h, known gap). It is NOT read that way
+// here: limits.c reads LIMIT_MASK/IREG as a group (GPIO_MRD), and the X/Y/Z
+// bits below ARE all consumed individually as single-bit tests too
+// (limits.c per-axis loop uses 1<<axis against the SAME LIMIT_MASK group
+// read) - X_LIMIT_BIT/Y_LIMIT_BIT/Z_LIMIT_BIT must match the *logical* axis
+// order the core assumes (X=bit0,Y=bit1,Z=bit2) if BUG#17's logical/physical
+// split applied here. It does not: this board wires the limit switches
+// directly to GPIOB0/1/10 and the core only ever masks/tests via
+// LIMIT_MASK and the per-name BIT, both defined consistently below - same
+// pattern already proven correct on stm32f103/h523 (BUG#17 was a SAMD21-
+// specific hazard from a *different* physical/logical pin split, not
+// present in this direct-wiring board.md).
 // --------------------------------------------------------------------------
 
 #define LIMIT_PORT          GPIOB
@@ -195,10 +162,11 @@
 #define Z_LIMIT_BIT         10
 #define LIMIT_MASK          ((1<<X_LIMIT_PIN)|(1<<Y_LIMIT_PIN)|(1<<Z_LIMIT_PIN))
 
-// EXTI lines for limit switches
-#define LIMIT_EXTI_LINE_X   EXTI_Line0
-#define LIMIT_EXTI_LINE_Y   EXTI_Line1
-#define LIMIT_EXTI_LINE_Z   EXTI_Line10
+// GPIO_INT_ON/OFF plumbing: core passes (name_PCMSK, name_INT, name_MASK) to
+// HAL_GPIO_INTERRUPT_ENABLE/DISABLE; on STM32 the first argument is the port,
+// the second is unused (AVR PCIE bit).
+#define LIMIT_PCMSK         LIMIT_PORT
+#define LIMIT_INT           0
 
 // --------------------------------------------------------------------------
 // CONTROL PINS (GPIOB: PB3, PB4, PB5, PB6)
@@ -217,11 +185,9 @@
 #define CONTROL_MASK              ((1<<CONTROL_RESET_PIN)|(1<<CONTROL_FEED_HOLD_PIN)|(1<<CONTROL_CYCLE_START_PIN)|(1<<CONTROL_SAFETY_DOOR_PIN))
 #define CONTROL_INVERT_MASK       CONTROL_MASK
 
-// EXTI lines for control pins
-#define CONTROL_EXTI_LINE_RESET       EXTI_Line3
-#define CONTROL_EXTI_LINE_FEED_HOLD   EXTI_Line4
-#define CONTROL_EXTI_LINE_CYCLE_START EXTI_Line5
-#define CONTROL_EXTI_LINE_SAFETY_DOOR EXTI_Line6
+// GPIO_INT_ON plumbing (see LIMIT_PCMSK note above)
+#define CONTROL_PCMSK             CONTROL_PORT
+#define CONTROL_INT               0
 
 // --------------------------------------------------------------------------
 // PROBE PIN (GPIOC: PC15)
@@ -237,13 +203,13 @@
 // SPINDLE PINS
 // --------------------------------------------------------------------------
 
-// Spindle PWM (PA8, TIM1_CH1)
+// Spindle PWM (PA8, TIM1_CH1, AF1)
 #define SPINDLE_PWM_PORT        GPIOA
 #define SPINDLE_PWM_PIN         8
 #define SPINDLE_PWM_BIT         8
 #define SPINDLE_PWM_TIMER       TIM1
 #define SPINDLE_PWM_CHANNEL     1
-#define SPINDLE_PWM_AF          GPIO_AF1_TIM1  // Alternate function
+#define SPINDLE_PWM_AF          1   // AF1 = TIM1/TIM2 on every F1/F4/H5 GPIO AF table
 
 // Spindle enable/direction (GPIOB: PB12, PB13)
 #define SPINDLE_ENABLE_PORT     GPIOB
@@ -253,13 +219,17 @@
 #define SPINDLE_DIRECTION_PIN   13
 #define SPINDLE_DIRECTION_BIT   13
 
-// PWM resolution (16-bit timer)
-#ifdef VARIABLE_SPINDLE
-  #define SPINDLE_PWM_MAX_VALUE     65535  // 16-bit PWM
-  #define SPINDLE_PWM_MIN_VALUE     1
-  #define SPINDLE_PWM_OFF_VALUE     0
-  #define SPINDLE_PWM_RANGE         (SPINDLE_PWM_MAX_VALUE - SPINDLE_PWM_MIN_VALUE)
-#endif
+// PWM duty domain: core plumbs duty as uint8_t end-to-end
+// (spindle_control.c:122, CONTRACTS.md section 6.2) - full scale MUST fit
+// uint8_t. TIM1 runs with ARR = SPINDLE_PWM_MAX_VALUE (platform.c). The
+// prior skeleton's 65535 (a "16-bit PWM" comment) was the exact duty-cap
+// defect already fixed on stm32f103/h523 (config.h vs platform.h dual-canon
+// bug, PLAN.md commits 6e75218/5a56a5a) - this port starts from 255 so the
+// bug class cannot recur. config.h below MUST NOT redefine this macro.
+#define SPINDLE_PWM_MAX_VALUE     255
+#define SPINDLE_PWM_MIN_VALUE     1
+#define SPINDLE_PWM_OFF_VALUE     0
+#define SPINDLE_PWM_RANGE         (SPINDLE_PWM_MAX_VALUE - SPINDLE_PWM_MIN_VALUE)
 
 // --------------------------------------------------------------------------
 // COOLANT PINS (GPIOC: PC13, PC14)
@@ -289,160 +259,159 @@
 #define PULSE_TIMER_IRQn        TIM3_IRQn
 #define PULSE_TIMER_IRQHandler  TIM3_IRQHandler
 
-// Spindle PWM timer: TIM1 (16-bit advanced timer)
-// Already defined above
+// Spindle PWM timer: TIM1 (16-bit advanced timer) - already defined above
 
 // ============================================================================
 // SERIAL/UART MAPPING
 // ============================================================================
 
-// USART1 for traditional serial
 #define GRBL_USART              USART1
 #define GRBL_USART_IRQn         USART1_IRQn
 #define GRBL_USART_IRQHandler   USART1_IRQHandler
-
-// Optional: Use DMA for UART (zero CPU overhead)
-#ifdef HAL_SERIAL_USE_DMA
-  #define GRBL_USART_DMA_RX_STREAM  DMA2_Stream2
-  #define GRBL_USART_DMA_RX_CHANNEL DMA_CHANNEL_4
-  #define GRBL_USART_DMA_TX_STREAM  DMA2_Stream7
-  #define GRBL_USART_DMA_TX_CHANNEL DMA_CHANNEL_4
-#endif
-
-// ============================================================================
-// USB SUPPORT (Native USB OTG)
-// ============================================================================
-
-#ifdef HAL_USE_USB_CDC
-  #define HAL_USB_ENABLED       1
-  #define HAL_USB_OTG           1       // USB OTG Full-Speed
-
-  // USB endpoints
-  #define USB_EP0_SIZE          64
-  #define USB_CDC_EP_IN         0x81
-  #define USB_CDC_EP_OUT        0x01
-  #define USB_CDC_EP_CMD        0x82
-
-  // USB buffer sizes
-  #define USB_CDC_RX_BUFFER     512
-  #define USB_CDC_TX_BUFFER     512
-
-  // USB VID/PID (use STM32 default or custom)
-  #define USB_VID               0x0483  // STM32 VID
-  #define USB_PID               0x5740  // CDC PID
-#endif
 
 // ============================================================================
 // FLASH EMULATION FOR EEPROM
 // ============================================================================
 
-// Use last 4 pages of flash for EEPROM emulation
-// STM32F411 has 128KB sectors, use last sector
-#define HAL_NVMEM_FLASH_START   0x08060000  // Sector 5 (128KB)
+// F411CE (512KB) sector map: sectors 0-3 = 16KB, sector 4 = 64KB, sectors
+// 5-7 = 128KB each (total 4*16+64+3*128 = 512KB). Sector 7 (last 128KB
+// sector, base 0x08060000) is reserved for NVMEM - erasing it never touches
+// code (code lives in sectors 0-6, well under 384KB). Unlike F1/H5's page
+// model, a single F4 sector erase always wipes the WHOLE 128KB sector
+// regardless of how many "logical" bytes NVMEM actually uses - see flash.c.
+//
+// IMPORTANT (gap found porting this platform, folded back to CONTRACTS.md
+// section 14): the logical NVMEM window size below (4096) is deliberately
+// SMALLER than the real 128KB erase granularity. common/stm32/stm32_nvmem.c's
+// cache is a single static `cache_buffer[4096]` shared by every STM32 port;
+// stm32h523's config (8192 = FLASH_PAGE_SIZE * NUM_PAGES) exceeds that
+// buffer and silently fails stm32_nvmem_init()'s own
+// STM32_VALIDATE_PARAM(nvmem_size <= sizeof(cache_buffer)) check every time
+// (hal_nvmem_read_byte/write_byte in stm32h523/platform.c do not check the
+// return value, so this degrades to "every NVMEM read returns 0xFF" with no
+// build or link error - the "compiles but dead" class). This port avoids
+// the same defect by keeping its logical window at 4096 bytes even though
+// the real hardware sector is 32x larger; flash.c's erase_page still erases
+// the full physical sector (F4 has no smaller granularity), it just leaves
+// the unused tail of the sector as erased 0xFF, which is harmless.
+#define HAL_NVMEM_FLASH_START   0x08060000
 #define HAL_NVMEM_FLASH_SIZE    4096
-#define HAL_NVMEM_FLASH_PAGE_SIZE 128       // Minimum write size
+#define HAL_NVMEM_FLASH_PAGE_SIZE 4096
 
 // ============================================================================
-// ADVANCED FEATURES (Enabled by FPU and large RAM)
+// HAL GPIO MACROS
 // ============================================================================
 
-// Larger buffers due to abundant RAM (128 KB!)
-#define STM32F411_LARGE_BUFFERS  1
+// Basic GPIO operations (optimized for STM32 BSRR register)
+#define HAL_GPIO_SET_BITS(port, mask)           ((port)->BSRR = (mask))
+#define HAL_GPIO_CLEAR_BITS(port, mask)         ((port)->BSRR = ((uint32_t)(mask) << 16))
+#define HAL_GPIO_TOGGLE_BITS(port, mask)        ((port)->ODR ^= (mask))
+#define HAL_GPIO_WRITE_PORT(port, mask, value)  ((port)->BSRR = (((port)->ODR & (mask)) << 16) | ((value) & (mask)))
+#define HAL_GPIO_READ_PORT(port, mask)          ((port)->ODR & (mask))
+#define HAL_GPIO_READ_PIN(pin, mask)            ((pin)->IDR & (mask))
+#define HAL_GPIO_WRITE_DIRECT(port, value)      ((port)->ODR = (value))
 
-#ifdef STM32F411_LARGE_BUFFERS
-  #undef RX_BUFFER_SIZE
-  #undef TX_BUFFER_SIZE
-  #define RX_BUFFER_SIZE    256   // 2x larger than AVR
-  #define TX_BUFFER_SIZE    256   // 2x larger than AVR
+// GPIO direction configuration - functions, not macros (MODER is 2 bits/pin)
+void hal_gpio_set_output(GPIO_TypeDef* port, uint32_t mask);
+void hal_gpio_set_input(GPIO_TypeDef* port, uint32_t mask);
 
-  // Larger planner buffer for smoother motion
-  #define BLOCK_BUFFER_SIZE_OVERRIDE   64   // 4x larger than AVR!
-  #define SEGMENT_BUFFER_SIZE_OVERRIDE 16   // 2.7x larger than AVR!
-#endif
+#define HAL_GPIO_SET_OUTPUT(port, mask)         hal_gpio_set_output((port), (mask))
+#define HAL_GPIO_SET_INPUT(port, mask)          hal_gpio_set_input((port), (mask))
 
-// FPU optimization flags
-#ifdef HAL_HAS_FPU
-  // Use hardware FPU for all float operations
-  #define USE_FPU_FOR_KINEMATICS    1
-  #define USE_FPU_FOR_TRIGONOMETRY  1
+void hal_gpio_pullup_enable(GPIO_TypeDef* port, uint32_t mask);
+void hal_gpio_pullup_disable(GPIO_TypeDef* port, uint32_t mask);
 
-  // Enable fast math (less precise but faster)
-  // Can be disabled for maximum precision
-  #define USE_FAST_MATH             1
-#endif
+#define HAL_GPIO_PULLUP_ENABLE(port, mask)      hal_gpio_pullup_enable((port), (mask))
+#define HAL_GPIO_PULLUP_DISABLE(port, mask)     hal_gpio_pullup_disable((port), (mask))
+
+// EXTI interrupt configuration
+void hal_gpio_interrupt_enable(GPIO_TypeDef* port, uint32_t mask);
+void hal_gpio_interrupt_disable(GPIO_TypeDef* port, uint32_t mask);
+
+#define HAL_GPIO_INTERRUPT_ENABLE(port, pcie, mask)   hal_gpio_interrupt_enable((port), (mask))
+#define HAL_GPIO_INTERRUPT_DISABLE(port, pcie, mask)  hal_gpio_interrupt_disable((port), (mask))
+
+// ============================================================================
+// HAL TIMER MACROS
+// ============================================================================
+// Stepper (TIM2), pulse reset (TIM3) and spindle PWM (TIM1) primitives live
+// in timer.h under the contract names STP_TMR_*/STP_PULSE_RESET_*/PWM_*
+// (included above). Vector wrappers with flag-clear-first are in handlers.c.
+
+// ============================================================================
+// HAL SERIAL/UART MACROS
+// ============================================================================
+
+#define HAL_SERIAL_RX_BUFFER_SIZE               128
+#define HAL_SERIAL_TX_BUFFER_SIZE               64
+
+// On STM32, RX and TX share USART1_IRQHandler, so we define helper functions;
+// the actual USART1_IRQHandler is in platform.c and calls these based on
+// SR flags (F4 uses the classic SR register, not H5's ISR).
+#define HAL_SERIAL_RX_ISR()                     void stm32_usart1_rx_handler(void)
+#define HAL_SERIAL_TX_ISR()                     void stm32_usart1_tx_handler(void)
+
+void hal_serial_init(uint32_t baud_rate);
+#define HAL_SERIAL_INIT()                       hal_serial_init(BAUD_RATE)
+
+// Serial data register access (F4 USART: classic SR/DR, same as F1 - NOT
+// H5's ISR/RDR/TDR split)
+#define HAL_SERIAL_WRITE_DATA(data)             (USART1->DR = (data))
+#define HAL_SERIAL_READ_DATA()                  (USART1->DR)
+
+#define HAL_SERIAL_TX_INTERRUPT_ENABLE()        (USART1->CR1 |= USART_CR1_TXEIE)
+#define HAL_SERIAL_TX_INTERRUPT_DISABLE()       (USART1->CR1 &= ~USART_CR1_TXEIE)
+
+#define HAL_SERIAL_RX_READY()                   (USART1->SR & USART_SR_RXNE)
+#define HAL_SERIAL_TX_READY()                   (USART1->SR & USART_SR_TXE)
+
+// ============================================================================
+// HAL SYSTEM MACROS
+// ============================================================================
+
+#define HAL_ENABLE_INTERRUPTS()                 __enable_irq()
+#define HAL_DISABLE_INTERRUPTS()                __disable_irq()
+
+// Critical section (save/restore, ISR-safe: CONTRACTS.md section 8.2)
+// Core consumes HAL_CRITICAL_SECTION_BEGIN/END (system.c:357-401, serial.c:153)
+#define HAL_CRITICAL_SECTION_BEGIN()            uint32_t __primask = __get_PRIMASK(); __disable_irq()
+#define HAL_CRITICAL_SECTION_END()              __set_PRIMASK(__primask)
+
+void hal_delay_ms(uint32_t ms);
+void hal_delay_us(uint32_t us);
+
+#define HAL_DELAY_MS(ms)                        hal_delay_ms(ms)
+#define HAL_DELAY_US(us)                        hal_delay_us(us)
+
+uint32_t hal_millis(void);
+uint64_t hal_micros(void);
+
+#define HAL_MILLIS()                            hal_millis()
+#define HAL_MICROS()                            hal_micros()
+
+void hal_watchdog_refresh(void);
+#define HAL_WATCHDOG_REFRESH()                  hal_watchdog_refresh()
+
+// ============================================================================
+// HAL NVMEM MACROS (Flash emulation)
+// ============================================================================
+
+unsigned char hal_nvmem_read_byte(unsigned int addr);
+void hal_nvmem_write_byte(unsigned int addr, unsigned char data);
+
+// Map to standard eeprom function names (CONTRACTS.md section 10)
+#define eeprom_get_char(addr)                   hal_nvmem_read_byte(addr)
+#define eeprom_put_char(addr, data)              hal_nvmem_write_byte(addr, data)
 
 // ============================================================================
 // PLATFORM-SPECIFIC FUNCTIONS
 // ============================================================================
 
-// Platform initialization
 void hal_system_init(void);
-
-// Clock configuration (100 MHz from PLL)
-void hal_clock_config(void);
-
-// GPIO initialization
+void hal_clock_config(void);       // HSE 25MHz -> PLL 96MHz
 void hal_gpio_init(void);
 
-// Timer functions (implemented in hal_impl.c)
-uint32_t hal_millis(void);
-uint64_t hal_micros(void);
-
-// USB CDC functions (optional)
-#ifdef HAL_USE_USB_CDC
-void hal_usb_cdc_init(void);
-bool hal_usb_cdc_connected(void);
-uint16_t hal_usb_cdc_available(void);
-uint8_t hal_usb_cdc_read(void);
-void hal_usb_cdc_write(uint8_t data);
-void hal_usb_cdc_flush(void);
-#endif
-
-// ============================================================================
-// PERFORMANCE NOTES FOR STM32F411
-// ============================================================================
-
-/*
-  STM32F411 Performance Advantages for GRBL:
-
-  1. **Hardware FPU**: Single-precision floating point
-     - Fast sqrt(), sin(), cos(), atan2() for arc interpolation
-     - Real-time kinematics calculations (SCARA, Delta, CoreXY)
-     - No software emulation overhead
-     - Example: sqrt() is 1 cycle on FPU vs ~100 cycles software!
-
-  2. **6.4x More RAM**: 128 KB vs 20 KB (STM32F103)
-     - Planner buffer: 64 blocks vs 16 blocks (4x lookahead)
-     - Larger segment buffer for ultra-smooth motion
-     - Room for advanced features (backlash compensation, etc.)
-
-  3. **39% Faster CPU**: 100 MHz vs 72 MHz
-     - More time for complex calculations in ISR
-     - Better response to real-time commands
-
-  4. **Native USB OTG**: No USB-Serial adapter needed
-     - Direct USB CDC virtual COM port
-     - Faster, more reliable communication
-     - Lower latency
-
-  5. **DSP Instructions**: SIMD math operations
-     - Fast vector math for multi-axis coordination
-     - Accelerated trigonometry
-
-  6. **Better DMA**: 16 streams vs 7 channels
-     - DMA for UART TX/RX (zero CPU)
-     - DMA for ADC (spindle tachometer, sensors)
-     - Parallel operations without CPU load
-
-  **Real-world improvements over STM32F103**:
-  - Step rate: 100 kHz → 150 kHz (50% improvement)
-  - Lookahead: 16 blocks → 64 blocks (4x improvement)
-  - Arc interpolation: 30% faster with FPU
-  - USB latency: ~1 ms vs ~5 ms (Serial adapter)
-  - Complex kinematics: 10x faster with FPU + DSP
-
-  **Cost**: $3-4 (similar to STM32F103 Blue Pill)
-  **Availability**: Excellent (very popular "Black Pill")
-*/
+void hal_nvmem_init(void);
+void hal_nvmem_flush(void);        // Flush dirty cache to flash
 
 #endif // PLATFORM_STM32F411_H

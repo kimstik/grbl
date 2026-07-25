@@ -35,6 +35,12 @@ jobs:
           - platform: stm32h523
             build: RELEASE
             toolchain-packages: gcc-arm-none-eabi libnewlib-arm-none-eabi
+          - platform: stm32f411
+            build: DEBUG
+            toolchain-packages: gcc-arm-none-eabi libnewlib-arm-none-eabi
+          - platform: stm32f411
+            build: RELEASE
+            toolchain-packages: gcc-arm-none-eabi libnewlib-arm-none-eabi
           - platform: samd21
             board: megarm
             build: DEBUG

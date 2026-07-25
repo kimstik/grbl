@@ -27,6 +27,25 @@ These were previously listed as "100% Complete / Production Ready". That was nev
 - **What's broken**: the platform Makefile never sets `CFLAGS_EXTRA` (a copy/paste omission — stm32f103's Makefile does), so `-I../common/dummy` never lands on the command line and the very first file fails: `main.c: fatal error: avr/pgmspace.h: No such file or directory`.
 - **Fix tracked**: [PLAN.md](PLAN.md) Phase 1
 
+### STM32F411CEU6 ("Black Pill", ARM Cortex-M4F) — ✅ built (Phase 6 rolling port #1)
+- **Status**: 🟢 Builds clean, zero `PORT_TODO_*`, ready for hardware validation
+- **Architecture**: ARM Cortex-M4F, 96MHz (HSE 25MHz -> PLL, PLLM=25/PLLN=192/PLLP=2)
+- **Memory**: 128KB RAM, 512KB Flash
+- **FPU**: `-mfpu=fpv4-sp-d16 -mfloat-abi=hard` (CONTRACTS.md section 15 item 5 justifies hard vs softfp)
+- **Code reuse**: GPIO/clock-config shape from stm32h523 (F4-style MODER/OTYPER/PUPDR/AFR); EXTI
+  dispatch and USART SR/DR shape from stm32f103 (F411 is NOT H5 on either of those two axes,
+  despite sharing H5's GPIO model — see CONTRACTS.md section 15 items 1-3); flash.c is new
+  (F4 sector erase, distinct from both F1/H5 page erase — section 15 item 4).
+- **Verified this session**: `make BUILD=DEBUG` and `make BUILD=RELEASE` both link with zero
+  `PORT_TODO_*` and zero undefined symbols. DEBUG: `.text` 48472B / RAM (`.data`+`.bss`) 6236B.
+  RELEASE: `.text` 28644B / RAM 6004B (of 512KB flash / 128KB RAM). Golden AVR gate re-verified
+  PASSED; stm32f103/stm32h523/samd21/ch32v006 sibling builds re-verified untouched.
+- **Known gap found (not introduced) while porting**: stm32h523's NVMEM cache-buffer sizing has a
+  latent overflow (CONTRACTS.md section 15 item 4) — documented, not fixed there (out of this
+  port's gate), avoided in stm32f411's own config.
+- **CI**: two matrix rows added (`stm32f411` × `{DEBUG, RELEASE}`), `ci/warn_baseline_stm32f411.txt`
+  generated from real build logs.
+
 ---
 
 ## In Progress Platforms
@@ -97,11 +116,15 @@ There was no CI when this roadmap was first written; there is now (landed 2026-0
 
 ## Planned Platforms
 
-### 1. STM32F411CEU6 ("Black Pill", ARM Cortex-M4F)
+### 1. STM32F411CEU6 ("Black Pill", ARM Cortex-M4F) — ✅ DONE (Phase 6 rolling port #1)
 - **Priority**: HIGH — first item in PLAN.md's Phase 6 rolling-ports queue; toolchain already in CI and large reuse expected via stm32_common
-- **Architecture**: ARM Cortex-M4F, 100MHz
+- **Architecture**: ARM Cortex-M4F, 96MHz (see status entry above — 100MHz would need PLLP=/1 with a
+  different PLLN, but 96MHz is the standard Black Pill config that also yields a clean 48MHz USB
+  clock on PLLQ, so this port uses the community-standard value rather than the datasheet's
+  absolute maximum)
 - **Memory**: 128KB RAM, 512KB Flash
-- **Current status**: directory scaffolded (`avr/` shim + a `platform.h` skeleton) — no Makefile, startup.c, or platform.c yet; not a real port
+- **Current status**: full port complete — see the "STM32F411CEU6" status entry earlier in this
+  file. Builds clean, zero `PORT_TODO_*`, CI matrix rows added, ready for hardware validation.
 - **Target use case**: high-performance CNC on cheap, widely available hardware
 
 ### 2. dsPIC33AK128MC102 (motor-control DSC — third ISA family)
