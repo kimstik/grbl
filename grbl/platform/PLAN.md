@@ -202,7 +202,10 @@ entry (one line, composite action) → fold discovered contract gaps back into
 Phase-2 docs + `_template` → commit, push, tick here, update Current State.
 
 Priority order (revise as hardware/toolchain reality dictates):
-- [ ] stm32f411 (ARM M4, toolchain already in CI, likely large reuse via stm32 common)
+- [x] stm32f411 COMPLETE (rolling #1): zero PORT_TODO both flavors (D 48472 /
+      R 28644), 13-row CI matrix, baseline real-log (14). Old dir was fiction
+      (never built, duty-cap twin inside). CONTRACTS §15: 7 family-mix traps
+      (F4 = H5-GPIO + F1-EXTI/USART hybrid; TIM1@0x40010000 else SDIO hit).
 - [ ] **dsPIC33AK128MC102** (owner-requested 2026-07-23; chip chosen by executor:
       28-pin = ATmega328p DIP-28 heir, 200 MHz, DP-FPU, motor-control PWM + SCCP/MCCP,
       PPS pin remap eases 28-pin budget; MC106 Curiosity = community hardware variant.
@@ -353,6 +356,12 @@ the reviewer catches plausible-but-wrong. A batch is DONE only after both.
 - PHASE 6 ROLLING STARTED: stm32f411 port dispatched (f103+common donors, F4
   specifics briefed: PLL/FPU/MODER/SR-DR, all contract lessons enumerated).
   Next in queue after f411: dsPIC33AK128MC102 (EULA approved, recipe verified).
+
+- **BUG #20 (HIGH, h523)**: NVMEM window 8192B > shared stm32_nvmem.c hardcoded
+  4096B cache -> silent 0xFF reads, settings never persist. Found by f411 port
+  work. Fix dispatched (parametrize-or-shrink + _Static_assert so the CLASS
+  cannot recur). dsPIC33AK M1-M3 dispatched (third ISA, EULA ok, recipe from
+  Decision Log; §16 gap-log expected).
 
 ## Current State (update each session)
 
