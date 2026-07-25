@@ -246,6 +246,13 @@ Priority order (revise as hardware/toolchain reality dictates):
         warn baseline from real logs
 - [ ] hc32f460 (ARM M4, vendor-exotic — tests contract completeness)
 - [ ] sg2002 (RISC-V 64, linux-class — decide scope first: bare-metal vs linux userspace)
+- [ ] **ch570** (owner-requested 2026-07-24: "много памяти, недорогой"): shaped as
+      WCH-family sub-target — extract common/wch/ layer (stm32-common precedent),
+      ch32v006 refactor gated by its own zero-PORT_TODO + size invariance (common
+      code is PROVEN OUT of working code, not written); ch570 = chip dir consuming
+      common/wch + delta. Recon (commonality matrix, core/ISA/flash-model/PFIC
+      deltas, ch32fun cross-check) in flight; extraction batch AFTER ch32-diet
+      lands (Makefile conflict avoidance).
 - [ ] any new platform dir that appears — same loop
 
 Standing laws for every port: reuse before write (stm32 common.mk pattern, common/
