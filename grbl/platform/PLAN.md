@@ -107,9 +107,12 @@ without reverse-engineering an existing port.
 
 - [x] `_delay_us()` / `_delay_ms()` implemented (calibrated 3-cycle asm loop +
       hal_millis poll with handler-mode/PRIMASK/no-SysTick fallback; disasm-verified)
-- [ ] **Wire SysTick_Config(48e6/1000) into startup** — discovered during delay work:
-      SysTick is NEVER configured in this port, so SysTick_Handler never fires and
-      hal_millis() is frozen at 0 (delay fallback keeps things functional meanwhile)
+- [x] **SysTick wired** (Reset_Handler post-SystemInit; reused core_cm0plus.h
+      SysTick_Config; demoted to prio 3 via SHPR3 — M0+ equal-prio never preempts,
+      tie arbitration favors motion/serial). Runtime evidence in Renode:
+      system_milliseconds advancing at 1kHz (+5012/~5s); G4 P5 dwell PC-sampling:
+      hal_millis/_delay_ms hits, ZERO delay_busy_loop → polling path live.
+      DEBUG 60284/296/6160 (+88), RELEASE 42596. Golden PASSED, ratchet OK.
 - [x] Pin-mask truncation INVESTIGATED — verdict far worse than suspected:
       **BUG #17 (CRITICAL): samd21 has NO WORKING MOTION PATH.** Core step pipeline
       is a uint8_t port image (st.step_outbits/dir_outbits/axislock/invert masks);
