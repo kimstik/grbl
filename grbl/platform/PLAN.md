@@ -334,6 +334,12 @@ the reviewer catches plausible-but-wrong. A batch is DONE only after both.
   deadlock on emulated reboot). Smoke+negative control re-verified, elf
   byte-identical (CI-only). B3 h523 landed; f103 twin fix in flight.
 
+- ~13:50 UTC 2026-07-24: limit wave (resets 15:00) killed ch32 Steps 3-6 (had
+  CH32V006 RM extracted in worktree — asset preserved) and f103 twin duty-fix
+  (mechanism confirmed, pre-disasm). BOTH resumed immediately via SendMessage
+  (context+worktrees intact). If resumes die again: 15:13 cron recovers with
+  this note. Owner directive active: "аккуратно развиваем прогресс по плану".
+
 ## Current State (update each session)
 
 - ALARM SEMANTICS (owner directive 2026-07-23): the 6h cron is FALLBACK RECOVERY
