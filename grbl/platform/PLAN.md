@@ -203,9 +203,8 @@ Priority order (revise as hardware/toolchain reality dictates):
       28-pin = ATmega328p DIP-28 heir, 200 MHz, DP-FPU, motor-control PWM + SCCP/MCCP,
       PPS pin remap eases 28-pin budget; MC106 Curiosity = community hardware variant.
       Third ISA family (non-ARM, non-RISC-V) — hardest portability stress test.
-      Toolchain: MPLAB XC-DSC, recently free incl. optimizations; NOT apt-installable —
-      CI via cached Microchip installer silent-mode, fallback build-only-local with
-      ledger note, same pattern as ch32v006)
+      Toolchain: XC-DSC verified recipe in Decision Log. **EULA APPROVED BY OWNER
+      2026-07-24** — unattended CI wiring authorized, no remaining blockers)
 - [ ] hc32f460 (ARM M4, vendor-exotic — tests contract completeness)
 - [ ] sg2002 (RISC-V 64, linux-class — decide scope first: bare-metal vs linux userspace)
 - [ ] any new platform dir that appears — same loop
@@ -308,6 +307,13 @@ the reviewer catches plausible-but-wrong. A batch is DONE only after both.
   dead in realtime. Found via weakify-probe side table; verified by grep. Fix
   dispatched to Renode agent (blocks its motion smoke ? polling) — mirror core
   switch verbatim + prove ? returns <...MPos...> in Renode, then motion test.
+
+- OWNER DIRECTIVES 2026-07-24: (1) dsPIC EULA approved — CI wiring unblocked;
+  (2) alarm now UNCONDITIONAL 3h grid :13 (job 16d87106; prior 6h job died with
+  a context compaction — session-only store, known behavior); (3) TEST/REVIEW
+  FOCUS = PORT CODE ONLY (grbl/platform/*, ci/*): core is presumed clean, do
+  not spend review/test cycles hunting core bugs (aligns with byte-proven
+  template philosophy).
 
 ## Current State (update each session)
 
