@@ -10,6 +10,7 @@
   Uses 8KB pages, dual-bank architecture.
 */
 
+#include <stddef.h>
 #include "../common/stm32/stm32_flash.h"
 #include "../common/stm32/stm32_timing.h"
 #include "regs.h"

@@ -58,6 +58,9 @@
 // This allows GRBL to build standalone without external CMSIS pack
 #include "regs.h"
 
+// Timer primitives with contract naming (STP_*/PWM_*/ISR_*), see CONTRACTS.md
+#include "timer.h"
+
 // Define hal_gpio_port_t before hal_gpio.h includes it
 // This ensures our GPIO_TypeDef* is used instead of void*
 typedef GPIO_TypeDef* hal_gpio_port_t;
@@ -167,6 +170,12 @@ typedef GPIO_TypeDef* hal_gpio_port_t;
 #define Z_LIMIT_BIT         10
 #define LIMIT_MASK          ((1<<X_LIMIT_PIN)|(1<<Y_LIMIT_PIN)|(1<<Z_LIMIT_PIN))
 
+// GPIO_INT_ON/OFF plumbing: core passes (name_PCMSK, name_INT, name_MASK) to
+// HAL_GPIO_INTERRUPT_ENABLE/DISABLE; on STM32 the first argument is the port,
+// the second is unused (AVR PCIE bit).
+#define LIMIT_PCMSK         LIMIT_PORT
+#define LIMIT_INT           0
+
 // EXTI lines for limit switches
 #define LIMIT_EXTI_LINE_X   EXTI_Line0
 #define LIMIT_EXTI_LINE_Y   EXTI_Line1
@@ -188,6 +197,10 @@ typedef GPIO_TypeDef* hal_gpio_port_t;
 #define CONTROL_SAFETY_DOOR_BIT   6
 #define CONTROL_MASK              ((1<<CONTROL_RESET_PIN)|(1<<CONTROL_FEED_HOLD_PIN)|(1<<CONTROL_CYCLE_START_PIN)|(1<<CONTROL_SAFETY_DOOR_PIN))
 #define CONTROL_INVERT_MASK       CONTROL_MASK
+
+// GPIO_INT_ON plumbing (see LIMIT_PCMSK note above)
+#define CONTROL_PCMSK             CONTROL_PORT
+#define CONTROL_INT               0
 
 // EXTI lines for control pins
 #define CONTROL_EXTI_LINE_RESET       EXTI_Line3
@@ -225,13 +238,15 @@ typedef GPIO_TypeDef* hal_gpio_port_t;
 #define SPINDLE_DIRECTION_PIN   13
 #define SPINDLE_DIRECTION_BIT   13
 
-// PWM resolution (16-bit timer)
-#ifdef VARIABLE_SPINDLE
-  #define SPINDLE_PWM_MAX_VALUE     65535  // 16-bit PWM
-  #define SPINDLE_PWM_MIN_VALUE     1
-  #define SPINDLE_PWM_OFF_VALUE     0
-  #define SPINDLE_PWM_RANGE         (SPINDLE_PWM_MAX_VALUE - SPINDLE_PWM_MIN_VALUE)
-#endif
+// PWM duty domain: core plumbs duty as uint8_t end-to-end
+// (spindle_control.c:122, CONTRACTS.md section 6.2) - full scale MUST fit
+// uint8_t. TIM1 runs with ARR = SPINDLE_PWM_MAX_VALUE (platform.c). A wider
+// value here (e.g. the previous 65535) is a contract violation: it truncates
+// silently in the core's uint8_t duty plumbing.
+#define SPINDLE_PWM_MAX_VALUE     255
+#define SPINDLE_PWM_MIN_VALUE     1
+#define SPINDLE_PWM_OFF_VALUE     0
+#define SPINDLE_PWM_RANGE         (SPINDLE_PWM_MAX_VALUE - SPINDLE_PWM_MIN_VALUE)
 
 // --------------------------------------------------------------------------
 // COOLANT PINS (GPIOC: PC13, PC14)
@@ -319,75 +334,9 @@ void hal_gpio_interrupt_disable(GPIO_TypeDef* port, uint32_t mask);
 // ============================================================================
 // HAL TIMER MACROS
 // ============================================================================
-
-// ----------------------------------------------------------------------------
-// TIM2: Stepper Driver Interrupt (32-bit timer for high resolution)
-// ----------------------------------------------------------------------------
-
-#define HAL_TIMER_STEPPER_ISR()                 void TIM2_IRQHandler(void)
-
-void hal_timer_stepper_init(void);
-#define HAL_TIMER_STEPPER_INIT()                hal_timer_stepper_init()
-
-#define HAL_TIMER_STEPPER_SET_PERIOD(cycles)    (TIM2->ARR = (cycles))
-#define HAL_TIMER_STEPPER_GET_PERIOD()          (TIM2->ARR)
-#define HAL_TIMER_STEPPER_GET_COUNT()           (TIM2->CNT)
-
-void hal_timer_stepper_set_prescaler(uint16_t prescaler);
-#define HAL_TIMER_STEPPER_SET_PRESCALER(prescaler)  hal_timer_stepper_set_prescaler(prescaler)
-#define HAL_TIMER_STEPPER_RESET_PRESCALER()         hal_timer_stepper_set_prescaler(0)
-
-#define HAL_TIMER_STEPPER_INTERRUPT_ENABLE()    (TIM2->DIER |= TIM_DIER_UIE)
-#define HAL_TIMER_STEPPER_INTERRUPT_DISABLE()   (TIM2->DIER &= ~TIM_DIER_UIE)
-
-// Clear interrupt flag in ISR
-// FIXED: Was (TIM2->SR = ~TIM_SR_UIF) which SETS all other flags causing interrupt storm!
-// REVIEW: CRITICAL #3 - Timer interrupt flag clearing bug
-#define HAL_TIMER_STEPPER_CLEAR_FLAG()          (TIM2->SR = 0)
-
-// ----------------------------------------------------------------------------
-// TIM3: Step Pulse Reset Interrupt
-// ----------------------------------------------------------------------------
-
-#define HAL_TIMER_PULSE_RESET_ISR()             void TIM3_IRQHandler(void)
-
-void hal_timer_pulse_reset_init(void);
-#define HAL_TIMER_PULSE_RESET_INIT()            hal_timer_pulse_reset_init()
-
-#define HAL_TIMER_PULSE_RESET_SET_COUNT(count)  (TIM3->CNT = (count))
-#define HAL_TIMER_PULSE_RESET_SET_COMPARE(val)  (TIM3->ARR = (val))
-#define HAL_TIMER_PULSE_RESET_START()           (TIM3->CR1 |= TIM_CR1_CEN)
-#define HAL_TIMER_PULSE_RESET_STOP()            (TIM3->CR1 &= ~TIM_CR1_CEN)
-
-// Clear interrupt flag
-// FIXED: Was (TIM3->SR = ~TIM_SR_UIF) - same interrupt storm bug as TIM2
-// REVIEW: CRITICAL #3 - Timer interrupt flag clearing bug
-#define HAL_TIMER_PULSE_RESET_CLEAR_FLAG()      (TIM3->SR = 0)
-
-// Step pulse delay (if STEP_PULSE_DELAY is defined)
-#ifdef STEP_PULSE_DELAY
-  #define HAL_TIMER_PULSE_DELAY_ISR()           void TIM4_IRQHandler(void)
-  void hal_timer_pulse_delay_init(void);
-  #define HAL_TIMER_PULSE_DELAY_INIT()          hal_timer_pulse_delay_init()
-#endif
-
-// ----------------------------------------------------------------------------
-// TIM1: Spindle PWM (16-bit advanced timer with PWM on CH1)
-// ----------------------------------------------------------------------------
-
-#ifdef VARIABLE_SPINDLE
-
-void hal_timer_spindle_pwm_init(void);
-#define HAL_TIMER_SPINDLE_PWM_INIT()            hal_timer_spindle_pwm_init()
-
-#define HAL_TIMER_SPINDLE_PWM_SET_DUTY(duty)    (TIM1->CCR1 = (duty))
-#define HAL_TIMER_SPINDLE_PWM_GET_DUTY()        (TIM1->CCR1)
-
-#define HAL_TIMER_SPINDLE_PWM_ENABLE()          (TIM1->CCER |= TIM_CCER_CC1E)
-#define HAL_TIMER_SPINDLE_PWM_DISABLE()         (TIM1->CCER &= ~TIM_CCER_CC1E)
-#define HAL_TIMER_SPINDLE_PWM_IS_ENABLED()      (TIM1->CCER & TIM_CCER_CC1E)
-
-#endif // VARIABLE_SPINDLE
+// Stepper (TIM2), pulse reset (TIM3) and spindle PWM (TIM1) primitives live
+// in timer.h under the contract names STP_TMR_*/STP_PULSE_RESET_*/PWM_*
+// (included above). Vector wrappers with flag-clear-first are in handlers.c.
 
 // ============================================================================
 // HAL SERIAL/UART MACROS
@@ -397,24 +346,27 @@ void hal_timer_spindle_pwm_init(void);
 #define HAL_SERIAL_TX_BUFFER_SIZE               64
 
 // Serial ISR definitions
-#define HAL_SERIAL_RX_ISR()                     void USART1_IRQHandler(void)
-#define HAL_SERIAL_TX_ISR()                     void USART1_IRQHandler(void)
+// On STM32, RX and TX share USART1_IRQHandler, so we define helper functions
+// The actual USART1_IRQHandler is in platform.c and calls these based on ISR flags
+#define HAL_SERIAL_RX_ISR()                     void stm32_usart1_rx_handler(void)
+#define HAL_SERIAL_TX_ISR()                     void stm32_usart1_tx_handler(void)
 
 // Serial initialization
 void hal_serial_init(uint32_t baud_rate);
 #define HAL_SERIAL_INIT()                       hal_serial_init(BAUD_RATE)
 
-// Serial data register access
-#define HAL_SERIAL_WRITE_DATA(data)             (USART1->DR = (data))
-#define HAL_SERIAL_READ_DATA()                  (USART1->DR)
+// Serial data register access (H5 USART: RDR/TDR, not the classic F1 DR -
+// reading RDR / writing TDR clears RXNE/TXE in ISR the same way DR did)
+#define HAL_SERIAL_WRITE_DATA(data)             (USART1->TDR = (data))
+#define HAL_SERIAL_READ_DATA()                  (USART1->RDR)
 
 // Serial interrupt control
 #define HAL_SERIAL_TX_INTERRUPT_ENABLE()        (USART1->CR1 |= USART_CR1_TXEIE)
 #define HAL_SERIAL_TX_INTERRUPT_DISABLE()       (USART1->CR1 &= ~USART_CR1_TXEIE)
 
-// Serial status flags
-#define HAL_SERIAL_RX_READY()                   (USART1->SR & USART_SR_RXNE)
-#define HAL_SERIAL_TX_READY()                   (USART1->SR & USART_SR_TXE)
+// Serial status flags (H5 USART: flags live in ISR, not SR)
+#define HAL_SERIAL_RX_READY()                   (USART1->ISR & USART_ISR_RXNE)
+#define HAL_SERIAL_TX_READY()                   (USART1->ISR & USART_ISR_TXE)
 
 // ============================================================================
 // HAL SYSTEM MACROS
@@ -424,8 +376,9 @@ void hal_serial_init(uint32_t baud_rate);
 #define HAL_ENABLE_INTERRUPTS()                 __enable_irq()
 #define HAL_DISABLE_INTERRUPTS()                __disable_irq()
 
-// Critical section
-#define HAL_CRITICAL_SECTION_START()            uint32_t __primask = __get_PRIMASK(); __disable_irq()
+// Critical section (save/restore, ISR-safe: CONTRACTS.md section 8.2)
+// Core consumes HAL_CRITICAL_SECTION_BEGIN/END (system.c:357-401, serial.c:153)
+#define HAL_CRITICAL_SECTION_BEGIN()            uint32_t __primask = __get_PRIMASK(); __disable_irq()
 #define HAL_CRITICAL_SECTION_END()              __set_PRIMASK(__primask)
 
 // Delay functions

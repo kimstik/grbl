@@ -130,8 +130,9 @@ typedef struct {
 #define RCC_APB1ENR1_USART2EN (1 << 17)
 #define RCC_APB1ENR1_USART3EN (1 << 18)
 
-// RCC APB2ENR register bits (USART1)
+// RCC APB2ENR register bits (USART1, TIM1)
 #define RCC_APB2ENR_USART1EN  (1 << 14)
+#define RCC_APB2ENR_TIM1EN    (1 << 11)
 
 // RCC CR register bits
 #define RCC_CR_HSION    (1 << 0)   // HSI oscillator enable
@@ -263,9 +264,15 @@ typedef struct {
   volatile uint32_t DMAR;       // DMA address for full transfer
 } TIM_TypeDef;
 
+// TIM1 (APB2, advanced-control timer - RM0481 memory map table): same
+// register shape as TIM2/TIM3 above (CCMR1/2, CCER, RCR, CCR1-4, BDTR are
+// already part of TIM_TypeDef), only the base address and the
+// advanced-timer-only bits (BDTR.MOE) are TIM1-specific.
+#define TIM1_BASE  0x40012C00
 #define TIM2_BASE  0x40000000
 #define TIM3_BASE  0x40000400
 
+#define TIM1   ((TIM_TypeDef*)TIM1_BASE)
 #define TIM2   ((TIM_TypeDef*)TIM2_BASE)
 #define TIM3   ((TIM_TypeDef*)TIM3_BASE)
 
@@ -283,6 +290,17 @@ typedef struct {
 // TIM SR register bits
 #define TIM_SR_UIF    (1 << 0)   // Update interrupt flag
 #define TIM_SR_CC1IF  (1 << 1)   // Capture/Compare 1 interrupt flag
+
+// TIM CCMR1 bits (output compare mode, channel 1)
+#define TIM_CCMR1_OC1PE  (1 << 3)   // Output compare 1 preload enable
+
+// TIM CCER bits
+#define TIM_CCER_CC1E    (1 << 0)   // Capture/compare 1 output enable
+
+// TIM BDTR bits (TIM1 only - advanced-control timer main output enable)
+#define TIM_BDTR_MOE     (1 << 15)  // Main output enable: without this the
+                                    // OCx outputs stay disconnected even with
+                                    // CCER.CC1E set (RM0481 advanced timer ch.)
 
 // ============================================================================
 // USART
@@ -389,9 +407,16 @@ typedef enum {
 // ============================================================================
 // Core M33 Functions
 // ============================================================================
+// Macros (not static inline functions): common/stm32/stm32_platform.h
+// #ifndef-guards these same names for its own fallback definitions, and an
+// #ifndef only sees prior MACRO definitions, not function declarations - a
+// static-inline version here would silently redefine when a TU pulls in both
+// headers (platform.c does, via stm32_timing.h/stm32_nvmem.h/stm32_watchdog.h).
 
-static inline void __disable_irq(void) { __asm__ volatile ("cpsid i" : : : "memory"); }
-static inline void __enable_irq(void)  { __asm__ volatile ("cpsie i" : : : "memory"); }
+#define __disable_irq()   __asm__ volatile ("cpsid i" : : : "memory")
+#define __enable_irq()    __asm__ volatile ("cpsie i" : : : "memory")
+#define __get_PRIMASK()   ({ uint32_t primask; __asm__ volatile ("mrs %0, primask" : "=r" (primask)); primask; })
+#define __set_PRIMASK(x)  __asm__ volatile ("msr primask, %0" : : "r" (x) : "memory")
 
 // ============================================================================
 // COMMON MACROS
