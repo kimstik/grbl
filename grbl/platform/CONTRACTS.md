@@ -612,3 +612,102 @@ RM or a failing build, not theory.
    fitting the part beats stepping through unoptimized spills. Any port
    below ~96 KB flash should expect the same decision; RELEASE (-Os)
    text here is ~55.5 KB, so headroom exists but not at -O0.
+
+## 15. Gaps found porting stm32f411 (Phase 6 rolling port #1, first ARM
+Cortex-M4F port with a real FPU and the first "same family, different
+memory map" stress test — F411 is ST's F4 line, not F1 or H5, and looks
+close enough to both that copy-paste-without-verification is the live
+hazard here, not an unfamiliar architecture. Found empirically this
+session: real `arm-none-eabi-gcc` 13.2.1 builds (`make BUILD=DEBUG` and
+`BUILD=RELEASE`, both link with zero `PORT_TODO_*` and zero undefined
+symbols in `grbl/platform/stm32f411/`), plus targeted web verification of
+register facts no CMSIS pack was vendored to check locally (RM0383 citations
+inline in `stm32f411/regs.h`'s file header).
+
+1. **"Family resemblance" GPIO/timer-shape reuse does NOT imply identical
+   peripheral base addresses**: stm32f411 borrowed stm32h523's MODER/OTYPER/
+   PUPDR/AFR GPIO model (both are F4-style) and stm32f103/h523's TIM
+   register shape (CR1/DIER/SR/EGR/PSC/ARR/CCR1/BDTR is byte-identical
+   across F1/F4/H5) — but TIM1's BASE ADDRESS is 0x40010000 on F4, not
+   F1/H5's 0x40012C00 (that address is SDIO on F4). Blindly reusing the F1/H5
+   constant would have compiled, linked, and silently driven every
+   `SPINDLE_PWM`/`STP_TMR`-adjacent register write into the wrong
+   peripheral's address space — exactly the "compiles, links, destroys the
+   machine at runtime" class the top-of-file cautionary tale warns about,
+   just relocated from a macro no-op to a base-address typo. Lesson for the
+   loop: when reusing a donor port's register *shape*, re-derive every base
+   address from that specific family's own memory map — never carry a donor
+   family's address forward just because the struct layout matched.
+2. **EXTI pending-register model does not follow the GPIO model split**:
+   F411 GPIO is F4-style (matches H5's MODER/OTYPER), but F411's EXTI is the
+   classic single write-1-to-clear `PR` register (matches F1's shape) — NOT
+   H5's split `RPR1`/`FPR1` rising/falling pending pair. `stm32f411/
+   handlers.c` therefore reuses stm32f103's shared-vector dispatch shape
+   (`EXTI9_5_IRQHandler`/`EXTI15_10_IRQHandler` dispatching to both core
+   handlers per §2.5) rather than stm32h523's per-line vectors. Two "same
+   family" axes (GPIO model, EXTI model) do not travel together across
+   STM32 generations; each needs its own donor-port check.
+3. **USART register model also splits independently of the GPIO model**:
+   F411 USART is the classic `SR`/`DR` pair (matches F1) — NOT H5's
+   `ISR`/`RDR`/`TDR` split, despite F411 sharing H5's GPIO shape. A third
+   independent axis confirms the general lesson: verify every peripheral
+   family's register shape against the *specific* target chip, not against
+   whichever donor port happens to share the most recently-checked
+   peripheral's shape.
+4. **Sector-erase flash (F4) vs page-erase (F1/H5) forces a NVMEM
+   logical-window/physical-erase-granularity split that avoids a latent
+   overflow bug found in the existing stm32h523 port**: F411's flash erase
+   granularity is a 128 KB SECTOR (SNB field, `FLASH_CR` bits 3-6), not a
+   1-8 KB PAGE like F1/H5. `common/stm32/stm32_nvmem.c`'s cache is a single
+   hardcoded `static uint8_t cache_buffer[4096]` shared by every STM32 port,
+   sized from `stm32_config.flash_page_size * stm32_config.flash_num_pages`.
+   stm32h523's config sets that product to 8192 (2x the buffer) — every call
+   to `stm32_nvmem_init()` on stm32h523 therefore fails its own
+   `STM32_VALIDATE_PARAM(nvmem_size <= sizeof(cache_buffer))` check and
+   returns an error that stm32h523/platform.c's `hal_nvmem_read_byte`/
+   `hal_nvmem_write_byte` do not check, silently degrading every NVMEM read
+   to the erased-flash value (0xFF) with no build or link error — the
+   textbook "compiles but dead" class this whole document exists to
+   prevent. **Not fixed on stm32h523** (out of scope — this port's gate is
+   "stm32h523 untouched, sizes per ledger" — a source change would be
+   size-visible even if behavior-only). stm32f411 avoids reproducing the
+   defect by keeping its *logical* NVMEM window at 4096 bytes (fits the
+   shared cache buffer exactly) while `stm32f411/flash.c`'s
+   `stm32_flash_erase_page()` still erases the full physical 128 KB sector
+   underneath it (F4 has no finer erase granularity) — the extra ~124 KB of
+   now-erased-but-unused sector tail is harmless. Checklist lesson: any
+   future STM32 port must size `flash_page_size * flash_num_pages` against
+   `common/stm32/stm32_nvmem.c`'s actual `cache_buffer` capacity, not
+   against the chip's real erase granularity, and should not assume a
+   sibling port already got this right.
+5. **FPU ABI choice, documented and justified (Step 1 FPU note this port's
+   Makefile added to PORTING-CHECKLIST.md)**: `-mfpu=fpv4-sp-d16
+   -mfloat-abi=hard` was chosen over `softfp` because (a) core grbl is
+   float-heavy throughout planner/gcode/motion_control, so register-based
+   float argument passing is the entire performance point of porting to an
+   FPU-bearing chip, and (b) this toolchain's arm-none-eabi multilib
+   provides a matching hard-float `fpv4-sp-d16` libc/libm/libgcc variant
+   (confirmed by a clean link with no ABI-mismatch errors), unlike
+   ch32v006's rv32ec case where no hardware F/D extension exists at all
+   (§14.4) and the choice was forced rather than optional. stm32h523 already
+   set this precedent one FPU generation up (`fpv5-sp-d16`); this port
+   follows it rather than falling back to softfp by default.
+6. **HPRE already resets to /1 on F4 (no CH32-class trap here), but the
+   §14.9 lesson is still followed defensively**: unlike CH32V00x's
+   `RCC_CFGR0.HPRE` reset value of SYSCLK/3 (§14.9(a)), STM32F4's
+   `RCC_CFGR.HPRE` reset value genuinely is 0000 = SYSCLK/1 (RM0383) — so
+   this port's clock config would have worked even without touching HPRE.
+   `hal_clock_config()` clears/sets it explicitly anyway, on the principle
+   that "verified correct by inspection of the reset value" is exactly the
+   failure mode §14.9 exists to warn against generalizing from — a future
+   F4-family variant's errata or a copy-paste onto a chip with a different
+   reset value should not silently inherit an implicit assumption.
+7. **Golden AVR gate, and the samd21/stm32f103/stm32h523/ch32v006 sibling
+   builds, were re-run (not just inspected) as part of this port's gate
+   check**: `make -C grbl/platform/atmega328p validate` still reports MD5
+   `79af184e67b27defd27a39309ac53563`; `stm32f103`, `stm32h523`, `samd21`
+   (board=megarm), and `ch32v006` (board=generic) each still build
+   BUILD=RELEASE cleanly with no source changes in their directories —
+   confirming this port touched only `grbl/platform/stm32f411/`,
+   `grbl/platform/CONTRACTS.md`, `grbl/platform/PLATFORM_ROADMAP.md`,
+   `ci/warn_baseline_stm32f411.txt`, and `.github/workflows/ci.yml`.

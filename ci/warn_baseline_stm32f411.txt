@@ -1,0 +1,33 @@
+# Warning baseline for the stm32f411 build (-Wall -Wextra, arm-none-eabi-gcc).
+# Format: normalized warnings, see ci/warn_ratchet.py header. Ratchet is
+# one-way: only remove lines here manually, after the warning is really gone.
+#
+# Regenerated from REAL builds (Phase 6 rolling port #1, first real
+# make/make link runs in grbl/platform/stm32f411/) - not inspection-derived.
+# Union of BUILD=DEBUG and BUILD=RELEASE logs - both produced the identical
+# warning set (same as stm32h523's baseline note). Command:
+#   make -C grbl/platform/stm32f411 BUILD=<DEBUG|RELEASE> > build.log 2>&1
+#   python3 ci/warn_ratchet.py --log build.log --emit
+#
+# Known debt (config.h vs platform.h dual pin-map canon, PLAN.md Phase 1/2 -
+# same accepted pattern already carried by stm32f103/stm32h523; the
+# SPINDLE_PWM_MAX_VALUE duty-cap twin is NOT among these because config.h
+# deliberately does not redefine it here - see config.h comment):
+config.h: warning: "CONTROL_MASK" redefined
+config.h: warning: "DIRECTION_MASK" redefined
+config.h: warning: "LIMIT_MASK" redefined
+config.h: warning: "PROBE_MASK" redefined
+config.h: warning: "STEPPERS_DISABLE_MASK" redefined
+config.h: warning: "STEP_MASK" redefined
+#
+# common/stm32 shared code (regs.h vs CMSIS-style headers, all stm32 ports):
+stm32_platform.h: warning: comparison of unsigned expression in '< 0' is always false [-Wtype-limits]
+#
+# GRBL core (shared with every platform; not stm32f411-specific):
+gcode.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
+motion_control.c: warning: unused parameter 'cycle_mask' [-Wunused-parameter]
+nvmem.c: warning: '<<' in boolean context, did you mean '<'? [-Wint-in-bool-context]
+report.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
+settings.c: warning: unsigned conversion from 'int' to 'uint8_t' {aka 'unsigned char'} changes value from '1024' to '0' [-Woverflow]
+stepper.c: warning: integer overflow in expression of type 'int' results in '1465032704' [-Woverflow]
+system.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
