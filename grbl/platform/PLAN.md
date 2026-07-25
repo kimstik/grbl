@@ -276,10 +276,15 @@ the reviewer catches plausible-but-wrong. A batch is DONE only after both.
   (Actions possibly disabled on fork — VERIFY at cron sessions; if permanently
   disabled, local gates remain authoritative and note it here).
 
-- 2026-07-23 OWNER RULING on weakify: LTO is the owner's working tool — sand in
-  the tool outweighs copy-paste cleanliness. Weak = CAREFUL, SPECIAL-PURPOSE ONLY
-  (curated allowlist per case), NOT a universal mechanism. Probe continues as
-  decision-support for the narrow cases (serial/nvmem dedup candidates).
+- 2026-07-23 WEAKIFY CLOSED (owner ruling + probe data, materially negative):
+  objcopy --weaken is a TOTAL NO-OP on slim-LTO objects (-fno-fat-lto-objects:
+  symtab has zero function symbols; nm lies via plugin) and override link
+  HARD-FAILS (multiple definition — loud, at least). Mitigation (-fno-lto per
+  TU) works but costs +17016 bytes / +40% RELEASE for ONE small core file vs
+  measured payoff of 36 deletable LOC (9.8% of samd21 serial+nvmem; nvmem = 0,
+  every diff there is a deliberate bug fix). Verdict: NOT for this codebase
+  while LTO is canon. Typo-guard PoC (nm set-check, both failure modes proven)
+  archived in probe artifacts if a narrow case ever justifies revival.
 - (superseded context) 2026-07-23 proposal record: weakify core .o via objcopy --weaken for
   per-function platform overrides. Executor position (pending probe data):
   blanket = NO (LTO-inline partial-interposition hazard; silent typo-override =
@@ -287,6 +292,13 @@ the reviewer catches plausible-but-wrong. A batch is DONE only after both.
   curated allowlist = YES if probe passes (weaken.list registry + CI typo guard +
   LTO parity via -fno-lto on overridable TUs). Real payoff target: delete the
   duplicated samd21 serial.c/nvmem.c whole-file copies. Probe measures all three.
+
+- **BUG #19 CONFIRMED (HIGH, safety-relevant)**: samd21/serial.c RX ISR lacks ALL
+  realtime-command interception (core serial.c:127-145 contract): ?/!/~/ctrl-X/
+  overrides enter the ring buffer as data. Status polling dead, feed-hold/reset
+  dead in realtime. Found via weakify-probe side table; verified by grep. Fix
+  dispatched to Renode agent (blocks its motion smoke ? polling) — mirror core
+  switch verbatim + prove ? returns <...MPos...> in Renode, then motion test.
 
 ## Current State (update each session)
 
