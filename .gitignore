@@ -16,3 +16,10 @@ README.md
 # The repo-wide `README.md` ignore rule above matches README.md in any
 # directory; explicitly un-ignore this one so it can be tracked.
 !tools/README.md
+
+# Every grbl/platform/<name>/README.md is a real, tracked porting doc
+# (samd21, stm32f103, sg2002, ... already are - this just makes the
+# existing convention explicit) - including grbl/platform/_template/'s,
+# whose whole point is to be copied into every new port's directory. Without
+# this, `git add` on a freshly copied _template/ silently drops its README.
+!grbl/platform/*/README.md

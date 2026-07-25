@@ -128,6 +128,9 @@
 #elif defined(PLATFORM_SG2002)
   #define PLATFORM_NAME "Sophgo SG2002"
 
+#elif defined(PLATFORM_TEMPLATE)
+  #define PLATFORM_NAME "_template (copy-me starting point - not a real port)"
+
 // Auto-detection from compiler defines
 #elif defined(__AVR_ATmega328P__) || defined(__AVR_ATmega328__)
   #define PLATFORM_AVR_ATMEGA328P
@@ -182,6 +185,9 @@
 
 #elif defined(PLATFORM_SAMD21)
   #include "samd21/platform.h"
+
+#elif defined(PLATFORM_TEMPLATE)
+  #include "_template/platform.h"
 
 #elif defined(PLATFORM_CH32V006)
   #include "ch32v006/platform.h"
