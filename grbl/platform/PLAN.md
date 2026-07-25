@@ -253,13 +253,15 @@ the reviewer catches plausible-but-wrong. A batch is DONE only after both.
 
 ## Current State (update each session)
 
-- 2026-07-23 ~19:10 UTC snapshot: Phases 0+3(SAMD21 core)+5(README) essentially done;
-  Phase 1 samd21-side done (stm32 pair still broken, open items above); Phase 2
-  contracts LANDED, `_template` author died on subagent limits (resets 23:00 UTC) —
-  **cron 23:27 session: resume via Workflow resumeFromRunId wf_e7f22066-e3b**
-  (contracts agent replays from cache, template author re-runs)
-- ALSO for cron session: adversarial review (doctrine) still owed for two landed
-  batches: Phase-1 prelude batch + CONTRACTS/PORTING docs batch
+- ALARM SEMANTICS (owner directive 2026-07-23): the 6h cron is FALLBACK RECOVERY
+  ONLY — never a scheduler/heartbeat. Work is dispatched immediately when known;
+  limit-killed agents are retried immediately, not parked for the next cron.
+- 2026-07-23 ~19:20 UTC snapshot: 6 tracks in flight — _template resume
+  (wf_e7f22066-e3b), adversarial review of prelude+contracts batches, stm32h523 +
+  samd21-generic fix, stm32f103 spindle-macro fix, pin-mask truncation
+  investigation, SysTick wiring (Renode-agent, with runtime evidence).
+  Phases 0+5 done; Phase 1 samd21-side done; Phase 2 contracts landed; Phase 3
+  delays+VTOR+smoke done.
 - Subagent limit windows observed today: 16:00 / 21:50 / 23:00 UTC resets (pools
   differ per model); main loop unaffected
 
