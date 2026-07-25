@@ -1,0 +1,6 @@
+# ch32v006 warning baseline - core-file warnings only (identical class to every
+# other port's baseline); platform files compile clean. May only shrink.
+gcode.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
+motion_control.c: warning: unused parameter 'cycle_mask' [-Wunused-parameter]
+report.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
+system.c: warning: this statement may fall through [-Wimplicit-fallthrough=]

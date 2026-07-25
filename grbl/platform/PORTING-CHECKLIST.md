@@ -68,6 +68,10 @@ with pull-up on/off.
 
 ## Step 3 — Timers (stepper, pulse-reset, PWM)
 
+- [ ] Verify every candidate timer HAS an interrupt line before allocating
+      it — "general purpose timer" does not imply one (CH32V006's TIM3 is
+      compare-only, no IRQ; its pulse-reset timer is the SysTick-class
+      counter instead — CONTRACTS.md §14.11).
 - [ ] `STP_TMR_*` per §3. `STP_TMR_PRESCALER_SET/RESET`: implement, or
       `#error` on non-AMASS builds — never empty (§3, the cautionary tale).
 - [ ] `STP_PULSE_RESET_*` per §4. Honor the 8-bit overflow horizon and the

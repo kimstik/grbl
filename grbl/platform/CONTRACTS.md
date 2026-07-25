@@ -473,6 +473,21 @@ when a real RISC-V chip hit it. All found empirically this session
    verbatim will write code that cannot work at all (no hardware SP
    autoload, and a data-pointer array is not a valid `mtvec` target in
    direct mode).
+   **Steps 3-6 UPDATE — vectored-mode question CLOSED with TRM facts**
+   (CH32V00X RM V1.5, 6.5.3.2): QingKe `mtvec` has MODE0 (bit 0,
+   1 = entry address = BASE + irq#*4) and MODE1 (bit 1, 1 = table
+   entries are ABSOLUTE ADDRESSES — i.e. a plain C array of function
+   pointers IS a valid vector table). ch32v006 now runs MODE0=MODE1=1
+   (startup.c `PFIC_Vector[41]`, `mtvec = table|0x3`), handlers are
+   standard `__attribute__((interrupt))` functions. The vendor "HPE"
+   hardware prologue = `INTSYSCR` (CSR 0x804) bit 0 HWSTKEN, and
+   2-level nesting = bit 1 INESTEN; BOTH reset to 0 and are LEFT 0
+   (documented choice, startup.c): HWSTKEN=0 matches GCC's software
+   save/restore frame exactly, INESTEN=0 gives the same no-preemption
+   posture as the SAMD21 M0+ reference (§5.2) and avoids the nested-trap
+   mepc/mstatus clobber hazard (GCC's interrupt attribute saves GPRs
+   only). Consequence: core's `sei()` inside ISR_STEP defers, not nests,
+   the pulse-reset IRQ — acceptable per §5.2's existing precedent.
 3. **`-specs=picolibc.specs` silently re-enables `--gc-sections`,
    defeating `_template`'s stated Makefile strategy of "just don't pass
    --gc-sections"**: picolibc's own linker spec (`*link:` rule, visible
@@ -513,23 +528,87 @@ when a real RISC-V chip hit it. All found empirically this session
    comment (currently only mentions the RMW-atomicity axis of GPIO
    design, not the "4-bit-packed config register" axis) since this will
    recur on every WCH/ST-family chip, not just these two.
-6. **Memory-barrier semantics unverified for QingKe**: `__DSB()`/`__DMB()`
-   are implemented as real `fence rw,rw` (ch32v006/platform.h) rather
-   than assumed unnecessary, but whether QingKe V2C actually reorders
-   ordinary loads/stores (the ARM Cortex-M reason these exist at all) is
-   NOT confirmed against a TRM this session — correctness-first stance,
-   flagged rather than asserted either way.
-7. **IRQ numbering / PFIC register fields are unverified placeholders**
-   (ch32v006.h's `IRQn_Type` is deliberately left almost empty, PFIC/STK
-   struct fields are best-effort) — Step 3+ (real timer/serial ISRs) must
-   confirm every field against a real CH32V006 datasheet before enabling
-   any `PFIC->IENR[]` bit. Nothing in Steps 0-2 (this batch) touches
-   these registers, so nothing here was exercisable yet.
-8. **DIRECTION group physical≠logical translation not yet built**: this
-   port's `boards/generic/config.h` documents but does not yet implement
-   the samd21-style `GPIO_MWO_DIRECTION`/`L2P`/`P2L` dispatch (BUG #17
-   contract, §1 above) — `gpio.h` only has the plain `GPIO_OREG`/`GPIO_IREG`
-   accessors this batch. Step 3 (timers) MUST add it before `ISR_STEP`
-   goes live, or DIRECTION output silently writes the wrong bits the
-   same way BUG #17 did on SAMD21 — this is a known, logged gap, not a
-   rediscovery risk.
+6. **Memory-barrier semantics for QingKe — partially resolved**:
+   `__DSB()`/`__DMB()` stay real `fence rw,rw` (ch32v006/platform.h);
+   whether QingKe V2C reorders ordinary loads/stores remains unstated by
+   the TRM (correctness-first stance kept). NEW, TRM-CONFIRMED (RM 6.5.2
+   note): "When using the PFIC_IENRx register to mask any interrupt or
+   the CSR register to mask global interrupts, add a 'fence.i'
+   instruction for synchronization between the core control state and
+   the interrupt enable state" — i.e. a mask-then-assume-no-ISR pattern
+   needs `fence.i`, a DIFFERENT instruction from the data fences.
+   Implemented in `PFIC_DisableIRQ` (ch32v006.h); deliberately NOT added
+   to `cli()`/critical sections (hot path; vendor SDK practice omits it
+   there too) — flagged, not fully discharged.
+7. **CLOSED (Steps 3-6): PFIC/STK/vector facts verified** against the
+   public CH32V00X RM V1.5 (+ Zephyr's Apache-2.0 ch32v006.dtsi as an
+   independent cross-check). ch32v006.h now carries the real PFIC layout
+   (ISR/IPR@0x00/0x20, ITHRESDR@0x40, IENR@0x100, IRER@0x180, IPRR@0x280,
+   IACTR@0x300, IPRIOR@0x400, SCTLR@0xD10 — the M1-M3 placeholder struct
+   had IENR at 0x70, i.e. WRONG; `_Static_assert(offsetof(...))` guards
+   the corrected layout), the full 41-entry vector table (SysTick=12,
+   EXTI7_0=20, USART1=32, TIM1_UP=35, TIM2=38, USART2=39, OPCM=40) and
+   the STK register set (CNTL@0x08, CMPLR@0x10; SR.CNTIF is
+   WRITE-0-TO-CLEAR — inverted polarity vs every W1C flag nearby, an
+   easy trap). Lesson for the loop: struct-shaped "best-effort" register
+   layouts are worse than absent ones — the offsets compiled fine and
+   read plausibly; only the RM register list exposed them.
+8. **CLOSED (Steps 3-6): DIRECTION logical<->physical translation
+   landed** — ch32v006/gpio.h now carries the samd21-style
+   `GPIO_MWO/GPIO_MRD/GPIO_MDIR_OUT` per-NAME dispatch and
+   boards/generic/config.h defines logical `*_BIT` 0,1,2 + physical
+   `*_PIN` + `STEP_/DIRECTION_MASK_PHYS`/`L2P`/`P2L` (pure shifts).
+   BUG #17 cannot recur on this port.
+
+Items 9-13 below were found during Steps 3-6 (timers/serial/nvmem/
+handlers) — same session discipline: every one is empirical, from the
+RM or a failing build, not theory.
+
+9. **Two "F_CPU lie"-class clock traps on CH32V00x** (both fixed in
+   platform.c SystemClock_Config, both would pass every compile/link
+   gate and run 3x slow / crash at speed on silicon):
+   (a) `RCC_CFGR0.HPRE[3:0]` RESETS TO 0b0010 = SYSCLK/3 (RM 3.4.2) —
+   NOT /1 like STM32F1. Any port that only switches SW to PLL without
+   CLEARING HPRE gets HCLK = F_CPU/3: stepper timing, STK tick and
+   USART baud all silently 3x off. (b) flash wait states: LATENCY must
+   be 0b10 (2 waits) for 24 < SYSCLK <= 48 MHz (RM 18.3.1) — the
+   F1-habit "1 wait" guess is only legal to 24 MHz. Checklist addition:
+   Step 1's "F_CPU feeds everything" warning now has a concrete
+   non-ARM reproducer.
+10. **V00x GPIO is NOT F1 GPIO despite the family resemblance**
+   (RM 7.3.1): ports are 8 pins wide (no CFGHR — offset 0x04 reserved;
+   GPIOB has only 7 pins bonded), and the per-pin nibble is
+   CNF[3:2] | reserved | MODE[0] with MODE a SINGLE bit (1 = output
+   30 MHz) — F1's 2-bit speed field is gone. Practical consequence:
+   alternate-function push-pull is nibble 0x9, not F1's 0xB; blind
+   F1-value reuse configures CNF=10 correctly by luck but sets the
+   reserved bit on other values. Pull direction is still ODR-selected
+   (1 = up), same as F1.
+11. **"Second timer" may not exist: audit IRQ capability, not timer
+   count** — CH32V006's TIM3 is a "streamlined" compare-only timer with
+   NO interrupt output at all (RM 13; it paces TIM1/ADC/DMA). The
+   pulse-reset role (§4) moved to the QingKe STK, which is actually the
+   BETTER fit: its STCLK=0 mode ticks at HCLK/8 — bit-identical to the
+   AVR Timer0 F_CPU/8 prescale, so core's `>>3` arithmetic transfers
+   with no rescaling; CMPLR is fixed at 256 and COUNT_SET preloads the
+   8-bit value (the §4 overflow-horizon contract on a 32-bit counter).
+   Cost: the STK has ONE compare — `STEP_PULSE_DELAY` is unsupported
+   and `#error`s loudly (legal per §4 conditional rule). Checklist
+   lesson: PORTING-CHECKLIST Step 3 must ask "does the candidate timer
+   HAVE an interrupt line" before allocating it.
+12. **EXTI line/port collision is a board-design constraint** on every
+   F1/CH32-class EXTI (one port per line number via AFIO_EXTICR):
+   LIMIT and CONTROL groups must not use the same pin NUMBERS on
+   different ports or one group's interrupts are unroutable. The M1-M3
+   placeholder board had exactly this bug (LIMIT PD0-2 + CONTROL
+   PA0-2); CONTROL moved to PB3-5. On V00x additionally ALL lines 0-7
+   share the single EXTI7_0 vector — the §2.5 shared-vector dispatch
+   rule applies to the whole GPIO interrupt space, and per-group
+   disable (§2.1) works because the two groups own disjoint INTENR
+   bits.
+13. **`-O0` debug builds do not fit small-flash parts**: soft-float
+   rv32ec grbl at -O0 is ~77 KB of .text vs 61 KB available (62 K minus
+   the 1 KB NVMEM window). ch32v006 DEBUG uses `-Og -g3` instead —
+   fitting the part beats stepping through unoptimized spills. Any port
+   below ~96 KB flash should expect the same decision; RELEASE (-Os)
+   text here is ~55.5 KB, so headroom exists but not at -O0.

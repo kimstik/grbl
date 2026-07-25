@@ -1,16 +1,12 @@
 /*
-  platform.c - CH32V006 real (non-PORT_TODO) chip bring-up code
+  platform.c - CH32V006 chip bring-up + peripheral init functions
   Part of Grbl
 
-  Houses PORTING-CHECKLIST Step 1 (clock) and Step 2 (GPIO direction/
-  pull-up config) real implementations - the two steps this Phase-4
-  batch (M1-M3) delivers for real, as opposed to Steps 3-6 which stay
-  PORT_TODO in timer.h/handlers.c/serial.c/nvmem.c/platform.h. No
-  platform.c existed in `_template` (critical sections/sei/cli are pure
-  macros there, nothing else needed a .c file); this chip needs one
-  because CFGLR/CFGHR direction config genuinely requires a
-  read-modify-write function, not a macro - stm32f103/platform.c is the
-  precedent for that same CRL/CRH-shaped problem.
+  Steps 1-2 (clock, GPIO config) plus the Step 3/6 function-shaped
+  primitives (timer inits, EXTI arm/disarm, delays). Chip facts verified
+  against CH32V00X RM V1.5 (see ch32v006.h header). stm32f103/platform.c
+  is the structural precedent for the CRL/CRH-shaped (here: CFGLR)
+  function-call GPIO config.
 */
 
 #include <stdint.h>
@@ -18,102 +14,248 @@
 #include "platform.h"
 
 // ============================================================================
-// GPIO DIRECTION / PULL-UP CONFIGURATION (Step 2)
+// GPIO PIN CONFIG (Step 2)
 // ============================================================================
 /*
-  CFGLR covers pins 0-7, CFGHR covers pins 8-15; each pin gets a 4-bit
-  CNF[1:0]MODE[1:0] nibble (ch32v006.h's GPIO_CFG_* constants). This is a
-  real read-modify-write per pin - NOT expressible as the single-bit
-  GPIO_DREG/GPIO_PREG macros common/gpio.h defaults to (gpio.h's file
-  header explains why). Boards in this port only use pins 0-7 (CFGLR) per
-  boards/generic/config.h's pin map, but pins 8-15 are handled too so this
-  function is correct for any future board that uses the upper byte.
+  CFGLR only - V00X ports are 8 pins wide, there is no CFGHR (RM 7.3.1).
+  Per-pin nibble: CNF[3:2] | reserved[1] | MODE[0]; MODE is a SINGLE bit
+  (1 = output 30MHz, 0 = input) - not F1's 2-bit speed field. Init-context
+  RMW only (CONTRACTS.md gpio contract - direction/pull config never runs
+  from ISRs).
 */
-static void ch32_gpio_set_cfg(GPIO_TypeDef* port, uint8_t pin, uint32_t cfg4) {
-  volatile uint32_t* reg = (pin < 8) ? &port->CFGLR : &port->CFGHR;
-  uint8_t shift = (uint8_t)((pin & 7u) * 4u);
+void hal_gpio_config_pin(GPIO_TypeDef* port, uint8_t pin, uint32_t cfg4) {
+  uint32_t shift = (uint32_t)(pin & 7u) * 4u;
   uint32_t mask = 0xFUL << shift;
 
-  *reg = (*reg & ~mask) | ((cfg4 & 0xFUL) << shift);
+  port->CFGLR = (port->CFGLR & ~mask) | ((cfg4 & 0xFUL) << shift);
 }
 
 void hal_gpio_set_output(GPIO_TypeDef* port, uint32_t mask) {
-  uint32_t cfg = (GPIO_CFG_CNF_OUT_PUSHPULL << 2) | GPIO_CFG_MODE_OUTPUT_10MHZ;
-  for (uint8_t pin = 0; pin < 16; pin++) {
-    if (mask & (1UL << pin)) { ch32_gpio_set_cfg(port, pin, cfg); }
+  for (uint8_t pin = 0; pin < 8; pin++) {
+    if (mask & (1UL << pin)) { hal_gpio_config_pin(port, pin, GPIO_CFG_OUT_PP); }
   }
 }
 
 void hal_gpio_set_input(GPIO_TypeDef* port, uint32_t mask) {
-  // Floating input by default (CONTRACTS.md #1.4: pull-up is a SEPARATE
-  // call the core makes via GPIO_MPULLUP_EN/DIS - this function must not
-  // assume a pull-up is wanted just because a pin becomes an input).
-  uint32_t cfg = (GPIO_CFG_CNF_IN_FLOATING << 2) | GPIO_CFG_MODE_INPUT;
-  for (uint8_t pin = 0; pin < 16; pin++) {
-    if (mask & (1UL << pin)) { ch32_gpio_set_cfg(port, pin, cfg); }
+  // Floating input (CONTRACTS.md #1.4: pull-up is a SEPARATE call the
+  // core makes via GPIO_MPULLUP_EN/DIS).
+  for (uint8_t pin = 0; pin < 8; pin++) {
+    if (mask & (1UL << pin)) { hal_gpio_config_pin(port, pin, GPIO_CFG_IN_FLOATING); }
   }
 }
 
 void hal_gpio_pullup_enable(GPIO_TypeDef* port, uint32_t mask) {
-  // CNF = 0b10 (input, pull-up/down) + ODR bit = 1 selects pull-UP (WCH
-  // clones this exactly from STM32F1's CRL/CRH+ODR pull convention).
-  // CONTRACTS.md #1.4: this must actually enable a real pull-up, unlike
-  // SAMD21's known-wrong PORT.CTRL mapping - this path is a genuine
-  // hardware pull-up, not a stand-in.
-  uint32_t cfg = (GPIO_CFG_CNF_IN_PULL << 2) | GPIO_CFG_MODE_INPUT;
-  for (uint8_t pin = 0; pin < 16; pin++) {
-    if (mask & (1UL << pin)) { ch32_gpio_set_cfg(port, pin, cfg); }
+  // CNF=10 input + ODR bit = 1 selects pull-UP (RM 7.3.1.3: "For with
+  // pull-up input mode: 1: Pull-up input; 0: Pull-down input"). This is a
+  // genuine hardware pull-up - CONTRACTS.md #1.4 satisfied for real,
+  // unlike the SAMD21 reference's known-wrong PORT.CTRL mapping.
+  for (uint8_t pin = 0; pin < 8; pin++) {
+    if (mask & (1UL << pin)) { hal_gpio_config_pin(port, pin, GPIO_CFG_IN_PULL); }
   }
-  port->OUTDR |= mask;   // ODR=1 under CNF=0b10 -> pull-up (not pull-down)
+  port->BSHR = mask & 0xFFu;   // ODR=1 -> pull-up (atomic set, init context anyway)
 }
 
 void hal_gpio_pullup_disable(GPIO_TypeDef* port, uint32_t mask) {
-  // Falls back to floating input - matches GPIO_DIR_INP's default so
-  // disabling the pull-up doesn't silently reconfigure MODE/CNF twice.
-  uint32_t cfg = (GPIO_CFG_CNF_IN_FLOATING << 2) | GPIO_CFG_MODE_INPUT;
-  for (uint8_t pin = 0; pin < 16; pin++) {
-    if (mask & (1UL << pin)) { ch32_gpio_set_cfg(port, pin, cfg); }
+  // Falls back to floating input - matches GPIO_DIR_INP's default.
+  for (uint8_t pin = 0; pin < 8; pin++) {
+    if (mask & (1UL << pin)) { hal_gpio_config_pin(port, pin, GPIO_CFG_IN_FLOATING); }
   }
 }
 
 // ============================================================================
-// SYSTEM CLOCK BRING-UP (Step 1) - HSI -> PLL x2 -> 48 MHz
+// GPIO EXTERNAL INTERRUPTS (Step 6, CONTRACTS.md #2)
 // ============================================================================
 /*
-  UNVERIFIED end-to-end on real silicon this session (no hardware/Renode
-  model for this chip yet - see ch32v006.h and CONTRACTS.md's new RISC-V
-  section for the specific gaps: HSI default frequency, whether V006's
-  PLL is really a fixed x2 like V003, FLASH_ACTLR latency threshold).
-  Structure mirrors samd21/startup.c's SystemInit() (enable source, wait
-  READY, raise flash latency BEFORE switching, switch, wait SWS): the
-  ORDER is the part that is architecture-general and safe to trust even
-  though the specific register names/bit positions need re-verification.
+  EXTI line N serves pin N of ONE port, selected by AFIO_EXTICR's 2-bit
+  field per line (RM 7.3.2.1: 00=PA 01=PB 10=PC 11=PD). Both edges armed -
+  core treats any pin CHANGE as a trigger (#2.6). All lines 0-7 funnel
+  into the single EXTI7_0 PFIC vector (handlers.c dispatches both core
+  groups, #2.5).
+
+  Runtime contract (#2.1): these are called repeatedly (homing/settings
+  writes). enable is idempotent; disable masks ONLY the given lines in
+  EXTI_INTENR, so the other group keeps working. The PFIC channel is left
+  enabled - delivery is gated per line.
+*/
+static uint32_t exti_port_code(GPIO_TypeDef* port) {
+  if (port == GPIOA) { return 0u; }
+  if (port == GPIOB) { return 1u; }
+  if (port == GPIOC) { return 2u; }
+  return 3u; // GPIOD
+}
+
+void hal_gpio_interrupt_enable(GPIO_TypeDef* port, uint32_t mask) {
+  uint32_t code = exti_port_code(port);
+
+  RCC->PB2PCENR |= RCC_PB2PCENR_AFIOEN;
+
+  for (uint8_t pin = 0; pin < 8; pin++) {
+    if (mask & (1UL << pin)) {
+      uint32_t field_shift = (uint32_t)pin * 2u;
+      AFIO->EXTICR = (AFIO->EXTICR & ~(0x3UL << field_shift)) | (code << field_shift);
+      EXTI->RTENR |= (1UL << pin);   // both edges (#2.6)
+      EXTI->FTENR |= (1UL << pin);
+      EXTI->INTFR  = (1UL << pin);   // drop any stale edge before unmasking
+      EXTI->INTENR |= (1UL << pin);
+    }
+  }
+
+  PFIC_EnableIRQ(EXTI7_0_IRQn);
+}
+
+void hal_gpio_interrupt_disable(GPIO_TypeDef* port, uint32_t mask) {
+  (void)port;  // line<->port mapping already fixed by enable; masking is per line
+  EXTI->INTENR &= ~(mask & 0xFFu);
+}
+
+// ============================================================================
+// SYSTEM CLOCK BRING-UP (Step 1) - HSI 24 MHz -> PLL x2 -> 48 MHz
+// ============================================================================
+/*
+  All register facts TRM-verified this session (RM 3.3/3.4):
+  - HSI = 24 MHz internal RC, on and selected at reset.
+  - PLL = FIXED x2 (no PLLMUL field exists); PLLSRC=0 feeds HSI undivided.
+  - FLASH_ACTLR LATENCY must be 0b10 (2 waits) for 24 < SYSCLK <= 48 MHz
+    (RM 18.3.1) - the M1-M3 draft's 1-wait guess was only good to 24 MHz.
+  - HPRE[3:0] RESETS TO 0b0010 = SYSCLK/3 (RM 3.4.2)! It must be cleared
+    or HCLK (= every peripheral clock + the STK tick + USART baud source)
+    runs at F_CPU/3 while the firmware believes F_CPU - the exact
+    "F_CPU lie" failure PORTING-CHECKLIST Step 1 warns about. Gap logged
+    in CONTRACTS.md #14.
 */
 void SystemClock_Config(void) {
-  // 1. HSI is the CH32V00x family's power-on default source and is
-  //    already running (RCC_CTLR_HSION set out of reset) - make sure,
-  //    then wait for the ready flag.
+  // 1. HSI on + ready (power-on default, belt-and-braces).
   RCC->CTLR |= RCC_CTLR_HSION;
   while (!(RCC->CTLR & RCC_CTLR_HSIRDY)) { /* spin */ }
 
-  // 2. Flash wait state BEFORE raising the clock past the zero-wait-state
-  //    ceiling (PORTING-CHECKLIST Step 1; samd21/startup.c:138 is the ARM
-  //    analog of this same ordering rule).
-  FLASH->ACTLR = (FLASH->ACTLR & ~FLASH_ACTLR_LATENCY_Msk) | FLASH_ACTLR_LATENCY_1;
+  // 2. Flash wait states BEFORE raising the clock: 2 waits for 48 MHz.
+  FLASH->ACTLR = (FLASH->ACTLR & ~FLASH_ACTLR_LATENCY_Msk) | FLASH_ACTLR_LATENCY_2;
 
-  // 3. PLL: source = HSI, fixed x2 multiplier (V003-family assumption,
-  //     see ch32v006.h RCC_CFGR0 comment - GAP if V006 differs).
-  RCC->CFGR0 = (RCC->CFGR0 & ~RCC_CFGR0_PLLSRC) | RCC_CFGR0_HPRE_DIV1;
+  // 3. HB prescaler OFF (clear the /3 reset default) + PLL source = HSI.
+  RCC->CFGR0 = (RCC->CFGR0 & ~(RCC_CFGR0_HPRE_Msk | RCC_CFGR0_PLLSRC));
+
+  // 4. PLL on (fixed x2 -> 48 MHz), wait ready.
   RCC->CTLR |= RCC_CTLR_PLLON;
   while (!(RCC->CTLR & RCC_CTLR_PLLRDY)) { /* spin */ }
 
-  // 4. Switch SYSCLK to PLL, confirm via SWS.
+  // 5. Switch SYSCLK to PLL, confirm via SWS.
   RCC->CFGR0 = (RCC->CFGR0 & ~RCC_CFGR0_SW_Msk) | RCC_CFGR0_SW_PLL;
   while ((RCC->CFGR0 & RCC_CFGR0_SWS_Msk) != RCC_CFGR0_SWS_PLL) { /* spin */ }
+}
 
-  // F_CPU (Makefile CLOCK=48000000) now describes the real SYSCLK, IF the
-  // fixed-x2-PLL assumption above holds - PORTING-CHECKLIST Step 1's exit
-  // test (scope/emulator-verified clock speed) is NOT satisfied yet; no
-  // hardware or cycle-accurate emulator exists for this chip in this
-  // session. Logged as an open item, not silently claimed done.
+// ============================================================================
+// STEPPER TIMER INIT (Step 3, CONTRACTS.md #3) - TIM2
+// ============================================================================
+/*
+  Post-INIT state contract: running, /1, compare interrupt masked (AVR
+  Timer1 CTC semantics; INIT+STP_TMR_PRESCALER_RESET together). UIE stays
+  0 here - STP_TMR_INT_ENA() (st_wake_up) unmasks it; the PFIC channel is
+  enabled once, delivery gated by UIE. TIM2 is clocked at HCLK = F_CPU
+  (single HB clock domain on V00X - no APB doubler).
+*/
+void hal_timer_stepper_init(void) {
+  RCC->PB1PCENR |= RCC_PB1PCENR_TIM2EN;
+
+  TIM2->CTLR1 = 0;
+  TIM2->PSC = 0;                    // /1 (STP_TMR_PRESCALER_RESET-equivalent)
+  TIM2->ATRLR = 0xFFFF;             // full 16-bit range until first PERIOD_SET
+  TIM2->SWEVGR = TIM_SWEVGR_UG;     // latch PSC/ARR preloads now
+  TIM2->INTFR = 0;                  // drop the UIF the UG event just set (RW0: write 0 clears)
+  TIM2->DMAINTENR = 0;              // update interrupt MASKED (contract)
+  TIM2->CTLR1 = TIM_CTLR1_CEN;      // counter running
+
+  PFIC_EnableIRQ(TIM2_IRQn);
+}
+
+// ============================================================================
+// PULSE-RESET TIMER INIT (Step 4 of the timer trio, CONTRACTS.md #4) - STK
+// ============================================================================
+/*
+  AVR Timer0 semantics: interrupt source enabled, timer STOPPED. STK
+  configured for HCLK/8 (STCLK=0) = the AVR F_CPU/8 tick exactly; STRE=0
+  (no auto-reload - the ISR stops the counter, stepper.c:503); CMPLR fixed
+  at 256 so a COUNT_SET(val) preload fires the compare after exactly
+  (256 - val) ticks - the 8-bit overflow horizon on a 32-bit counter.
+*/
+void hal_timer_pulse_reset_init(void) {
+  STK->CTLR = STK_CTLR_STIE;        // STE=0 (stopped), STCLK=0 (HCLK/8), STRE=0
+  STK->SR = 0;                      // clear CNTIF (write-0-to-clear, RM 6.5.4.2)
+  STK->CMPLR = 256u;                // fixed compare = the uint8 overflow point
+  STK->CNTL = 0;
+
+  PFIC_EnableIRQ(SysTick_IRQn);
+}
+
+// ============================================================================
+// SPINDLE PWM INIT (CONTRACTS.md #6) - TIM1 CH1 on PA3 (TIM1_RM=0100)
+// ============================================================================
+/*
+  ATRLR = SPINDLE_PWM_MAX_VALUE (255, fits core's uint8_t duty domain,
+  #6.2); PSC = 191 -> 48MHz/192/256 = 976.6 Hz PWM - the AVR Timer2
+  fast-PWM base frequency (16MHz/64/256), so spindle behavior matches the
+  origin. PWM mode 1 + OC1PE preload; BDTR.MOE set once here (TIM1-class
+  master output gate); CCER.CC1E is the PWM_ENABLE/DISABLE connect switch.
+  PA3 is re-muxed to AF push-pull HERE, after core's GPIO_DIR_OUT left it
+  a plain GPIO (f103 pattern, timer.h note).
+*/
+void hal_timer_spindle_pwm_init(void) {
+  RCC->PB2PCENR |= RCC_PB2PCENR_TIM1EN | RCC_PB2PCENR_AFIOEN | RCC_PB2PCENR_IOPAEN;
+
+  // TIM1 partial remap: CH1 -> PA3 (RM table 7-8, TIM1_RM=0100).
+  AFIO->PCFR1 = (AFIO->PCFR1 & ~AFIO_PCFR1_TIM1_RM_Msk)
+              | ((uint32_t)SPINDLE_PWM_TIM1_RM << AFIO_PCFR1_TIM1_RM_Pos);
+
+  hal_gpio_config_pin(SPINDLE_PWM_PORT, SPINDLE_PWM_PIN, GPIO_CFG_OUT_AF_PP);
+
+  TIM1->CTLR1 = 0;
+  TIM1->PSC = 191;                  // 48 MHz / 192 = 250 kHz tick -> 976.6 Hz PWM
+  TIM1->ATRLR = SPINDLE_PWM_MAX_VALUE;
+  TIM1->CHCTLR1 = TIM_CHCTLR1_OC1M_PWM1 | TIM_CHCTLR1_OC1PE;
+  TIM1->CCER = 0;                   // channel disconnected until PWM_ENABLE()
+  TIM1->BDTR = TIM_BDTR_MOE;        // master output enable (advanced timer)
+  TIM1->CH1CVR = 0;
+  TIM1->SWEVGR = TIM_SWEVGR_UG;     // latch preloads
+  TIM1->CTLR1 = TIM_CTLR1_CEN;
+}
+
+// ============================================================================
+// DELAYS (Step 6; CONTRACTS.md #13 "closed" note - empty stubs are the
+// canonical silent killer of homing debounce / spindle ramp)
+// ============================================================================
+/*
+  Calibrated busy-wait, samd21/platform.c pattern (counted inline-asm
+  loop: correct from reset onward, no peripheral state, times identically
+  at -O0 and -Os). The STK is NOT usable here - it is the pulse-reset
+  timer (this port's equivalent of "SysTick is taken").
+
+  Cycle assumption: addi(1) + taken bnez(2) = 3 cycles/iteration on the
+  QingKe V2C 2-stage pipeline. UNVERIFIED against silicon (no per-
+  instruction cycle table in the public RM; flash wait states can stretch
+  it) - delays err LONG, never short, which is the safe direction for
+  debounce/dwell. Hardware-validation item, flagged in CONTRACTS.md #14.
+*/
+#define DELAY_LOOP_CYCLES        3u
+#define DELAY_LOOP_ITERS_PER_US  (F_CPU / (DELAY_LOOP_CYCLES * 1000000uL))  // 16 @ 48 MHz
+
+static void delay_busy_loop(uint32_t iterations) {
+  if (iterations == 0) { return; }
+  __asm volatile (
+    "1: addi %0, %0, -1 \n"
+    "   bnez %0, 1b     \n"
+    : "+r" (iterations)
+  );
+}
+
+void _delay_us(double __us) {
+  uint32_t us = (uint32_t)__us;   // single soft-float conversion
+  if (us) { delay_busy_loop(us * DELAY_LOOP_ITERS_PER_US); }
+}
+
+void _delay_ms(double __ms) {
+  uint32_t ms = (uint32_t)__ms;
+  for (uint32_t i = ms; i != 0; i--) {
+    delay_busy_loop(1000u * DELAY_LOOP_ITERS_PER_US);
+  }
+  double rem = __ms - (double)ms;
+  if (rem > 0.0) { _delay_us(rem * 1000.0); }
 }

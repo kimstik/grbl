@@ -1,30 +1,38 @@
 /*
-  startup.c - CH32V006 reset entry + trap/vector handling
+  startup.c - CH32V006 reset entry + PFIC vector table
   Part of Grbl
 
-  PORTING-CHECKLIST Step 0/Step 1. This is the file with the LEAST
-  reusable structure from `_template/startup.c` of anything in this
-  port: the template's vector table is pure ARMv6-M/v7-M convention
-  (hardware auto-loads SP from vector_table[0] and jumps to
-  vector_table[1] on reset - zero software boot code needed for that
-  part) and its ISR model is "array of function pointers the CPU
-  hardware fetches directly". RISC-V has NEITHER of those things, even
-  before getting to QingKe's PFIC specifics - see the GAP notes inline
-  and the new RISC-V section folded into CONTRACTS.md.
+  PORTING-CHECKLIST Step 0/1 (+ the Step 3-6 vector wiring). RISC-V has
+  no ARM-style hardware SP/PC autoload from a data table: `_start` (naked,
+  at the base of flash via .init) sets SP itself, then Reset_Handler does
+  .data/.bss init, points mtvec at the vector table, and calls main().
 
-  DESIGN CHOSEN FOR THIS BATCH: standard RISC-V direct-mode trap vector
-  (mtvec mode=00, one trap entry, `mcause` dispatch in C) rather than
-  attempting QingKe's vendor "absolute-address vectored" PFIC mode.
-  Rationale: direct mode is unambiguously spec-correct on ANY RV32/64
-  core (verified against this toolchain in this session - see the
-  Makefile's ARCHFLAGS comment for the Zicsr gap found while proving
-  it), whereas the vectored/absolute-address PFIC mode is a WCH
-  extension this session could not verify against a real CH32V006 TRM
-  or any hardware/emulator. Nothing in M1-M3 needs a real peripheral IRQ
-  to fire (STP_TMR_INIT/serial/nvmem are all still PORT_TODO - Step 3+
-  is "the next batch" per this batch's own mandate), so direct mode is
-  sufficient today; the vectored-mode question is deferred, not silently
-  dropped - see PFIC_Vector[] below and CONTRACTS.md.
+  INTERRUPT MODE - the M1-M3 "direct vs vendor vectored" open question
+  (CONTRACTS.md #14.2) is now CLOSED with TRM facts (RM 6.5.3.2 MTVEC):
+    MODE0 (bit 0) = 1: entry address = BASEADDR + interrupt_number * 4
+    MODE1 (bit 1) = 1: table entries are ABSOLUTE ADDRESSES (function
+                       pointers), not jump instructions
+  This port uses MODE0=1, MODE1=1: a plain `const` array of C function
+  pointers below IS the vector table - no asm jump stubs needed, and the
+  hot vectors (TIM2/STK/USART1/EXTI) get hardware dispatch instead of an
+  mcause switch. BASEADDR is bits [31:2], so 4-byte alignment suffices.
+
+  HPE / HARDWARE STACKING - DOCUMENTED CHOICE (task brief asks for it):
+  QingKe V2C's INTSYSCR (CSR 0x804) has HWSTKEN (bit 0, vendor hardware
+  prologue: auto register push) and INESTEN (bit 1, 2-level nesting).
+  BOTH RESET TO 0 AND ARE LEFT AT 0 by this port:
+    - HWSTKEN=0 means handlers need a full software frame - which is
+      precisely what GCC's __attribute__((interrupt)) emits (spill +
+      `mret`; disassembly-verified). Enabling HWSTKEN under GCC-attributed
+      handlers would double-save (harmless but slow) and its interaction
+      with picolibc/GCC frames is silicon-unverified - correctness first.
+    - INESTEN=0 means no preemption: core's sei() inside ISR_STEP
+      (stepper.c:355) cannot nest the pulse-reset interrupt into the
+      running handler; delivery defers to handler exit. This is the SAME
+      accepted posture as the SAMD21 M0+ reference (CONTRACTS.md #5.2:
+      "acceptable only because ISR_STEP's tail is short"). Flip-side
+      benefit: no nested-trap mepc/mstatus clobber hazard on a core where
+      GCC's interrupt attribute does not save those CSRs.
 */
 
 #include <stdint.h>
@@ -43,39 +51,20 @@ extern uint32_t _ebss;
 
 extern int main(void);
 
-void Default_Handler(void);
+// Real vector bodies (handlers.c, all __attribute__((interrupt)))
+extern void TIM2_IRQHandler(void);
+extern void SysTick_Handler(void);
+extern void EXTI7_0_IRQHandler(void);
+extern void USART1_IRQHandler(void);
 
 // ============================================================================
-// TRAP ENTRY (direct mode - mtvec[1:0] = 00)
+// DEFAULT HANDLER - loud hang for exceptions and unexpected interrupts.
+// Exceptions funnel to the HardFault slot (vector 3, RM table 6-1); a trap
+// landing here is a bug, and hanging visibly beats silently swallowing it
+// ("compiles but dead" anti-pattern).
 // ============================================================================
-/*
-  __attribute__((interrupt)) makes GCC emit the full callee-saved-register
-  spill/restore and `mret` (verified by disassembly in this session: RV32EC
-  + Zicsr correctly emits `mret` opcode 0x30200073 and a real prologue/
-  epilogue for both plain and nested-call interrupt functions - see the
-  toolchain-evidence transcript). QingKe's `mret` semantics are standard
-  RISC-V privileged-spec `mret` - the PFIC's "hardware fast interrupt"
-  behavior (documented informally as extra automatic context save/restore
-  for lower latency) is additive hardware behavior UNDERNEATH this, not a
-  different software contract; software still just needs a correct
-  interrupt-attributed C function pointed to by mtvec, which is what this
-  provides. `aligned(4)` satisfies direct-mode's BASE alignment
-  requirement (RISC-V priv spec: mtvec.BASE is a 4-byte-aligned address
-  in direct mode - the low 2 bits are the MODE field, not part of the
-  address).
-*/
-__attribute__((interrupt, aligned(4)))
-void trap_entry(void) {
-  // GAP: no real ISR needs to run yet (Step 3+). A trap reaching here
-  // today is either a synchronous exception (bug) or a spuriously
-  // enabled peripheral IRQ (shouldn't happen - nothing in this batch
-  // ever sets a PFIC IENR bit) - Default_Handler's infinite loop is the
-  // correct "loud failure" for both, matching PORTING-CHECKLIST's
-  // "compiles but dead" anti-pattern warning: better to hang visibly
-  // than silently swallow a fault.
-  Default_Handler();
-}
 
+__attribute__((interrupt))
 void Default_Handler(void) {
   while (1) {
     __asm__ volatile ("nop");
@@ -83,27 +72,43 @@ void Default_Handler(void) {
 }
 
 // ============================================================================
-// PLACEHOLDER "CUSTOM VECTOR TABLE" (PFIC absolute-address vectored mode -
-// NOT WIRED TO mtvec YET, see the design note above)
+// PFIC VECTOR TABLE (absolute-address mode). 41 entries, numbers 0-40 per
+// RM table 6-1. `used` + KEEP(.vectors) in script.ld guard it from any
+// future --gc-sections reinstatement (CONTRACTS.md #14.3 lesson).
 // ============================================================================
-/*
-  M1's ask is a "QingKe vector table" skeleton. This array is that
-  skeleton: it is what Step 3+ will populate with real dispatcher
-  function pointers (stepper_timer_irq_dispatch / serial_irq_dispatch /
-  gpio_irq_dispatch, all already defined in handlers.c/serial.c) once
-  the real PFIC IRQ numbering for THIS chip (not V003's) is confirmed
-  against a datasheet (ch32v006.h's IRQn_Type is deliberately left
-  almost empty for the same reason). Sized 32 as a placeholder - WCH
-  V00x-family parts commonly expose on the order of 30-40 vectored
-  sources; this is NOT a verified count for V006. Marked `used` so
-  --gc-sections (once re-enabled per _template's README step 4) cannot
-  silently discard it before anyone notices it is still a placeholder.
-*/
-#define PFIC_VECTOR_COUNT_PLACEHOLDER 32
 
-__attribute__((used, aligned(4)))
-static void (* const PFIC_Vector[PFIC_VECTOR_COUNT_PLACEHOLDER])(void) = {
-  [0 ... PFIC_VECTOR_COUNT_PLACEHOLDER - 1] = Default_Handler,
+__attribute__((used, section(".vectors"), aligned(4)))
+static void (* const PFIC_Vector[PFIC_VECTOR_COUNT])(void) = {
+  [0]  = Default_Handler,        // reserved (reset enters via _start, not the table)
+  [1]  = Default_Handler,        // reserved
+  [2]  = Default_Handler,        // NMI
+  [3]  = Default_Handler,        // HardFault - all exceptions land here
+  [4]  = Default_Handler, [5]  = Default_Handler, [6]  = Default_Handler,
+  [7]  = Default_Handler, [8]  = Default_Handler, [9]  = Default_Handler,
+  [10] = Default_Handler, [11] = Default_Handler,
+  [SysTick_IRQn]  = SysTick_Handler,      // 12 - pulse-reset timer (STK)
+  [13] = Default_Handler,
+  [SW_IRQn]       = Default_Handler,      // 14 - software int, unused
+  [15] = Default_Handler,
+  [WWDG_IRQn]     = Default_Handler,      // 16
+  [PVD_IRQn]      = Default_Handler,      // 17
+  [FLASH_IRQn]    = Default_Handler,      // 18
+  [RCC_IRQn]      = Default_Handler,      // 19
+  [EXTI7_0_IRQn]  = EXTI7_0_IRQHandler,   // 20 - limits + controls (shared)
+  [AWU_IRQn]      = Default_Handler,      // 21
+  [DMA1_CH1_IRQn] = Default_Handler, [DMA1_CH2_IRQn] = Default_Handler,
+  [DMA1_CH3_IRQn] = Default_Handler, [DMA1_CH4_IRQn] = Default_Handler,
+  [DMA1_CH5_IRQn] = Default_Handler, [DMA1_CH6_IRQn] = Default_Handler,
+  [DMA1_CH7_IRQn] = Default_Handler,
+  [ADC_IRQn]      = Default_Handler,      // 29
+  [I2C1_EV_IRQn]  = Default_Handler, [I2C1_ER_IRQn] = Default_Handler,
+  [USART1_IRQn]   = USART1_IRQHandler,    // 32 - serial RX/TX
+  [SPI1_IRQn]     = Default_Handler,      // 33
+  [TIM1_BRK_IRQn] = Default_Handler, [TIM1_UP_IRQn] = Default_Handler,
+  [TIM1_TRG_IRQn] = Default_Handler, [TIM1_CC_IRQn] = Default_Handler,
+  [TIM2_IRQn]     = TIM2_IRQHandler,      // 38 - stepper timer
+  [USART2_IRQn]   = Default_Handler,      // 39
+  [OPCM_IRQn]     = Default_Handler,      // 40
 };
 
 // ============================================================================
@@ -129,12 +134,10 @@ void Reset_Handler(void) {
     *dst++ = *src++;
   }
 
-  // BUG #13-class ordering (CONTRACTS.md #12.4): fence between the .data
-  // copy and .bss zero, and again before SystemInit - plain stores are
-  // not guaranteed complete before the next phase begins. See platform.h
-  // for why this uses `fence rw,rw` rather than assuming an in-order
-  // pipeline needs nothing (UNVERIFIED whether QingKe truly needs it -
-  // correctness-first until confirmed otherwise).
+  // BUG #13-class ordering (CONTRACTS.md #12.4): fence between init
+  // phases - plain stores are not guaranteed complete before the next
+  // phase begins (kept even though QingKe reordering is unconfirmed -
+  // correctness-first, see platform.h).
   __DSB();
 
   // Zero-initialize .bss section.
@@ -145,13 +148,12 @@ void Reset_Handler(void) {
 
   __DSB();
 
-  // Point mtvec at trap_entry, direct mode (mode bits = 00 - trap_entry
-  // is 4-byte aligned via its own attribute, and the low 2 bits are
-  // masked off here defensively in case the linker ever placed something
-  // odd there). Needs Zicsr (see platform.h's HAL_CRITICAL_SECTION
-  // comment for the toolchain flag gap this session found).
+  // mtvec -> PFIC vector table, vectored-by-number (MODE0=1) with
+  // absolute-address entries (MODE1=1) - see file header. Interrupts are
+  // still globally masked (mstatus.MIE=0 out of reset) until core's
+  // sei() at main.c:48.
   {
-    uint32_t mtvec_val = ((uint32_t)trap_entry) & ~0x3u;
+    uint32_t mtvec_val = ((uint32_t)PFIC_Vector & ~0x3u) | 0x3u;
     __asm__ volatile ("csrw mtvec, %0" :: "r" (mtvec_val));
   }
 
@@ -172,13 +174,9 @@ void Reset_Handler(void) {
 // ============================================================================
 /*
   RISC-V has no ARM-style "vector_table[0] = initial SP, hardware loads
-  it automatically" mechanism (GAP vs. every ARM port in this repo) - the
-  very first instructions to run after reset must set SP themselves.
-  `naked` + inline asm is the standard, portable way to do this on RISC-V
-  (matches every bare-metal RISC-V bring-up this session is aware of,
-  including the pre-existing but chip-mismatched CH32V006_PLAN.md sketch
-  this file supersedes). Falls straight into Reset_Handler (a normal C
-  function, not `naked`) once SP is valid.
+  it" mechanism - the very first instructions after reset must set SP
+  themselves. `naked` + inline asm, falling into Reset_Handler once SP is
+  valid (CONTRACTS.md #14.2's worked non-ARM reference).
 */
 __attribute__((naked, section(".init")))
 void _start(void) {

@@ -2,27 +2,26 @@
   script.ld - CH32V006 linker script
   Part of Grbl
 
-  Memory sizes per PLAN.md Decision Log / task brief: 62KB flash, 8KB
-  SRAM. UNVERIFIED against a real CH32V006 datasheet in this session
-  (no vendor doc access, no hardware) - encoded here because it is the
-  only concrete figure this batch has to build against; treat as
-  provisional until confirmed. If wrong, this fails at flash time or
-  corrupts memory silently (not a PORT_TODO-style loud link failure -
-  same warning `_template/script.ld` gives).
+  Memory sizes TRM-VERIFIED this session (CH32V00X RM V1.5 figure 1-8):
+  62KB flash (256B pages 0-247, physical 0x08000000 aliased to 0x0 for
+  execution), 8KB SRAM. The LAST 1KB of flash (0x0800F400-0x0800F7FF,
+  pages 244-247) is the NVMEM EEPROM-emulation window (nvmem.c /
+  platform.h HAL_NVMEM_FLASH_START) - FLASH LENGTH below is shortened to
+  61K so code can never grow into it.
 
-  Section layout is RISC-V-generic (no ARM VTOR alignment requirement -
-  RISC-V direct-mode mtvec only needs 4-byte alignment, which
-  startup.c's `aligned(4)` on trap_entry already guarantees without any
-  special linker placement).
+  Vector table: startup.c's PFIC_Vector (absolute-address vectored mode,
+  mtvec MODE0=MODE1=1) - kept via KEEP(.vectors) so a future
+  --gc-sections reinstatement cannot discard it (CONTRACTS.md #14.3).
+  mtvec BASEADDR is bits [31:2]: 4-byte alignment, no special placement.
 */
 
 ENTRY(_start)
 
-_stack_size = 0x400;  /* 1KB stack - PORT-TODO: size for real worst-case depth once Steps 3-6 add ISR nesting */
+_stack_size = 0x400;  /* 1KB stack - PORT-TODO: size for real worst-case depth (no ISR nesting: INESTEN=0, one interrupt frame max) */
 
 MEMORY
 {
-  FLASH (rx)  : ORIGIN = 0x00000000, LENGTH = 62K
+  FLASH (rx)  : ORIGIN = 0x00000000, LENGTH = 61K  /* 62K minus 1K NVMEM window */
   RAM   (rwx) : ORIGIN = 0x20000000, LENGTH = 8K
 }
 
@@ -31,6 +30,7 @@ SECTIONS
   .init :
   {
     KEEP(*(.init))
+    KEEP(*(.vectors))
   } > FLASH
 
   .text :
