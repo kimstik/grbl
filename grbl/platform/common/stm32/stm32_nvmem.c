@@ -36,8 +36,12 @@ stm32_status_t stm32_nvmem_init(void) {
 
   // Allocate cache (freed on reset, no dynamic deallocation needed)
   if (!nvmem_cache) {
-    // Static allocation for embedded systems (safer than malloc)
-    static uint8_t cache_buffer[4096];  // Max 4KB for now (covers F103, H523)
+    // Static allocation for embedded systems (safer than malloc). Sized from
+    // NVMEM_WINDOW_SIZE (stm32_nvmem.h), which each platform's Makefile may
+    // override to match its own flash_page_size*flash_num_pages - see
+    // BUG #20 note in stm32_nvmem.h for why this can no longer silently
+    // truncate a platform's NVMEM window.
+    static uint8_t cache_buffer[NVMEM_WINDOW_SIZE];
     STM32_VALIDATE_PARAM(nvmem_size <= sizeof(cache_buffer), STM32_ERROR_INVALID_PARAM);
     nvmem_cache = cache_buffer;
   }

@@ -15,6 +15,28 @@
 #include "stm32_platform.h"
 
 // ============================================================================
+// NVMEM CACHE WINDOW SIZE
+// ============================================================================
+//
+// BUG #20: this used to be a hardcoded 4096-byte buffer inside stm32_nvmem.c
+// ("Max 4KB for now (covers F103, H523)" - wrong: H523's window is 8KB).
+// stm32_nvmem_init() computes nvmem_size = flash_page_size * flash_num_pages
+// from the platform's stm32_config (runtime), then validates it against the
+// cache buffer with STM32_VALIDATE_PARAM - which just `return`s the error.
+// hal_nvmem_read_byte() (platform.c) pre-initializes its local `data` to
+// 0xFF and ignores that returned status, so a too-small cache made every
+// read silently come back as 0xFF and every write silently no-op: settings
+// never persisted, with no build or runtime error to point at why.
+//
+// Fix: let each platform size the shared cache to its own window via
+// -DNVMEM_WINDOW_SIZE=<bytes> in its Makefile (see stm32h523/Makefile).
+// Default 4096 is unchanged from before and already covers F103 (2KB) and
+// F411 (4KB), so their Makefiles need no edit.
+#ifndef NVMEM_WINDOW_SIZE
+#define NVMEM_WINDOW_SIZE 4096
+#endif
+
+// ============================================================================
 // NVMEM PUBLIC API
 // ============================================================================
 

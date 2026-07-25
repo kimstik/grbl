@@ -42,6 +42,16 @@ const stm32_platform_config_t stm32_config = {
   .gpio_model             = STM32F411_GPIO_MODEL,
 };
 
+// Ratchet for BUG #20 (found on stm32h523): stm32_nvmem.c's static cache
+// buffer is sized from NVMEM_WINDOW_SIZE (Makefile define, defaults to 4096
+// - see stm32_nvmem.h). Catch at compile time, on every platform sharing
+// that code, if a future config.h edit ever grows this platform's flash
+// window past whatever NVMEM_WINDOW_SIZE its Makefile supplies - instead of
+// letting stm32_nvmem_init() silently reject it and every setting read back
+// as 0xFF at runtime.
+_Static_assert(STM32F411_FLASH_PAGE_SIZE * STM32F411_FLASH_NUM_PAGES <= NVMEM_WINDOW_SIZE,
+               "STM32F411 NVMEM window exceeds stm32_nvmem.c cache buffer (NVMEM_WINDOW_SIZE) - BUG #20 class");
+
 // ============================================================================
 // CLOCK CONFIGURATION (HSE 25MHz -> PLL -> 96MHz, Black Pill crystal)
 // ============================================================================

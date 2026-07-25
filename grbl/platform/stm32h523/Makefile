@@ -22,6 +22,13 @@ OPENOCD_TARGET = stm32h5x.cfg
 # prelude.h is the single injected build prelude (defines GRBL_PRELUDE,
 # checked by grbl/platform/hal.h) - same pattern as samd21's $(BOARD)/prelude.h
 CFLAGS_EXTRA   = -I. -I../common/dummy -include prelude.h
+# BUG #20: H523's flash erase granularity is a fixed 8KB sector (flash.c
+# computes page_num = addr/8192; there is no smaller erase unit on this
+# family), so FLASH_NUM_PAGES=1 in config.h already gives the smallest
+# possible NVMEM window at 8192B - it can't be shrunk to fit the common
+# code's 4096B default. Override the shared cache buffer in
+# common/stm32/stm32_nvmem.c to match instead (see stm32_nvmem.h).
+CFLAGS_EXTRA  += -DNVMEM_WINDOW_SIZE=8192
 
 # Include common build rules
 include ../common/stm32/common.mk
