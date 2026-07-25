@@ -972,8 +972,8 @@ disassembly. RM-only facts that could not be locally verified are marked.
    golden match.
 ## 18. KEEP() does not survive LTO: vector tables need a real code reference
 
-*(Section number assigned by the BUG #21 work item; §17 is reserved by a
-concurrent workstream.)*
+*(Section number assigned by the BUG #21 work item; §17 is FP precision, landed
+RUNTIME-PROVEN by the concurrent workstream.)*
 
 Empirical, from BUG #21: stm32f103, stm32f411 and stm32h523 RELEASE
 binaries shipped with **no vector table at all**. Not a corrupted table —
