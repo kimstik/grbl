@@ -7,21 +7,29 @@
   License: MIT
 
   Injected into every translation unit by the Makefile via -include, same
-  pattern as samd21's $(BOARD)/prelude.h. Unlike samd21 (whose prelude chains
-  GPIO register accessors, common/gpio.h helpers, the board pin map and
-  platform.h), stm32h523 currently takes everything through grbl.h's ordinary
-  include chain, so this prelude deliberately includes nothing - it only
-  carries the GRBL_PRELUDE marker that grbl/platform/hal.h checks to reject
-  compiles that bypass the platform Makefile.
+  pattern as samd21's $(BOARD)/prelude.h and stm32f103/prelude.h. Order is
+  load-bearing:
 
-  When this platform grows -include needs (e.g. common/gpio.h injection for
-  the GPIO_* macro family), add them HERE, in dependency order, instead of
-  adding new -include flags to the Makefile.
+    1. gpio.h               STM32H523 register accessors (GPIO_OREG/IREG) and
+                            MODER/PUPDR-based direction/pull overrides. MUST
+                            come first: platform/common/gpio.h only supplies
+                            AVR-style defaults for names not already defined.
+    2. ../common/gpio.h     Generic GPIO bit-op helpers (GPIO_MWO, GPIO_MRD,
+                            GPIO_BGETOUT, ...) built on the accessors above.
+
+  The pin map and chip HAL (platform.h, which includes timer.h) arrive through
+  grbl.h's ordinary include chain (grbl.h -> platform/hal.h -> platform.h).
+
+  GRBL_PRELUDE is the marker grbl/platform/hal.h checks to reject compiles
+  that bypass the platform Makefile.
 */
 
 #ifndef GRBL_PRELUDE_STM32H523_H
 #define GRBL_PRELUDE_STM32H523_H
 
 #define GRBL_PRELUDE 1
+
+#include "gpio.h"
+#include "../common/gpio.h"
 
 #endif // GRBL_PRELUDE_STM32H523_H

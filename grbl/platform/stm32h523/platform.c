@@ -191,6 +191,21 @@ void hal_gpio_pullup_disable(GPIO_TypeDef* port, uint32_t mask) {
   hal_gpio_set_input(port, mask);
 }
 
+// Configure a single pin for an alternate function (MODER=0b10 + AFR nibble).
+// H5's MODER/AFR model has no single-pin AF helper of its own (unlike F1's
+// gpio_config_pin(port, pin, 0xB) which f103 uses for the same purpose) -
+// used by hal_timer_spindle_pwm_init() (PA8/TIM1_CH1, AF1) and
+// hal_serial_init() (PA9/PA10 USART1, AF7).
+static void hal_gpio_set_af(GPIO_TypeDef* port, uint8_t pin, uint8_t af) {
+  port->MODER &= ~(0x3u << (pin * 2));
+  port->MODER |= (0x2u << (pin * 2));          // Alternate function mode (10)
+
+  uint8_t reg_idx = pin / 8;                    // AFR[0]=AFRL (pins 0-7), AFR[1]=AFRH (pins 8-15)
+  uint8_t shift = (pin % 8) * 4;
+  port->AFR[reg_idx] &= ~(0xFu << shift);
+  port->AFR[reg_idx] |= ((uint32_t)af << shift);
+}
+
 void hal_gpio_interrupt_enable(GPIO_TypeDef* port, uint32_t mask) {
   // Enable SYSCFG clock (needed for EXTI configuration)
   RCC->APB3ENR |= RCC_APB3ENR_SYSCFGEN;
@@ -305,7 +320,12 @@ void hal_gpio_init(void) {
   // Configure spindle pins
   hal_gpio_set_output(GPIOB, (1 << 7));  // PB7: Spindle enable
   hal_gpio_set_output(GPIOA, (1 << 9));  // PA9: Spindle direction
-  // PA8 (spindle PWM) will be configured by timer HAL when needed
+
+  // PA8 (spindle PWM, TIM1_CH1): route to TIM1 alternate function AF1
+  // (RM0481 GPIO AF table - AF1 is TIM1 on every general-purpose/advanced
+  // timer STM32 family, F1 through H5). hal_timer_spindle_pwm_init() does
+  // not touch GPIO mode - see timer.h note.
+  hal_gpio_set_af(GPIOA, 8, 1);
 
   // Configure coolant pins (PC0, PC1) as outputs
   hal_gpio_set_output(GPIOC, (1 << 0) | (1 << 1));
@@ -317,6 +337,153 @@ void hal_gpio_init(void) {
   GPIOA->BSRR = (1 << 6);        // Disable steppers (active LOW, so set HIGH)
   GPIOB->BSRR = (1 << (7 + 16)); // Spindle off (active HIGH, so set LOW)
   GPIOC->BSRR = (1 << (0 + 16)) | (1 << (1 + 16)); // Coolant off
+}
+
+// ============================================================================
+// TIMER FUNCTIONS (contract macros: timer.h - STP_TMR_*/STP_PULSE_RESET_*/PWM_*)
+// ============================================================================
+
+void hal_timer_stepper_init(void) {
+  // Enable TIM2 clock
+  RCC->APB1ENR1 |= RCC_APB1ENR1_TIM2EN;
+
+  // Configure TIM2 as upcounter with auto-reload (32-bit on H523)
+  TIM2->CR1 = 0;
+  TIM2->PSC = 0;                    // No prescaler
+  TIM2->ARR = 0xFFFFFFFF;           // Max period (32-bit)
+  TIM2->DIER = TIM_DIER_UIE;        // Enable update interrupt
+  TIM2->CR1 = TIM_CR1_CEN;          // Enable counter
+
+  // Enable TIM2 interrupt in NVIC
+  NVIC_EnableIRQ(TIM2_IRQn);
+}
+
+void hal_timer_pulse_reset_init(void) {
+  // Enable TIM3 clock
+  RCC->APB1ENR1 |= RCC_APB1ENR1_TIM3EN;
+
+  // Configure TIM3 for pulse reset timing (STOPPED, per CONTRACTS.md
+  // section 4 - STP_PULSE_RESET_START() is what starts it)
+  TIM3->CR1 = 0;
+  TIM3->PSC = 0;
+  TIM3->DIER = TIM_DIER_UIE;        // Enable update interrupt
+
+  // Enable TIM3 interrupt in NVIC
+  NVIC_EnableIRQ(TIM3_IRQn);
+}
+
+// Spindle PWM timer initialization (TIM1, advanced-control timer - needs
+// BDTR.MOE, see timer.h/regs.h notes)
+void hal_timer_spindle_pwm_init(void) {
+  // Enable TIM1 clock
+  RCC->APB2ENR |= RCC_APB2ENR_TIM1EN;
+
+  // Configure TIM1 for PWM mode on channel 1
+  TIM1->CR1 = 0;
+  TIM1->PSC = 0;                    // No prescaler
+  TIM1->ARR = SPINDLE_PWM_MAX_VALUE;
+
+  // PWM mode 1 on channel 1
+  TIM1->CCMR1 = (6 << 4) | TIM_CCMR1_OC1PE;  // PWM mode 1, preload enable
+  TIM1->CCER = 0;                   // Channel disabled initially
+  TIM1->BDTR = TIM_BDTR_MOE;        // Main output enable (required for TIM1)
+  TIM1->CCR1 = 0;                   // 0% duty cycle
+
+  TIM1->CR1 = TIM_CR1_CEN;          // Enable counter
+}
+
+// ============================================================================
+// SERIAL/UART FUNCTIONS
+// ============================================================================
+
+void hal_serial_init(uint32_t baud_rate) {
+  // Enable USART1 clock
+  RCC->APB2ENR |= RCC_APB2ENR_USART1EN;
+
+  // Configure PA9 (TX) and PA10 (RX) as USART1 alternate function (AF7,
+  // RM0481 GPIO AF table - same AF number as F4/F7/H7 for USART1/2/3)
+  hal_gpio_set_af(GPIOA, 9, 7);
+  hal_gpio_set_af(GPIOA, 10, 7);
+
+  // Calculate baud rate divisor (USART1 is on APB2, 125 MHz per config.h)
+  uint32_t div = (stm32_config.apb2_freq + (baud_rate / 2)) / baud_rate;
+
+  // Configure USART1
+  USART1->BRR = div;
+  USART1->CR1 = USART_CR1_TE | USART_CR1_RE | USART_CR1_RXNEIE;
+  USART1->CR1 |= USART_CR1_UE;      // Enable USART
+
+  // Enable USART1 interrupt in NVIC
+  NVIC_EnableIRQ(USART1_IRQn);
+}
+
+// Forward declarations for serial ISR helpers (defined in serial.c)
+extern void stm32_usart1_rx_handler(void);
+extern void stm32_usart1_tx_handler(void);
+
+// USART1 interrupt handler
+// This is the actual ISR that dispatches to RX/TX handlers based on status
+// flags (H5 USART: ISR register, not the classic F1 SR)
+void USART1_IRQHandler(void) {
+  // Check for RX not empty (data received)
+  if (USART1->ISR & USART_ISR_RXNE) {
+    stm32_usart1_rx_handler();
+  }
+
+  // Check for TX empty (ready to transmit)
+  if (USART1->ISR & USART_ISR_TXE) {
+    stm32_usart1_tx_handler();
+  }
+}
+
+// ============================================================================
+// SYSTEM TIMING (thin wrappers over common/stm32/stm32_timing.c)
+// ============================================================================
+
+void SysTick_Handler(void) {
+  stm32_systick_handler();
+}
+
+uint32_t hal_millis(void) {
+  return stm32_millis();
+}
+
+uint64_t hal_micros(void) {
+  return stm32_micros();
+}
+
+void hal_delay_ms(uint32_t ms) {
+  stm32_delay_ms(ms);
+}
+
+void hal_delay_us(uint32_t us) {
+  stm32_delay_us(us);
+}
+
+// AVR compatibility - _delay_ms wrapper (nuts_bolts.c:124,133 call this
+// directly, bypassing the HAL_DELAY_MS macro, same as f103/platform.c)
+void _delay_ms(double ms) {
+  hal_delay_ms((uint32_t)ms);
+}
+
+// ============================================================================
+// NVMEM (thin wrappers over common/stm32/stm32_nvmem.c - link-level API
+// expected by platform.h's eeprom_get_char/put_char macros, CONTRACTS.md
+// section 10)
+// ============================================================================
+
+unsigned char hal_nvmem_read_byte(unsigned int addr) {
+  uint8_t data = 0xFF;
+  stm32_nvmem_read_byte((uint32_t)addr, &data);
+  return data;
+}
+
+void hal_nvmem_write_byte(unsigned int addr, unsigned char data) {
+  stm32_nvmem_write_byte((uint32_t)addr, data);
+}
+
+void hal_nvmem_flush(void) {
+  stm32_nvmem_flush();
 }
 
 // ============================================================================

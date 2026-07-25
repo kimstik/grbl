@@ -1,84 +1,140 @@
 /*
-  handlers.c - External interrupt handlers for STM32H523
+  handlers.c - STM32H523 interrupt vector wrappers
   Part of Grbl
 
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
 
-  EXTI interrupt handlers for limit switches and control pins.
-  STM32H5 uses separate FPR1/RPR1 registers instead of combined PR register.
+  Real IRQ vectors for the timers (TIM2/TIM3) and external interrupts
+  (EXTI, limit switches + control pins). Each wrapper clears the peripheral
+  interrupt flag FIRST, then calls the core-supplied ISR body - clearing
+  after would lose edges/updates that arrive during the body, and for
+  ISR_STEP_RESET specifically would ghost the final overflow after the
+  timer is stopped (CONTRACTS.md sections 2.3 and 5.1). Ported from
+  stm32f103/handlers.c: same core-ISR dedup pattern, adapted to H523's EXTI
+  mechanics (separate rising/falling pending registers, RPR1/FPR1, and a
+  dedicated vector per line 0-15 instead of F1's shared EXTI9_5/EXTI15_10).
 */
 
 #include "platform.h"
 #include "regs.h"
 
-// Forward declarations of GRBL interrupt handlers
-extern void limits_isr(void);     // Defined in limits.c
-extern void control_isr(void);    // Defined in system.c
+// ============================================================================
+// STEPPER / PULSE-RESET TIMER ISRs
+// ============================================================================
+// __isr_step_impl / __isr_step_reset_impl are the named bodies stepper.c
+// defines via ISR_STEP()/ISR_STEP_RESET() (timer.h). startup.c's vector
+// table requires TIM2_IRQHandler and TIM3_IRQHandler as real (non-weak)
+// symbols.
+
+extern void __isr_step_impl(void);
+extern void __isr_step_reset_impl(void);
+#ifdef STEP_PULSE_DELAY
+  extern void __isr_step_delay_impl(void);
+#endif
+
+// TIM2 - stepper timer (STP_TMR_*, platform.c hal_timer_stepper_init)
+void TIM2_IRQHandler(void) {
+  TIM2->SR = 0;  // Clear all flags first - see timer.h STP_TMR note re UIF-only clear
+  __isr_step_impl();
+}
+
+// TIM3 - pulse reset timer (STP_PULSE_RESET_*, platform.c hal_timer_pulse_reset_init)
+void TIM3_IRQHandler(void) {
+  TIM3->SR = 0;  // Clear flags before the body stops the timer (section 5.1)
+  __isr_step_reset_impl();
+}
+
+#ifdef STEP_PULSE_DELAY
+  // Step pulse delay shares TIM3's CC1 compare (timer.h STP_PULSE_DELAY_INIT),
+  // same as the f103 reference - no separate timer peripheral needed.
+  void TIM4_IRQHandler(void) {
+    TIM3->SR = 0;
+    __isr_step_delay_impl();
+  }
+#endif
 
 // ============================================================================
-// LIMIT SWITCH INTERRUPT HANDLERS
+// GPIO INTERRUPTS (EXTI - limit switches and control pins)
 // ============================================================================
-// Limit switches are configured for falling edge trigger (button press)
+// LIMIT_INT_IRQHandler()/CONTROL_INT_IRQHandler() are the core-supplied
+// bodies (limits.c via HAL_GPIO_IRQ_HANDLER(LIMIT_INT), system.c via
+// HAL_GPIO_IRQ_HANDLER(CONTROL_INT)) - CONTRACTS.md section 2.
+//
+// STM32H5 EXTI splits the classic single PR pending register into RPR1
+// (rising edge) / FPR1 (falling edge). hal_gpio_interrupt_enable()
+// (platform.c) currently arms falling-edge only, but both are cleared here
+// unconditionally (write-1-to-clear on a bit that was never set is a
+// documented no-op) so a future rising/both-edges config (CONTRACTS.md
+// section 2.6 - core treats any change as a trigger) does not silently
+// break this vector. Each line has its OWN vector on H5 (no shared
+// EXTI9_5/EXTI15_10 group like F1), so no multi-handler dispatch is needed
+// here (contrast f103/handlers.c EXTI9_5_IRQHandler).
+
+extern void LIMIT_INT_IRQHandler(void);
+extern void CONTROL_INT_IRQHandler(void);
 
 // X limit switch (PB0, EXTI0)
 void EXTI0_IRQHandler(void) {
-  if (EXTI->FPR1 & (1 << 0)) {  // Check falling edge pending
-    EXTI->FPR1 = (1 << 0);       // Clear pending bit by writing 1
-    limits_isr();                 // Call GRBL limit handler
+  if ((EXTI->FPR1 | EXTI->RPR1) & (1 << 0)) {
+    EXTI->FPR1 = (1 << 0);  // Clear pending bit(s) FIRST
+    EXTI->RPR1 = (1 << 0);
+    LIMIT_INT_IRQHandler();
   }
 }
 
 // Y limit switch (PB1, EXTI1)
 void EXTI1_IRQHandler(void) {
-  if (EXTI->FPR1 & (1 << 1)) {
+  if ((EXTI->FPR1 | EXTI->RPR1) & (1 << 1)) {
     EXTI->FPR1 = (1 << 1);
-    limits_isr();
+    EXTI->RPR1 = (1 << 1);
+    LIMIT_INT_IRQHandler();
   }
 }
 
 // Z limit switch (PB10, EXTI10)
 void EXTI10_IRQHandler(void) {
-  if (EXTI->FPR1 & (1 << 10)) {
+  if ((EXTI->FPR1 | EXTI->RPR1) & (1 << 10)) {
     EXTI->FPR1 = (1 << 10);
-    limits_isr();
+    EXTI->RPR1 = (1 << 10);
+    LIMIT_INT_IRQHandler();
   }
 }
 
-// ============================================================================
-// CONTROL PIN INTERRUPT HANDLERS
-// ============================================================================
-// Control buttons are configured for falling edge trigger (button press)
-
 // Reset button (PB3, EXTI3)
 void EXTI3_IRQHandler(void) {
-  if (EXTI->FPR1 & (1 << 3)) {
+  if ((EXTI->FPR1 | EXTI->RPR1) & (1 << 3)) {
     EXTI->FPR1 = (1 << 3);
-    control_isr();  // Call GRBL control pin handler
+    EXTI->RPR1 = (1 << 3);
+    CONTROL_INT_IRQHandler();
   }
 }
 
 // Feed hold button (PB4, EXTI4)
 void EXTI4_IRQHandler(void) {
-  if (EXTI->FPR1 & (1 << 4)) {
+  if ((EXTI->FPR1 | EXTI->RPR1) & (1 << 4)) {
     EXTI->FPR1 = (1 << 4);
-    control_isr();
+    EXTI->RPR1 = (1 << 4);
+    CONTROL_INT_IRQHandler();
   }
 }
 
-// Cycle start button (PB5, EXTI5)
+// Cycle start button (PB5, EXTI5) - own vector on H5, unlike f103's shared
+// EXTI9_5 line, so no multi-line dispatch is required here.
 void EXTI5_IRQHandler(void) {
-  if (EXTI->FPR1 & (1 << 5)) {
+  if ((EXTI->FPR1 | EXTI->RPR1) & (1 << 5)) {
     EXTI->FPR1 = (1 << 5);
-    control_isr();
+    EXTI->RPR1 = (1 << 5);
+    CONTROL_INT_IRQHandler();
   }
 }
 
 // Safety door button (PB6, EXTI6)
 void EXTI6_IRQHandler(void) {
-  if (EXTI->FPR1 & (1 << 6)) {
+  if ((EXTI->FPR1 | EXTI->RPR1) & (1 << 6)) {
     EXTI->FPR1 = (1 << 6);
-    control_isr();
+    EXTI->RPR1 = (1 << 6);
+    CONTROL_INT_IRQHandler();
   }
 }
