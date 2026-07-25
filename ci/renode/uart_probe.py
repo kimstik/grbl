@@ -6,10 +6,17 @@ GRBL banner, then (unless --banner-only) sends "$$" and waits for the
 settings dump. On banner timeout it interrogates the Renode monitor for the
 hang PC and nearest symbol so CI logs capture WHERE the boot stalled.
 
+With --motion, additionally proves the port MOVES: sends G91 + G0 X1 and
+polls '?' realtime status reports, asserting MPos X advances from 0.000 and
+reaches 1.000 with the machine back in Idle. Position feedback is
+sys_position, which only the TC3 stepper ISR increments - X advancing IS
+step generation.
+
 Exit codes:
-  0 - banner seen (and settings seen, unless --banner-only)
+  0 - all requested stages passed
   1 - banner never appeared (hang analysis printed if monitor reachable)
   2 - banner seen but "$$" produced no settings output
+  4 - motion stage failed (no status reports, or MPos X frozen/incomplete)
 """
 
 import argparse
@@ -21,6 +28,9 @@ import time
 BANNER_RE = re.compile(rb"Grbl \d+\.\d+\w*")
 # $$ output ends with the last numbered setting; $132 is max-travel Z in 1.1h.
 SETTINGS_RE = re.compile(rb"\$132=")
+# grbl 1.1 realtime report: <Idle|MPos:0.000,0.000,0.000|FS:0,0>
+STATUS_RE = re.compile(rb"<(\w+)[^>]*\|MPos:([-0-9.]+),([-0-9.]+),([-0-9.]+)")
+OK_RE = re.compile(rb"ok\r?\n")
 
 
 def connect_retry(port, deadline, name):
@@ -93,6 +103,72 @@ def hang_analysis(mon_port):
         print(regs, flush=True)
 
 
+def send_and_wait_ok(sock, line, transcript, timeout):
+    """Send one g-code line and wait for a fresh 'ok' after it."""
+    mark = len(transcript)
+    sock.sendall(line + b"\n")
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            chunk = sock.recv(4096)
+            if chunk:
+                transcript.extend(chunk)
+        except socket.timeout:
+            pass
+        if OK_RE.search(transcript, mark):
+            return True
+    return False
+
+
+def motion_stage(sock, transcript, timeout):
+    """G91 + G0 X1 (250 steps at $100=250), then poll '?' until X reaches
+    1.000 in Idle. Returns (ok, samples)."""
+    if not send_and_wait_ok(sock, b"G91", transcript, 10):
+        print("FAIL: no 'ok' for G91", flush=True)
+        return False, []
+    mark = len(transcript)
+    sock.sendall(b"G0 X1\n")
+
+    samples = []          # (state, x) in arrival order, deduplicated
+    reached = False
+    scan_pos = mark       # parse each report exactly once
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        sock.sendall(b"?")             # realtime command, no newline needed
+        time.sleep(0.05)
+        try:
+            chunk = sock.recv(65536)
+            if chunk:
+                transcript.extend(chunk)
+        except socket.timeout:
+            pass
+        last = None
+        for m in STATUS_RE.finditer(transcript, scan_pos):
+            last = m
+            state = m.group(1).decode()
+            x = float(m.group(2))
+            if not samples or samples[-1] != (state, x):
+                samples.append((state, x))
+        if last is not None:
+            scan_pos = last.end()
+            state = last.group(1).decode()
+            x = float(last.group(2))
+            if state == "Idle" and abs(x - 1.0) < 0.0005:
+                reached = True
+                break
+
+    xs = [x for _, x in samples]
+    print("motion samples (state, MPos X):", samples, flush=True)
+    if not samples:
+        print("FAIL: '?' produced no status reports", flush=True)
+        return False, samples
+    advanced = any(0.0 < x < 1.0 for x in xs) or (reached and max(xs) >= 1.0)
+    monotonic = all(b >= a - 1e-9 for a, b in zip(xs, xs[1:]))
+    print(f"motion: reached={reached} advanced={advanced} "
+          f"monotonic={monotonic} max_x={max(xs):.3f}", flush=True)
+    return reached and advanced and monotonic, samples
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--uart-port", type=int, default=3456)
@@ -100,6 +176,9 @@ def main():
     ap.add_argument("--banner-timeout", type=float, default=90.0)
     ap.add_argument("--settings-timeout", type=float, default=60.0)
     ap.add_argument("--banner-only", action="store_true")
+    ap.add_argument("--motion", action="store_true",
+                    help="after $$, run the G91/G0 X1 motion stage")
+    ap.add_argument("--motion-timeout", type=float, default=60.0)
     ap.add_argument("--transcript", default=None,
                     help="write raw UART transcript to this file")
     args = ap.parse_args()
@@ -129,6 +208,15 @@ def main():
                     read_until(uart, re.compile(rb"\$132=.*?ok", re.S),
                                time.monotonic() + 5, transcript)
                     print("PASS: '$$' settings dump received", flush=True)
+                    if args.motion:
+                        moved, _ = motion_stage(uart, transcript,
+                                                args.motion_timeout)
+                        if moved:
+                            print("PASS: motion - MPos X advanced 0 -> "
+                                  "1.000, Idle", flush=True)
+                        else:
+                            print("FAIL: motion stage", flush=True)
+                            rc = 4
                 else:
                     print("FAIL: no settings output after '$$'", flush=True)
                     rc = 2

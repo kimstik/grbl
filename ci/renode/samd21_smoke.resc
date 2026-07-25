@@ -11,6 +11,9 @@ $elf?=@build/grbl_samd21_dbg.elf
 $uart_port?=3456
 
 mach create "grbl-samd21"
+# Compile the 16-bit TC access shim (see its header comment) before the
+# platform description references Timers.SAMD21_Timer16.
+include @ci/renode/SAMD21_Timer16.cs
 machine LoadPlatformDescription @ci/renode/samd21_grbl.repl
 
 macro reset
@@ -29,6 +32,14 @@ runMacro $reset
 
 emulation CreateServerSocketTerminal $uart_port "uartsrv" false
 connector Connect sysbus.sercom3 uartsrv
+
+# Log every PORT OUT write that drives the X STEP pin (megarm: PA25) high.
+# MPos alone cannot prove step output: sys_position increments in the
+# Bresenham branch even when the step-bit OR truncates (BUG #17 phantom
+# motion), so the motion smoke additionally requires XSTEP_HIGH lines in the
+# Renode log (asserted by smoke.sh --motion). ~10 us pulses are far below
+# monitor sampling resolution; a write hook catches every single one.
+sysbus SetHookBeforePeripheralWrite portA "if offset == 0x10 and (value & (1 << 25)) != 0: self.InfoLog('XSTEP_HIGH')"
 
 echo "SAMD21 GRBL smoke machine ready; UART on socket port:"
 echo $uart_port

@@ -47,8 +47,13 @@ jobs:
           mkdir -p renode-portable
           tar xzf renode.tar.gz -C renode-portable --strip-components=1
 
-      - name: Run smoke test
+      - name: Boot smoke (banner + $$)
         run: RENODE="$PWD/renode-portable/renode" ci/renode/smoke.sh
+
+      - name: Motion smoke (G91 + G0 X1, MPos X -> 1.000)
+        run: >
+          RENODE="$PWD/renode-portable/renode" LOG_DIR=build/smoke-motion
+          ci/renode/smoke.sh --motion
 
       - name: Upload smoke logs
         if: always()
@@ -58,4 +63,6 @@ jobs:
           path: |
             build/smoke/renode.log
             build/smoke/uart_transcript.txt
+            build/smoke-motion/renode.log
+            build/smoke-motion/uart_transcript.txt
           if-no-files-found: warn
