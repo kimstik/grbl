@@ -147,6 +147,9 @@ without reverse-engineering an existing port.
       Renode VTOR modeling PROVEN by isolation test (VecBase forced 0 + stub SP/PC →
       boots, VecBase reads back 0x200) → .resc override removed. Smoke exit 0 ×2.
       samd21 DEBUG size-proxy now 60196/296/6160 (+24, str+dsb+literal pool).
+- [ ] **Motion smoke** (after BUG #17 fix + SysTick land): extend Renode scenario —
+      jog/G0 command, assert `?` status position ADVANCES and step pulses reach
+      GPIO. Banner+$$ proved boot; only motion proves the port moves steel.
 - [ ] Mark SAMD21 "ready for hardware validation" in roadmap; community does hardware.
 
 **Exit criterion**: Renode boot test green in CI.
