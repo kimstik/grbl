@@ -105,7 +105,7 @@ assumptions); BUG #4 (baud arithmetic) — none catchable without stated contrac
 **Exit criterion**: a new platform can be ported by copying `_template` + contracts alone,
 without reverse-engineering an existing port.
 
-## Phase 3 — SAMD21 Closure
+## Phase 3 — SAMD21 Closure   [COMPLETE 2026-07-23]
 
 - [x] `_delay_us()` / `_delay_ms()` implemented (calibrated 3-cycle asm loop +
       hal_millis poll with handler-mode/PRIMASK/no-SysTick fallback; disasm-verified)
@@ -152,10 +152,17 @@ without reverse-engineering an existing port.
       Renode VTOR modeling PROVEN by isolation test (VecBase forced 0 + stub SP/PC →
       boots, VecBase reads back 0x200) → .resc override removed. Smoke exit 0 ×2.
       samd21 DEBUG size-proxy now 60196/296/6160 (+24, str+dsb+literal pool).
-- [ ] **Motion smoke** (after BUG #17 fix + SysTick land): extend Renode scenario —
-      jog/G0 command, assert `?` status position ADVANCES and step pulses reach
-      GPIO. Banner+$$ proved boot; only motion proves the port moves steel.
-- [ ] Mark SAMD21 "ready for hardware validation" in roadmap; community does hardware.
+- [x] **BUG #19 FIXED + MOTION SMOKE PASSED — THE PORT MOVES (2026-07-23).**
+      serial.c realtime interception mirrors core verbatim (?/!/~/ctrl-X/overrides);
+      motion: MPos 0->1.000 with accel/decel profile, Idle; PA25 STEP pin driven
+      150+ times (write-hook), DIR polarity correct both ways. NEGATIVE CONTROL
+      FINDING: #17 = PHANTOM MOTION (MPos lies even broken — Bresenham increments
+      regardless of dead pins) -> pin-level assert added, exit 4 on phantom;
+      before/after pair complete. Renode model gap closed via ci-only C# shim
+      (16-bit TC writes + CTC top=0 wake). Sizes 60864/43036. All gates green.
+- [x] SAMD21 = READY FOR HARDWARE VALIDATION (community/owner does hardware;
+      every emulatable subsystem proven: boot, EEPROM, serial RX/TX+realtime,
+      SysTick, delays, VTOR, MOTION with physical pin evidence).
 
 **Exit criterion**: Renode boot test green in CI.
 
