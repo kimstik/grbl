@@ -199,12 +199,18 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 // this board was the one deliberately-excluded, tracked violation of the
 // duty-cap-twins class (CONTRACTS.md static-assert-sweep slug) - it shipped
 // SPINDLE_PWM_MAX_VALUE=65535 while TCC0's PER=0xFF and core's duty is
-// uint8_t, so the value silently truncated to 255 at compile time (the
-// port worked BY ACCIDENT of that truncation; see the now-removed
-// -Woverflow entry this exact truncation left in
-// ci/warn_baseline_samd21.txt). Fixed to the single canon (255) in the
-// same commit that adds this assert, per the instruction the exclusion
-// comment left. The class is now closed on every port, no exceptions.
+// uint8_t. BUG #22 (reclassified 2026-07-26, was wrongly called cosmetic):
+// only ONE use site (the uint8_t assignment in spindle_compute_pwm_value())
+// silently truncated 65535->255 harmlessly; spindle_control.c:45's
+// `pwm_gradient = SPINDLE_PWM_RANGE/(rpm_max-rpm_min)` is a FLOAT
+// expression with no such truncation, so pwm_gradient was ~258x too large
+// and real commanded spindle speeds produced wrapped-mod-256 garbage duty
+// values - see CONTRACTS.md #6.2/static-assert-sweep and PLAN.md's BUG #22
+// entry for the objdump diff and reproduction numbers. Not a benign
+// accident: a live, silent spindle-output defect. Fixed to the single
+// canon (255) in the same commit that adds this assert, per the
+// instruction the exclusion comment left. The class is now closed on
+// every port, no exceptions.
 _Static_assert(SPINDLE_PWM_MAX_VALUE <= 255,
                "SPINDLE_PWM_MAX_VALUE must fit core's uint8_t duty domain (CONTRACTS.md #6.2, duty-cap-twins class)");
 

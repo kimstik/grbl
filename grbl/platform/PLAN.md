@@ -35,8 +35,12 @@ The single highest-leverage phase. Converts manual review marathons into automat
 
 **Exit criterion**: green pipeline on push — CONFIRMED RUNNING 2026-07-26 (see Current State):
 `github.com/kimstik/grbl/actions` shows 78 CI runs + 67 Smoke runs on this branch, one per push,
-matching this branch's commit history. Per-run pass/fail was not re-confirmed pixel-by-pixel in
-that pass (fetch method loses status icons) — check the Actions tab directly for green/red.
+matching this branch's commit history. **Provenance caveat (2026-07-26, added on review): this run
+count is single-sourced** — one agent's single GitHub web-UI fetch, not corroborated via `gh api`
+(both the orchestrator's and a reviewer's API access to this repo returned 403 on re-check). Treat
+"Actions is enabled and running" as solid and the exact 78/67 counts as an unverified UI snapshot.
+Per-run pass/fail was not re-confirmed pixel-by-pixel in that pass (fetch method loses status
+icons) — check the Actions tab directly for green/red.
 
 ## Phase 1 — Injection Canon (prelude refactor)
 
@@ -1179,7 +1183,9 @@ identity to integration time.
   matching intent). **CI-status finding, corrects a stale claim in this file**: GitHub Actions IS
   running on this fork — `github.com/kimstik/grbl/actions` shows 78 CI + 67 Smoke runs on this
   branch, one per push (run #78 = this tree's HEAD commit), not "no runs yet / possibly disabled"
-  as this file previously recorded (Phase 0 exit criterion corrected above). Docs truth-audited
+  as this file previously recorded (Phase 0 exit criterion corrected above; that entry now also
+  carries the single-source/403-API provenance caveat for this exact run count — see there,
+  Phase 0). Docs truth-audited
   and corrected: README.md's platform matrix (was 2 platforms "green," rest "in repair" — now a
   full 8-platform table with honest proof-level column); PLATFORM_ROADMAP.md (was badly stale —
   stm32f103/h523 still described as build-broken, ch32v006 as "not a real port, no Makefile",
@@ -1575,12 +1581,17 @@ identity to integration time.
     megarm-specific — always rebuild megarm DEBUG immediately before the smoke
     or the pin check reads as a false phantom-motion FAIL.
 
-- **2026-07-26 — samd21 duty-cap-twins closure: LAST tracked
+- **2026-07-26 — BUG #22 FIXED: samd21 duty-cap-twins closure — LAST tracked
   `SPINDLE_PWM_MAX_VALUE<=255` exception removed, class now closed on every
   port.** (agent-authored entry) Follow-up to the `_Static_assert` sweep
   above, which deliberately left samd21 (megarm+generic) excluded because it
   was declaring `SPINDLE_PWM_MAX_VALUE 65535` — a live, tracked violation, not
   a stale doc.
+  **RECLASSIFIED 2026-07-26 (adversarial review): this commit's own "post-fix
+  disassembly is byte-identical" / "behaviour-preserving by construction"
+  claims below are FALSE for the build as a whole and are corrected in place
+  rather than left standing — see the new bullet after "Fix" for the actual
+  functional bug (BUG #22) this commit silently repaired.**
   - **Truth established before touching anything** (per the brief — do not
     assume the accident, verify it): rebuilt samd21/megarm DEBUG and captured
     the exact compiler diagnostic: `megarm/config.h:188:32: warning: unsigned
@@ -1601,9 +1612,60 @@ identity to integration time.
     equals `PER` exactly, correct by construction instead of by accidental
     truncation. Added the same `_Static_assert(SPINDLE_PWM_MAX_VALUE <= 255,
     ...)` wording the other 6 ports already carry (CONTRACTS.md #6.2,
-    duty-cap-twins class) to both files. Post-fix disassembly of the same
-    function is byte-identical (`movs r2, #255` still there) — the value the
-    hardware sees does not change, only how it's arrived at.
+    duty-cap-twins class) to both files. Post-fix disassembly of
+    `spindle_compute_pwm_value()` alone is byte-identical (`movs r2, #255`
+    still there) for its one `uint8_t` assignment site — **but that is not
+    the whole picture** (see BUG #22 below): the disassembly check at
+    landing time covered only that one function.
+  - **BUG #22 (CORRECTION, adversarial review, 2026-07-26): this was a real
+    spindle-output bug, not a no-op.** `SPINDLE_PWM_RANGE` (`=MAX-MIN`) has a
+    SECOND use site the original disassembly check missed:
+    `spindle_control.c:45`, `pwm_gradient = SPINDLE_PWM_RANGE/(settings.
+    rpm_max-settings.rpm_min)`, inside `spindle_init()`. That expression is
+    evaluated entirely in `float` — no `uint8_t` truncation applies there,
+    unlike the assignment site checked above. Reproduced from scratch:
+    full RELEASE `objdump -Sxdstr` diff of `022e50c~1` vs `022e50c`, both
+    boards (generic + megarm), rebuilt in this session — exactly one word
+    differs anywhere in either binary, at `spindle_init()+0x84` (file
+    offset `0x34c`): `0x477ffe00` vs `0x437e0000`, i.e. the float literal
+    `65534.0f` (the old `SPINDLE_PWM_RANGE`) became `254.0f` (the new one).
+    Everything else, byte for byte, is identical — so the commit's
+    "disassembly byte-identical" claim is falsified by one word, and that
+    one word is exactly where the bug lived.
+    Quantified with a standalone host rebuild of the unmodified
+    `spindle_compute_pwm_value()` body against samd21's actual shipped
+    defaults (`DEFAULTS_GENERIC`, `grbl/defaults.h:44-45`: `$30`/`rpm_max` =
+    1000, `$31`/`rpm_min` = 0): `pwm_gradient` was `65.534` pre-fix vs
+    `0.254` post-fix (a 258x error), and the resulting `uint8_t` PWM
+    register value for representative commanded speeds (pre-fix ->
+    post-fix): `S100` 154->26, `S500` 255->128, `S900` 101->229, `S999`
+    189->254 — before the fix, the spindle PWM duty for nearly every
+    commanded RPM below `rpm_max` was an arbitrary, unrelated value (the
+    linear term wrapped mod 256), not the requested duty. `S1000`,
+    `S12000`, `S24000` all resolve to `255` on both sides of the fix,
+    because `DEFAULTS_GENERIC`'s `rpm_max=1000` puts each of them on the
+    `rpm >= settings.rpm_max` saturation branch, which returns
+    `SPINDLE_PWM_MAX_VALUE` directly and never touches `pwm_gradient` — this
+    is also why the commit's own Renode probe (`M3 S1000`) could not have
+    caught the bug: it happened to land exactly on the one branch immune to
+    it. The fix (`MAX_VALUE 65535`->`255`) is still correct and sufficient
+    (it makes `SPINDLE_PWM_RANGE` right in both the float and uint8_t
+    contexts) — what was wrong was the commit's characterization of the
+    prior state as behaviour-preserving/cosmetic. This bug shipped, silently,
+    for the entire period samd21 declared `SPINDLE_PWM_MAX_VALUE 65535`.
+  - **Per-port RANGE audit (2026-07-26)**: re-verified rather than assumed
+    that no sibling port carries the same latent bug. atmega328p (AVR
+    origin) `PER`=255 fixed by hardware; stm32f103/f411/h523 `TIM1->ARR`=255;
+    hc32f460 `TMRA_1->PERAR`=255; ch32v006 `ATRLR`=255; dspic33ak128mc102
+    `CCP2PR`=255; ch570 fixed 256-step hardware PWM cycle (`RB_PWM_CYC_256`)
+    matching `MAX_VALUE=255` exactly — every one of these declares
+    `SPINDLE_PWM_MAX_VALUE=255`/`RANGE=254` and is sane against its own PER;
+    none reproduces this bug. sg2002 defines no `SPINDLE_PWM_*` at all (no
+    variable-spindle support yet, out of scope). hc32f460 and
+    dspic33ak128mc102 both predate 022e50c in history (confirmed via `git
+    merge-base --is-ancestor`); ch570 landed after it (d4c5245) and was
+    authored with `MAX_VALUE=255` and the `_Static_assert` from its first
+    commit. samd21 was the only port that ever carried the wrong value.
   - **Ratchet**: removed the now-dead `config.h: ... -Woverflow ...` line from
     `ci/warn_baseline_samd21.txt` (one-way ratchet, removal-on-real-fix
     direction). Confirmed gone from fresh build logs across all 4 combos
@@ -1647,4 +1709,9 @@ identity to integration time.
     sweep item above; CONTRACTS.md static-assert-sweep section (slug
     `static-assert-sweep`) and §6.2 (slug `spindle-pwm`) updated to match —
     "Known gap" language for the PWM range replaced with closure text, no
-    exceptions remaining.
+    exceptions remaining. **Both sections further corrected 2026-07-26** to
+    replace the "behaviour-preserving by construction"/"disassembly
+    byte-identical" wording with the BUG #22 reproduction above — the
+    adversarial review's finding that this was a significant, previously
+    live spindle-output bug, not a cosmetic no-op, is accepted and recorded
+    here rather than argued with.

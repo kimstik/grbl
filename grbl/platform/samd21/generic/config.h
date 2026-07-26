@@ -187,8 +187,13 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 
 // PLAN.md Phase 2 static-assert sweep (2026-07-26) closure (2026-07-26):
 // same fix/reasoning as megarm/config.h - this board shared the identical
-// tracked violation (65535 vs PER=0xFF vs uint8_t core duty, truncating to
-// 255 by accident at compile time). Fixed to the single canon (255); the
+// tracked violation (65535 vs PER=0xFF vs uint8_t core duty). BUG #22
+// (reclassified 2026-07-26): the uint8_t assignment site truncated
+// harmlessly, but spindle_control.c:45's pwm_gradient computation is a
+// FLOAT expression that did NOT truncate - pwm_gradient was ~258x too
+// large, producing wrapped-mod-256 garbage spindle duty for real commanded
+// RPMs (see megarm/config.h and PLAN.md/CONTRACTS.md #6.2 for the
+// objdump-verified reproduction). Fixed to the single canon (255); the
 // duty-cap-twins class is now closed on every port, no exceptions.
 _Static_assert(SPINDLE_PWM_MAX_VALUE <= 255,
                "SPINDLE_PWM_MAX_VALUE must fit core's uint8_t duty domain (CONTRACTS.md #6.2, duty-cap-twins class)");

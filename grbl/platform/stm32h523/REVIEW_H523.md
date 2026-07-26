@@ -1,3 +1,21 @@
+> **SUPERSEDED — DO NOT TRUST THE VERDICT BELOW.** This review is a
+> point-in-time snapshot from 2025-11-18. It predates the project's truth
+> audit (2026-07), which found this port did NOT actually build at the
+> start of Phase 1 (`Makefile` never set `CFLAGS_EXTRA` — a copy/paste
+> omission — and the HAL GPIO typedef was missing), a spindle-PWM duty-cap
+> contract violation (`SPINDLE_PWM_MAX_VALUE=1000` against a `uint8_t` core
+> duty, capping real duty at 25.5% — CONTRACTS.md #6.2), NVMEM that was
+> FULLY DEAD in RELEASE builds (LTO stripped it silently — BUG #20), and
+> BUG #21 (CRITICAL): this port, along with stm32f103/f411, shipped a
+> `.bin` with no vector table at all — a boot-breaking defect fixed
+> 2026-07-25. "READY FOR HARDWARE TESTING" and "production-ready" below
+> were false claims even at the time and remain false. **`grbl/platform/
+> stm32h523/platform.md` is the current, maintained status document** — it
+> explicitly states this port has "Never run on real hardware, and never
+> executed even in emulation" and is "0% hardware- or emulation-validated."
+> Read that file, not this one, for this port's actual state. This file is
+> kept for history, not guidance.
+
 # STM32H523 Platform Deep Review
 **Date:** 2025-11-18 (Updated post-fixes)
 **Platform:** STM32H523CBT6 (Cortex-M33, 250MHz, 32KB RAM, 128KB Flash)

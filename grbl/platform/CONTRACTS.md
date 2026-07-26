@@ -287,11 +287,19 @@ Contracts:
 2. **Duty domain**: full scale = `SPINDLE_PWM_MAX_VALUE`, defined by
    cpu_map/board config, and it must fit `uint8_t` because the core plumbs
    duty as `uint8_t` end-to-end (spindle_control.c:122). AVR fixes it at 255
-   (cpu_map.h:131). **Closed 2026-07-26** (was: SAMD21 megarm/generic
-   declared 65535 against `PER = 0xFF`, samd21/timer.h:109 — the value
-   silently truncated to 255 at compile time, so the port worked BY ACCIDENT
-   of that truncation; see the static-assert-sweep entry below for the
-   before/after disassembly proof). Both samd21 boards now declare
+   (cpu_map.h:131). **Closed 2026-07-26 — BUG #22** (was: SAMD21
+   megarm/generic declared 65535 against `PER = 0xFF`, samd21/timer.h:109.
+   This was NOT the harmless accident it was first reported as: the
+   `uint8_t pwm_value = SPINDLE_PWM_MAX_VALUE` assignment site DID truncate
+   65535->255 silently at compile time and was fine, but
+   `spindle_control.c:45`'s `pwm_gradient = SPINDLE_PWM_RANGE/(rpm_max-
+   rpm_min)` consumes `SPINDLE_PWM_RANGE` in a float context with no such
+   truncation, so `pwm_gradient` was computed ~258x too large and
+   `spindle_compute_pwm_value()` returned effectively-wrapped garbage
+   `uint8_t` duty values for nearly the entire commanded-RPM range below
+   `rpm_max` — a real, silent spindle-speed defect on every samd21 board.
+   See the static-assert-sweep entry below for the before/after disassembly
+   proof and reproduction numbers). Both samd21 boards now declare
    `SPINDLE_PWM_MAX_VALUE 255`, matching `PER` exactly — no port violates
    this contract any longer.
 3. `PWM_SET(x); PWM_ENABLE()` in either order must yield duty `x` — core does
@@ -487,9 +495,11 @@ pull-up accessor mapped to PORT CTRL ([§1.4](#gpio-data)), pulse-width 16-bit o
 horizon ([§4](#pulse-reset-timer)), EIC arming never called ([§2.1](#gpio-interrupts)). Each is a
 Phase-3 closure item; each future port must clear this whole file instead.
 
-Closed: PWM range 65535 vs `PER=0xFF` vs core `uint8_t` ([§6.2](#spindle-pwm)) — both boards now
-declare `SPINDLE_PWM_MAX_VALUE 255`, matching `PER` exactly (2026-07-26, see the
-static-assert-sweep closure entry).
+Closed: PWM range 65535 vs `PER=0xFF` vs core `uint8_t`, BUG #22
+([§6.2](#spindle-pwm)) — both boards now declare `SPINDLE_PWM_MAX_VALUE 255`,
+matching `PER` exactly (2026-07-26, see the static-assert-sweep closure entry
+for the reproduction: this was a real garbage-duty spindle-output defect, not
+a cosmetic no-op).
 
 Closed: `_delay_us/_delay_ms` empty stubs — real calibrated busy-wait
 implementations landed (samd21/platform.c:169-214, commit dd5c5e7). The
@@ -1523,21 +1533,74 @@ living only in prose or a code comment:
    have. Truth was established before the fix, not assumed: a fresh DEBUG
    build reproduced the exact `-Woverflow` diagnostic
    (`unsigned conversion from 'int' to 'uint8_t' ... changes value from
-   '65535' to '255'`), and disassembly of `spindle_control.o` showed the
+   '65535' to '255'`), and disassembly of `spindle_control.o` showed
+   `spindle_compute_pwm_value`'s `pwm_value = SPINDLE_PWM_MAX_VALUE`
    assignment already compiled to `movs r2, #255` / `strb r2, [r3, #0]` —
-   the port worked only because the compiler silently truncated the
-   declared value down to what the hardware could actually hold.
-   Post-fix disassembly of the same function is byte-identical (still
-   `movs r2, #255`) — the fix changes how the value is arrived at, not what
-   reaches the hardware, so it is behaviour-preserving by construction; this
-   was cross-checked with a `git stash`/rebuild/`stash pop` A-B size
-   comparison on both boards (0 byte delta) and a full Renode
-   `smoke.sh --arc` run (banner/settings/motion/arc/dwell all PASS, exit 0)
-   plus a live `M3 S1000` / `M5` spindle command exchange over the emulated
-   UART (both acknowledged `ok`, no error/ALARM). The `ci/warn_baseline_
-   samd21.txt` `-Woverflow` entry this exact truncation had recorded is
-   removed (one-way ratchet, removal-on-real-fix direction), confirmed gone
-   from fresh logs on all 4 megarm/generic × DEBUG/RELEASE combos.
+   that ONE site was harmless because the `uint8_t` assignment truncates at
+   compile time regardless of the declared macro value.
+   **BUG #22 (reclassified from "no behaviour change" — the commit
+   introducing this fix, 022e50c, is wrong on that point): a second,
+   unguarded use site exists.** `spindle_control.c:45`,
+   `pwm_gradient = SPINDLE_PWM_RANGE/(settings.rpm_max-settings.rpm_min)`,
+   consumes `SPINDLE_PWM_RANGE` (`MAX-MIN`) in a **float** context, where no
+   `uint8_t` truncation ever applied. Full RELEASE-object `objdump` diff of
+   022e50c~1 vs 022e50c, both boards: exactly one word differs, at
+   `spindle_init()+0x84` (file offset `0x34c`): `0x477ffe00` (`65534.0f`)
+   -> `0x437e0000` (`254.0f`) — the `SPINDLE_PWM_RANGE` literal folded into
+   `spindle_init()`'s gradient computation. Reproduced independently with a
+   standalone host build of the unmodified function body against samd21's
+   actual `DEFAULTS_GENERIC` `$30`/`$31` (`rpm_max=1000`, `rpm_min=0`):
+   `pwm_gradient` was `65.534` before vs `0.254` after (a 258x error), and
+   `spindle_compute_pwm_value()` for representative commanded speeds came
+   out as (pre-fix -> post-fix pwm register byte): S100 154->26, S500
+   255->128, S900 101->229, S999 189->254 — i.e. before the fix, PWM duty
+   for nearly every commanded RPM below `rpm_max` was an unrelated wrapped
+   (mod 256) value, not the requested duty. (S1000/S12000/S24000 all
+   saturate to 255 either side of the fix because `DEFAULTS_GENERIC`'s
+   `rpm_max` is 1000 and the clamp branch `rpm >= settings.rpm_max` short-
+   circuits before `pwm_gradient` is used — the bug is invisible exactly at
+   and above `rpm_max`, which is why disassembly-only or boundary-only
+   testing missed it.) This was a real, silent spindle-speed-output defect
+   on every samd21 board for the entire time `SPINDLE_PWM_MAX_VALUE` was
+   65535, not a cosmetic/no-op change — 022e50c's "disassembly byte-
+   identical" and "behaviour-preserving by construction" claims covered only
+   the one `uint8_t` call site they disassembled and did not check
+   `spindle_init()`, where the actual functional bug lived.
+   The commit's own runtime evidence (Renode `M3 S1000` -> `ok`, `?` ->
+   `FS:0,1000`) does not contradict this: S1000 lands exactly on the
+   `rpm >= settings.rpm_max` saturation branch under `DEFAULTS_GENERIC`, so
+   that one probed value was never able to exercise the broken gradient
+   path — the smoke test happened to probe the one input class immune to
+   the bug it was checking for.
+   The `_Static_assert(SPINDLE_PWM_MAX_VALUE <= 255, ...)` added by this
+   same commit is still the correct, sufficient fix (`MAX_VALUE=255` makes
+   `SPINDLE_PWM_RANGE` correct in both the float and uint8_t contexts) —
+   only the commit's characterization of what was broken before it was
+   wrong. Cross-checked with a `git stash`/rebuild/`stash pop` A-B size
+   comparison on both boards (0 byte delta — the literal-pool constant swap
+   costs no bytes) and a full Renode `smoke.sh --arc` run (banner/settings/
+   motion/arc/dwell all PASS, exit 0) plus a live `M3 S1000` / `M5` spindle
+   command exchange over the emulated UART (both acknowledged `ok`, no
+   error/ALARM) — none of that runtime evidence was wrong, it just didn't
+   probe the affected RPM range. The `ci/warn_baseline_samd21.txt`
+   `-Woverflow` entry this exact truncation had recorded is removed
+   (one-way ratchet, removal-on-real-fix direction), confirmed gone from
+   fresh logs on all 4 megarm/generic × DEBUG/RELEASE combos.
+   **Per-port audit (2026-07-26, re-verified, not assumed):** every other
+   port's `SPINDLE_PWM_RANGE` was checked against its actual hardware PWM
+   period register — atmega328p `PER`=255 (cpu_map.h, AVR fast-PWM hardware
+   top, origin platform); stm32f103/stm32f411/stm32h523 `TIM1->ARR` = 255;
+   hc32f460 `TMRA_1->PERAR` = 255; ch32v006 `ATRLR` = 255;
+   dspic33ak128mc102 `CCP2PR` = 255; ch570 `R8_PWM_CONFIG =
+   RB_PWM_CYC_256` (fixed 256-step/8-bit hardware cycle, matching
+   `SPINDLE_PWM_MAX_VALUE=255` exactly) — all declare `MAX_VALUE=255`,
+   `RANGE=254`, sane against their PER in every case; none exhibits this
+   bug. sg2002 has no `VARIABLE_SPINDLE`/`SPINDLE_PWM_*` configuration at
+   all (out of scope). hc32f460 and dspic33ak128mc102 predate 022e50c in
+   the repo's history (`git merge-base --is-ancestor` confirms both are
+   ancestors of 022e50c); ch570 landed after it (d4c5245) and was authored
+   with `SPINDLE_PWM_MAX_VALUE 255` and the `_Static_assert` from its first
+   commit — samd21 was the only port ever to carry the 65535 declaration.
 2. **[§10](#nvmem-eeprom) NVMEM window vs cache buffer, BUG #20 class**: stm32h523 and
    stm32f411 already had `_Static_assert(FLASH_PAGE_SIZE * FLASH_NUM_PAGES
    <= NVMEM_WINDOW_SIZE, ...)`; stm32f103 (sharing the same

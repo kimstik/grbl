@@ -93,7 +93,10 @@ Hardware Abstraction Layer implementation for SAMD21G18A-based boards (Arduino Z
 
 ### Spindle Control
 - **Spindle Enable:** PA16 (D11)
-- **Spindle PWM:** PA15 (D5) - TCC0/WO[5], 16-bit
+- **Spindle PWM:** PA15 (D5) - TCC0/WO[5], configured for 8-bit duty: `TCC0->PER = 0xFF`
+  (samd21/timer.h:109), matching `SPINDLE_PWM_MAX_VALUE=255` — the core plumbs spindle duty as
+  `uint8_t` end-to-end (CONTRACTS.md #6.2), so `PER` is fixed at 255 regardless of what wider
+  counting modes the TCC peripheral itself may support
 - **Spindle Direction:** PA17 (D13/LED)
 
 ### Coolant
@@ -284,7 +287,7 @@ SAMD21 includes a hardware accelerator that compensates for Cortex-M0+ lack of h
 | Division (DIVAS) | 1-3 cycles | Hardware accelerator |
 | Stepper ISR | TC3 (24-bit) | Implemented, Renode-proven |
 | Pulse Reset | TC4 (24-bit) | Implemented, Renode-proven |
-| PWM (Spindle) | TCC0 (16-bit) | Up to 65535 levels |
+| PWM (Spindle) | TCC0, `PER=0xFF` | 256 levels (0-255), matching `SPINDLE_PWM_MAX_VALUE=255` (CONTRACTS.md #6.2; BUG #22, 2026-07-26 — was incorrectly declared 65535 against this same 255-level hardware, see PLAN.md/CONTRACTS.md) |
 | PWM Frequency | Configurable | Default: 5 kHz |
 
 ---

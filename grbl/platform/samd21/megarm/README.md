@@ -69,7 +69,7 @@ bossac -e -w -v -R --offset=0x200 build/grbl_samd21.bin
 - **rSamba Bootloader**: Ultra-compact 512-byte bootloader at 0x00000000
 - **Application Start**: 0x00000200 (512 bytes offset)
 - **DIVAS Accelerator**: Hardware division and square root (1-3 cycles)
-- **TCC0 PWM**: 16-bit PWM for spindle control
+- **TCC0 PWM**: 8-bit PWM for spindle control (`PER=0xFF`, `SPINDLE_PWM_MAX_VALUE=255` — CONTRACTS.md #6.2, BUG #22)
 - **SERCOM Flexibility**: Can reconfigure for I2C, SPI if needed
 
 ## Notes

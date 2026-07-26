@@ -14,7 +14,8 @@ Complete Hardware Abstraction Layer implementation for STM32F103C8T6 (Blue Pill 
 
 ## Features
 
-✅ **100% Complete Implementation**
+✅ **100% Complete Implementation (build/link/contract gates — see "Builds
+Clean, Never Hardware-Validated" below for what that does and does not mean)**
 - All GRBL core functions supported
 - Stepper motor control with high-precision timing
 - Serial communication @ 115200 baud (USART1)

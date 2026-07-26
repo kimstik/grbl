@@ -1,3 +1,19 @@
+> **SUPERSEDED — DO NOT TRUST THE VERDICT BELOW.** This review is a
+> point-in-time snapshot from 2025-11-18. It predates the project's truth
+> audit (2026-07), which found this port did NOT actually build at the
+> start of Phase 1 (spindle macros undeclared — PLAN.md Phase 1 recon),
+> a spindle-PWM duty-cap contract violation (`SPINDLE_PWM_MAX_VALUE=1000`
+> against a `uint8_t` core duty, capping real duty at 25.5% — CONTRACTS.md
+> #6.2), and BUG #21 (CRITICAL): this port, along with stm32f411/h523,
+> shipped a `.bin` with no vector table at all — `KEEP(*(.isr_vector))`
+> does not survive `-flto` — a boot-breaking defect fixed 2026-07-25. "100%
+> COMPLETE - PRODUCTION READY" and "production-ready" below were false
+> claims even at the time and remain false. **`grbl/platform/stm32f103/
+> platform.md` is the current, maintained status document** — it explicitly
+> states "Never run on real hardware" and "0% hardware-validated." Read
+> that file, not this one, for this port's actual state. This file is kept
+> for history, not guidance.
+
 # STM32F103 HAL Implementation Review - FINAL
 
 **Date:** 2025-11-18
