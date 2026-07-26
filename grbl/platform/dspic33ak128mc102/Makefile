@@ -261,9 +261,14 @@ $(ELF_FILE): objects
 	$(CC) $(LDFLAGS) -o $(ELF_FILE) $(OBJECTS) $(LIBS)
 	$(ASSERT_FP)
 
-# Create hex file (xc-dsc-bin2hex writes alongside the ELF)
+# Create hex file (xc-dsc-bin2hex writes alongside the ELF).
+# -mdfp= is REQUIRED here exactly as for nm/objdump below: bin2hex hard-
+# requires DFP device info to resolve memory ranges/records, it just fails
+# silently different from gcc/ld (which get it via $(ARCHFLAGS)) - omitting
+# it made `make all` fail at this step for both flavors (CI's KNOWN GAP
+# workaround is no longer needed once this is fixed; see PLAN.md).
 $(HEX_FILE): $(ELF_FILE)
-	$(BIN2HEX) $<
+	$(BIN2HEX) -mdfp=$(DFP_XC16) $<
 
 # Create disassembly dump (objdump needs the DFP for SFR symbolization)
 $(DUMP_FILE): $(ELF_FILE)
