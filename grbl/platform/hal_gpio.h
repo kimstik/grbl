@@ -172,8 +172,8 @@ typedef enum {
 #define GPIO_INT_ON(pcmsk, int_flag, mask)   HAL_GPIO_INTERRUPT_ENABLE(pcmsk, int_flag, mask)
 #define GPIO_INT_OFF(pcmsk, int_flag, mask)  HAL_GPIO_INTERRUPT_DISABLE(pcmsk, int_flag, mask)
 
-// PLAN.md Phase 1 naming-migration closure: HAL_GPIO_IRQ_HANDLER(name) is
-// THE canon for the IRQ handler definition macro (CONTRACTS.md #2; every
+// HAL_GPIO_IRQ_HANDLER(name) is THE canon for the IRQ handler definition
+// macro (CONTRACTS.md #2; every
 // core use site - grbl/limits.c, grbl/system.c - and every landed port's
 // handlers.c/platform.h spells it out in full, long form). A short alias
 // `GPIO_ISR(name)` used to live here as a "new short name" candidate; grep

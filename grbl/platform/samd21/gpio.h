@@ -18,7 +18,7 @@
 #define GPIO_PREG(name)	PORT->Group[name##_PORT].CTRL   // GPIO pullup control
 
 /* ---------------------------------------------------------------------
- * LOGICAL PORT-IMAGE CONTRACT (BUG #17 fix, PLAN.md Phase 3, CONTRACTS.md #1)
+ * LOGICAL PORT-IMAGE CONTRACT (BUG #17 fix, CONTRACTS.md #1)
  *
  * GRBL core's step pipeline is a uint8_t port image: st.step_outbits,
  * st.dir_outbits, axislock and the step/dir invert masks all live in bits

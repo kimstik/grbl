@@ -125,7 +125,7 @@ void hal_gpio_interrupt_disable(GPIO_TypeDef* port, uint32_t mask) {
 
 // SYSTEM CLOCK BRING-UP (Step 1) - HSI 24 MHz -> PLL x2 -> 48 MHz
 /*
-  All register facts TRM-verified this session (RM 3.3/3.4):
+  All register facts TRM-verified (RM 3.3/3.4):
   - HSI = 24 MHz internal RC, on and selected at reset.
   - PLL = FIXED x2 (no PLLMUL field exists); PLLSRC=0 feeds HSI undivided.
   - FLASH_ACTLR LATENCY must be 0b10 (2 waits) for 24 < SYSCLK <= 48 MHz

@@ -102,23 +102,10 @@ CFLAGS += -ffunction-sections -fdata-sections
 # string is arbitrary - only that it is IDENTICAL across checkouts matters.
 CFLAGS += -ffile-prefix-map=$(CURDIR)=/grbl-src
 
-# FP PRECISION KNOB (CONTRACTS.md #17: "FP precision is a declared port
-# property"). Landed pattern from samd21/Makefile, rolled out here to every
-# STM32 family sharing this common.mk (f103/h523/f411) in one place - see
-# samd21/Makefile for the full rationale (avr-gcc double==float template
-# semantics; unsuffixed double literals/libm calls in core were always
-# single precision on the origin AVR).
-#   FP=SINGLE (default): -fsingle-precision-constant keeps unsuffixed FP
-#     literals float; GRBL_FP_SINGLE arms the platform prelude's SP libm
-#     call-site mapping; post-link tools/assert_no_double.sh FAILS the
-#     build listing offenders if any DP machinery still linked in. On
-#     f103 (M3, no FPU) this is a pure soft-float size win, same class as
-#     samd21/ch32v006. On h523/f411 (M33/M4F, SP-only hardware FPU) it
-#     ALSO lets SP math hit real FPU instructions (vsqrt.f32 etc.)
-#     instead of soft-float calls - a speed win, not just size.
-#   FP=DOUBLE: conscious opt-in deviation, must be declared in port docs.
-# Applied to BOTH build flavors - it is a semantics pin, not an
-# optimization.
+# FP PRECISION KNOB (CONTRACTS.md #17). Shared here for every STM32 family
+# using this common.mk (f103/h523/f411) - see samd21/Makefile for the full
+# rationale. On h523/f411 (SP-only hardware FPU) it also turns soft-float
+# calls into real FPU instructions - a speed win, not just size (#17 pt 7).
 FP ?= SINGLE
 ifeq ($(FP),SINGLE)
   CFLAGS += -fsingle-precision-constant -DGRBL_FP_SINGLE

@@ -136,9 +136,8 @@ void Reset_Handler(void) {
   // still globally masked (mstatus.MIE=0 out of reset) until core's
   // sei() at main.c:48.
   //
-  // EXTRACTED (Phase 6 rolling #4, Part A) to
-  // common/wch/wch_vectors.h::wch_mtvec_set_vectored() - same instruction
-  // this inline block emitted, verified byte-identical by this batch's
+  // EXTRACTED to common/wch/wch_vectors.h::wch_mtvec_set_vectored() - same
+  // instruction this inline block emitted, verified byte-identical by the
   // rebuild gate. INTSYSCR is deliberately NOT written here (unlike
   // CH570's startup.c) - this port continues to rely on the TRM's
   // documented reset-0 value exactly as before this extraction; see

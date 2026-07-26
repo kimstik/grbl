@@ -40,7 +40,7 @@
 #define DIRECTION_L2P(v)    ((uint32_t)(v) << X_DIRECTION_PIN)
 #define DIRECTION_P2L(v)    ((uint32_t)(v) >> X_DIRECTION_PIN)
 
-// PLAN.md Phase 2 static-assert sweep: core packs step_outbits/dir_outbits/
+// core packs step_outbits/dir_outbits/
 // axislock into a uint8_t (BUG #17, CONTRACTS.md #1) - only the LOGICAL
 // bits feed that byte (PHYS masks above are hardware-side and exempt).
 _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&

@@ -67,8 +67,8 @@ _Static_assert(offsetof(PFIC_TypeDef, SCTLR)  == 0xD10, "PFIC SCTLR offset");
 // Parameter is a plain uint32_t (not a chip-specific IRQn_Type enum) so
 // this stays chip-agnostic; every WCH port's own IRQn_Type enum converts
 // implicitly (GCC sizes a non-negative-valued enum as unsigned int, same
-// representation as uint32_t - verified byte-identical on ch32v006 by
-// this batch's Part A rebuild gate).
+// representation as uint32_t - verified byte-identical on ch32v006's
+// rebuild).
 static inline void PFIC_EnableIRQ(uint32_t irqn) {
   PFIC->IENR[irqn >> 5] = 1UL << (irqn & 0x1F);
 }

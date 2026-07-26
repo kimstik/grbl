@@ -31,7 +31,7 @@
 #define RX_RING_BUFFER (RX_BUFFER_SIZE+1)
 #define TX_RING_BUFFER (TX_BUFFER_SIZE+1)
 
-// PLAN.md Phase 2 static-assert sweep (2026-07-26), BUG #12 class: head/tail
+// BUG #12 class: head/tail
 // below are uint8_t and wrap via plain `+1` (no explicit mod) - the ring
 // arithmetic is only correct if RX/TX_RING_BUFFER (SIZE+1) fits in that
 // index type, i.e. SIZE <= 255. grbl/config.h's own commented-out override

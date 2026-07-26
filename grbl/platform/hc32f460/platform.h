@@ -73,7 +73,7 @@ typedef HC32_PORT_TypeDef* hal_gpio_port_t;
  * collision" class entirely regardless of whether this chip's EIRQ model
  * turns out to be per-pin-number-shared-across-ports (STM32-style) or
  * fully independent - a defensive choice made because the real EIRQ model
- * is UNVERIFIED this session (regs.h).
+ * is UNVERIFIED (regs.h).
   */
 
 #define STEP_PORT           GPIOA
@@ -190,7 +190,7 @@ typedef HC32_PORT_TypeDef* hal_gpio_port_t;
    STM32 port (no common/stm32 code shared, different flash controller
    entirely). See nvmem.c. */
 
-#define HAL_NVMEM_FLASH_START     0x0007F800UL   /* last 2KB page of a 512KB image (UNVERIFIED page size - EFM erase granularity not confirmed this session, see nvmem.c) */
+#define HAL_NVMEM_FLASH_START     0x0007F800UL   /* last 2KB page of a 512KB image (UNVERIFIED page size - EFM erase granularity not confirmed, see nvmem.c) */
 #define HAL_NVMEM_FLASH_SIZE      2048
 #define HAL_NVMEM_FLASH_PAGE_SIZE 2048
 
