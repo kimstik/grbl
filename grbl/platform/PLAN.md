@@ -1519,6 +1519,50 @@ identity to integration time.
   this file) and a leftover hc32f460 queue placeholder (the port landed
   many ledger-lines ago).
 
+- **[x] Toolchain axis (`TC=gcc|clang`) REOPENED and PARTIALLY LANDED
+  (2026-07-26, third pass on the same day).** The first recon session
+  closed the axis at "zero ports" on one claim: clang has no equivalent
+  to `-fsingle-precision-constant`. An adversarial review
+  (`docs/REVIEW-SESSION-CLAIMS.md`, Claim F) refuted it the same day. This
+  session independently re-verified the refutation — not trusted from
+  either prior pass — across every real target this tree ships (ARM
+  Cortex-M0+/M3/M4/M33, RISC-V rv32ec_zicsr/rv32imc_zicsr/rv64imac_zicsr:
+  all 7 show uniform double-precision-libcall elimination with
+  `-cl-single-precision-constant`, byte-for-byte symbol-set match against
+  real `gcc -fsingle-precision-constant`), then closed the review's own
+  stated verification gap: a full 24-file stm32f411 RELEASE build,
+  compiled and linked entirely with clang + `lld` + ThinLTO, passes the
+  project's real, unmodified `assert_no_double.sh`/`init_check.sh`/
+  `boot_check.sh`. Also fixed the `script.ld` `(NOLOAD)` gap the same
+  recon found (`.bss`/`.stack`/`.heap` sections with no input sections get
+  real `SHT_PROGBITS` under `lld`, producing a 402MB `.bin`) in every port
+  this session was allowed to touch (`_template`, `ch32v006`, `ch570`,
+  `stm32f103`, `stm32f411`, `stm32h523` — `hc32f460`/`samd21`/`sg2002` were
+  owned by concurrent sessions, still need the identical one-line fix).
+  Landed `common/toolchain/family/{gcc,clang}.mk` +
+  `common/toolchain/profiles/*.mk` (canonical: avr-gcc-7.3, arm-gcc-13.2,
+  riscv-gcc-13.2; verification-only: avr-gcc-15/16, arm-gcc-14.2,
+  arm-clang-18, riscv-clang-18) — proven correct (a standalone `make -f`
+  harness confirms every profile's flags match what the end-to-end build
+  actually used) but **deliberately NOT wired into any port Makefile**
+  this session, since a concurrently-live agent was auditing ratchet
+  invocation across those exact files; every existing build path is
+  therefore byte-identical by construction (grep confirms zero Makefile
+  references the new files yet), not just re-measured. AVR re-confirmed
+  gcc-only forever (wdt.h hard error at `-Os` explicitly, PROGMEM silently
+  RAM-copies string constants — both independently re-verified, not
+  re-quoted). Full account, with every corrected claim marked in place
+  (struck through, not deleted) per this project's reversed-finding
+  convention: `docs/TOOLCHAIN-AXIS.md`. `CONTRACTS.md` needed no edits —
+  §32/§34 already carry the core-purity rules this axis's docs proposed.
+  Gates: golden AVR `make -C grbl/platform/atmega328p validate` PASSED
+  (`79af184e67b27defd27a39309ac53563`) throughout; all `script.ld`-touched
+  ports rebuilt RELEASE and `md5sum`-diffed byte-identical against
+  `artifacts/`; `ci/warn_ratchet.py`/`tools/assert_no_double.sh`/
+  `grbl/platform/common/init_check.sh` `--selftest` and
+  `tools/check_contracts_numbering.py`/`tools/build_artifacts.py check`
+  all green.
+
 - **[x] BUG #18 CLASS CLOSED FOR REAL: F_CPU needs ULL, not UL (2026-07-26,
   toolchain-probe follow-up).** The probe that opened this batch reported
   "pre-existing, already-baselined -Woverflow in stepper.c:1015 (missing UL
