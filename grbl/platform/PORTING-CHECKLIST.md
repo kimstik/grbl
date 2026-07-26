@@ -184,7 +184,7 @@ All of the following, in this order:
    **This is not paperwork**: four landed ports shipped a complete bring-up
    chain that nothing called, LTO deleted all of it, and they booted on the
    reset-default clock with unconfigured GPIO — every other gate passed. See
-   CONTRACTS.md [§26](CONTRACTS.md#boot-init-unreachable) / PLAN.md BUG #23.
+   CONTRACTS.md [§27](CONTRACTS.md#boot-init-unreachable) / PLAN.md BUG #23.
    Core `grbl/main.c` will never call your init; the call must come from
    your `Reset_Handler`, before `main()`.
 5. **CI matrix row added**: one `include:` row per build flavor in
