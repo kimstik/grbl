@@ -50,8 +50,14 @@ GDB        = $(PREFIX)gdb
 GRBL_DIR   = ../..
 # Keyed by BUILD flavor: DEBUG/RELEASE object dirs never alias (landed
 # repo-wide convention, PLAN.md/CONTRACTS.md).
-BUILD_DIR  = ../../../build/$(PLATFORM_NAME)/$(BUILD)
 OUTPUT_DIR = ../../../build
+# Whole-platform object root (both BUILD flavors live under here) - `clean`
+# below removes THIS, not just $(BUILD_DIR), so it can't leave the OTHER
+# flavor's stale objects behind for a knob change (FP=, or any -D) to
+# silently relink under the wrong label (CONTRACTS.md gap log: "make clean
+# cleans only the invoked BUILD flavor's object dir").
+PLATFORM_BUILD_ROOT = $(OUTPUT_DIR)/$(PLATFORM_NAME)
+BUILD_DIR  = $(PLATFORM_BUILD_ROOT)/$(BUILD)
 PLATFORM_DIR = .
 
 # GRBL core sources. nvmem.c IS compiled (macro route, CONTRACTS.md section
@@ -201,7 +207,7 @@ clean:
 	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.bin \
 	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.dump \
 	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.map
-	rm -rf $(BUILD_DIR)
+	rm -rf $(PLATFORM_BUILD_ROOT)
 
 clean-all:
 	rm -rf $(OUTPUT_DIR)

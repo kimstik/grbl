@@ -69,11 +69,18 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define COOLANT_FLOOD_PIN       7
 #define COOLANT_FLOOD_BIT       7
 
-#ifdef ENABLE_M7
-  #define COOLANT_MIST_PORT     GPIOA
-  #define COOLANT_MIST_PIN      7
-  #define COOLANT_MIST_BIT      7
-#endif
+// NOT gated on `#ifdef ENABLE_M7`: this file is reached through the build
+// prelude (-include, CONTRACTS.md #0), which runs before grbl.h's own
+// #include "config.h" ever defines ENABLE_M7 - a guard here can never see
+// it set, silently dropping these pins even when the user enables the
+// feature (CONTRACTS.md #19 "guard that certifies instead of checking",
+// wrong-phase variant; see grbl/CONTRACTS.md gap log and this file's
+// STEP_PULSE_DELAY-class sibling fix in ../../timer.h/serial.c). Defining
+// the pins unconditionally is free - core's own (correctly-timed) `#ifdef
+// ENABLE_M7` in coolant_control.c is the only place that ever reads them.
+#define COOLANT_MIST_PORT     GPIOA
+#define COOLANT_MIST_PIN      7
+#define COOLANT_MIST_BIT      7
 
 // LIMIT SWITCHES (GPIOD: PD0, PD1, PD2) - inputs, bits 0-7 (CONTRACTS.md
 // #1.3), EXTI lines 0-2 mapped to port D

@@ -137,10 +137,18 @@ _Static_assert(SPINDLE_PWM_MAX_VALUE <= 255,
 #define COOLANT_FLOOD_PIN        3
 #define COOLANT_FLOOD_BIT        3
 
-#ifdef ENABLE_M7
-  #define COOLANT_MIST_PORT     TEMPLATE_PORT_AUX
-  #define COOLANT_MIST_PIN       4
-  #define COOLANT_MIST_BIT       4
-#endif
+// PORT-TODO NOTE (do not re-add `#ifdef ENABLE_M7` around this): this file
+// arrives via the build prelude (-include boards/$(BOARD)/prelude.h),
+// processed before grbl.h's own #include "config.h" ever defines
+// ENABLE_M7 - a guard here can never observe it, silently dropping these
+// pins even when a user of a port copied from this template enables the
+// feature (CONTRACTS.md #19 "guard that certifies instead of checking",
+// wrong-phase variant - every landed port hit this and had it removed
+// here, see grbl/CONTRACTS.md gap log). Defining the pins unconditionally
+// costs nothing; core's own (correctly-timed) `#ifdef ENABLE_M7` in
+// coolant_control.c is the only place that ever reads them.
+#define COOLANT_MIST_PORT     TEMPLATE_PORT_AUX
+#define COOLANT_MIST_PIN       4
+#define COOLANT_MIST_BIT       4
 
 #endif // BOARD_GENERIC_TEMPLATE_CONFIG_H

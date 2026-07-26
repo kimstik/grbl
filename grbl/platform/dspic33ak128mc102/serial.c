@@ -8,6 +8,23 @@
 #include "../../serial.h"
 #include "../../grbl.h"
 
+// CONTRACTS.md #19 "guard that certifies instead of checking" (wrong-phase
+// variant - grbl/CONTRACTS.md gap log): these two features are genuinely
+// unsupported on this chip (see ../../timer.h and boards/generic/config.h
+// for the hardware reasons), but the natural place to say so - an
+// `#ifdef`/`#error` in timer.h / board config.h - is reached through the
+// build prelude, BEFORE grbl.h's own #include "config.h" ever defines
+// either macro. A guard there can never fire. This file's #include
+// "../../grbl.h" above is the first REAL processing of core config.h in
+// this translation unit, so the checks are placed here instead, where
+// they actually work.
+#ifdef STEP_PULSE_DELAY
+#error "STEP_PULSE_DELAY is not supported on dsPIC33AK128MC102 (CCP1RB dual-compare scheme not implemented/verified - see timer.h)"
+#endif
+#ifdef ENABLE_M7
+#error "ENABLE_M7 (mist coolant) does not fit the 28-pin dsPIC33AK128MC102 pin budget (19 GPIO, all allocated - see boards/generic/config.h)"
+#endif
+
 #define RX_RING_BUFFER (RX_BUFFER_SIZE+1)
 #define TX_RING_BUFFER (TX_BUFFER_SIZE+1)
 

@@ -8,6 +8,19 @@
 #include "../../grbl.h"   // realtime CMD_* bytes, sys, mc_reset(), exec-flag setters (BUG #19)
 #include "../../serial.h"
 
+// CONTRACTS.md #19 "guard that certifies instead of checking" (wrong-phase
+// variant - grbl/CONTRACTS.md gap log): STEP_PULSE_DELAY is genuinely
+// unsupported on this chip (see ../../timer.h for the hardware reason),
+// but the natural place to say so - an `#ifdef`/`#error` in timer.h - is
+// reached through the build prelude, BEFORE grbl.h's own #include
+// "config.h" ever defines the macro. A guard there can never fire. This
+// file's #include "../../grbl.h" above is the first REAL processing of
+// core config.h in this translation unit, so the check is placed here
+// instead, where it actually works.
+#ifdef STEP_PULSE_DELAY
+#error "STEP_PULSE_DELAY is not supported on CH32V006 (single-compare STK pulse timer; TIM3 has no interrupt - see timer.h)"
+#endif
+
 #define RX_RING_BUFFER (RX_BUFFER_SIZE+1)
 #define TX_RING_BUFFER (TX_BUFFER_SIZE+1)
 

@@ -59,10 +59,16 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define COOLANT_FLOOD_PIN       18
 #define COOLANT_FLOOD_BIT       18
 
-#ifdef ENABLE_M7
-  #define COOLANT_MIST_PIN      19
-  #define COOLANT_MIST_BIT      19
-#endif
+// NOT gated on `#ifdef ENABLE_M7`: this file arrives via the build prelude
+// (-include, CONTRACTS.md #0), processed before grbl.h's own #include
+// "config.h" ever defines ENABLE_M7 - a guard here can never observe it,
+// silently dropping this pin even when the user enables the feature
+// (CONTRACTS.md #19 "guard that certifies instead of checking", wrong-
+// phase variant - see grbl/CONTRACTS.md gap log). Defining the pin
+// unconditionally costs nothing; core's own (correctly-timed) `#ifdef
+// ENABLE_M7` in coolant_control.c is the only place that ever reads it.
+#define COOLANT_MIST_PIN      19
+#define COOLANT_MIST_BIT      19
 
 // LIMIT SWITCHES (PA0, PA1, PA5) - inputs, physical==logical (CONTRACTS.md
 // #1.3), GPIOA interrupt-capable (ch570.h - single-port chip, no EXTI
