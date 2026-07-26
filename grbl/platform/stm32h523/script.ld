@@ -46,7 +46,15 @@ SECTIONS
     _edata = .;
   } >RAM AT >FLASH
 
-  .bss : {
+  /* (NOLOAD): defense-in-depth, matching stm32f103/f411's fix (docs/
+   * TOOLCHAIN-AXIS.md) - this section already carries real input sections
+   * so GNU ld/lld both infer SHT_NOBITS from them today, but an explicit
+   * marker doesn't depend on that inference holding for every object. The
+   * `_estack` symbol two lines below is a bare assignment, not a section
+   * with content, so it does not need (NOLOAD) - the lld/gcc .bin-bloat
+   * class only bites an output section made purely of location-counter
+   * advances with zero input sections, which .bss here is not. */
+  .bss (NOLOAD) : {
     . = ALIGN(4);
     _sbss = .;
     *(.bss)
