@@ -59,7 +59,7 @@
 #define FLASH_R_BASE           (PERIPH_BASE + 0x22000UL)  // RM 18.3
 
 // QingKe V2 core peripherals (RM 6.5.2 / 6.5.4 - address-verified)
-#define PFIC_BASE              0xE000E000UL
+// PFIC_BASE now comes from common/wch/wch_pfic.h (same value, 0xE000E000UL).
 #define STK_BASE               0xE000F000UL
 
 // ============================================================================
@@ -308,44 +308,17 @@ typedef struct {
 // ============================================================================
 // PFIC (RM 6.5.2) - offsets confirmed against the RM register list.
 // Two 32-bit words cover all sources (<= 64 IRQs on QingKe V2).
+//
+// EXTRACTED (Phase 6 rolling #4, Part A): the struct + enable/disable
+// helpers moved to common/wch/wch_pfic.h verbatim (same offsets, same
+// fence.i) once the CH570 recon proved QingKe V3C shares this exact
+// layout, differing only in IRQ-bank width (WCH_PFIC_IRQ_WORDS below) -
+// see that file's header for the byte-identity gate this extraction was
+// held to.
 // ============================================================================
 
-typedef struct {
-  volatile uint32_t ISR[2];       // 0x000 enable status (RO; ISR1 reset 0xC: NMI+EXC)
-  uint32_t RESERVED0[6];
-  volatile uint32_t IPR[2];       // 0x020 pending status (RO)
-  uint32_t RESERVED1[6];
-  volatile uint32_t ITHRESDR;     // 0x040 priority threshold
-  uint32_t RESERVED2;
-  volatile uint32_t CFGR;         // 0x048 (key-gated system reset)
-  volatile uint32_t GISR;         // 0x04C global interrupt status
-  volatile uint32_t VTFIDR;       // 0x050 VTF channel ID select
-  uint32_t RESERVED3[3];
-  volatile uint32_t VTFADDRR[2];  // 0x060 VTF 0/1 address
-  uint32_t RESERVED4[38];
-  volatile uint32_t IENR[2];      // 0x100 enable set (write-1)
-  uint32_t RESERVED5[30];
-  volatile uint32_t IRER[2];      // 0x180 enable clear (write-1)
-  uint32_t RESERVED6[30];
-  volatile uint32_t IPSR[2];      // 0x200 pending set
-  uint32_t RESERVED7[30];
-  volatile uint32_t IPRR[2];      // 0x280 pending clear
-  uint32_t RESERVED8[30];
-  volatile uint32_t IACTR[2];     // 0x300 active status (RO)
-  uint32_t RESERVED9[62];
-  volatile uint8_t  IPRIOR[256];  // 0x400 per-IRQ priority byte
-  uint32_t RESERVED10[516];
-  volatile uint32_t SCTLR;        // 0xD10 system control
-} PFIC_TypeDef;
-
-#define PFIC ((PFIC_TypeDef*)PFIC_BASE)
-
-// Compile-time layout proof (the M1-M3 placeholder struct had these wrong)
-_Static_assert(offsetof(PFIC_TypeDef, IENR)   == 0x100, "PFIC IENR offset");
-_Static_assert(offsetof(PFIC_TypeDef, IRER)   == 0x180, "PFIC IRER offset");
-_Static_assert(offsetof(PFIC_TypeDef, IPRR)   == 0x280, "PFIC IPRR offset");
-_Static_assert(offsetof(PFIC_TypeDef, IPRIOR) == 0x400, "PFIC IPRIOR offset");
-_Static_assert(offsetof(PFIC_TypeDef, SCTLR)  == 0xD10, "PFIC SCTLR offset");
+#define WCH_PFIC_IRQ_WORDS 2
+#include "../common/wch/wch_pfic.h"
 
 // ============================================================================
 // STK - QingKe V2 SysTick (RM 6.5.4). 32-bit up-counter + 32-bit compare.
@@ -409,16 +382,8 @@ typedef enum {
 
 #define PFIC_VECTOR_COUNT   41   // vectors 0..40 per RM table 6-1
 
-// PFIC enable/disable. RM 6.5.2 note: "When using the PFIC_IENRx register
-// to mask any interrupt ... add a 'fence.i' instruction for synchronization
-// between the core control state and the interrupt enable state." - the
-// fence.i in the disable path is therefore TRM-mandated, not decorative.
-static inline void PFIC_EnableIRQ(IRQn_Type irqn) {
-  PFIC->IENR[(uint32_t)irqn >> 5] = 1UL << ((uint32_t)irqn & 0x1F);
-}
-static inline void PFIC_DisableIRQ(IRQn_Type irqn) {
-  PFIC->IRER[(uint32_t)irqn >> 5] = 1UL << ((uint32_t)irqn & 0x1F);
-  __asm volatile ("fence.i" ::: "memory");
-}
+// PFIC_EnableIRQ/PFIC_DisableIRQ (with the RM-mandated fence.i on disable)
+// now live in common/wch/wch_pfic.h (Phase 6 rolling #4, Part A extraction)
+// - IRQn_Type above converts implicitly to that header's uint32_t parameter.
 
 #endif // CH32V006_H

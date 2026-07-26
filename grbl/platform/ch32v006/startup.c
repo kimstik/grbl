@@ -37,6 +37,7 @@
 
 #include <stdint.h>
 #include "platform.h"
+#include "../common/wch/wch_vectors.h"
 
 // ============================================================================
 // EXTERNAL SYMBOLS (from script.ld)
@@ -152,10 +153,16 @@ void Reset_Handler(void) {
   // absolute-address entries (MODE1=1) - see file header. Interrupts are
   // still globally masked (mstatus.MIE=0 out of reset) until core's
   // sei() at main.c:48.
-  {
-    uint32_t mtvec_val = ((uint32_t)PFIC_Vector & ~0x3u) | 0x3u;
-    __asm__ volatile ("csrw mtvec, %0" :: "r" (mtvec_val));
-  }
+  //
+  // EXTRACTED (Phase 6 rolling #4, Part A) to
+  // common/wch/wch_vectors.h::wch_mtvec_set_vectored() - same instruction
+  // this inline block emitted, verified byte-identical by this batch's
+  // rebuild gate. INTSYSCR is deliberately NOT written here (unlike
+  // CH570's startup.c) - this port continues to rely on the TRM's
+  // documented reset-0 value exactly as before this extraction; see
+  // wch_vectors.h's header for why that stays a valid choice for THIS
+  // chip while CH570 explicitly zeroes it.
+  wch_mtvec_set_vectored(PFIC_Vector);
 
   SystemInit();
 

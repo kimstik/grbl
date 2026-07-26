@@ -1808,3 +1808,264 @@ with no assertion, no crash, and no distinguishing signature short of
 comparing against ground truth. Treat "no emulator can catch this" as a
 standing flag on the whole class, not a reason to defer it — an unfixed
 example is a live footgun for whoever builds the SG2002 channel.
+
+<a id="wch-common-extraction-ch570"></a>
+## 24. Gaps found extracting common/wch/ and porting CH570 (Phase 6 rolling #4 — second WCH chip, first shared-code extraction between two RISC-V ports)
+
+Two-part batch: Part A proved a real `common/<vendor>/` extraction is
+possible for this project without disturbing a landed, golden-gated port
+(ch32v006); Part B ported CH570 (QingKe V3C) consuming it. Every item
+below is empirical — a real build, a real disassembly, or a real vendor
+source file read this session, not theory.
+
+1. **A `common/wch/` extraction can be BYTE-IDENTITY-PROVEN, not just
+   "should be equivalent"**: ch32v006's PFIC struct/enable/disable
+   (`wch_pfic.h`), `mstatus` critical-section/sei/cli/fence macros
+   (`wch_critical.h`), and the mtvec vectored-mode write
+   (`wch_vectors.h::wch_mtvec_set_vectored()`) moved out of
+   `ch32v006.h`/`platform.h`/`startup.c` into `common/wch/` with the PFIC
+   struct's fixed IRQ-bank width (`[2]`) replaced by a
+   `WCH_PFIC_IRQ_WORDS`-parameterized one (arithmetic on the reserved
+   padding arrays keeps every named register's byte OFFSET identical for
+   any bank width — verified by `_Static_assert(offsetof(...))` for both
+   values this tree uses, 2 and 8). The rebuild's RELEASE `.bin` MD5
+   matched the pre-extraction build byte-for-byte
+   (`075d79ced3a3f7e9324e93f6936bec54`, both DEBUG and RELEASE `.elf`
+   `text/data` identical to the previously-recorded 41072/0) — proof, not
+   inspection, that a shared header can be introduced under a hard
+   byte-identity gate without disturbing the donor port, as long as the
+   extracted text is copied verbatim and only the truly-fixed constants
+   (the IRQ-bank width) become a parameter.
+2. **The vendor SDK's own interrupt-enable helper is NOT the register
+   `wch_critical.h` should use — a second, independent, HARDWARE-TESTED
+   source resolved the apparent conflict**: openwch/ch570's
+   `RVMSIS/core_riscv.h` (`__risc_v_enable_irq`/`__risc_v_disable_irq`,
+   used by `sys_safe_access_enable/disable()`) reads/writes raw CSR
+   **0x800** with mask `0x88` — a different numeric address than the
+   standard named `mstatus` (0x300) ch32v006's `wch_critical.h` already
+   used. Taken alone this would suggest V3C needs a different register
+   than V2C. Two independent facts closed the question instead of
+   guessing: (a) WCH's own OFFICIAL boot assembly for this exact chip
+   (`startup_CH572.S`, Apache-2.0) enables interrupts with `li t0, 0x88` /
+   `csrw mstatus, t0` — the STANDARD NAMED register, not the raw 0x800
+   literal their own C helper uses; (b) cnlohr/ch32fun (MIT), a
+   real, hardware-exercised project supporting BOTH QingKe V2
+   (ch32v00x) and the CH5xx/V3 family CH570 belongs to, uses the named
+   `mstatus` mnemonic uniformly across every chip it ports, compiled with
+   mainline `riscv64-unknown-elf-gcc` — the same toolchain this project
+   uses. Conclusion: `mstatus` (0x300) is correct and portable across
+   QingKe generations on a mainline toolchain; the vendor SDK's raw-0x800
+   helper is either a narrower-purpose register or tied to WCH's own
+   forked-compiler convention, and this project deliberately does not
+   reproduce it — CH570's flash safe-access bracket
+   (`ch570.h::CH570_SAFE_ACCESS_BEGIN/END`) is built on this project's own
+   already-trusted `sei()`/`cli()` instead of a second, less-verified
+   primitive. **General lesson**: when a vendor's C-level helper and its
+   own official assembly example disagree on which register to touch for
+   the same stated purpose, the raw assembly (closer to what actually
+   runs, less likely to be an artifact of a specific compiler's private
+   ABI) is the better tiebreaker — and an independent, hardware-exercised
+   community project that spans the same silicon family is worth more
+   than either vendor artifact alone.
+3. **Vendor startup code re-arming INTSYSCR is a stronger reason to WRITE
+   the register than "trust the documented reset value"**: WCH's own
+   `startup_CH572.S` executes `csrw 0x804, 0x3` during boot (INTSYSCR,
+   BOTH HWSTKEN and INESTEN set) — the exact opposite of what this
+   project's plain `__attribute__((interrupt))` handlers need (GCC's own
+   software prologue, not the vendor hardware one; no preemption nesting
+   assumed). ch32v006 (Phase 4) only relied on the TRM's documented
+   reset-0 value and never observed a real counter-example, so its
+   startup.c was left unchanged (HARD GATE: any added instruction would
+   have broken Part A's byte-identity proof). CH570's startup.c calls the
+   new `common/wch/wch_vectors.h::wch_intsyscr_clear()` explicitly, BECAUSE
+   its own recon surfaced a real, official example reprogramming the same
+   CSR away from 0 — the defense-in-depth the task brief asked for is not
+   boilerplate caution here, it answers a genuine finding.
+4. **TMR0 (this chip's only FIFO/DMA-capable general timer) has NO
+   hardware clock prescaler** — a 26-bit up-counter that free-runs at
+   Fsys with only a reload/compare register (`CNT_END`), unlike
+   ch32v006's TIM2 (`PSC` register). `STP_TMR_PRESCALER_SET`/`_RESET`
+   (CONTRACTS.md §3) cannot be a register write here without becoming the
+   canonical silent no-op this document already forbids (§6.2's sibling
+   class, the SAMD21 STP_TMR_PRESCALER_SET bug). Resolved by folding the
+   /1,/8,/64 divisor into a stored software multiplier
+   (`g_ch570_stepper_divisor`, `ch570/timer.h`) that `STP_TMR_PERIOD_SET`
+   applies before writing `CNT_END` — externally identical semantics to a
+   hardware prescaler (the period of the real-time tick genuinely scales
+   by the selected divisor), just a different mechanism. 26-bit headroom
+   (67,108,863 max) comfortably covers the worst case
+   (`65535 * 64 = 4,194,240`), so no overflow risk. **General lesson**:
+   "prescaler" in this document's contracts means an OBSERVABLE semantic
+   (the tick period scales), not a specific register shape — a port
+   without a hardware divider must still implement the semantic, in
+   software, rather than treat its absence as license to no-op.
+5. **Single-polarity edge-triggered GPIO interrupt hardware can still
+   deliver CONTRACTS.md §2.6 "any pin CHANGE" semantics, via an edge-flip
+   technique, not just a documented gap**: CH570's GPIO interrupt block
+   (`R16_PA_INT_MODE`/`R16_PA_INT_EDGE_TYPE`, datasheet-confirmed) offers
+   level-OR-edge trigger with a SINGLE selectable polarity per pin (no
+   "either edge" encoding exists in the register, unlike ch32v006's EXTI
+   RTENR+FTENR pair, which arms both edges simultaneously). This port's
+   `hal_gpio_interrupt_enable()` arms the edge away from the pin's current
+   level, and the shared GPIOA ISR (`handlers.c`) XORs the fired pins'
+   `EDGE_TYPE` bits after each servicing — so the NEXT interrupt fires on
+   whichever transition comes next, alternating forever across
+   consecutive interrupts. This turns single-polarity hardware into
+   "any change" semantics without hardware support for it, at the cost of
+   one extra register write per interrupt (already inside the
+   flag-clear-first ISR-hot budget, CONTRACTS.md §2.3). **General
+   lesson**: before accepting "this hardware can't do any-edge, document
+   the gap" for GPIO interrupt controllers with single-polarity edge
+   select, check whether the polarity field itself is writable from the
+   ISR — if so, the edge-flip technique closes the gap for real instead
+   of leaving it as a known limitation.
+6. **CORRECTED after adversarial review — a chip whose datasheet
+   EXPLICITLY DECLINES to document its flash register protocol, and whose
+   vendor object is confirmed by disassembly to contain real,
+   non-trivial logic, is the honest case for vendoring a BINARY (the
+   first in this project's tree) — investigated, not assumed.** The
+   original draft of this port called `FLASH_EEPROM_CMD` a "boot-ROM
+   call"; that phrase was imprecise and has been removed throughout this
+   port (ch570.h, nvmem.c, ISP572.h, the Makefile). It is not a far call
+   into a separate boot-ROM address range — full disassembly
+   (`riscv64-unknown-elf-objdump -d vendor/ISP572.o`) shows every internal
+   call is a normal PC-relative `auipc`/`jalr` to ANOTHER FUNCTION IN THE
+   SAME OBJECT, and the whole thing links as an ordinary statically-placed
+   function. The investigation this batch's review demanded, done
+   properly:
+   - **Is the ROM entry address + ABI independently documented (option
+     "reimplement it ourselves")?** NO — the CH572/CH570 Datasheet V1.1,
+     in the paragraph immediately preceding its own "4.4 Flash-ROM
+     Operation Steps" section, states outright: *"For the operation or
+     setting of FlashROM, please refer to related subprograms. **This
+     datasheet does not provide the introductions to FlashROM word data
+     registers and FlashROM control registers.**"* Section 4.4 itself:
+     *"1. Erase Flash-ROM, please refer to and call related subprograms.
+     2. Write Flash-ROM, please refer to and call the related
+     subprograms."* The vendor is not offering a convenience wrapper
+     around a documented mechanism — it is stating plainly that the
+     register-level protocol on `R8_FLASH_CTRL`/`R8_FLASH_CFG`/
+     `R32_FLASH_DATA`/`R32_FLASH_CONTROL` (0x40001800-0x40001807, all
+     real, listed addresses with NO bit tables) is deliberately withheld,
+     and that calling this exact function is the only supported path.
+   - **Is the object a thin trampoline in disguise (the reviewer's
+     explicit test — "20 instructions of load-address-and-jump")?** NO —
+     ~1.3KB of real control flow: it saves and restores the PFIC
+     interrupt-enable state around the operation (masks ALL interrupts
+     via `PFIC->IENR`/`IRER` while flash is unreadable — necessary, since
+     the CPU cannot fetch code from flash during program/erase), validates
+     the requested address range against the boot-ROM boundary (0x3C000),
+     dispatches EIGHT distinct sub-commands (erase/write/verify/get-ROM-
+     info/get-unique-ID/power-up/power-down/software-reset/start-I/O),
+     and for erase specifically runs a real block-size-selection loop
+     (chooses among multiple erase granularities by address alignment,
+     iterating over the requested range) against an internal byte-level
+     command/status protocol on `R8_FLASH_CTRL` (opcodes like 4, 5,
+     0xD8, 0x20, 0x81 — none explained by the datasheet). This is real,
+     compact, non-trivial logic, not a stub — genuinely (b), not (a) in
+     disguise.
+   - **Given that, why not transcribe the disassembly into new
+     "clean-room" source (Apache-2.0 already permits it)?** Because there
+     is NO independent public specification of the `R8_FLASH_CTRL`
+     protocol to derive from — the datasheet says so explicitly, above.
+     Transcribing disassembly into new text under those conditions is not
+     clean-room re-derivation, it is a hand-copy of the exact same vendor
+     logic with strictly MORE transcription-error risk (a single
+     mistyped immediate or flipped branch condition becomes a silent
+     flash-corruption bug) than linking the vendor's own tested object,
+     for zero corresponding benefit — Apache-2.0 already grants full
+     reproduction rights, so there is no legal motive to paraphrase.
+     Verdict: **(c), genuinely unavoidable** — tracked explicitly
+     (`.gitignore`'s blanket `*.o` rule needed an explicit
+     `!grbl/platform/ch570/vendor/ISP572.o` exception, verified via
+     `git check-ignore -v` AND a simulated fresh checkout — `git archive`
+     of a `git stash create` snapshot, extracted and rebuilt clean,
+     byte-identical sizes), LICENSE kept alongside, and disclosed here in
+     plain language: **this is the first port in this tree carrying a
+     vendored binary artifact, not just vendored header text.**
+   - **A second, related correction relocation analysis surfaced**:
+     `nvmem.c`'s region-write-enable bracket originally claimed
+     "least privilege" by setting `R8_GLOB_ROM_CFG`'s `RB_ROM_CODE_WE` to
+     "enable 129-240K" (0x40) rather than "enable 0-240K" (0xC0) before
+     calling `FLASH_EEPROM_CMD`. `readelf -r vendor/ISP572.o` shows this
+     claim does NOT hold for the operation itself: both
+     `FLASH_CMD_ROM_WRITE` and `FLASH_CMD_ROM_ERASE` call `FLASH_START`
+     as their first action, and `FLASH_START` unconditionally ORs the
+     SAME register with 0xE0 (0xC0 + `RB_ROM_CTRL_EN`) regardless of what
+     this port set beforehand — the vendor code re-widens access to the
+     full region every time. The narrower grant only protects the brief
+     margins immediately before/after the `FLASH_EEPROM_CMD` call, not
+     the erase/write window itself; `nvmem.c`'s comments now say so
+     honestly instead of repeating the original overclaim. **General
+     lesson**: when vendoring a black-box binary, verify any assumption
+     about what it does with registers you also touch by reading its
+     relocations/disassembly, not by inspection of your own bracketing
+     code alone — the two can silently disagree.
+7. **GPIO SET/CLR as two independent write-only registers (not one
+   combined atomic register like STM32's BSRR) is still safe for a
+   multi-bit STEP/DIRECTION group write, just not simultaneous at the bus
+   level**: CH570's `R32_PA_SET`/`R32_PA_CLR` (WZ — write 1, auto-clears)
+   each touch only the bits written, with no read-modify-write hazard
+   against an ISR touching other pins concurrently (CONTRACTS.md §1.2) —
+   but a group write (`hal_gpio_mwo()`, `ch570/gpio.h`) costs TWO register
+   writes (SET then CLR) instead of STM32/ch32v006's one, so the group as
+   a whole does not transition in a single bus cycle. Judged acceptable
+   (not a new hazard class): even a single-register combined write only
+   LOOKS simultaneous across bits because it is one instruction, not
+   because hardware promises simultaneity at the pin-driver level: a
+   few-nanosecond skew across 3 axis STEP/DIRECTION bits is not
+   qualitatively different from what every port already tolerates.
+8. **This chip's real GPIO pin budget (12 pins, ONE port) is far below
+   what a full-featured "generic" GRBL board wants (~20 signals)** — the
+   CH572/CH570 Datasheet V1.1 states plainly "the chip provides a group of
+   GPIO ports PA with 12 general input and output pins"; the vendor SDK's
+   own `GPIO_Pin_0..GPIO_Pin_23` defines are shared boilerplate across the
+   whole CH5xx family tree (bigger siblings bond out more pins) and do NOT
+   mean this specific chip has 24. `ch570/boards/generic/config.h` uses
+   PA0-PA21 anyway (a placeholder map, explicitly NOT claimed hardware-fit,
+   same posture ch32v006's and dsPIC33AK128MC102's own generic boards
+   already established for their own real pin-budget constraints) with an
+   explicit file-header caveat and a list of real consolidations a
+   from-scratch board would need (shared STEPPERS_DISABLE, safety door
+   sharing feed-hold, optional COOLANT_MIST). Two REAL, datasheet-fixed
+   facts are honored regardless of the placeholder pin choices: PWM1's
+   dedicated pin is PA7 (no remap exists for PWM1-5 on this chip) and
+   UART1's default remap is TX=PA3/RX=PA2 — both load-bearing, not
+   arbitrary, in the generic board's pin map.
+9. **`assert_no_double.sh`'s allowed exceptions (widening/narrowing
+   conversions at a legacy double-typed ABI boundary) held on a THIRD
+   RISC-V target with real hardware multiply/divide (RV32IMC's M
+   extension) and no FPU**: FP=SINGLE PASSED on both flavors with zero
+   `__aeabi_d*`/`__*df3`/DP-libm symbols linked — the same class of leak
+   this knob exists to plug (CONTRACTS.md §17) reproduces identically on
+   a chip with hardware integer multiply, confirming the leak is about
+   the ABSENCE OF AN FPU, not the absence of integer multiply/divide
+   (ch32v006's rv32ec has neither; CH570's rv32imc has M but not F, and
+   the same fix applies unchanged).
+
+GATES this batch re-ran (not just inspected): golden AVR `make validate`
+PASSED (MD5 79af184e67b27defd27a39309ac53563, text 30640); samd21 megarm
+RELEASE 31952/296; stm32f103 RELEASE 28700/80; stm32h523 RELEASE
+25132/388; stm32f411 RELEASE 25796/80; hc32f460 RELEASE 25596/80;
+ch32v006 RELEASE 41072/0 (`.bin` MD5-identical before/after the Part A
+extraction) — every sibling this task's brief named, all byte-identical,
+confirming this batch touched only `grbl/platform/common/wch/`,
+`grbl/platform/ch32v006/{ch32v006.h,platform.h,startup.c}` (extraction
+only, zero behavior change), `grbl/platform/ch570/` (new),
+`grbl/platform/hal.h` (additive `PLATFORM_CH570` dispatch, guarded so it
+cannot affect any other platform's preprocessing), `CONTRACTS.md`,
+`PLAN.md`, `ci/warn_baseline_ch570.txt`, and `.github/workflows/ci.yml`.
+CH570: `make BUILD=DEBUG`/`BUILD=RELEASE` both LINK with **zero
+`PORT_TODO_*`** (`nm | grep PORT_TODO` empty both flavors — verified, not
+assumed), zero compiler warnings on platform files (baseline holds only
+core-file warnings, identical text to ch32v006's), FP=SINGLE assert
+PASSED both flavors, boot integrity OK both flavors (`_start=0x00000000`),
+`mret` (opcode `0x30200073`) disassembly-confirmed in all four real
+vector bodies (`TMR_IRQHandler`, `SysTick_Handler`, `GPIOA_IRQHandler`,
+`UART_IRQHandler`). Sizes: DEBUG 46830/4/6850, RELEASE 40674/4/6849 (of
+236KB usable flash / 12KB RAM). NOT marked ready for hardware validation
+(no CH570 emulator exists, same posture as ch32v006/dsPIC33AK/hc32f460) —
+every UNVERIFIED fact (the 60MHz PLL clock path end-to-end, the busy-wait
+delay cycle-count assumption, the GPIO any-edge technique's real-silicon
+behavior) is flagged at its own definition site, not asserted as
+hardware-proven.

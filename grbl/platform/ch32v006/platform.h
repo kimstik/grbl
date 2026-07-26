@@ -94,50 +94,19 @@ typedef GPIO_TypeDef* hal_gpio_port_t;
 // silently shadowed in every core TU.
 
 // ============================================================================
-// CRITICAL SECTIONS (CONTRACTS.md #8) - save/restore mstatus.MIE (bit 3).
+// CRITICAL SECTIONS / sei() / cli() / MEMORY BARRIERS
+// (CONTRACTS.md #8, #11, #12)
 // ============================================================================
-/*
-  Save/restore, not blind disable/enable - the pair runs inside the RX ISR
-  on the debug path (serial.c:153); an END that always re-enables
-  interrupts would corrupt nesting. mstatus.MIE is standard RISC-V
-  privileged-spec state, correct on any RV32/64 core. Needs Zicsr - see
-  the Makefile ARCHFLAGS note (CONTRACTS.md #14.1).
-*/
-#define HAL_CRITICAL_SECTION_BEGIN() \
-  uint32_t __hal_mstatus_save; \
-  __asm volatile ("csrr %0, mstatus" : "=r" (__hal_mstatus_save)); \
-  __asm volatile ("csrci mstatus, 8" ::: "memory")
-
-#define HAL_CRITICAL_SECTION_END() \
-  __asm volatile ("csrw mstatus, %0" : : "r" (__hal_mstatus_save) : "memory")
-
-// ============================================================================
-// INTERRUPT GLOBAL CONTROL (CONTRACTS.md #11)
-// ============================================================================
-// mstatus.MIE = bit 3. "memory" clobber mandatory (CONTRACTS.md #12.6).
-// QingKe note: with INTSYSCR.INESTEN=0 (this port's configuration - see
-// startup.c), core's sei() inside ISR_STEP (stepper.c:355) does NOT nest
-// another interrupt into the running handler; delivery is deferred to
-// handler exit - same accepted posture as the SAMD21 M0+ reference
+// EXTRACTED (Phase 6 rolling #4, Part A) to common/wch/wch_critical.h,
+// verbatim - see that file for the full rationale (mstatus.MIE bit 3,
+// Zicsr requirement, fence rw,rw semantics) and for why `mstatus` is the
+// right primitive on every QingKe generation this tree ports, not just
+// this one. QingKe note specific to THIS port: with INTSYSCR.INESTEN=0
+// (see startup.c), core's sei() inside ISR_STEP (stepper.c:355) does NOT
+// nest another interrupt into the running handler; delivery is deferred
+// to handler exit - same accepted posture as the SAMD21 M0+ reference
 // (CONTRACTS.md #5.2).
-#define sei()  __asm volatile ("csrsi mstatus, 8" ::: "memory")
-#define cli()  __asm volatile ("csrci mstatus, 8" ::: "memory")
-
-// ============================================================================
-// MEMORY BARRIERS (CONTRACTS.md #12)
-// ============================================================================
-/*
-  `fence rw,rw` orders all prior loads/stores against all subsequent ones -
-  the architecturally correct primitive for the #12.1 ring-buffer publish
-  and #12.4 flash-commit lessons, regardless of whether QingKe V2C's
-  in-order pipeline would reorder in practice (still not stated either way
-  by the TRM - correctness-first stance kept). Related, TRM-CONFIRMED
-  (RM 6.5.2 note): masking interrupts via PFIC_IENRx/IRERx requires a
-  `fence.i` for core/PFIC state sync - implemented in PFIC_DisableIRQ
-  (ch32v006.h), NOT here: these data fences are a different instruction.
-*/
-#define __DSB() __asm volatile ("fence rw, rw" ::: "memory")
-#define __DMB() __asm volatile ("fence rw, rw" ::: "memory")
+#include "../common/wch/wch_critical.h"
 
 // ============================================================================
 // WATCHDOG (CONTRACTS.md #9)
