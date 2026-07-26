@@ -173,6 +173,20 @@ All of the following, in this order:
    that shifts this is rejected, full stop.
 4. **Ratchet clean**: `ci/warn_ratchet.py` passes against a committed
    `ci/warn_baseline_<name>.txt`; baseline may only shrink.
+4a. **Boot-init reachability declared**: your Makefile sets `INIT_SYMBOLS`
+   (comma-separated) and runs `../common/init_check.sh $(PREFIX)nm $@
+   $(INIT_SYMBOLS)` right after the no-DP assert in the link rule — the STM32
+   family gets a working default from `common/stm32/common.mk`, everyone else
+   declares their own. List every function that must run before `main()`:
+   your `Reset_Handler` (or the toolchain's crt0 entry), and each clock/GPIO
+   bring-up function it reaches. Tag each of those `GRBL_BOOT_INIT`
+   (`common/boot_init.h`) at BOTH the declaration and the definition.
+   **This is not paperwork**: four landed ports shipped a complete bring-up
+   chain that nothing called, LTO deleted all of it, and they booted on the
+   reset-default clock with unconfigured GPIO — every other gate passed. See
+   CONTRACTS.md [§26](CONTRACTS.md#boot-init-unreachable) / PLAN.md BUG #23.
+   Core `grbl/main.c` will never call your init; the call must come from
+   your `Reset_Handler`, before `main()`.
 5. **CI matrix row added**: one `include:` row per build flavor in
    `.github/workflows/ci.yml` (platform/board/build/toolchain-packages —
    existing rows are the template). CI is a thin invoker; all build knowledge
@@ -223,8 +237,10 @@ committed bytes are refreshed on the right cadence:
   present (see below), so its absence between tags never fails this check.
 - This is the **sixth ratchet** in this project (after golden MD5, warn
   baseline, boot integrity, no-DP assert, docs integrity/CONTRACTS
-  numbering) — same "a bugfix/change is not done until a CI check exists
-  that would have caught it" law from PLAN.md's working rules.
+  numbering; the **seventh** is boot-init reachability,
+  `common/init_check.sh` — step 4a above) — same "a bugfix/change is not
+  done until a CI check exists that would have caught it" law from PLAN.md's
+  working rules.
 
 ### ELF is tag-time only, not part of this cadence ("Эльф на тегах")
 

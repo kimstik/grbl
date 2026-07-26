@@ -42,7 +42,7 @@ static void pwc_registers_lock(void) {
  * ARE confirmed (Klipper bootloader cross-check, regs.h header).
  * --------------------------------------------------------------------------*/
 
-void hal_clock_config(void) {
+GRBL_BOOT_INIT void hal_clock_config(void) {
   pwc_registers_unlock();
 
   /* 1. Enable the external main oscillator and wait for it to stabilize. */
@@ -149,7 +149,7 @@ void hal_gpio_interrupt_disable(HC32_PORT_TypeDef* port, uint32_t mask) {
   }
 }
 
-void hal_gpio_init(void) {
+GRBL_BOOT_INIT void hal_gpio_init(void) {
   /* Step/direction/stepper-enable (PA0-6) as outputs */
   hal_gpio_set_output(GPIOA, STEP_MASK | DIRECTION_MASK | STEPPERS_DISABLE_MASK);
   HAL_GPIO_SET_BITS(GPIOA, STEPPERS_DISABLE_MASK);   /* disable steppers initially (active LOW) */
@@ -296,7 +296,7 @@ void hal_watchdog_refresh(void) {
  * SYSTEM INITIALIZATION
  * ==========================================================================*/
 
-void hal_system_init(void) {
+GRBL_BOOT_INIT void hal_system_init(void) {
   hal_clock_config();
   hc32_systick_init();
   hal_gpio_init();

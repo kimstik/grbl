@@ -85,6 +85,38 @@ void Reset_Handler(void) {
   }
   __DSB();
 
+  /* BUG #23: bring the chip up BEFORE main().
+   *
+   * hal_system_init() -> hal_clock_config() (XTAL -> MPLL 200MHz, EFM
+   * flash wait states raised before the switch) + hal_gpio_init() (PORT
+   * unlock, PCR direction/pull, function mux) was written, reviewed and
+   * documented - and called from NOWHERE. main.c is the golden gate and
+   * does not call platform init, so under -flto the entire chain was
+   * unreachable and GCC's IPA deleted it: the RELEASE image defined none
+   * of the three symbols and the chip ran on the MRC reset default with
+   * unconfigured GPIO. Same class as BUG #21 (LTO deleted the vector
+   * table because nothing referenced it), one level up.
+   *
+   * Placed HERE, in the platform's own Reset_Handler, matching samd21's
+   * SystemInit()/SysTick_Config() precedent - the established way this
+   * tree runs pre-main platform code without touching core.
+   *
+   * Ordering is load-bearing and must not be reshuffled:
+   *   .data/.bss first  - hal_gpio_init and the NVMEM cache write
+   *                       initialized statics.
+   *   clock (+ its own flash wait states) before anything timing-
+   *                       dependent - hal_clock_config programs EFM
+   *                       wait states BEFORE switching the system clock
+   *                       source; hc32_systick_init() then derives the
+   *                       tick from the final frequency.
+   *   GPIO after clock  - the PORT/PWC gating it writes is meaningless
+   *                       until the bus clocks are settled.
+   *   main() last       - core's serial_init()/settings_init() need the
+   *                       final clock and the NVMEM cache already up.
+   * VTOR is already set above, so an IRQ raised during bring-up vectors
+   * into this image. */
+  hal_system_init();
+
   main();
 
   while (1);

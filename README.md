@@ -41,13 +41,13 @@ re-verified at every integration):
 | Platform | ISA | RELEASE text | data | Body (text+data) | CI | Proven by |
 |---|---|---|---|---|---|---|
 | atmega328p | AVR (8-bit, reference) | 30640 | 0 | 30640 | build + golden MD5 | byte-identical to upstream |
-| stm32f103 (Blue Pill) | ARM Cortex-M3 | 28700 | 80 | 28780 | build, both flavors | build/link/contract-proven |
-| stm32h523 (Black Pill H5) | ARM Cortex-M33 | 25132 | 388 | 25520 | build, both flavors | build/link/contract-proven |
-| stm32f411 (Black Pill) | ARM Cortex-M4F | 25796 | 80 | 25876 | build, both flavors | build/link/contract-proven |
-| samd21 megarm | ARM Cortex-M0+ | 31952 | 296 | 32248 | build, both boards x both flavors | **Renode-booted and Renode-driven through a real arc move**, with STEP-pin toggling observed — the only port executed anywhere, even in emulation |
-| samd21 generic | ARM Cortex-M0+ | 31940 | 296 | 32236 | build, both boards x both flavors | build/link/contract-proven |
-| ch32v006 | RISC-V rv32ec | 41072 | 0 | 41072 | build, both flavors | build/link/contract-proven |
-| hc32f460 | ARM Cortex-M4F | 25596 | 80 | 25676 | build, both flavors | build/link/contract-proven; register facts largely UNVERIFIED pending a real register-level manual |
+| stm32f103 (Blue Pill) | ARM Cortex-M3 | 29028 | 80 | 29108 | build, both flavors | build/link/contract-proven |
+| stm32h523 (Black Pill H5) | ARM Cortex-M33 | 25468 | 388 | 25856 | build, both flavors | build/link/contract-proven |
+| stm32f411 (Black Pill) | ARM Cortex-M4F | 26132 | 80 | 26212 | build, both flavors | build/link/contract-proven |
+| samd21 megarm | ARM Cortex-M0+ | 31956 | 296 | 32252 | build, both boards x both flavors | **Renode-booted and Renode-driven through a real arc move**, with STEP-pin toggling observed — the only port executed anywhere, even in emulation |
+| samd21 generic | ARM Cortex-M0+ | 31944 | 296 | 32240 | build, both boards x both flavors | build/link/contract-proven |
+| ch32v006 | RISC-V rv32ec | 41076 | 0 | 41076 | build, both flavors | build/link/contract-proven |
+| hc32f460 | ARM Cortex-M4F | 25796 | 80 | 25876 | build, both flavors | build/link/contract-proven; register facts largely UNVERIFIED pending a real register-level manual |
 | dsPIC33AK128MC102 | dsPIC33 DSC (3rd ISA family) | ~41.8KB (approx.) | — | ~41.8KB | not yet (toolchain fetch/licensing unresolved) | build/link/contract-proven |
 
 Four of the five ARM ports (stm32f103, stm32h523, stm32f411, hc32f460) are now smaller in flash

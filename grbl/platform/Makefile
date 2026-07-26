@@ -42,8 +42,27 @@ sg2002:
 	@echo "==== Building SG2002 (BUILD=$(BUILD)) ===="
 	$(MAKE) -C sg2002 BUILD=$(BUILD)
 
-check:	#TODO: compile base AVR port and check hash of generated images by /common/chk.py
-	@echo "integrity check"
+# ============================================================================
+# BOOT-INIT REACHABILITY RATCHET (BUG #23, CONTRACTS.md
+# #boot-init-unreachable)
+#
+# The check itself rides each port's OWN Makefile at link time, right after
+# the no-DP assert and alongside boot_check.sh - same wiring point, same
+# blast radius, no CI change needed to cover a new port. What lives here is
+# the aggregate entry point and the pure-logic selftest.
+#
+# atmega328p's leg is in grbl/platform/atmega328p/Makefile (its real link
+# happens in the golden-MD5-gated root Makefile, which stays untouched, so
+# the check hangs off the shim CI already invokes).
+check: ## boot-init reachability ratchet, AVR reference leg (BUG #23)
+	@echo "==== BOOT-INIT reachability: atmega328p (golden reference) ===="
+	$(MAKE) -C atmega328p validate
+
+# Pure-logic unit tests for the ratchet itself - no compiler invoked,
+# matches tools/assert_no_double.sh --selftest / ci/warn_ratchet.py
+# --selftest / tools/build_artifacts.py --selftest.
+init-check-selftest:
+	sh common/init_check.sh --selftest
 
 # ============================================================================
 # TRACKED BUILD ARTIFACTS (PLAN.md "build artifacts tracked in git for
@@ -132,5 +151,12 @@ help:
 	@echo "  make artifacts-check    - Fail if committed artifacts are stale"
 	@echo "                            relative to a fresh build (the 6th ratchet)"
 	@echo "  make artifacts-selftest - Pure-logic unit tests, no compiler invoked"
+	@echo ""
+	@echo "Boot-init reachability ratchet (BUG #23):"
+	@echo "  make check               - AVR reference leg (every other port"
+	@echo "                             runs common/init_check.sh from its own"
+	@echo "                             Makefile at link time)"
+	@echo "  make init-check-selftest - Pure-logic unit tests for the ratchet"
 
-.PHONY: all $(READY_PLATFORMS) clean clean-all help artifacts artifacts-check artifacts-selftest
+.PHONY: all $(READY_PLATFORMS) check init-check-selftest clean clean-all help \
+        artifacts artifacts-tag artifacts-check artifacts-selftest

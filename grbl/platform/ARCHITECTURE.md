@@ -413,12 +413,12 @@ RELEASE flash body (`text`+`data`), re-measured 2026-07-26 by fresh clean builds
 | Platform | Flash used (`text`+`data`) | Flash budget | RAM (`data`+`bss`) |
 |---|---|---|---|
 | AVR ATmega328P (golden) | 30640 B (30640+0) | 32KB (94%) | 1.6KB / 2KB |
-| STM32F103 | 28780 B (28700+80) | 64KB (44%) | ~19.5KB / 20KB |
-| STM32H523 | 25520 B (25132+388) | 128KB (19%) | ~10.4KB / 32KB |
-| STM32F411 | 25876 B (25796+80) | 512KB (5%) | ~127KB / 128KB |
-| SAMD21 (megarm) | 32248 B (31952+296) | 256KB (12.3%) | ~6.3KB / 32KB |
-| CH32V006 | 41072 B (41072+0) | 61K usable (62K minus a 1K NVMEM window), per `script.ld` | ~2.7KB / 8KB |
-| HC32F460 | 25676 B (25596+80) | 512KB (5%) | ~127KB / 128KB |
+| STM32F103 | 29108 B (29028+80) | 64KB (44%) | ~19.5KB / 20KB |
+| STM32H523 | 25856 B (25468+388) | 128KB (19%) | ~10.4KB / 32KB |
+| STM32F411 | 26212 B (26132+80) | 512KB (5%) | ~127KB / 128KB |
+| SAMD21 (megarm) | 32252 B (31956+296) | 256KB (12.3%) | ~6.3KB / 32KB |
+| CH32V006 | 41076 B (41076+0) | 61K usable (62K minus a 1K NVMEM window), per `script.ld` | ~2.7KB / 8KB |
+| HC32F460 | 25876 B (25796+80) | 512KB (5%) | ~127KB / 128KB |
 | dsPIC33AK128MC102 | ~41.8KB (approximate — see its platform.md) | 128KB (~33%) | ~3.8KB / 16KB |
 
 Note on ch32v006: some older docs in this tree (`PLATFORM_ROADMAP.md`'s original entry) quote

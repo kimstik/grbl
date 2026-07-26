@@ -112,6 +112,21 @@ endif
 # startup.c supplies its own _start/Reset_Handler.
 CFLAGS += -specs=picolibc.specs
 
+# BOOT-INIT REACHABILITY KNOB (BUG #23, CONTRACTS.md #boot-init-unreachable).
+# Post-link proof that this port's pre-main bring-up is still REACHABLE:
+# after -flto + --gc-sections, a function survives only if something
+# reaches it, so "defined in the final ELF" == "reachable". Four sibling
+# ports (stm32f103/f411/h523, hc32f460) shipped a complete bring-up chain
+# that nothing called - core grbl/main.c is the golden gate and never calls
+# platform init - and LTO silently deleted all of it.
+#
+# Declarable per port because ports genuinely name this differently: the
+# STM32/HC32 family uses hal_system_init/hal_clock_config/hal_gpio_init,
+# this port uses SystemInit + SystemClock_Config, the dsPIC uses an underscore-
+# prefixed _hal_clock_config reached through a crt0 user_init table.
+INIT_SYMBOLS ?= Reset_Handler,SystemInit,SystemClock_Config
+INIT_CHECK = ../common/init_check.sh
+
 CFLAGS += $(CFLAGS_EXTRA) -I$(PLATFORM_DIR) -I$(GRBL_DIR)/platform -I$(GRBL_DIR)
 
 # LTO: RELEASE only (house style, matches samd21/stm32*/hc32f460/sg2002/
@@ -235,6 +250,7 @@ $(ELF_FILE): objects $(BOARD_STAMP)
 	$(CC) $(LDFLAGS) -o $(ELF_FILE) $(OBJECTS) $(VENDOR_OBJECTS) $(LIBS)
 	$(SIZE) --format=berkeley $(ELF_FILE)
 	$(ASSERT_FP)
+	@sh $(INIT_CHECK) $(PREFIX)nm $@ $(INIT_SYMBOLS)
 
 $(HEX_FILE): $(ELF_FILE)
 	$(OBJCOPY) -O ihex $< $@
