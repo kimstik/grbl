@@ -50,7 +50,7 @@ SECTIONS
   _sidata = LOADADDR(.data);
 
   /* Uninitialized data (zero-initialized at startup) */
-  .bss :
+  .bss (NOLOAD) :
   {
     . = ALIGN(4);
     _sbss = .;
@@ -61,8 +61,16 @@ SECTIONS
     _ebss = .;
   } > RAM
 
-  /* Stack */
-  .stack :
+  /* Stack. (NOLOAD): this section is pure location-counter advance, no
+   * input sections assigned. GNU ld infers SHT_NOBITS for that shape by
+   * convention; ld.lld does NOT and emits real file-backed SHT_PROGBITS,
+   * which turns `objcopy -O binary` into a multi-hundred-MB .bin padding
+   * the gap between FLASH and this RAM section (measured on stm32f411:
+   * 402MB, docs/TOOLCHAIN-AXIS.md). (NOLOAD) is a standards-compliant
+   * directive both linkers honor identically - zero effect under GNU ld
+   * (confirmed: identical section layout/size before and after), and this
+   * is the fix under lld. */
+  .stack (NOLOAD) :
   {
     . = ALIGN(8);
     . = . + _stack_size;
@@ -70,8 +78,8 @@ SECTIONS
     _estack = .;
   } > RAM
 
-  /* Heap (if needed) */
-  .heap :
+  /* Heap (if needed). (NOLOAD): same reasoning as .stack above. */
+  .heap (NOLOAD) :
   {
     . = ALIGN(4);
     _sheap = .;

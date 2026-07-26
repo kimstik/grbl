@@ -71,7 +71,7 @@ SECTIONS
 
   _sidata = LOADADDR(.data);
 
-  .bss :
+  .bss (NOLOAD) :
   {
     . = ALIGN(4);
     _sbss = .;
@@ -89,7 +89,16 @@ SECTIONS
   PROVIDE(end = _ebss);
   PROVIDE(_end = _ebss);
 
-  .stack :
+  /* (NOLOAD): this section is pure location-counter advance, no input
+   * sections assigned. GNU ld infers SHT_NOBITS for that shape by
+   * convention; ld.lld does NOT and emits real file-backed SHT_PROGBITS,
+   * which turns `objcopy -O binary` into a multi-hundred-MB .bin padding
+   * the gap between FLASH and this RAM section (measured on stm32f411:
+   * 402MB, docs/TOOLCHAIN-AXIS.md). (NOLOAD) is a standards-compliant
+   * directive both linkers honor identically - zero effect under GNU ld.
+   * PORT-TODO template inherits the fix so every new port copies it
+   * forward instead of reintroducing the gap. */
+  .stack (NOLOAD) :
   {
     . = ALIGN(8);
     _sstack = .;
