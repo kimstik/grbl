@@ -1,5 +1,33 @@
 # GRBL for Sophgo SG2002 (RISC-V C906)
 
+> **STATUS: NON-FUNCTIONAL — never compiled.** This directory is the
+> FOURTH platform port in this project found presenting as complete
+> while never having built successfully. Verified by direct build
+> attempt (2026-07-26):
+> 1. The Makefile never passes `--specs=picolibc.specs`, so file 1
+>    (`main.c` → `grbl.h`) fails immediately on `fatal error: math.h:
+>    No such file or directory` — the apt `picolibc-riscv64-unknown-elf`
+>    package's headers are never on the include path GCC actually
+>    searches without that flag.
+> 2. Even with that fixed, the apt picolibc package ships no
+>    `rv64imafdc`/`lp64d` multilib (i.e. no `crt0.o` for the exact
+>    ARCH/ABI this Makefile requests, `rv64gc`/`lp64d`) — the closest
+>    available multilibs are `rv64iafd`/`rv64ifd` (no `m`, no compressed
+>    `c`), so linking would fail even past the header error.
+> 3. Fatally: `platform.h` defines a private `HAL_*` macro namespace
+>    (`HAL_GPIO_SET_OUTPUT`, `HAL_TIMER_STEPPER_INIT`, etc.) that core
+>    `grbl/stepper.c` has not called since this project's Nov-2025
+>    HAL_-strip refactor — core now calls `GPIO_BSET`/`GPIO_MWO`/
+>    `STP_TMR_INT_ENA`/etc. directly. This platform layer never reaches
+>    `stepper.c` at all; even a clean build would not step a motor.
+>
+> Do not trust the "Implementation Status" table below — it describes
+> code that exists on disk, not code that has ever built or run. Treat
+> this port as a candidate to be **restarted from `_template`** (see
+> `PLAN.md`), not repaired in place. See `CONTRACTS.md` §21 and `PLAN.md`
+> (`sg2002` entry) for the separate, still-valid runtime-core design work
+> done on top of this — that design targets a rewrite, not this source.
+
 GRBL CNC controller port for Sophgo SG2002 RISC-V processor (LicheeRV-Nano board).
 
 ## Hardware
@@ -139,11 +167,17 @@ cp build_sg2002_RELEASE/grbl_sg2002.bin /media/boot/
 
 ## HAL Implementation Status
 
+**NON-FUNCTIONAL — table below describes code written to disk, not code
+verified to build or run (see status banner at top of this file). The
+`✅ Implemented` markers below predate that discovery and are retained only
+to show what a from-scratch `_template` restart should re-cover; do not
+read them as "working".**
+
 | Feature | Status | Notes |
 |---------|--------|-------|
-| GPIO | ✅ Implemented | Basic operations |
-| UART | ✅ Implemented | 115200 baud |
-| Timer | ✅ Implemented | Stepper interrupt |
+| GPIO | ⚠️ Written, unverified | Never compiled; uses private `HAL_*` names core no longer calls |
+| UART | ⚠️ Written, unverified | 115200 baud; same private `HAL_*` namespace issue |
+| Timer | ⚠️ Written, unverified | Stepper interrupt; same private `HAL_*` namespace issue |
 | PLIC | 🚧 Partial | Basic setup |
 | NVMEM | ⚠️ RAM-based | Flash emulation TODO |
 | PWM | ⚠️ Stub | GPIO-based spindle PWM TODO |
@@ -159,6 +193,10 @@ Estimated performance (700MHz RISC-V vs 16MHz AVR):
 
 ## Known Issues
 
+0. **Does not build** (see status banner at top of this file): missing
+   `--specs=picolibc.specs`, no `rv64imafdc`/`lp64d` multilib in the apt
+   picolibc package, and a private `HAL_*` macro layer core no longer
+   calls — any one of these blocks a working image today.
 1. NVMEM is RAM-based (settings lost on reset)
 2. PWM spindle control not implemented
 3. USB CDC not implemented (UART only)
@@ -167,6 +205,8 @@ Estimated performance (700MHz RISC-V vs 16MHz AVR):
 
 ## TODO
 
+- [ ] Restart from `_template` (see `PLAN.md`) rather than repairing this
+      tree in place — issue 0 above is structural, not a small fix
 - [ ] Flash-based NVMEM implementation
 - [ ] Hardware PWM for spindle control
 - [ ] USB CDC virtual serial port

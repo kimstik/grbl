@@ -1648,3 +1648,68 @@ symbols — `nm -u` on both finished ELFs is empty).
    port touched only `grbl/platform/hc32f460/`, `grbl/platform/CONTRACTS.md`,
    `grbl/platform/PLAN.md`, `grbl/platform/PLATFORM_ROADMAP.md`,
    `ci/warn_baseline_hc32f460.txt`, and `.github/workflows/ci.yml`.
+
+## 23. Cross-core shared memory needs cache maintenance, not just ordering (SG2002 recon — a new class beyond BUG #12)
+
+Every port closed so far (§12 item 1, BUG #12) shares one cache domain
+with its own ISRs: producer and consumer are the same core (or a
+core/DMA pair) inside one coherent view of memory, so a release-store
+paired with `__DMB()`/a fence is the whole obligation — get the ORDER
+right and the data is visible. That assumption breaks on an asymmetric
+multi-core SoC where the companion core has its own L1 and no hardware
+coherency between the two: SG2002 pairs a big core (C906 or Cortex-A53,
+mutually exclusive by boot strap — see PLAN.md) running Linux against a
+little C906L running our blob, and the two cores' D-caches are not kept
+in sync by the interconnect. A fence only orders *this core's* memory
+operations against *this core's* memory system; it says nothing about
+when — or whether — another core's cache line for the same physical
+address gets refreshed.
+
+Consequence: the producer must explicitly WRITE BACK its dirty line(s)
+after the data store, and the consumer must explicitly INVALIDATE its
+copy before the data read, or the consumer can spin forever re-reading
+its own stale cached line while the producer's fresh data sits
+correctly ordered — and correctly written back nowhere the consumer's
+cache knows to look. `__DMB()`/fence ordering and cache-maintenance are
+ORTHOGONAL obligations; satisfying one says nothing about the other.
+T-Head's C906/C906L expose custom cache-management ops for this
+(XTheadCmo family, e.g. `th.dcache.call`) — not the base RISC-V ISA, a
+vendor extension, so treat the encodings with the same "verify against
+THIS toolchain" skepticism as §14/§20 rather than assuming portability
+from documentation alone.
+
+This composes with the existing command-vs-data ordering obligation
+(BUG #13 class, §12 item 4) into a THIRD requirement, not a
+replacement: the doorbell/MMIO write that announces "data ready" must
+be sequenced strictly AFTER the writeback that makes the data actually
+visible in memory, or the consumer can be signaled before there is
+anything correct to invalidate-and-read. So the full producer sequence
+for a cross-core message is: write data -> writeback (cache op) ->
+fence -> doorbell write; the full consumer sequence is: doorbell IRQ ->
+invalidate (cache op) -> fence -> read data. Dropping either cache step,
+or reordering the doorbell ahead of the writeback, both compile clean
+and both fail silently.
+
+Preferred simplification, where the SoC's PMA/MMU configuration allows
+it: map the shared window as NON-CACHEABLE on both sides and sidestep
+this entire class rather than hand-maintaining coherency — at the
+serial byte rates this project moves data (GRBL command/status
+traffic), the throughput cost of non-cacheable access is irrelevant, and
+removing a manual-coherency class from a safety-relevant data path is
+worth far more than the cycles it costs.
+
+**General lesson beyond SG2002:** on any port where the producer and
+consumer of a shared buffer are NOT guaranteed to be in the same cache
+domain (different cores, no hardware coherency — as opposed to same-core
+producer/ISR-consumer pairs, which is every port to date), ask "is this
+memory coherent between these two agents" as a question separate from
+"is this memory ordered between these two agents." Ordering-only
+fixes (§12 item 1) are necessary but not sufficient once a second cache
+enters the picture. This class is invisible to every test this project
+can run without the actual hardware (no emulator models cross-core cache
+incoherency at this fidelity) and its failure mode is not a hang or a
+wrong timing — it is silent data corruption: stale bytes read as fresh,
+with no assertion, no crash, and no distinguishing signature short of
+comparing against ground truth. Treat "no emulator can catch this" as a
+standing flag on the whole class, not a reason to defer it — an unfixed
+example is a live footgun for whoever builds the SG2002 channel.

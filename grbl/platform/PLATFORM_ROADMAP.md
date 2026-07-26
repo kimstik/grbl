@@ -87,17 +87,41 @@ These were previously listed as "100% Complete / Production Ready". That was nev
 - **See**: [SAMD21_PLAN.md](samd21/SAMD21_PLAN.md) (itself stale — treat [PLAN.md](PLAN.md) Phase 3 as authoritative over it), [PLAN.md](PLAN.md)
 
 ### SG2002 (Sophgo RISC-V)
-- **Status**: 🚧 Work In Progress
+- **Status**: ❌ NON-FUNCTIONAL — never compiled (relabeled 2026-07-26; was
+  previously, incorrectly, described as "Work In Progress"/"partial").
+  Verified by direct build attempt: this is the FOURTH platform port found
+  in this state — (1) the Makefile never passes `--specs=picolibc.specs`,
+  so the first file fails on `math.h: No such file or directory`; (2) the
+  apt `picolibc-riscv64-unknown-elf` package has no `rv64imafdc`/`lp64d`
+  multilib, so there is no `crt0.o` for the ARCH/ABI this Makefile
+  requests even once the flag is fixed; (3) fatally, `platform.h` defines
+  a private `HAL_*` macro namespace (`HAL_GPIO_SET_OUTPUT`,
+  `HAL_TIMER_STEPPER_INIT`, ...) that core `stepper.c` has not called
+  since the Nov-2025 HAL_-strip refactor — this platform layer never
+  reaches `stepper.c` at all. See `sg2002/README.md`'s status banner for
+  full detail. Recommendation: restart from `_template`, do not repair in
+  place.
 - **Architecture**: RISC-V C906, 700MHz (RV64IMAFDC)
 - **Vendor**: Sophgo
 - **Memory**: 256MB DDR3
 - **Target board**: LicheeRV Nano
 - **Unique features**:
-  - Dual-core: C906 (big) + C906 (little)
-  - Linux-capable RISC-V
+  - Dual-core: big core (C906 RISC-V or Cortex-A53 ARM, mutually exclusive
+    boot-strap, runs Linux) + little C906L (RISC-V, no MMU, M-mode,
+    ALWAYS present regardless of big-core ISA — this is the actual
+    runtime-core target; see PLAN.md `sg2002` entry, fact-corrected
+    2026-07-26)
+  - Linux-capable on the big core only; the runtime core we target is
+    bare-metal
   - PLIC interrupt controller
   - High performance for complex G-code
-- **Current status**: Platform structure ready (Makefile, startup.c, platform.c, handlers.c, regs.h, script.ld, avr shim all present); not in the CI build matrix yet — deferred to PLAN.md Phase 6 pending a RISC-V64 toolchain decision.
+- **Current status**: NON-FUNCTIONAL source tree as described above,
+  unchanged pending a `_template` restart. Separately, PLAN.md now carries
+  a DESIGN-COMPLETE / IMPLEMENTATION-DEFERRED runtime-core channel design
+  (remoteproc lifecycle + shared-memory ring replacing UART for CONTRACTS
+  §7, cross-core cache-maintenance obligations per CONTRACTS §21) — that
+  design targets a rewrite of this platform, not a fix to the current
+  source. Not in the CI build matrix.
 - **Target use case**: High-end CNC, complex multi-axis systems
 
 ---
@@ -238,6 +262,11 @@ Per [PLAN.md](PLAN.md) (the authoritative queue — this list is kept in sync wi
    2. dsPIC33AK128MC102 (third ISA family, XC-DSC toolchain now free)
    3. HC32F460 (ARM M4F, vendor-exotic — tests contract completeness) — ✅ DONE, see above
    4. SG2002 (RISC-V64, Linux-class — bare-metal vs. Linux userspace scope still to be decided)
+   3. HC32F460 (ARM M4F, vendor-exotic — tests contract completeness)
+   4. SG2002 (RISC-V64 runtime core, Linux-adjacent — scope DECIDED
+      2026-07-26: bare-metal blob only, Linux side out of scope; design
+      DESIGN-COMPLETE/IMPLEMENTATION-DEFERRED per PLAN.md, current source
+      tree is NON-FUNCTIONAL and needs a `_template` restart first)
    5. any new platform directory that appears
 
 ATSAMC21E18A is not currently scheduled — see its tracking note above.

@@ -428,6 +428,75 @@ Priority order (revise as hardware/toolchain reality dictates):
       validation" in PLATFORM_ROADMAP.md, reflecting the UNVERIFIED register
       facts honestly.
 - [ ] sg2002 (RISC-V 64, linux-class — decide scope first: bare-metal vs linux userspace)
+- [ ] hc32f460 (ARM M4, vendor-exotic — tests contract completeness)
+- [ ] **sg2002** DESIGN-COMPLETE / IMPLEMENTATION-DEFERRED (2026-07-26 runtime-core
+      design batch; owner's scope ruling below, executor's recommendation to defer
+      actual coding, owner may overrule in one line):
+      * **Scope ruling (owner)**: Linux side is OUT OF SCOPE. The deliverable is a
+        bare-metal blob for the runtime core only — loadable and restartable from
+        Linux, not a Linux-side driver or userspace daemon we author from scratch
+        beyond the small bridge below.
+      * **FACT CORRECTION to the owner's model** (stated plainly, as requested):
+        the RISC-V-vs-ARM choice does NOT apply to the core this project targets.
+        That choice belongs to the BIG, Linux-hosting core (C906 or Cortex-A53,
+        mutually exclusive, selected by a boot-time strap — SG2002 ships as either
+        variant, never both). The runtime core this port actually targets is a
+        C906L (RISC-V, 700MHz, no MMU, M-mode) on EVERY SG2002 configuration —
+        there is never a free ARM core to target instead. So "both ISA variants"
+        collapses to ONE port, not two: the Linux-side ISA becomes a
+        COMPATIBILITY AXIS to test against (the mailbox, reset controller, and
+        DDR carve-out all hang off shared SoC fabric, so the same runtime-core
+        blob should work unmodified under either big-core ISA), not a second
+        implementation to write.
+      * **Lifecycle**: reuse the upstream remoteproc driver
+        `sophgo,cv1800b-c906l` as-is — load/start/stop/restart via the standard
+        `/sys/class/remoteproc/.../state` sysfs interface, ELF segment loading
+        into a device-tree `reserved-memory` region, no new kernel code needed
+        for lifecycle. Its mailbox IPC half was explicitly deferred upstream
+        ("added in a separate patch" per the upstream commit) — the data channel
+        is ours to design and build. Use ONE carve-out: the same reserved-memory
+        region backs both the firmware image and the shared-memory rings, no
+        second region to coordinate.
+      * **Channel design**: implement CONTRACTS §7 (`HAL_SERIAL_*`) over a
+        shared-memory ring instead of a UART. `RX_PENDING` becomes `head != tail`
+        on the ring. The mailbox-doorbell IRQ IS `HAL_SERIAL_RX_ISR()` — but it
+        must DRAIN-LOOP inside the handler, because a doorbell fires once per
+        burst, not once per byte. That is a deliberate, contract-legal
+        cardinality change (§7's table binds semantics, not a 1-IRQ-per-byte
+        cardinality) and a genuine overhead win: orders of magnitude fewer IRQ
+        entries than a byte-at-a-time UART. Critically, BUG #19's realtime-command
+        interception (mc_reset/status/feed-hold/cycle-start byte-sniffing) lives
+        in core serial.c's RX-ISR body, not in the platform macros — so it is
+        INHERITED UNCHANGED as long as the doorbell ISR calls
+        `HAL_SERIAL_READ_DATA()` the same number of times it would for N
+        individual bytes. That call-count invariant is the one thing a future
+        implementer must not violate when writing the drain loop. New cross-core
+        cache-maintenance obligation for this ring: CONTRACTS §21 (writeback
+        before doorbell, invalidate before read, or map the window non-cacheable
+        and skip the whole class).
+        Linux side needs NO custom kernel module: `mmap()` the ring out of the
+        existing reserved-memory carve-out (exposed via the stock upstream
+        `uio_pdrv_genirq` driver — a devicetree binding change, not new C code —
+        to deliver the doorbell IRQ to userspace), and bridge ring<->PTY in
+        roughly 200 lines of userspace, with the PTY end symlinked to
+        `/dev/ttyGRBL` so unmodified senders (any GRBL sender talking to a serial
+        device) work without changes.
+      * **Open point, not hand-waved away**: TX backpressure. GRBL's TX path
+        assumes a hardware TX-empty IRQ; a shared-memory ring instead needs the
+        Linux-side bridge to doorbell BACK when it drains ring space, or the
+        runtime core has nothing to interrupt on. Generous ring sizing makes the
+        condition rarely bind in practice, but this is NOT fully solved by this
+        design pass — flagged for whoever implements, not silently assumed away.
+      * **Why deferred (executor's recommendation)**: no public TRM exists for
+        SG2002 — every peripheral/IRQ/cache fact in this entry and in CONTRACTS
+        §21 is community-sourced (kernel patches, SDK headers, board-support
+        repos), not vendor documentation. And — a first for this project — there
+        is NO emulator model available for pre-hardware verification of a
+        correctness-critical class (the cache-coherency work of §21 specifically
+        needs real silicon or a cycle-accurate multi-core model neither Renode
+        nor QEMU provide here). Cheaper, unblocked queue items (ch570, fully
+        recon'd and ready) and in-flight work (hc32f460) should land first;
+        owner may overrule this ordering in one line.
 - [ ] **ch570** RECON DONE (matrix in recon report): QingKe V3C RV32IMBC (full
       I+M — hw mul/div!, exact rv32im/ilp32 picolibc multilib exists), 240K user
       flash + 12K RAM (owner claim confirmed, ~$0.10 — cheaper than V006).
