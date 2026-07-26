@@ -8,7 +8,7 @@ placeholders (no register-level manual reachable this session) — see below.
 
 Chip: HC32F460JETA (HDSC/XHSC, Huada Semiconductor), ARM Cortex-M4F, up to
 200 MHz, up to 512KB Flash, up to 192KB SRAM. First HDSC/vendor-exotic chip
-in this tree — see CONTRACTS.md section 20 for the full gap log.
+in this tree — see [CONTRACTS.md section 22](../CONTRACTS.md#hc32f460-gaps) for the full gap log.
 
 ## Verification methodology (read this before trusting any register write)
 

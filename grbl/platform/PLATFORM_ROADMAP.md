@@ -119,7 +119,7 @@ These were previously listed as "100% Complete / Production Ready". That was nev
   unchanged pending a `_template` restart. Separately, PLAN.md now carries
   a DESIGN-COMPLETE / IMPLEMENTATION-DEFERRED runtime-core channel design
   (remoteproc lifecycle + shared-memory ring replacing UART for CONTRACTS
-  §7, cross-core cache-maintenance obligations per CONTRACTS §21) — that
+  §7, cross-core cache-maintenance obligations per [CONTRACTS §23](CONTRACTS.md#cross-core-cache-coherency)) — that
   design targets a rewrite of this platform, not a fix to the current
   source. Not in the CI build matrix.
 - **Target use case**: High-end CNC, complex multi-axis systems

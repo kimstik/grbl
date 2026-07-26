@@ -24,7 +24,7 @@
 > Do not trust the "Implementation Status" table below — it describes
 > code that exists on disk, not code that has ever built or run. Treat
 > this port as a candidate to be **restarted from `_template`** (see
-> `PLAN.md`), not repaired in place. See `CONTRACTS.md` §21 and `PLAN.md`
+> `PLAN.md`), not repaired in place. See [`CONTRACTS.md` §23](../CONTRACTS.md#cross-core-cache-coherency) and `PLAN.md`
 > (`sg2002` entry) for the separate, still-valid runtime-core design work
 > done on top of this — that design targets a rewrite, not this source.
 
