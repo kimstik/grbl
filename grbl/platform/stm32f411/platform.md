@@ -44,9 +44,14 @@ multilib has a matching hard-float variant (confirmed by a clean link).
 ## Verified build (this session)
 
 ```
-make BUILD=DEBUG    # .text 48472B, RAM (.data+.bss) 6236B of 128KB
-make BUILD=RELEASE  # .text 28644B, RAM 6004B of 128KB
+make BUILD=DEBUG    # .text 41644B, .data 80B
+make BUILD=RELEASE  # .text 25796B, .data 80B
 ```
+
+(Earlier `platform.md` revisions cited 48472B/28644B DEBUG/RELEASE `.text` -
+those were this port's initial-landing sizes, since reduced by a later
+size-optimization pass shared across the STM32 ports; the numbers above are
+from a fresh build today.)
 
 Both link with zero `PORT_TODO_*` symbols and zero undefined references.
 Warning baseline: `ci/warn_baseline_stm32f411.txt` (regenerated from these

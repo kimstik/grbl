@@ -29,7 +29,15 @@ dir; the shipped `boards/generic` is a paper pinout for the bare chip).
   `make BUILD=RELEASE` both build the full ELF+hex and link with ZERO
   `PORT_TODO_*`** (verified: `nm | grep PORT_TODO` empty on both). Sizes:
   RELEASE ~41.8KB code / DEBUG ~53.2KB code (128KB flash), RAM ~3.8KB
-  RELEASE (16KB). See CONTRACTS.md §16 items 12-20 for the full register-
+  RELEASE (16KB). **Treat these size numbers as approximate, not exact**: a
+  fresh RELEASE (`-Os`) build this session printed `Options have been
+  disabled due to restricted license` from `xc-dsc-gcc` - the free/
+  unlicensed tier of this Microchip compiler silently caps optimization
+  instead of failing loudly, so RELEASE may not reflect true `-Os` codegen.
+  Sizes are also inherently approximate given the multi-segment Harvard
+  memory layout (`readelf` shows multiple `.text` sections at different
+  program-memory pages) and no single `size` tool ships with xc-dsc. See
+  CONTRACTS.md §16 items 12-20 for the full register-
   fact writeup, including two specific RM-only gaps (SCCP MOD/CLKSEL/
   TMRPS encodings, PPS OUTPUT function-select codes) that are structurally
   real but numerically UNVERIFIED pending hardware bring-up.

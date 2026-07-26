@@ -1,9 +1,18 @@
 # GRBL for SAMD21G18A (Arduino Zero / MKR Series)
 
-**Status**: 🚧 Work In Progress
-**Completion**: ~40% (Foundation complete, HAL implementation in progress)
+**Status**: Builds clean (DEBUG + RELEASE, both `megarm` and `generic`
+boards), zero `PORT_TODO_*`, boot-integrity and `FP=SINGLE` assert both
+PASSED. **This is the only port in this tree with ANY runtime evidence**:
+a Renode-emulated boot smoke test (banner, `$$` settings dump, EEPROM
+restore) and a Renode motion smoke test (`G2` arc interpolation - the only
+core path touching atan2/sqrt/cos/sin - with real STEP-pin toggling on
+PA25, MPos tracked correctly through the arc, no phantom motion). **Still
+never run on real physical hardware** - like every other port in this tree,
+zero exceptions - so treat this as "ready for hardware validation" per
+PORTING-CHECKLIST.md's definition of done, not as a field-tested board.
+**Completion**: 100% (Steps 0-6 of PORTING-CHECKLIST.md); 0% physical-hardware-validated
 
-Hardware Abstraction Layer implementation for SAMD21G18A-based boards (Arduino Zero, MKR series, Adafruit Feather M0).
+Hardware Abstraction Layer implementation for SAMD21G18A-based boards (Arduino Zero, MKR series, Adafruit Feather M0). The two boards actually built and Renode-tested in this tree are `megarm` (MegARM, Arduino Mega pin-compatible) and `generic` - see `megarm/README.md` and `generic/README.md`. Arduino Zero/MKR/Feather M0 pin mappings below are this port's original target reference and have not been individually built/tested as boards.
 
 ---
 
@@ -25,32 +34,34 @@ Hardware Abstraction Layer implementation for SAMD21G18A-based boards (Arduino Z
 
 ## Current Implementation Status
 
-### ✅ Complete
-- [x] Build system (Makefile with DEBUG/RELEASE)
-- [x] Startup code (reset handler, 44 IRQ vectors)
+### ✅ Complete (builds clean, zero `PORT_TODO_*`, Renode-verified)
+- [x] Build system (Makefile with DEBUG/RELEASE, BOARD=megarm/generic)
+- [x] Startup code (reset handler, IRQ vectors, VTOR fix)
 - [x] Linker script (256KB Flash, 32KB RAM, 4KB stack)
-- [x] Pin mapping (complete, Arduino Zero compatible)
+- [x] Pin mapping (megarm + generic boards; Arduino Zero mapping below is
+      the original reference, not independently board-tested)
 - [x] Platform configuration (platform.h, config.h)
-- [x] Interrupt handler structure
-- [x] HAL function stubs
-- [x] CMSIS stub headers (temporary)
+- [x] GPIO implementation (hal_gpio_*) - real PORT register access
+- [x] Timer configuration (TC3 stepper ISR, TC4 pulse-reset) - Renode-proven
+      via the `G2` arc motion smoke test (STEP pin PA25 toggled 150+ times)
+- [x] UART implementation (SERCOM3) - Renode-proven via `$$` dump over RXC
+      interrupt + realtime character interception (`?`/`!`/`~`/ctrl-X)
+- [x] Clock configuration (GCLK, DFLL48M)
+- [x] NVMEM flash emulation - Renode-proven via blank-EEPROM recovery +
+      `settings_restore` at boot
+- [x] External interrupts (EIC) for limits/control pins
+- [x] TCC0 PWM for spindle
 - [x] AVR compatibility layer
 
-### 🚧 In Progress
-- [ ] GPIO implementation (hal_gpio_*)
-- [ ] Timer configuration (TC3, TC4)
-- [ ] UART implementation (SERCOM3)
-- [ ] Clock configuration (GCLK, DFLL48M)
-- [ ] NVMEM flash emulation
-- [ ] External interrupts (EIC)
-
-### ⏳ Planned
-- [ ] TCC0 PWM for spindle
-- [ ] SysTick for timing
-- [ ] USB CDC serial (optional)
+### Known gaps (not build blockers)
+- [ ] Official CMSIS integration (uses clean-room stub headers,
+      `core_cm0plus.h`/`samd21.h`, since Atmel/ASF's real headers are
+      proprietary)
+- [ ] USB CDC serial (optional; SERCOM3 UART is the tested path)
 - [ ] DMA optimization (optional)
-- [ ] Official CMSIS integration
-- [ ] Full testing and validation
+- [ ] Real physical hardware validation - never run on physical silicon;
+      Renode is the only execution evidence, for this port or any other in
+      this tree
 
 ---
 
@@ -99,7 +110,7 @@ Hardware Abstraction Layer implementation for SAMD21G18A-based boards (Arduino Z
 
 ---
 
-## Quick Start (When Complete)
+## Quick Start
 
 ### 1. Prerequisites
 
@@ -232,16 +243,21 @@ SAMD21 has no hardware EEPROM. GRBL settings are stored in Flash:
 
 ## Supported Boards
 
-### Tested:
-- ⏳ Arduino Zero (primary target)
+### Build + Renode smoke-tested (boot and motion, both DEBUG/RELEASE):
+- **megarm** (MegARM, ATSAMC21E18A-MZ, Arduino Mega pin-compatible) -
+  `make BOARD=megarm`
+- **generic** - `make BOARD=generic`
 
-### Should Work:
+### Should Work (untested pin-mapping guesses, not built as boards here):
+- Arduino Zero (this README's original primary target)
 - Arduino MKR series (MKR1000, MKR Zero, etc.)
 - Adafruit Feather M0 / M0 Express
 - Seeeduino XIAO (SAMD21G18 variant)
 - SparkFun SAMD21 boards
 
-**Note:** Pin mapping may need adjustment for non-Zero boards
+**Note:** No board, including megarm/generic, has been run on real physical
+hardware - Renode emulation is the only execution evidence that exists.
+Pin mapping may need adjustment for non-tested boards.
 
 ---
 
@@ -266,8 +282,8 @@ SAMD21 includes a hardware accelerator that compensates for Cortex-M0+ lack of h
 | CPU Clock | 48 MHz | From DFLL48M |
 | Timer Resolution | ~20.8 ns | @ 48MHz |
 | Division (DIVAS) | 1-3 cycles | Hardware accelerator |
-| Stepper ISR | TC3 (24-bit) | Planned |
-| Pulse Reset | TC4 (24-bit) | Planned |
+| Stepper ISR | TC3 (24-bit) | Implemented, Renode-proven |
+| Pulse Reset | TC4 (24-bit) | Implemented, Renode-proven |
 | PWM (Spindle) | TCC0 (16-bit) | Up to 65535 levels |
 | PWM Frequency | Configurable | Default: 5 kHz |
 
@@ -275,26 +291,30 @@ SAMD21 includes a hardware accelerator that compensates for Cortex-M0+ lack of h
 
 ## Development Plan
 
-See [SAMD21_PLAN.md](SAMD21_PLAN.md) for detailed implementation roadmap.
+See [SAMD21_PLAN.md](SAMD21_PLAN.md) for the detailed implementation history
+(note: that file's own header status line is stale/pre-dates the work
+described here).
 
-**Current Phase:** Phase 2 - Core HAL Implementation
-**Next Milestone:** GPIO + Timers + UART functional
-**ETA for Phase 2:** 2025-11-22
+**Current Phase:** Complete - builds clean, zero `PORT_TODO_*`, Renode boot
+and motion smoke tests both PASSED (2026-07-23 through 2026-07-25).
+**Remaining milestone:** Real physical hardware validation (community/owner
+item, not yet done for this or any port in this tree).
 
 ---
 
 ## Known Limitations
 
-### Current WIP Status:
-- ⚠️ **Not yet functional** - HAL implementation incomplete
-- ⚠️ Code compiles but untested on hardware
-- ⚠️ Using temporary CMSIS stub headers
-- ⚠️ GPIO operations not implemented
-- ⚠️ Timers not configured
-- ⚠️ UART not functional
+### Current Status:
+- ⚠️ **Never run on real physical hardware** - Renode emulation (boot +
+  motion) is the only execution evidence that exists, for this port or any
+  other port in this tree
+- ⚠️ Using clean-room CMSIS stub headers (not vendor Atmel/ASF headers -
+  those are proprietary)
+- ⚠️ Non-megarm/generic boards (Arduino Zero, MKR, Feather M0, etc.) are
+  untested pin-mapping guesses, not built/verified boards
 
 ### Planned Limitations:
-- No hardware FPU (software floating-point)
+- No hardware FPU (software floating-point); `FP=SINGLE` assert PASSED
 - Flash NVMEM slower than EEPROM
 - Some boards require pin mapping changes
 
@@ -308,7 +328,7 @@ grbl/platform/samd21/
 ├── README.md               # This file
 ├── SAMD21_PLAN.md          # Implementation plan & roadmap
 ├── platform.h              # HAL interface, pin definitions
-├── platform.c              # HAL implementation (WIP)
+├── platform.c              # HAL implementation (complete)
 ├── config.h                # Platform configuration
 ├── startup.c               # Startup code, vector table
 ├── handlers.c              # Interrupt handlers (TC3, TC4, SERCOM3, EIC)
@@ -321,16 +341,15 @@ grbl/platform/samd21/
 
 ## Contributing
 
-This platform is under active development. Contributions welcome!
+Core HAL work (GPIO, timers, UART/SERCOM3, clock tree, flash NVMEM) is done
+and Renode-verified. Contributions welcome on what's left!
 
 **Areas needing help:**
-- [ ] GPIO implementation
-- [ ] Timer configuration
-- [ ] UART/SERCOM3 setup
-- [ ] Clock tree configuration
-- [ ] Flash NVMEM implementation
-- [ ] Testing on real hardware
-- [ ] Pin mapping for other SAMD21 boards
+- [ ] Testing on real physical hardware (never done for this or any port in
+      this tree)
+- [ ] Pin mapping / board files for SAMD21 boards other than megarm/generic
+- [ ] Official CMSIS integration (replacing the clean-room stub headers)
+- [ ] USB CDC serial (optional)
 
 ---
 
@@ -350,6 +369,8 @@ See main GRBL license.
 
 ---
 
-**Status**: Work In Progress 🚧
-**Last Updated**: 2025-11-19
-**Next Review**: 2025-11-22 (after HAL implementation)
+**Status**: Builds clean (DEBUG + RELEASE, megarm + generic), zero
+`PORT_TODO_*`. Only port in this tree with runtime (Renode) evidence: boot
+and motion smoke tests both PASSED. Never run on real physical hardware.
+**Last Updated**: 2026-07-26 (audit correction; prior revision was stale and
+described this port as ~40% complete/non-functional)

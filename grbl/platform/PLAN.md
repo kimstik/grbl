@@ -33,8 +33,10 @@ The single highest-leverage phase. Converts manual review marathons into automat
 - [x] `compile_commands.json`: tools/gen_compile_commands.py + `make compdb` (samd21),
       -include flags preserved verbatim, 21 entries verified locally.
 
-**Exit criterion**: green pipeline on push — PENDING first GitHub Actions run
-(verify at next cron session; recalibrate ARM warn baselines if needed).
+**Exit criterion**: green pipeline on push — CONFIRMED RUNNING 2026-07-26 (see Current State):
+`github.com/kimstik/grbl/actions` shows 78 CI runs + 67 Smoke runs on this branch, one per push,
+matching this branch's commit history. Per-run pass/fail was not re-confirmed pixel-by-pixel in
+that pass (fetch method loses status icons) — check the Actions tab directly for green/red.
 
 ## Phase 1 — Injection Canon (prelude refactor)
 
@@ -147,7 +149,10 @@ config error (SPINDLE_PWM_MIN_VALUE must be > 0).
       is inside a macro-only, AVR-only header with no expansion anywhere in
       the golden build — confirmed with a rebuild: `make -C
       grbl/platform/atmega328p validate` still PASSED, MD5 unchanged.
-- [ ] Truth-update PLATFORM_ROADMAP.md (currently claims SAMD21 at 40% — it is ~95%)
+- [x] Truth-update PLATFORM_ROADMAP.md — CLOSED 2026-07-26 (release-readiness truth audit,
+      see Current State): full pass, not just the SAMD21 percentage — every platform section,
+      the CI row count, and the Next Steps/Implementation Priority lists were stale and are now
+      corrected against fresh builds.
 
 **Exit criterion**: zero warnings in platform layer; one injection mechanism; docs match reality.
 
@@ -877,6 +882,44 @@ identity to integration time.
   always check `git status` after, use `--3way`, never `head`-truncate its output.
 
 ## Current State (update each session)
+
+- **[x] RELEASE-READINESS TRUTH AUDIT (2026-07-26)** — Phase 5's last item prep (tag v0.x).
+  Fresh clean builds of every buildable port re-verified against this file's own canonical size
+  table: all match exactly (atmega328p golden MD5 unchanged; stm32f103/h523/f411, samd21
+  megarm+generic, ch32v006, hc32f460 all byte-identical to the table; dspic33ak128mc102 builds
+  DEBUG+RELEASE with zero PORT_TODO_* using the real xc-dsc-gcc 8.3.1 + DFP 1.5.263 already
+  present in this environment — NEW FINDING: its RELEASE (`-Os`) compile prints "Options have
+  been disabled due to restricted license" from the free-tier compiler, so its size figures stay
+  approximate, not exact, until a licensed build confirms them). Provenance thesis independently
+  re-verified from a fresh live clone of `gnea/grbl` v1.1h.20190825 (not reused from a prior
+  claim): `.text` differs by exactly 2 bytes, the `GRBL_VERSION_BUILD` date string. CI matrix
+  (15 rows) and all three workflow YAMLs re-checked (valid YAML; matrix covers exactly
+  atmega328p/stm32f103/h523/f411/samd21×2boards/ch32v006/hc32f460, no dspic/ch570/_template rows,
+  matching intent). **CI-status finding, corrects a stale claim in this file**: GitHub Actions IS
+  running on this fork — `github.com/kimstik/grbl/actions` shows 78 CI + 67 Smoke runs on this
+  branch, one per push (run #78 = this tree's HEAD commit), not "no runs yet / possibly disabled"
+  as this file previously recorded (Phase 0 exit criterion corrected above). Docs truth-audited
+  and corrected: README.md's platform matrix (was 2 platforms "green," rest "in repair" — now a
+  full 8-platform table with honest proof-level column); PLATFORM_ROADMAP.md (was badly stale —
+  stm32f103/h523 still described as build-broken, ch32v006 as "not a real port, no Makefile",
+  dsPIC as "M1-M3 only" — all corrected to current reality, this file's own long-open "Truth-update
+  PLATFORM_ROADMAP.md" checkbox is now closed); ARCHITECTURE.md (directory structure/memory
+  usage/future-platforms sections dated from the single-platform 2025-11-18 design, corrected;
+  Build Prelude section was already current); PORTING-CHECKLIST.md (`_template` mislabeled
+  "planned"); per-port `platform.md`/`README.md` for stm32f103 (was "Production Ready 100%"),
+  stm32h523 (was "Ready for Hardware Testing"), stm32f411 (stale pre-optimization sizes), samd21
+  (was severely UNDERSTATED — "WIP ~40%" when it's actually the most-verified port in the tree),
+  dspic33ak128mc102 (added the restricted-license caveat above), samd21/SAMD21_PLAN.md (stale WIP
+  header). hc32f460/platform.md, sg2002/README.md, `_template`/README.md were already accurate,
+  verified not edited. A `CHANGELOG.md` release-notes draft was authored at repo root covering
+  the thesis, the 8-platform matrix, proof levels (samd21 = Renode-proven, everyone else =
+  build/link/contract-proven only, NOBODY hardware-validated), the 21 numbered bugs (#17 phantom
+  motion, #21 vanished vector table called out), the contributor machinery (CONTRACTS.md 24
+  sections, PORTING-CHECKLIST, `_template`, 5 ratchets), and honest limitations — not tagged,
+  tagging is an owner action. **Golden AVR MD5 unchanged throughout** (`79af184e67b27defd27a39309ac53563`,
+  re-verified after every doc batch); `tools/check_contracts_numbering.py` still OK (24
+  sections/slugs, 8 cross-file links). No core `grbl/*.c`/`*.h` file touched — this was a
+  docs-and-release-notes batch only.
 
 - **[x] PHASE 1/2 CLOSURE BATCH (2026-07-26)** — closed the 4 remaining Phase 1
   checkboxes + the Phase 2 `_Static_assert` sweep. Verdict per item: (1)

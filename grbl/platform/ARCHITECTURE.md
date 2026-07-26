@@ -4,6 +4,15 @@
 
 This document describes the Hardware Abstraction Layer (HAL) architecture for GRBL. The HAL allows GRBL to run on multiple microcontroller platforms while keeping the core GRBL code unchanged.
 
+**Staleness note (2026-07-26):** most of the concrete examples below (directory layout, macro
+names, "Future Platforms" list) were written 2025-11-18 against an early single-platform design
+and were never fully synced as the tree grew to 8 platforms across 3 ISA families. The macro
+*concepts* here (compile-time expansion, zero AVR overhead, no runtime indirection) are still
+accurate and are the project's actual invariant — but for the current directory layout, platform
+list, and per-port status, treat `PLAN.md` (the live ledger) and `PLATFORM_ROADMAP.md` as
+authoritative over this file, not the other way around. The "Build Prelude" section further below
+was truth-updated 2026-07-26 and is current.
+
 ## Design Principles
 
 1. **Zero Overhead on AVR**: The HAL must not add any performance or code size overhead on the original AVR platform
@@ -15,45 +24,23 @@ This document describes the Hardware Abstraction Layer (HAL) architecture for GR
 
 ```
 grbl/
-├── hal/
-│   ├── hal.h                      # Main HAL header (includes platform headers)
+├── platform/
+│   ├── hal.h                      # Main HAL header (includes platform headers, #error guard)
 │   ├── hal_gpio.h                 # GPIO abstraction
 │   ├── hal_timer.h                # Timer abstraction
-│   ├── hal_serial.h               # Serial/UART abstraction
-│   ├── hal_nvmem.h                # NVMEM/EEPROM abstraction
-│   ├── hal_system.h               # System functions (reset, delay, etc.)
-│   └── platforms/
-│       ├── atmega328p/        # AVR ATmega328P (Arduino Uno)
-│       │   ├── platform.h         # Platform configuration
-│       │   ├── cpu_map.h          # Pin definitions (original GRBL file, moved here)
-│       │   └── Makefile           # AVR build system
-│       ├── stm32f103/             # STM32F103 (Blue Pill)
-│       │   ├── platform.h         # Platform configuration
-│       │   ├── regs.h             # STM32F103 register definitions
-│       │   ├── clock.c            # Clock configuration
-│       │   ├── gpio.c             # GPIO implementation
-│       │   ├── timer.c            # Timer implementation
-│       │   ├── serial.c           # USART implementation
-│       │   ├── nvmem.c            # Flash emulation for EEPROM
-│       │   ├── system.c           # System functions
-│       │   ├── handlers.c         # Interrupt handlers
-│       │   ├── Makefile           # STM32F103 build system
-│       │   └── platform.md        # Platform documentation
-│       ├── stm32h523/             # STM32H523 (Black Pill H5)
-│       │   ├── platform.h
-│       │   ├── regs.h
-│       │   ├── clock.c
-│       │   ├── gpio.c
-│       │   ├── timer.c
-│       │   ├── serial.c
-│       │   ├── nvmem.c
-│       │   ├── system.c
-│       │   ├── handlers.c
-│       │   ├── Makefile
-│       │   └── platform.md
-│       └── stm32_common/          # Shared code for all STM32 platforms
-│           ├── common.mk          # Common Makefile rules
-│           └── startup.c          # Common startup code
+│   ├── CONTRACTS.md               # Per-macro contracts (24 sections)
+│   ├── PORTING-CHECKLIST.md       # Ordered bring-up steps + exit tests
+│   ├── PLAN.md                    # Live orchestration ledger (authoritative status)
+│   ├── PLATFORM_ROADMAP.md        # Platform-facing overview, synced from PLAN.md
+│   ├── _template/                 # Copy this to start a new port (PORT_TODO_* linker-as-checklist)
+│   ├── common/                    # Shared helpers (gpio.h, dummy/, stm32/common.mk, ...)
+│   ├── atmega328p/                # AVR reference (single flavor, golden-MD5 gated)
+│   ├── stm32f103/, stm32h523/, stm32f411/  # ARM Cortex-M3/M33/M4F, share common/stm32/
+│   ├── samd21/                    # ARM Cortex-M0+, boards/{megarm,generic} - only Renode-proven port
+│   ├── ch32v006/                  # RISC-V rv32ec, first port built from _template + contracts alone
+│   ├── hc32f460/                  # ARM Cortex-M4F, vendor-exotic, no donor IP reused
+│   ├── dspic33ak128mc102/         # dsPIC33 DSC, third ISA family, not yet in CI
+│   └── sg2002/                    # RISC-V C906L, NON-FUNCTIONAL, rewrite deferred by design
 ├── grbl.h                         # Main GRBL header (includes hal.h first)
 ├── main.c                         # GRBL main (original, unmodified)
 ├── stepper.c                      # Stepper motor control (original, unmodified)
@@ -420,34 +407,47 @@ include ../stm32_common/common.mk
 
 ## Memory Usage
 
-### AVR ATmega328P
-- Flash: 30KB / 32KB (94%)
-- RAM: 1.5KB / 2KB (75%)
+RELEASE flash body (`text`+`data`), re-measured 2026-07-26 by fresh clean builds — see
+`PLAN.md`'s canonical size table for how these are re-verified at every integration:
 
-### STM32F103
-- Flash: 30KB / 64KB (47%)
-- RAM: 6KB / 20KB (30%)
+| Platform | Flash used | Flash budget | RAM (`data`+`bss`) |
+|---|---|---|---|
+| AVR ATmega328P (golden) | 30640 B | 32KB (94%) | 1.6KB / 2KB |
+| STM32F103 | 28700 B | 64KB (44%) | ~19.5KB / 20KB |
+| STM32H523 | 25132 B | 128KB (19%) | ~10.4KB / 32KB |
+| STM32F411 | 25796 B | 512KB (5%) | ~127KB / 128KB |
+| SAMD21 (megarm) | 31952 B | 256KB (12.5%) | ~6.3KB / 32KB |
+| CH32V006 | 41072 B | 61K usable (62K minus a 1K NVMEM window), per `script.ld` | ~2.7KB / 8KB |
+| HC32F460 | 25596 B | 512KB (5%) | ~127KB / 128KB |
+| dsPIC33AK128MC102 | ~41.8KB (approximate — see its platform.md) | 128KB (~33%) | ~3.8KB / 16KB |
 
-### STM32H523
-- Flash: 24KB / 128KB (19%)
-- RAM: 10KB / 32KB (31%)
+Note on ch32v006: some older docs in this tree (`PLATFORM_ROADMAP.md`'s original entry) quote
+"2KB RAM, 16KB Flash" — that was the CH32V003-class part first considered before the port
+settled on a CH32V006-class part with 8KB RAM / 62KB flash (`ch32v006/script.ld`); the 41072-byte
+RELEASE build above is measured against the real linker script, not the stale estimate.
+
+Two ARM ports (STM32H523, STM32F411/HC32F460 tie) are now smaller than the AVR reference build.
+
+## Platforms in this tree today
+
+Not "future" — these are built now (`grbl/platform/PLATFORM_ROADMAP.md` has full per-port detail):
+STM32F411 (Cortex-M4F), SAMD21 (Cortex-M0+, Renode-proven), CH32V006 (RISC-V rv32ec), HC32F460
+(Cortex-M4F, vendor-exotic), dsPIC33AK128MC102 (dsPIC33 DSC, third ISA family, not yet in CI).
 
 ## Future Platforms
 
-### Planned
-- **RP2040** (Raspberry Pi Pico) - Dual Cortex-M0+, 133MHz, 264KB RAM
-- **RP2350** (Raspberry Pi Pico 2) - Dual Cortex-M33, 150MHz, 520KB RAM
-
-### Potential
+### Potential (unscheduled, no directory exists)
+- RP2040 / RP2350 (Raspberry Pi Pico, dual-core Cortex-M0+/M33)
 - ESP32-C3 (RISC-V, WiFi)
-- SAMD21 (Cortex-M0+, Arduino Zero)
+- ATSAMC21E18A (Cortex-M0+ — see PLATFORM_ROADMAP.md, "not currently in PLAN.md's Phase 6 queue")
 - STM32G4 (Cortex-M4F with advanced timer)
+- CH570 (WCH RISC-V QingKe V3C) — recon done, unblocked, queued in PLAN.md but not started
 
 ## HAL Interface Guidelines
 
 When adding a new platform:
 
-1. **Create platform directory**: `hal/platforms/<name>/`
+1. **Create platform directory**: `grbl/platform/<name>/` (copy `_template/` as the starting point)
 2. **Create platform.h**: Define all HAL macros for your platform
 3. **Implement required functions**: clock init, GPIO, timers, serial, NVMEM
 4. **Create Makefile**: Set CPU, F_CPU, linker script
@@ -481,7 +481,9 @@ When adding a new platform:
 
 ---
 
-**Version**: 1.0
-**Last Updated**: 2025-11-18
+**Version**: 1.1
+**Last Updated**: 2026-07-26 (Directory Structure / Memory Usage / Future Platforms truth-updated
+against fresh builds; see the staleness note at the top of this file — PLAN.md and
+PLATFORM_ROADMAP.md remain authoritative over this file for current per-port status)
 **Author**: kimstik (with AI assistance)
 **License**: MIT

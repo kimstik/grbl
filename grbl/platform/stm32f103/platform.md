@@ -1,7 +1,10 @@
 # STM32F103 Platform Documentation
 
-**Status**: ✅ Production Ready
-**Completion**: 100%
+**Status**: Builds clean (DEBUG + RELEASE), zero `PORT_TODO_*`, boot-integrity
+and `FP=SINGLE` assert both PASSED. **Never run on real hardware** - "ready
+for hardware validation" per PORTING-CHECKLIST.md's definition of done, not
+"production ready" in an unqualified sense.
+**Completion**: 100% (build/link/contract gates); 0% hardware-validated
 **Last Updated**: 2025-11-18
 
 ---
@@ -232,11 +235,10 @@ Peripherals:
 
 ## GRBL Build Statistics
 
-**Release Build (with LTO)**:
-- Flash usage: 30,584 bytes (47% of 64KB)
-- RAM usage: ~6KB (30% of 20KB)
-- Free flash: 33KB (52%)
-- Free RAM: 14KB (70%)
+Verified this session (fresh build, both flavors):
+- DEBUG: .text 43,120 bytes, .data 80 bytes
+- RELEASE (with LTO): .text 28,700 bytes (44% of 64KB), .data 80 bytes
+- Free flash (RELEASE): ~35.8KB (56%)
 
 **Optimization Level**: `-Os -flto`
 

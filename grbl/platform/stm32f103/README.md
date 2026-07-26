@@ -25,12 +25,15 @@ Complete Hardware Abstraction Layer implementation for STM32F103C8T6 (Blue Pill 
 - Independent watchdog timer (optional)
 - Fault handlers with LED indication and safe shutdown
 
-✅ **Production Ready**
-- DEBUG/RELEASE build configurations
+✅ **Builds Clean, Never Hardware-Validated**
+- DEBUG/RELEASE build configurations (zero `PORT_TODO_*`, boot-integrity and
+  `FP=SINGLE` assert both PASSED)
 - Optimized for size and performance
 - Cycle-accurate microsecond delays (DWT)
 - Comprehensive error handling
 - AVR-compatible interface
+- **Not yet run on real hardware** - "ready for hardware validation" per
+  PORTING-CHECKLIST.md's definition of done, not a claim of field testing
 
 ## Pin Mapping
 
@@ -193,10 +196,10 @@ Enhanced fault handlers with safe shutdown and LED indication:
 
 ## Memory Usage
 
-**Flash Allocation:**
-- **Code:** ~30KB
+**Flash Allocation (RELEASE, verified this session):**
+- **Code:** 28,700 bytes (.text), 80 bytes (.data)
 - **NVMEM Emulation:** 2KB (last 2KB: 0x0800F800 - 0x0800FFFF)
-- **Free:** ~32KB (or ~96KB on 128KB variant)
+- **Free:** ~33.7KB (or ~97.7KB on 128KB variant)
 
 **RAM Usage:**
 - **Stack:** 1KB
@@ -357,6 +360,7 @@ For STM32F103 platform issues, report to grbl-HAL repository.
 
 ---
 
-**Status:** Production Ready ✅
+**Status:** Builds clean (DEBUG + RELEASE), zero `PORT_TODO_*`, boot-integrity
+and `FP=SINGLE` assert PASSED. Never run on real hardware.
 **Version:** 1.0
 **Date:** 2025-11-18
