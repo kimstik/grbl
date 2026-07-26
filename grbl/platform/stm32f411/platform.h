@@ -120,32 +120,46 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define STEPPERS_DISABLE_BIT    6
 #define STEPPERS_DISABLE_MASK   (1<<STEPPERS_DISABLE_PIN)
 
-// LIMIT SWITCH PINS (GPIOB: PB0, PB1, PB10) - all bits 0-7 land in the
-// low byte except Z (bit10); core truncates GPIO_MRD reads to uint8_t
-// (CONTRACTS.md section 1.3) - Z_LIMIT_BIT=10 would be silently invisible
-// if it were ever read through the truncated group path the way SAMD21's
-// CONTROL bits are (megarm/config.h, known gap). It is NOT read that way
-// here: limits.c reads LIMIT_MASK/IREG as a group (GPIO_MRD), and the X/Y/Z
-// bits below ARE all consumed individually as single-bit tests too
-// (limits.c per-axis loop uses 1<<axis against the SAME LIMIT_MASK group
-// read) - X_LIMIT_BIT/Y_LIMIT_BIT/Z_LIMIT_BIT must match the *logical* axis
-// order the core assumes (X=bit0,Y=bit1,Z=bit2) if BUG#17's logical/physical
-// split applied here. It does not: this board wires the limit switches
-// directly to GPIOB0/1/10 and the core only ever masks/tests via
-// LIMIT_MASK and the per-name BIT, both defined consistently below - same
-// pattern already proven correct on stm32f103/h523 (BUG#17 was a SAMD21-
-// specific hazard from a *different* physical/logical pin split, not
-// present in this direct-wiring board.md).
+// LIMIT SWITCH PINS (GPIOB: PB0, PB1, PB2)
+//
+// BUG #26 (2026-07-26): Z used to be PB10. The prior version of this
+// comment argued that was safe because limits.c only reads LIMIT_MASK/IREG
+// as a GROUP (GPIO_MRD) - that argument missed a second, independent core
+// consumer: grbl/settings.c's get_limit_pin_mask(uint8_t axis_idx) returns
+// `(1<<Z_LIMIT_BIT)` from a function declared to return uint8_t. With
+// Z_LIMIT_BIT=10, `1<<10 = 1024` truncates to 0 at that return - core's
+// per-axis test `pin & get_limit_pin_mask(idx)` (limits.c) is therefore
+// ALWAYS false for Z, structurally, regardless of the switch. Separately,
+// `uint8_t pin = GPIO_MRD(LIMIT, IREG)` (limits.c) truncates bit 10 out of
+// the group read too - two independent zeros. limits_get_state() is the
+// ONLY detection path during a homing cycle (motion_control.c disables the
+// interrupt-driven hard-limit ISR for the whole homing cycle, matching
+// upstream's documented design in limits.c's own top-of-ISR comment) - so
+// this was a real, silent, always-on defect: Z-axis homing could never see
+// its limit switch and would drive into the physical hard stop. Found by
+// an independent-compiler probe (clang -Wconstant-conversion flagged
+// settings.c:339 directly; gcc's -Wall/-Wextra does not warn on it).
+//
+// Fix: Z moved to PB2, keeping Z_LIMIT_BIT within bits 0-7 (CONTRACTS.md
+// section 1.3) like every other port's LIMIT pin choice - no hardware was
+// ever wired to PB10 for this (platform.md: "not yet run on real
+// hardware"), so this is a pin-map correction, not a breaking repin.
+// PB2/EXTI2 was already a real, unshared vector slot (previously an unused
+// weak alias, startup.c) - no shared-vector dispatch needed, unlike PB10's
+// old EXTI15_10 line. stm32f103 and stm32h523 shared the identical
+// Z_LIMIT_BIT=10 defect (same donor pin map) and get the same PB2 fix.
 
 #define LIMIT_PORT          GPIOB
 #define LIMIT_PORT_ID       ((hal_gpio_port_t)GPIOB)
 #define X_LIMIT_PIN         0
 #define Y_LIMIT_PIN         1
-#define Z_LIMIT_PIN         10
+#define Z_LIMIT_PIN         2
 #define X_LIMIT_BIT         0
 #define Y_LIMIT_BIT         1
-#define Z_LIMIT_BIT         10
+#define Z_LIMIT_BIT         2
 #define LIMIT_MASK          ((1<<X_LIMIT_PIN)|(1<<Y_LIMIT_PIN)|(1<<Z_LIMIT_PIN))
+_Static_assert(X_LIMIT_BIT <= 7 && Y_LIMIT_BIT <= 7 && Z_LIMIT_BIT <= 7,
+               "LIMIT logical bits must fit core's uint8_t group read / get_limit_pin_mask() return (BUG #26 class, CONTRACTS.md #1.3)");
 
 // GPIO_INT_ON/OFF plumbing: core passes (name_PCMSK, name_INT, name_MASK) to
 // HAL_GPIO_INTERRUPT_ENABLE/DISABLE; on STM32 the first argument is the port,

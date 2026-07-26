@@ -164,6 +164,18 @@ Contracts:
    (megarm/config.h:97-103) — truncated to zero at system.c:43: control-pin
    input is dead on that port as written. Known gap; a port is not done while
    such a mismatch exists.
+   **A THIRD consumer of this exact contract, easy to miss because it isn't
+   a `GPIO_MRD` call site**: `grbl/settings.c`'s `get_limit_pin_mask(uint8_t
+   axis_idx)` returns `(1<<Z_LIMIT_BIT)` (etc.) from a function declared to
+   return `uint8_t` — this truncates independently of, and in addition to,
+   the `GPIO_MRD` group-read truncation above. BUG #26 (stm32f103/f411/h523,
+   2026-07-26): all three shared `Z_LIMIT_BIT=10`; a review comment on one
+   of them reasoned correctly about the `GPIO_MRD`/limits.c consumer and
+   concluded the port was safe, without checking this second one — it
+   wasn't. **Lesson for future audits: enumerate every core call site of a
+   `*_BIT` constant before declaring bits 0-7 satisfied "because I checked
+   the read path" — a single traced consumer is not a proof.** See
+   [§NEW below](#limit-bit-width-second-consumer) for the full incident.
 4. **Pull-up semantics**: after `GPIO_MDIR_INP` + `GPIO_MPULLUP_EN`, the pin
    must read logic 1 when the switch is open (AVR PORTx-on-input = pull-up,
    cpu_map.h wiring assumption throughout limits/probe/control). No-op is
@@ -2471,7 +2483,7 @@ contributor-facing statement of the rule.
 ---
 
 <a id="lto-asm-only-reachable-symbols"></a>
-## §NEW. `-flto` on ch32v006/ch570: an assembly-only-reachable symbol is BUG #21's mechanism, one ISA over (placeholder number — integrator assigns the final one; cite this slug, not a number, from elsewhere)
+## 30. `-flto` on ch32v006/ch570: an assembly-only-reachable symbol is BUG #21's mechanism, one ISA over (cite the slug, not "§30", from elsewhere)
 
 A compactness audit measured real, rebuilt savings from enabling `-flto`
 `-fno-fat-lto-objects` (RELEASE only, house style — see below) on the two
@@ -3222,3 +3234,143 @@ unit" — a prelude is, by construction, code that runs before the file
 being compiled has said anything at all; a macro defined by that later
 file's own include chain is invisible to it, permanently, once an
 `#ifndef` guard has already made its one pass.
+
+---
+
+<a id="limit-bit-width-second-consumer"></a>
+## 31. A width contract has as many consumers as there are call sites — audit all of them, not the one you found first (cite the slug, not "§31", from elsewhere)
+
+BUG #26 (2026-07-26, found via an independent-compiler probe: `clang
+-Wconstant-conversion` on `grbl/settings.c:339`, a core file; gcc's
+`-Woverflow` had also flagged it, but as an accepted, unexamined baseline
+entry — see the closing note below).
+
+**The defect.** `stm32f103`, `stm32f411` and `stm32h523` all declared
+`Z_LIMIT_BIT = 10` (physical PB10 on all three — a shared donor pin map,
+not three independent mistakes). [§1.3](#gpio-data) already states the
+rule this violates: input-group bits must land in bits 0-7 because core
+narrows the group read to `uint8_t`. One of the three ports' `platform.h`
+carried a long, careful comment tracing exactly that consumer
+(`limits.c`'s `uint8_t pin = GPIO_MRD(LIMIT, IREG)`) and correctly showing
+X/Y/Z are all tested individually against the *same* group value — then
+concluded the port was safe. It wasn't: `grbl/settings.c`'s
+`get_limit_pin_mask(uint8_t axis_idx)` — a **second, independent** core
+consumer of `Z_LIMIT_BIT`, in a different file, doing a different kind of
+truncation (a function return, not a variable assignment) — does
+`return((1<<Z_LIMIT_BIT));` from a function declared to return `uint8_t`.
+`1<<10 = 1024`, truncated to `uint8_t` = **0**. `limits.c`'s per-axis test
+`pin & get_limit_pin_mask(idx)` is therefore unconditionally false for Z,
+regardless of whether the first truncation (the one that got audited) was
+ever fixed.
+
+**Why it mattered on real hardware, not just in principle**:
+`limits_get_state()` (backed by both truncations above) is the *only*
+detection path during a homing cycle — `motion_control.c` disables the
+interrupt-driven hard-limit ISR for the entire homing cycle by design
+(the ISR's own top-of-body comment says so: "this interrupt is disabled
+during homing cycles"). A structurally-zero Z contribution to
+`limits_get_state()` means Z-axis homing cannot detect its switch and
+drives the axis into the physical hard stop. This is the same *failure
+class* as [BUG #17](#gpio-data) (a port's own pin choice silently defeats
+a core width contract) one axis-group over, and the same *meta-lesson* as
+[BUG #23](#boot-init-unreachable) one level removed: a defect that looks
+checked, because *someone did check something adjacent to it*, is not
+the same as a defect that has been checked.
+
+**The general lesson (this is why it gets its own section instead of just
+a [§1.3](#gpio-data) footnote)**: a width/range contract on a named
+constant (here, `*_LIMIT_BIT`) does not have "a consumer" — it has as
+many consumers as there are places core reads that constant, and they are
+not all shaped the same way (a group-mask AND, a function return, a
+direct shift-and-test are three different textual shapes for the *same*
+hazard). Tracing one call site to a correct conclusion says nothing about
+the others. Before a port comment asserts "this bit choice is safe
+because X" for any `*_BIT`/`*_PIN` constant core also reads, grep every
+core file for that identifier (not just the file the constant is
+`#define`d for) and check each hit independently. A CI-enforceable
+partial mitigation for this specific class landed alongside the fix:
+`_Static_assert(X_LIMIT_BIT <= 7 && Y_LIMIT_BIT <= 7 && Z_LIMIT_BIT <= 7,
+...)` in the three affected ports' `platform.h` (mirroring the existing
+STEP/DIRECTION assert the same file already carried for [BUG #17](#gpio-data)'s
+class) — this cannot regress silently again on *these* three ports, but
+it is not yet rolled to every port that has a LIMIT group, and a
+compile-time bit-range assert is necessarily narrower than "this constant
+has no unaudited consumer" in general; it closes the one class that is
+mechanically checkable, not the methodology gap above.
+
+**Fix**: Z moved to PB2 on all three ports (a free, previously-unused
+GPIOB bit ≤7 on this donor pin map, confirmed by grepping each port's own
+`platform.h` for existing PB-pin users before choosing it) — not a
+logical/physical remap, because no hardware had been wired to PB10 for
+any of the three (`platform.md`/`README` for each: "not yet run on real
+hardware"), making a pin-map correction strictly simpler and lower-risk
+than reproducing [BUG #17](#gpio-data)'s gather/scatter machinery for a
+single bit. `config.h`'s independent copy of `Z_LIMIT_PIN` (the
+already-documented dual-pin-map-canon debt, item 2 above) was updated to
+match in the same commit — leaving it stale would have reintroduced the
+exact "which header wins depends on include order" hazard item 2
+documents, for this constant too.
+
+**Closing note on the gcc-vs-clang framing**: gcc's `-Woverflow` (part of
+`-Wall`, already enabled on every port) had already caught this — the
+exact line, on all three ports, was sitting in
+`ci/warn_baseline_stm32f{103,411}.txt`/`stm32h523.txt` as an accepted
+baseline entry (`settings.c: warning: unsigned conversion from 'int' to
+'uint8_t' ... changes value from '1024' to '0' [-Woverflow]`) since
+whichever session first built these ports and folded its warning log into
+the baseline. Nobody circled back to ask whether that specific
+value-changing conversion was load-bearing. The value a second,
+independent compiler actually added here was not detecting a fact gcc
+missed — it was `-Wconstant-conversion`'s framing (a value-identity claim
+about a specific returned constant, not a generic "conversion changes a
+value" note) prompting fresh scrutiny of a warning that had already been
+technically visible, and dismissed, for as long as these three ports have
+existed. The baseline lines for this specific warning were removed from
+all three files once the fix confirmed it no longer fires (`ci/
+warn_ratchet.py`'s own convention: baseline entries are removed only
+after the warning is verified gone, never speculatively).
+
+---
+
+<a id="core-purity-under-a-second-toolchain"></a>
+## 32. Core-purity rule for a second toolchain (cite the slug, not "§32", from elsewhere)
+
+`grbl/` (outside `grbl/platform/`) is byte-for-byte frozen — written for
+avr-gcc 7.3.0 in 2011, golden-MD5-gated, and never edited to satisfy any
+tool. A second compiler (recon: `docs/TOOLCHAIN-AXIS.md`) will emit
+diagnostics on core files a single-compiler baseline never had reason to
+record; that is the entire point of running one. When that happens:
+
+1. **NEVER edit a `grbl/` core file to silence a diagnostic, on any
+   toolchain, for any reason.** Not even a redundant-qualifier or
+   dead-code-branch fix. The byte-golden AVR invariant is the project's
+   central thesis; a "harmless cleanup" on core is not exempt from it
+   just because it was clang, not gcc, that found the spot.
+2. A diagnostic on core code is handled at exactly one of two layers:
+   (a) **the flags/prelude layer**, if a compiler flag or a preprocessor
+   define can make the diagnostic legitimately not apply (example:
+   `-D_AVR_WDT_H_` skips an unused, uncallable avr-libc header whose
+   untaken branch clang validates differently than gcc — a flags-layer
+   fact about the header, not a claim about core); or (b) **accepted
+   into that toolchain's own warn baseline**
+   (`ci/warn_baseline_<port>.<tc>.txt`) if there is no legitimate
+   flag-layer suppression and the diagnostic is judged noise, with the
+   judgement written down at the point of acceptance, not silently
+   absorbed.
+3. If a diagnostic on core code cannot be handled either way — it is a
+   genuine hard error with no flags-layer bypass, and it is not
+   noise — **that toolchain does not support that port.** Record it as a
+   `TOOLCHAINS_SUPPORTED` exclusion, not as a TODO to eventually silence.
+4. **A hard ERROR (not warning) on core code under a toolchain being
+   evaluated is a headline finding, not routine baseline noise** — report
+   it prominently the moment it's found. (Precedent this rule codifies:
+   avr-libc's `wdt.h` "value out of range for constraint" under clang was
+   found this way, handled per rule 2(a) since a flags-layer bypass
+   existed; had none existed, rule 3 would have applied and AVR would
+   already be gcc-only for this reason alone, independent of the
+   golden-MD5 argument that also applies on that port.)
+
+This is the same discipline [§10.4](#nvmem-eeprom) already applies to the
+AVR checksum `||` quirk ("Never fix the AVR `||`") — generalized here
+because a second toolchain is where the temptation to "just clean up"
+core code will recur constantly, and the answer is always the same one.

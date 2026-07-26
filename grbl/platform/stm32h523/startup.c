@@ -255,7 +255,7 @@ const void *vector_table[] = {
   RCC_S_IRQHandler,            // 26: IRQ 10 - RCC secure interrupt
   EXTI0_IRQHandler,            // 27: IRQ 11 - EXTI line 0 (X limit switch)
   EXTI1_IRQHandler,            // 28: IRQ 12 - EXTI line 1 (Y limit switch)
-  EXTI2_IRQHandler,            // 29: IRQ 13 - EXTI line 2
+  EXTI2_IRQHandler,            // 29: IRQ 13 - EXTI line 2 (Z limit switch, BUG #26)
   EXTI3_IRQHandler,            // 30: IRQ 14 - EXTI line 3 (Reset button)
   EXTI4_IRQHandler,            // 31: IRQ 15 - EXTI line 4 (Feed hold button)
   EXTI5_IRQHandler,            // 32: IRQ 16 - EXTI line 5 (Cycle start button)
@@ -263,7 +263,7 @@ const void *vector_table[] = {
   EXTI7_IRQHandler,            // 34: IRQ 18 - EXTI line 7
   EXTI8_IRQHandler,            // 35: IRQ 19 - EXTI line 8
   EXTI9_IRQHandler,            // 36: IRQ 20 - EXTI line 9
-  EXTI10_IRQHandler,           // 37: IRQ 21 - EXTI line 10 (Z limit switch)
+  EXTI10_IRQHandler,           // 37: IRQ 21 - EXTI line 10 (unused, BUG #26 moved off PB10)
   EXTI11_IRQHandler,           // 38: IRQ 22 - EXTI line 11
   EXTI12_IRQHandler,           // 39: IRQ 23 - EXTI line 12
   EXTI13_IRQHandler,           // 40: IRQ 24 - EXTI line 13

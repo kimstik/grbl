@@ -54,7 +54,7 @@
 
 #define X_LIMIT_PIN         0   // PB0
 #define Y_LIMIT_PIN         1   // PB1
-#define Z_LIMIT_PIN         10  // PB10
+#define Z_LIMIT_PIN         2   // PB2 (BUG #26: moved off PB10 - see platform.h)
 
 #define RESET_PIN           3   // PB3
 #define FEED_HOLD_PIN       4   // PB4
