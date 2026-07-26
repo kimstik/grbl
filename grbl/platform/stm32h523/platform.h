@@ -171,18 +171,37 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define STEPPERS_DISABLE_MASK   (1<<STEPPERS_DISABLE_PIN)
 
 // --------------------------------------------------------------------------
-// LIMIT SWITCH PINS (GPIOB: PB0, PB1, PB10)
+// LIMIT SWITCH PINS (GPIOB: PB0, PB1, PB2)
+//
+// BUG #26 (2026-07-26): Z used to be PB10 (Z_LIMIT_BIT=10). Two independent
+// core consumers silently truncate any *_LIMIT_BIT > 7 to a uint8_t:
+// grbl/settings.c's get_limit_pin_mask() returns `(1<<Z_LIMIT_BIT)` from a
+// uint8_t-returning function (1<<10 = 1024 -> 0), and grbl/limits.c's
+// `uint8_t pin = GPIO_MRD(LIMIT, IREG)` truncates the group read the same
+// way. limits_get_state() is the ONLY detection path during a homing cycle
+// (motion_control.c disables the interrupt-driven hard-limit ISR for the
+// whole homing cycle) - Z-axis homing could never see its switch and would
+// drive into the physical hard stop. Found by an independent-compiler
+// probe (clang -Wconstant-conversion on settings.c:339); gcc's -Woverflow
+// had also flagged it (ci/warn_baseline_stm32h523.txt carried the line as
+// accepted "known debt" - it was real, not noise). Fix: Z moved to PB2,
+// keeping Z_LIMIT_BIT within bits 0-7 (CONTRACTS.md section 1.3) like every
+// other port's LIMIT pin choice; no hardware was ever wired to PB10 for
+// this. See PLAN.md BUG #26 - stm32f103/f411 shared the identical defect
+// (same donor pin map) and get the same PB2 fix.
 // --------------------------------------------------------------------------
 
 #define LIMIT_PORT          GPIOB
 #define LIMIT_PORT_ID       ((hal_gpio_port_t)GPIOB)
 #define X_LIMIT_PIN         0
 #define Y_LIMIT_PIN         1
-#define Z_LIMIT_PIN         10
+#define Z_LIMIT_PIN         2
 #define X_LIMIT_BIT         0
 #define Y_LIMIT_BIT         1
-#define Z_LIMIT_BIT         10
+#define Z_LIMIT_BIT         2
 #define LIMIT_MASK          ((1<<X_LIMIT_PIN)|(1<<Y_LIMIT_PIN)|(1<<Z_LIMIT_PIN))
+_Static_assert(X_LIMIT_BIT <= 7 && Y_LIMIT_BIT <= 7 && Z_LIMIT_BIT <= 7,
+               "LIMIT logical bits must fit core's uint8_t group read / get_limit_pin_mask() return (BUG #26 class, CONTRACTS.md #1.3)");
 
 // GPIO_INT_ON/OFF plumbing: core passes (name_PCMSK, name_INT, name_MASK) to
 // HAL_GPIO_INTERRUPT_ENABLE/DISABLE; on STM32 the first argument is the port,
