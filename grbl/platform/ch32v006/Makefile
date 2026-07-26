@@ -141,9 +141,25 @@ CFLAGS += -specs=picolibc.specs
 CFLAGS += $(CFLAGS_EXTRA) -I$(PLATFORM_DIR) -I$(GRBL_DIR)/platform -I$(GRBL_DIR)
 
 # Build-specific flags
-BUILD ?= DEBUG
+#
+# LTO: RELEASE only (house style - samd21/stm32*/hc32f460/sg2002 Makefiles
+# all gate -flto on BUILD==RELEASE; DEBUG stays plain -Og for debuggability,
+# same reasoning as every other port: LTO's cross-TU inlining/reordering
+# makes single-stepping/variable-inspection unreliable, and DEBUG has no
+# size pressure -Og doesn't already relieve).
+#
+# LTO-PROOFING (CONTRACTS.md gap log, this batch - BUG #21's mechanism on
+# this ISA): naive -flto silently deletes Reset_Handler, whose only caller
+# is _start's raw inline asm (invisible to LTO's IPA), and the link fails
+# with "undefined reference to Reset_Handler". Fixed at the source
+# (startup.c: `__attribute__((used))` on Reset_Handler) rather than here -
+# every assembly-only-reachable symbol on this port is now audited and
+# pinned (Reset_Handler; PFIC_Vector[] and every handler it addresses were
+# already `used`/address-taken since the M1-M3 --gc-sections lifecycle
+# fix, CONTRACTS.md #14.3).
 ifeq ($(BUILD),RELEASE)
   CFLAGS += -Os -g0
+  CFLAGS += -flto -fno-fat-lto-objects
 else
   # -Og, not -O0: soft-float rv32ec grbl at -O0 is ~77KB of .text and the
   # chip has 62KB (61K after the NVMEM window). -Og keeps single-stepping
@@ -195,6 +211,13 @@ LDFLAGS  = $(ARCHFLAGS) -nostartfiles -specs=picolibc.specs
 LDFLAGS += -Wl,--gc-sections
 LDFLAGS += -Wl,-Map=$(MAP_FILE)
 LDFLAGS += -T script.ld
+
+# LTO for release builds (samd21/stm32*/hc32f460/sg2002 house style: the
+# link step re-invokes the compiler driver, which re-runs LTO codegen over
+# the whole-program IR - -flto must be present here too, not just in CFLAGS).
+ifeq ($(BUILD),RELEASE)
+  LDFLAGS += -flto -Os
+endif
 
 # Libraries (must come after objects in link command)
 LIBS = -lm

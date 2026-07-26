@@ -2315,3 +2315,125 @@ of this cadence — it is tag-time only (`build --with-elf` +
 `bin`/`hex`/`syms` cadence rather than leaving it to memory — see
 `PORTING-CHECKLIST.md` and `artifacts/README.md` for the full
 contributor-facing statement of the rule.
+
+---
+
+<a id="lto-asm-only-reachable-symbols"></a>
+## §NEW. `-flto` on ch32v006/ch570: an assembly-only-reachable symbol is BUG #21's mechanism, one ISA over (placeholder number — integrator assigns the final one; cite this slug, not a number, from elsewhere)
+
+A compactness audit measured real, rebuilt savings from enabling `-flto`
+`-fno-fat-lto-objects` (RELEASE only, house style — see below) on the two
+RISC-V ports: ch32v006 41072 → **39012** (−2060 B, −5.0%); ch570 40674 →
+**38422** (−2252 B, −5.5%). Both numbers reproduced exactly on a real
+rebuild in this batch, not projected.
+
+**The precondition the audit hit before either number was real: naive
+`-flto` breaks the boot path.** Both RISC-V startup files
+(`ch32v006/startup.c`, `ch570/startup.c`) reach `Reset_Handler` from
+exactly one place — `_start`'s raw inline assembly:
+
+```c
+__attribute__((naked, section(".init")))
+void _start(void) {
+  __asm__ volatile (
+    "la sp, _estack \n"
+    "jal Reset_Handler \n"
+  );
+}
+```
+
+`jal Reset_Handler` is a string GCC's LTO frontend never parses for symbol
+references — it is opaque to the whole-program IPA pass that decides what
+survives into codegen. `Reset_Handler` has no other caller anywhere in the
+C call graph (nothing else in the tree calls it; it is reached only via
+this one `jal`). With `-flto` and no visible reference, IPA for an
+executable link (GCC treats a non-PIC executable link as implicitly
+whole-program) concludes `Reset_Handler` is dead and deletes its
+*definition* before codegen ever runs. `_start` itself survives (`ld`'s
+`ENTRY(_start)` — reinforced here by `script.ld`'s `KEEP(*(.init))` —
+keeps the linker's own root set anchored on it), so the build does not
+silently produce a bricked image the way [§18](#vector-table-lto)'s
+ARM vector-table case did. Instead the *link fails loudly*:
+`undefined reference to 'Reset_Handler'` — the one call site referencing it
+(the `.init` object's relocation) now points at nothing. Loud is better
+than silent, but it is still the same root cause as BUG #21, seen through a
+different ISA's boot mechanism: **a symbol reachable only from raw assembly
+(or only from a hardware-loaded table) is invisible to LTO's IPA and must
+be pinned with `__attribute__((used))`, regardless of which architecture or
+which flavor of "invisible to the compiler" is in play.** §18's ARM ports
+dodge this specific instance only because their `Reset_Handler` happens to
+be address-taken from a C-visible `vector_table[]` (`SCB->VTOR = (uint32_t)
+vector_table;`) — a defense that has no equivalent here, because RISC-V
+reset is entered by hand-written asm, not a hardware-loaded pointer table.
+
+**Fix**: `__attribute__((used))` on `Reset_Handler` in both
+`ch32v006/startup.c` and `ch570/startup.c` — nothing else. `used` pins the
+symbol to GCC's emitted-symbols root set independent of visible callers,
+the same role it already plays on `PFIC_Vector[]` in the same two files
+(landed earlier, `--gc-sections` lifecycle fix, [§14 item 3](#ch32v006-riscv-gaps)).
+
+**The rest of the audit: every other assembly-/table-reachable symbol on
+both ports was already `used`-pinned before this batch, verified by nm/
+disassembly, not assumed:**
+- `PFIC_Vector[]` (both ports): `__attribute__((used, section(".vectors")))`
+  already, plus `script.ld`'s `KEEP(*(.init)) KEEP(*(.vectors))` — landed
+  during the M1-M3 `--gc-sections` reachability fix, unaffected by this
+  batch.
+- Every ISR body addressed only via `PFIC_Vector[]`
+  (`Default_Handler`, `SysTick_Handler`, `TIM2_IRQHandler`,
+  `EXTI7_0_IRQHandler`, `USART1_IRQHandler` on ch32v006;
+  `Default_Handler`, `SysTick_Handler`, `TMR_IRQHandler`,
+  `GPIOA_IRQHandler`, `UART_IRQHandler` on ch570): address-taken by a
+  `used`-anchored array initializer, so IPA treats them as reachable —
+  confirmed present by name in a post-`-flto` `nm` on both RELEASE ELFs
+  (`_start`, `Reset_Handler`, `PFIC_Vector`, and all of the above, every
+  one), and `mret` (opcode `0x30200073`) disassembly-confirmed as the last
+  instruction of two ISR bodies per port ([§20](#wch-isr-attribute)'s
+  trap-return contract — `TIM2_IRQHandler`/`USART1_IRQHandler` on
+  ch32v006, `TMR_IRQHandler`/`UART_IRQHandler` on ch570).
+- `_start` itself: not `used`, and does not need to be — it is the
+  linker's `ENTRY()` symbol, a root the linker plugin's own symbol
+  resolution keeps independent of C-level call-graph visibility. The
+  Makefile's existing RISC-V boot-integrity check (`nm | grep ' _start$'`
+  must equal the flash origin) is unchanged and still the correct
+  belt-and-suspenders assertion for this fact — if a future toolchain
+  ever failed to protect the entry symbol under LTO, this check catches it
+  the same way it already catches any other reason `_start` might not land
+  at the flash base.
+- `ch570/vendor/ISP572.o` (the one vendored non-LTO object, linked as a
+  plain `.o`, not compiled with `-flto`): mixing an ordinary object into an
+  otherwise-LTO link is supported by design — it participates in the final
+  link as opaque machine code, not LTO IR, and needs no `used` audit of its
+  own (nothing in it is reached only from assembly; its one entry point is
+  called from ordinary C in `nvmem.c`).
+
+**House style matched, not invented**: `-flto -fno-fat-lto-objects` in
+`CFLAGS` and `-flto -Os` in `LDFLAGS`, gated on `BUILD==RELEASE` only —
+copied from `samd21/Makefile` (`grbl/platform/samd21/Makefile:134,150`) and
+`grbl/platform/common/stm32/common.mk:114,130`, which every ARM port in
+this tree already uses the same way. DEBUG stays `-Og -g3` on both RISC-V
+ports, untouched — same reasoning as every other port: LTO's cross-TU
+inlining/reordering makes single-stepping/variable inspection unreliable,
+and DEBUG has no size pressure `-Og` doesn't already relieve. Confirmed
+both DEBUG binaries are byte-for-byte unaffected by this batch (`used` is
+inert without `-flto`): ch32v006 DEBUG 46988/0 unchanged, ch570 DEBUG
+46830/4 unchanged (both match the pre-batch recorded figures exactly).
+
+**GATES this batch re-ran (not just inspected)**: golden AVR `make -C
+grbl/platform/atmega328p validate` **PASSED** (MD5
+`79af184e67b27defd27a39309ac53563`, text 30640); boot integrity OK both
+RISC-V ports both flavors (`_start=0x00000000`); FP=SINGLE post-link assert
+PASSED all four RISC-V builds; warning ratchet clean against
+`ci/warn_baseline_ch32v006.txt`/`ci/warn_baseline_ch570.txt` for all four
+logs (ch570 RELEASE additionally dropped 4 warnings that no longer fire —
+recorded as ratchet-reported removal candidates, baseline left as-is per
+the one-way-ratchet rule); zero `PORT_TODO_*` in all four ELFs;
+`tools/build_artifacts.py check` **OK** across all 10 buildable units after
+refreshing `artifacts/ch32v006/` and `artifacts/ch570/` (`bin`/`hex`/`syms`
++ `MANIFEST.sha256`) — the other 8 units rebuilt byte-identical to their
+already-committed artifacts (confirmed via `git diff --stat`: zero bytes
+changed outside `ch32v006/`, `ch570/`, and `MANIFEST.sha256`), so this
+batch's `-flto` change is confirmed scoped to exactly the two ports it
+targets. `tools/build_artifacts.py --selftest`,
+`tools/assert_no_double.sh --selftest`, `ci/warn_ratchet.py --selftest`,
+and `tools/check_contracts_numbering.py` all still PASS unchanged.
