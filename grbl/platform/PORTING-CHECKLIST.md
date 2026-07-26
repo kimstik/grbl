@@ -18,6 +18,20 @@ Ground rules (PLAN.md, standing laws):
 
 - [ ] `grbl/platform/<name>/`: Makefile, platform.h, gpio.h, timer.h,
       startup/vector code, linker script, `<board>/config.h`.
+- [ ] **Check `common/` before writing any of these from scratch** — several
+      pieces are already shared and byte-identity-proven across ports
+      (CONTRACTS.md
+      [§cross-arch-dedup-byte-invariance](CONTRACTS.md#cross-arch-dedup-byte-invariance)):
+      `common/cortexm/cortexm_critical.h` (Cortex-M `sei`/`cli` +
+      `HAL_CRITICAL_SECTION_*`, include it from your `prelude.h`),
+      `common/wch/wch_critical.h` (QingKe RISC-V equivalent),
+      `common/stm32/stm32_timer.h` (the whole `timer.h` for an STM32 port),
+      `common/serial_ring_accessors.h` and `common/nvmem_checksum.h` (the
+      chip-agnostic halves of a TU-replacement `serial.c`/`nvmem.c`).
+      **Do not create a `<port>/avr/io.h`** — the shared
+      `common/dummy/avr/io.h` is enough once your prelude defines `sei`/`cli`
+      before `grbl.h`; a local copy exists only to win an `-I` race and is
+      exactly the invisible duplication that batch removed.
 - [ ] Makefile follows the samd21 pattern (samd21/Makefile): core sources
       listed explicitly; a single `-include $(BOARD)/prelude.h`
       (samd21/Makefile:30) — the injection order is documented inside

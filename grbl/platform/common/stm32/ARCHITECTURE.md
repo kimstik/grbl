@@ -29,6 +29,10 @@ grbl/hal/platforms/
 │   ├── stm32_flash.h          # Flash API (platform implements)
 │   ├── stm32_nvmem.c/h        # NVMEM cache (100% reusable)
 │   ├── stm32_timing.c/h       # DWT + SysTick (100% reusable)
+│   ├── stm32_timer.h          # STP_TMR_*/STP_PULSE_RESET_*/PWM_*/ISR_*
+│   │                          # contract macros (100% reusable - was three
+│   │                          # code-identical <port>/timer.h copies; base
+│   │                          # addresses still come from each port's regs.h)
 │   └── stm32_watchdog.c/h     # IWDG (100% reusable)
 │
 ├── stm32f103/                 ← Platform-specific (F103)

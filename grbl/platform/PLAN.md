@@ -1165,6 +1165,75 @@ identity to integration time.
 
 ## Current State (update each session)
 
+- **[x] CROSS-ARCHITECTURE DE-DUPLICATION BATCH, BYTE-IDENTITY GATED
+  (2026-07-26)** — four duplication clusters extracted into `common/`,
+  each proven by rebuilding every consumer and comparing the RELEASE
+  `.bin` MD5 against the committed `artifacts/<port>/` baseline (the
+  `common/wch/` precedent from CONTRACTS.md
+  [§wch-common-extraction-ch570](CONTRACTS.md#wch-common-extraction-ch570),
+  now applied ACROSS architectures rather than within one vendor family).
+  Full findings: CONTRACTS.md
+  [§cross-arch-dedup-byte-invariance](CONTRACTS.md#cross-arch-dedup-byte-invariance).
+  **LOC saved per extraction.** Counted as *code* lines only — comments and
+  blank lines stripped, so the numbers measure duplicated logic and are not
+  inflated by the (deliberately large) explanatory banners on the new shared
+  files. "before" is the sum across all consumers; "after" is the single
+  shared copy:
+
+  | # | extraction | new shared file | consumers | dup code lines before | shared after | net LOC saved |
+  |---|---|---|---|---|---|---|
+  | A+H | Cortex-M critical sections + `sei`/`cli` | `common/cortexm/cortexm_critical.h` | stm32f103, stm32f411, stm32h523, hc32f460 | 48 (12 x 4) | 9 | **39** (+4 whole files deleted) |
+  | C | serial ring-buffer accessors | `common/serial_ring_accessors.h` | ch32v006, ch570, dspic33ak128mc102 (33 each), samd21 (41) | 140 | 37 | **103** |
+  | D | NVMEM checksum-copy wrappers | `common/nvmem_checksum.h` | ch32v006, ch570, dspic33ak128mc102 (19 each, read+write), samd21 (13, read only) | 70 | 29 | **41** |
+  | B | STM32 timer contract macros | `common/stm32/stm32_timer.h` | stm32f103, stm32f411, stm32h523 (29 each) | 87 | 29 | **58** |
+
+  Total **345 duplicated code lines collapse to 104** — net **241 code lines
+  saved**; 7 whole files deleted (4 shadowing `avr/io.h` stubs, 3 `timer.h`
+  copies), 4 shared files added. In raw diff terms (comments included, which
+  is what `git diff --stat` reports across the four commits): 502 insertions,
+  638 deletions. NOTE: the individual commit messages quote raw line counts
+  rather than these comment-stripped ones and are therefore higher; this
+  table is the measured, comparable figure.
+
+  - **Every affected port RELEASE `.bin` MD5 unchanged** vs `artifacts/`:
+    stm32f103 `b12b018e…`, stm32f411 `945a2b58…`, stm32h523 `de36d6bf…`,
+    hc32f460 `b17a625a…`, ch32v006 `075d79ce…`, ch570 `0a602df6…`,
+    samd21-megarm `86cf3fae…`, samd21-generic `8d8acc85…`.
+    dspic33ak128mc102 is not hash-gated (non-reproducible toolchain,
+    `artifacts/README.md`) so it was gated on its symbol map — `nm
+    --print-size --size-sort` output identical to the committed `.syms`;
+    its `.bin` also happened to come out byte-identical (`cmp -l`: 0
+    differing bytes, 94996 bytes).
+  - **Golden AVR untouched**: `make -C grbl/platform/atmega328p validate`
+    PASSED, MD5 `79af184e67b27defd27a39309ac53563`. Core `grbl/nvmem.c`'s
+    logical-`||` checksum (§10.4, never to be "fixed") and core
+    `grbl/serial.c` were not modified — the shared NVMEM header carries
+    only the non-AVR bitwise-`|` form and `#error`s under `__AVR__`.
+  - **Extraction D deliberately stopped short of full unification**:
+    samd21 has no `nvmem_write_range` (its `eeprom_put_char` does a page
+    read-modify-write per byte), so it takes only the shared READ half;
+    the write half is opt-in via `GRBL_NVMEM_HAS_WRITE_RANGE`. Sharing the
+    block-write form there would have been a flash erase/program behavior
+    change, not a cleanup.
+  - **Ratchets**: warning ratchet OK on all 9 ports x both flavors (no new
+    warnings, all in baseline); boot-integrity + no-DP post-link asserts
+    PASSED on all 8 RELEASE units that run them; `check_contracts_
+    numbering` OK; `build_artifacts.py --selftest`, `warn_ratchet.py
+    --selftest`, `assert_no_double.sh --selftest` all PASS.
+  - **One artifact legitimately moves, and it is NOT a committed one**:
+    normalizing samd21's `if/else` accessors to the 3-of-4-majority
+    early-return form is RELEASE-byte-identical but changes the **DEBUG**
+    image by 4 bytes (megarm 48408 → 48404). Committed artifacts
+    (RELEASE `bin`/`hex`/`syms`) are unchanged for every port; only
+    `MANIFEST.sha256`'s `#`-prefixed DEBUG lines for `samd21-megarm` and
+    `samd21-generic` (`_dbg.hex`, `_dbg.bin`) need regenerating —
+    `python3 tools/build_artifacts.py build --platforms
+    samd21-megarm,samd21-generic`, **run in the canonical tree**, not in a
+    worktree: DEBUG `.elf` hashes embed `DW_AT_comp_dir`, so regenerating
+    from a worktree checkout would poison eight units' DEBUG `.elf` lines
+    with the wrong path (the same reason the prior commit on this branch is
+    titled "artifacts: regenerate manifest in canonical tree").
+
 - **[x] BUILD ARTIFACTS TRACKED IN GIT FOR OBSERVABILITY (2026-07-26,
   owner directive)** — new `artifacts/<port>/` tree (RELEASE
   elf/bin/hex + a `nm --print-size --size-sort --demangle` symbol map per
