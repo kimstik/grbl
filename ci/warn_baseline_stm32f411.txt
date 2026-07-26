@@ -9,6 +9,14 @@
 #   make -C grbl/platform/stm32f411 BUILD=<DEBUG|RELEASE> > build.log 2>&1
 #   python3 ci/warn_ratchet.py --log build.log --emit
 #
+# Removed 2026-07-26: `stepper.c: ... integer overflow ... '1465032704'
+# [-Woverflow]` (BUG #18 class, CONTRACTS.md's clock-constant-width
+# section). Root cause:
+# common/stm32/common.mk's F_CPU lacked a suffix wide enough for 96 MHz -
+# the true compile-time constant is 5760000000, not 1465032704 (a real
+# ~3.93x-too-fast stepper timing bug, not cosmetic). Fixed at the source
+# (common.mk now uses ULL); do NOT re-add.
+#
 # The "config.h vs platform.h dual pin-map canon" entries that used to sit
 # here (CONTROL_MASK/DIRECTION_MASK/LIMIT_MASK/PROBE_MASK/
 # STEPPERS_DISABLE_MASK/STEP_MASK, all "redefined") were the numerically-
@@ -34,5 +42,4 @@ gcode.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
 motion_control.c: warning: unused parameter 'cycle_mask' [-Wunused-parameter]
 nvmem.c: warning: '<<' in boolean context, did you mean '<'? [-Wint-in-bool-context]
 report.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
-stepper.c: warning: integer overflow in expression of type 'int' results in '1465032704' [-Woverflow]
 system.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
