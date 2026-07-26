@@ -1,0 +1,28 @@
+# Warning baseline for the hc32f460 build (-Wall -Wextra, arm-none-eabi-gcc).
+# Format: normalized warnings, see ci/warn_ratchet.py header. Ratchet is
+# one-way: only remove lines here manually, after the warning is really gone.
+#
+# Regenerated from REAL builds (Phase 6 rolling port #3, first real
+# make/make link runs in grbl/platform/hc32f460/) - not inspection-derived.
+# Command:
+#   make -C grbl/platform/hc32f460 BUILD=<DEBUG|RELEASE> > build.log 2>&1
+#   python3 ci/warn_ratchet.py --log build.log --emit
+#
+# Unlike stm32f411/h523 (same warning set on both flavors), RELEASE here
+# (-flto -fno-fat-lto-objects) produced ZERO per-file compile warnings this
+# session - only linker _close/_lseek/_read/_write nosys stub notices, which
+# ci/warn_ratchet.py's regex does not match (no "<file>: warning:"/
+# "<file>:<line>: warning:" shape). DEBUG (-O0, no LTO) produced the set
+# below. Union taken per the established convention; DEBUG is a superset
+# here.
+#
+# hc32f460-specific:
+flash.c: warning: unused parameter 'addr' [-Wunused-parameter]
+#
+# GRBL core (shared with every platform; not hc32f460-specific):
+gcode.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
+motion_control.c: warning: unused parameter 'cycle_mask' [-Wunused-parameter]
+nvmem.c: warning: '<<' in boolean context, did you mean '<'? [-Wint-in-bool-context]
+report.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
+stepper.c: warning: integer overflow in expression of type 'int' results in '-884901888' [-Woverflow]
+system.c: warning: this statement may fall through [-Wimplicit-fallthrough=]

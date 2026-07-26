@@ -163,25 +163,46 @@ There was no CI when this roadmap was first written; there is now (landed 2026-0
 - **Estimated code size**: ~20KB (fits in 16KB with LTO optimization)
 - **Target use case**: Ultra-low-cost CNC controllers, educational projects
 
-### 4. HC32F460JETA (High-Performance ARM)
-- **Priority**: MEDIUM — third item in PLAN.md's Phase 6 queue
-- **Architecture**: ARM Cortex-M4F, 200MHz
-- **Vendor**: HDSC (Huada Semiconductor)
-- **Target board**: Small System HC32F460 development board
-- **Memory**: 192KB RAM, 512KB Flash
-- **Current status**: directory scaffolded (`avr/` shim + a `platform.h` skeleton) — no Makefile, startup.c, or platform.c yet; not a real port
-- **Unique features**:
-  - High RAM (192KB) - largest of all current platforms
-  - Hardware FPU (single precision)
-  - Advanced motor control peripherals
-  - CAN-FD support
-  - 12-bit ADC with up to 24 channels
-- **Challenges**:
-  - Limited documentation (mostly Chinese)
-  - Less common toolchain
-  - Non-standard peripheral library
-  - Register definitions not in CMSIS standard format
-- **Estimated code size**: ~28KB
+### 4. HC32F460JETA (High-Performance ARM) — ✅ built (Phase 6 rolling port #3)
+- **Status**: 🟢 Builds clean, zero `PORT_TODO_*`, ready for hardware validation (register facts
+  are clean-room + honestly UNVERIFIED-flagged — see below, hardware bring-up gates real trust)
+- **Architecture**: ARM Cortex-M4F, up to 200MHz
+- **Vendor**: HDSC / XHSC (Huada Semiconductor) — first HDSC/vendor-exotic chip in this tree;
+  no donor port shares this vendor's peripheral IP at all (TIMER0/TIMERA, GPIO PORT model, INTC
+  event router, EFM flash, PWC/CMU clock tree)
+- **Target board**: generic reference pin map (no specific commercial board), same posture as
+  ch32v006's `boards/generic`
+- **Memory (this port's linker script)**: 128KB RAM (conservative subset of the "up to 192KB" max
+  variant-dependent spec), 512KB Flash
+- **Previous status was fiction**: the directory before this port had a `platform.h` skeleton
+  (marketing-comment blocks, `#include "hc32_ddl.h"` pointing at a vendor SDK never vendored into
+  this tree) and nothing else — no Makefile/gpio.h/timer.h/regs.h/startup.c/platform.c/handlers.c/
+  script.ld. It never built. Same "trust only builds" lesson as stm32f103/stm32h523/stm32f411.
+- **Verification methodology (see `regs.h` file header for full detail)**: no permissively-licensed
+  vendor SDK could be confirmed this session (HDSC's own `hc32f4a0_ddl` exists on GitHub but no
+  LICENSE file was found — unlike the dsPIC33AK DFP's Apache-2.0 or ch32v006's Zephyr dtsi
+  cross-check), so this port is clean-room register headers per PORTING-CHECKLIST's
+  vendor-SDK-only-if-permissive rule. Klipper3d/klipper's real shipped `src/hc32f460` firmware
+  (GPL-3.0, license-compatible with this GPLv3 core) was used as an independent factual
+  cross-check — NOT copied — for GPIO data-path register names, the INTC event-router mechanism,
+  and USART/TIMERA existence. Every other register offset/bit-field/base-address is an explicitly
+  flagged UNVERIFIED placeholder pending the real HC32F460 register-level manual.
+- **Unique architecture fact**: this chip has NO fixed per-peripheral NVIC vector table. Every
+  peripheral interrupt source routes through an INTC event router onto a shared pool of 32
+  identically-named vectors (`Int000_IRQn`..`Int031_IRQn`) — a materially different shape from
+  every STM32/SAMD21 donor in this tree, confirmed via Klipper's real interrupts.c.
+- **Sizes (this session, real `arm-none-eabi-gcc` 13.2.1 build)**: RELEASE `.text` 25596B / `.data`
+  80B (of 512KB flash); DEBUG `.text` 41220B. Both link with **zero `PORT_TODO_*`** and zero
+  undefined symbols. `FP=SINGLE` (default) `assert_no_double.sh` PASSED on both flavors;
+  disassembly confirms `vsqrt.f32` (real FPU instruction, not `__aeabi_d*` soft-float) and 82
+  `vmul.f32` instances — same FPU win class as stm32f411/stm32h523.
+- **Challenges (confirmed, not resolved this session — hardware bring-up items)**:
+  - Register-level manual not reachable this session (only the datasheet's feature/electrical
+    chapters, not the full register reference)
+  - Non-standard peripheral library, register definitions not in CMSIS standard format
+  - PCONR per-pin GPIO config bit layout, EFM flash controller bit fields, TIMER0/TIMERA control
+    register layouts, and the INTC base address are all placeholder values needing hardware
+    confirmation
 - **Target use case**: High-performance CNC, multi-axis systems, industrial applications
 
 ### 5. ATSAMC21E18A (Microchip ARM)
@@ -215,7 +236,7 @@ Per [PLAN.md](PLAN.md) (the authoritative queue — this list is kept in sync wi
 2. **Phase 6 rolling-ports queue** thereafter, revised as hardware/toolchain reality dictates:
    1. STM32F411 (ARM M4F, toolchain already in CI, large stm32_common reuse expected)
    2. dsPIC33AK128MC102 (third ISA family, XC-DSC toolchain now free)
-   3. HC32F460 (ARM M4F, vendor-exotic — tests contract completeness)
+   3. HC32F460 (ARM M4F, vendor-exotic — tests contract completeness) — ✅ DONE, see above
    4. SG2002 (RISC-V64, Linux-class — bare-metal vs. Linux userspace scope still to be decided)
    5. any new platform directory that appears
 
@@ -247,7 +268,9 @@ SAMD21 does not yet share code this way (its NVMEM/timing implementations are pl
 
 ### Expected Code Reuse (unbuilt platforms — estimates, not measured):
 - CH32V006: 40% (RISC-V architecture different)
-- HC32F460: 50% (ARM but different vendor)
+- HC32F460: ~0% code reuse in practice (MEASURED, not estimated, now that it is built) — no
+  peripheral IP shared with any donor port; only the ARM Cortex-M startup/VTOR/FP=SINGLE
+  *mechanisms* (not code) transferred. Clean-room `regs.h`/`gpio.h`/`timer.h`/`platform.c`.
 - STM32F411: high, via existing stm32_common (same family as stm32f103/h523)
 - dsPIC33AK128MC102: low — new ISA family, expect mostly new code plus the macro contract layer
 
@@ -268,7 +291,9 @@ See [PLAN.md](PLAN.md) for the authoritative, continuously-updated phase list. C
 
 **See detailed implementation plans:**
 - [CH32V006_PLAN.md](ch32v006/CH32V006_PLAN.md)
-- HC32F460_PLAN.md — not written yet (directory only has a `platform.h` skeleton)
+- HC32F460_PLAN.md — not written as a separate file; port status is tracked in this file's
+  own HC32F460JETA entry above plus PLAN.md's Phase 6 rolling-ports section and `hc32f460/
+  platform.md` (per-port notes, same pattern as stm32f411/platform.md)
 - ATSAMC21_PLAN.md — not written yet (no directory exists)
 - [SAMD21_PLAN.md](samd21/SAMD21_PLAN.md) — exists but stale; PLAN.md Phase 3 is authoritative over it
 - [PLAN.md](PLAN.md) — the live orchestration ledger; authoritative for phase status and the current queue

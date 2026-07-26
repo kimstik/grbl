@@ -382,7 +382,51 @@ Priority order (revise as hardware/toolchain reality dictates):
         (native DP FPU, CONTRACTS §17 item 7).
       * [ ] CI wiring: cached XC-DSC installer or fetch step + 2 matrix rows +
         warn baseline from real logs
-- [ ] hc32f460 (ARM M4, vendor-exotic — tests contract completeness)
+- [x] **hc32f460 COMPLETE** (rolling #3, first HDSC/Huada vendor-exotic chip):
+      `make BUILD=DEBUG`/`BUILD=RELEASE` both build all objects and LINK with
+      **zero `PORT_TODO_*`**, zero undefined symbols (`nm -u` empty both
+      flavors). Sizes: DEBUG 41220/80, RELEASE 25596/80 (of 512KB flash/128KB
+      RAM). Old directory was fiction (platform.h doc-skeleton only,
+      `#include "hc32_ddl.h"` never vendored, no Makefile/startup.c/
+      platform.c/anything else) — never built, same class as the
+      stm32f103/h523/f411 predecessors. No donor port in this tree shares
+      this vendor's peripheral IP AT ALL (TIMER0/TIMERA, GPIO PORT model,
+      INTC event router, EFM flash, PWC/CMU clock tree) — the first port
+      where "reuse a donor's shape" had literally nothing to reuse.
+      Verification: no permissively-licensed vendor SDK confirmed (HDSC's
+      own `hc32f4a0_ddl` exists publicly but no LICENSE file found — unlike
+      dsPIC33AK's Apache-2.0 DFP or ch32v006's Apache-2.0 Zephyr dtsi), so
+      this port is clean-room per PORTING-CHECKLIST's stated fallback,
+      cross-checked (not copied) against Klipper3d/klipper's real shipped
+      GPL-3.0 firmware for this exact chip (GPIO register names, the INTC
+      routing mechanism, TIMERA-as-PWM, three real CMU clock addresses from
+      a real bootloader). Every other register fact is an explicitly
+      UNVERIFIED placeholder flagged at its own definition site in `regs.h`
+      — the port is NOT claimed "ready for hardware validation" in the
+      unqualified sense stm32f411 was; see `hc32f460/platform.md` and
+      CONTRACTS.md section 20 (new, 9 items: no-donor-IP-at-all,
+      vendor-SDK-license-came-back-negative for the first time, Klipper-as-
+      real-firmware-cross-check as a new source class, the INTC event-router
+      as a 4th interrupt-architecture family, split USART RX/TX interrupt
+      sources, per-pin (not per-port) GPIO config register, the
+      every-UNVERIFIED-flagged-at-definition-site methodology, FPU verdict,
+      gate re-run). FP=SINGLE (default): `assert_no_double.sh` PASSED both
+      flavors; disassembly confirms `vsqrt.f32` (1) + 82 `vmul.f32` + 161
+      combined vadd/vsub/vdiv.f32, **zero** `__aeabi_d*`/DP soft-float
+      symbols anywhere (cleaner than stm32f411's one tolerated `__aeabi_d2f`).
+      Boot-integrity (`common/boot_check.sh`) PASSED both flavors. Gates
+      re-run (not just inspected): golden AVR MD5 PASSED (79af184e…, text
+      30640); samd21 megarm RELEASE 31952/296; stm32f103 RELEASE 28700/80;
+      stm32h523 RELEASE 25132/388; stm32f411 RELEASE 25796/80; ch32v006
+      generic RELEASE 41072/0 — all six siblings byte-identical, confirming
+      this port touched only `grbl/platform/hc32f460/`, CONTRACTS.md,
+      PLAN.md, PLATFORM_ROADMAP.md, `ci/warn_baseline_hc32f460.txt`, and
+      `.github/workflows/ci.yml`. CI: 2 matrix rows added
+      (`hc32f460` × `{DEBUG, RELEASE}`), warn baseline generated from real
+      build logs. Not smoke-tested (no HC32F460 emulator exists) — marked
+      "gaps require hardware bring-up" rather than "ready for hardware
+      validation" in PLATFORM_ROADMAP.md, reflecting the UNVERIFIED register
+      facts honestly.
 - [ ] sg2002 (RISC-V 64, linux-class — decide scope first: bare-metal vs linux userspace)
 - [ ] **ch570** RECON DONE (matrix in recon report): QingKe V3C RV32IMBC (full
       I+M — hw mul/div!, exact rv32im/ilp32 picolibc multilib exists), 240K user
@@ -936,6 +980,7 @@ markers in the tree instead of a silent no-op.
   | stm32h523 | 32448 / 388             | **25132** / 388          | -7316  | -22.5% |
   | stm32f411 | 32660 / 80              | **25796** / 80           | -6864  | -21.0% |
   | dspic33ak128mc102 | N/A — FP=DOUBLE is this port's declared default (native DP FPU), never carried the SINGLE rollout | ~41.8KB code | — | — |
+  | hc32f460  | N/A (new port, rolling #3, `FP=SINGLE` from day one) | **25596** / 80 | N/A | N/A |
 
   RULE: any sibling size quoted in a ledger entry must be re-verified against
   this table at integration time, not copied from the entry's own drafting —
