@@ -394,3 +394,44 @@ intermediate. No exception found; the claim's own parenthetical ("checked, not a
 accurate — I re-checked and it holds.
 
 ---
+
+## Claim D — Byte-identity claims
+
+**Verdict: SURVIVES.** Per the brief's own warning, did not trust `tools/build_artifacts.py`'s
+self-reported hash match (that generator grew from 665 to 1525 lines this session — confirmed via
+`git show 62c76d9:tools/build_artifacts.py | wc -l` → 665 vs current `wc -l tools/build_artifacts.py`
+→ 1525, the exact figures the brief cites). Instead, independently rebuilt every port's RELEASE
+image directly through its own `Makefile` (bypassing `build_artifacts.py` entirely) and diffed the
+raw `.bin` bytes against the committed `artifacts/` tree with a plain `md5sum`:
+
+| Port | Build command | `md5sum build/...` | `md5sum artifacts/...` | Match |
+|---|---|---|---|---|
+| ch32v006 | `make -C grbl/platform/ch32v006 BUILD=RELEASE` | `a265693d67506eb2...` | `a265693d67506eb2...` | yes |
+| hc32f460 | `make -C grbl/platform/hc32f460 BUILD=RELEASE` | `11e0eb3f0c0bf102...` | `11e0eb3f0c0bf102...` | yes |
+| dspic33ak128mc102 | `make -C grbl/platform/dspic33ak128mc102 BUILD=RELEASE` (real `xc-dsc-gcc` 8.3.1, real DFP at `/opt/Microchip.dsPIC33AK-MC_DFP.1.5.263`) | `879b45a88ec69c13...` | `879b45a88ec69c13...` | yes |
+| stm32f103 | `make -C grbl/platform/stm32f103 BUILD=RELEASE` | `8d4641fa49e5129d...` | `8d4641fa49e5129d...` | yes |
+| stm32f411 | `make -C grbl/platform/stm32f411 BUILD=RELEASE` | `8028897a8a2c1a97...` | `8028897a8a2c1a97...` | yes |
+| stm32h523 | `make -C grbl/platform/stm32h523 BUILD=RELEASE` | `a41505d934a48ed1...` | `a41505d934a48ed1...` | yes |
+| samd21 megarm | `make -C grbl/platform/samd21 BOARD=megarm BUILD=RELEASE` | `491ffd90f0f9ccbf...` | `491ffd90f0f9ccbf...` | yes |
+| samd21 generic | `make -C grbl/platform/samd21 BOARD=generic BUILD=RELEASE` | `3f28eebf53f8a6d0...` | `3f28eebf53f8a6d0...` | yes |
+| ch570 | `make -C grbl/platform/ch570 BUILD=RELEASE` | `01297786e9122908...` | `01297786e9122908...` | yes |
+| atmega328p | `make -C grbl/platform/atmega328p validate` | golden gate | `79af184e67b27def...` | yes |
+
+Every one of the 10 CI-matrix units' committed `.bin` is byte-identical to a fresh, independent
+rebuild from the current tree — verified with the raw toolchain + `md5sum`, never through the
+possibly-compromised generator. This is transitive but strong evidence for the specific historical
+claims named in the brief (pin-width batch on hc32f460/ch32v006/dspic33ak128mc102; the
+comment-compaction and Makefile-dedup batches): if any of those edits had actually changed
+generated code, the *current* tree would no longer byte-match the committed artifact — but it
+does, on every port, right now. `_Static_assert` itself is additionally a zero-codegen construct
+by C-standard definition (compile-time only, no object-code footprint), so an assert-only diff
+cannot change a binary by construction, independent of any tooling trust question.
+
+Did not re-derive the historical parent-commit-vs-child-commit diff for each named batch
+individually (would require checking out each intermediate commit and rebuilding under this
+review's read-only scope) — the verification performed is "today's committed state survives an
+independent rebuild," which is the load-bearing invariant these claims ultimately serve, but is
+not literally "replayed the exact before/after commits of each named batch." Noting this
+narrower scope explicitly rather than overstating it.
+
+---
