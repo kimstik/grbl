@@ -211,6 +211,12 @@ _Static_assert(X_LIMIT_BIT <= 7 && Y_LIMIT_BIT <= 7 && Z_LIMIT_BIT <= 7,
 #define CONTROL_SAFETY_DOOR_BIT   6
 #define CONTROL_MASK              ((1<<CONTROL_RESET_PIN)|(1<<CONTROL_FEED_HOLD_PIN)|(1<<CONTROL_CYCLE_START_PIN)|(1<<CONTROL_SAFETY_DOOR_PIN))
 #define CONTROL_INVERT_MASK       CONTROL_MASK
+// Same truncation class as the LIMIT assert above (system.c:43 narrows
+// GPIO_MRD(CONTROL,IREG) to a uint8_t) - this port's bits already fit;
+// codified so a future re-pin cannot silently regress.
+_Static_assert(CONTROL_RESET_BIT <= 7 && CONTROL_FEED_HOLD_BIT <= 7 &&
+               CONTROL_CYCLE_START_BIT <= 7 && CONTROL_SAFETY_DOOR_BIT <= 7,
+               "CONTROL logical bits must fit core's uint8_t group read (BUG #17 class, CONTRACTS.md #limit-bit-width-second-consumer)");
 
 // GPIO_INT_ON plumbing (see LIMIT_PCMSK note above)
 #define CONTROL_PCMSK             CONTROL_PORT
@@ -222,13 +228,30 @@ _Static_assert(X_LIMIT_BIT <= 7 && Y_LIMIT_BIT <= 7 && Z_LIMIT_BIT <= 7,
 #define CONTROL_EXTI_LINE_CYCLE_START EXTI_Line5
 #define CONTROL_EXTI_LINE_SAFETY_DOOR EXTI_Line6
 
-// PROBE PIN (GPIOC: PC15)
+// PROBE PIN (GPIOC: PC0)
+//
+// BUG #26 follow-up (same audit, 2026-07-26): PROBE_BIT was 15 here (PC15).
+// probe.c's `uint8_t probe_get_state() { return(GPIO_MRD(PROBE, IREG) ^
+// probe_invert_mask); }` and probe_configure_invert_mask()'s `probe_invert_mask
+// ^= PROBE_MASK` both narrow to uint8_t; `1<<15 = 32768` truncates to 0 in
+// both, so the probe input read as a constant 0 regardless of the physical
+// pin - the identical failure class as BUG #26's Z_LIMIT_BIT=10, one input
+// group over, and unlike that one this shape was NEVER flagged by gcc's
+// -Woverflow: the truncated expression is `register_value & PROBE_MASK`, a
+// RUNTIME AND, not a compile-time constant shift-and-return, so -Woverflow
+// (constant-conversion only) had nothing to warn about - no baseline entry
+// hid this, it was simply invisible to the whole warning-ratchet mechanism.
+// Fix: PROBE moved to PC0 (free, unused GPIOC bit <=7, same reasoning as
+// BUG #26's Z_LIMIT fix - no hardware was ever wired to PC15, platform.md/
+// README: not yet run on real hardware).
 
 #define PROBE_PORT          GPIOC
 #define PROBE_PORT_ID       ((hal_gpio_port_t)GPIOC)
-#define PROBE_PIN           15
-#define PROBE_BIT           15
+#define PROBE_PIN           0
+#define PROBE_BIT           0
 #define PROBE_MASK          (1<<PROBE_PIN)
+_Static_assert(PROBE_BIT <= 7,
+               "PROBE logical bit must fit core's uint8_t group read / invert-mask XOR (BUG #26 class, CONTRACTS.md #limit-bit-width-second-consumer)");
 
 // SPINDLE PINS
 

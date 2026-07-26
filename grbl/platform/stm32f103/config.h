@@ -72,7 +72,13 @@
 #define LED_PIN             13  // PC13 (built-in on Blue Pill, active LOW)
 
 // Probe
-#define PROBE_PIN           15  // PC15
+// BUG #26 follow-up (2026-07-26): moved off PC15 to PC0 in platform.h (the
+// live copy core actually reads); synced here too, same dual-canon lesson
+// as Z_LIMIT_PIN below - a stale second copy of a moved pin doesn't just
+// mislead a reader, it trips a real "PROBE_PIN redefined" warning once the
+// two copies disagree (this port's own -Wall catches token-value mismatches
+// on redefinition, not just presence).
+#define PROBE_PIN           0   // PC0 - see platform.h's PROBE section
 
 // BITMASKS FOR GPIO OPERATIONS
 

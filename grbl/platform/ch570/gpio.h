@@ -36,18 +36,38 @@ void hal_gpio_pullup_disable(uint8_t port, uint32_t mask);
 void hal_gpio_interrupt_enable(uint32_t mask);
 void hal_gpio_interrupt_disable(uint32_t mask);
 
+#include "../common/gpio_logical.h"
+
 // Pull-up needs PD_DRV cleared too (PD_DRV=1 forces pull-DOWN regardless
 // of PU - platform.c mirrors the vendor's own GPIOA_ModeCfg truth table).
 // Two independent full-width registers, no nibble packing - safe as a
 // small function rather than the default single-register macro.
+//
+// GPIO_MPULLUP_EN/DIS and GPIO_MDIR_INP dispatch per NAME (not a single
+// generic `name##_MASK` formula) because CONTROL below needs its PHYSICAL
+// mask here even though core-visible CONTROL_MASK is LOGICAL (BUG #17
+// class, see boards/generic/config.h's CONTROL section) - LIMIT/PROBE stay
+// on their own physical==logical mask, unaffected.
 #undef GPIO_PULLUP_EN
 #undef GPIO_PULLUP_DIS
-#undef GPIO_MPULLUP_EN
-#undef GPIO_MPULLUP_DIS
 #define GPIO_PULLUP_EN(name)    hal_gpio_pullup_enable(0, 1UL << (name##_BIT))
 #define GPIO_PULLUP_DIS(name)   hal_gpio_pullup_disable(0, 1UL << (name##_BIT))
-#define GPIO_MPULLUP_EN(name)   hal_gpio_pullup_enable(0, (name##_MASK))
-#define GPIO_MPULLUP_DIS(name)  hal_gpio_pullup_disable(0, (name##_MASK))
+
+#define GPIO_MPULLUP_EN(name)      GPIO_LOGICAL_DISPATCH_MPULLUP_EN(name)
+#define GPIO_MPULLUP_DIS(name)     GPIO_LOGICAL_DISPATCH_MPULLUP_DIS(name)
+#define GPIO_MPULLUP_EN_LIMIT()    hal_gpio_pullup_enable(0, LIMIT_MASK)
+#define GPIO_MPULLUP_DIS_LIMIT()   hal_gpio_pullup_disable(0, LIMIT_MASK)
+#define GPIO_MPULLUP_EN_PROBE()    hal_gpio_pullup_enable(0, PROBE_MASK)
+#define GPIO_MPULLUP_DIS_PROBE()   hal_gpio_pullup_disable(0, PROBE_MASK)
+#define GPIO_MPULLUP_EN_CONTROL()  hal_gpio_pullup_enable(0, CONTROL_MASK_PHYS)
+#define GPIO_MPULLUP_DIS_CONTROL() hal_gpio_pullup_disable(0, CONTROL_MASK_PHYS)
+
+// GPIO_MDIR_INP: direction is a plain bit here (no packing), but CONTROL
+// still needs its physical mask for the same reason as the pull-ups above.
+#define GPIO_MDIR_INP(name)        GPIO_LOGICAL_DISPATCH_MDIR_INP(name)
+#define GPIO_MDIR_INP_LIMIT()      (R32_PA_DIR &= ~LIMIT_MASK)
+#define GPIO_MDIR_INP_PROBE()      (R32_PA_DIR &= ~PROBE_MASK)
+#define GPIO_MDIR_INP_CONTROL()    (R32_PA_DIR &= ~CONTROL_MASK_PHYS)
 
 // Atomic single-bit output (CONTRACTS.md #1.2) - SET/CLR registers, not a
 // RMW on OUT (safe against an ISR touching a different bit concurrently).
@@ -68,13 +88,14 @@ static inline void hal_gpio_mwo(uint32_t phys_mask, uint32_t phys_val) {
 #define GPIO_MWO_STEP(val)         hal_gpio_mwo(STEP_MASK_PHYS,      STEP_L2P(val))
 #define GPIO_MWO_DIRECTION(val)    hal_gpio_mwo(DIRECTION_MASK_PHYS, DIRECTION_L2P(val))
 
-// GPIO_MRD: STEP path (stepper.c OREG readback) needs P2L; input groups
-// (LIMIT/CONTROL/PROBE) are physical==logical on this board and reuse the
-// stock common/gpio.h formula (no override needed for them specifically).
+// GPIO_MRD: STEP path (stepper.c OREG readback) needs P2L; LIMIT/PROBE are
+// physical==logical on this board and reuse the stock common/gpio.h
+// formula; CONTROL needs P2L too (real silicon PA15/16/17 don't fit core's
+// uint8_t read - BUG #17 class, see boards/generic/config.h).
 #define GPIO_MRD(name, reg)        GPIO_MRD_##name(reg)
 #define GPIO_MRD_STEP(reg)         STEP_P2L( GPIO_##reg(STEP) & STEP_MASK_PHYS )
 #define GPIO_MRD_LIMIT(reg)        ( GPIO_##reg(LIMIT)   & LIMIT_MASK )
-#define GPIO_MRD_CONTROL(reg)      ( GPIO_##reg(CONTROL) & CONTROL_MASK )
+#define GPIO_MRD_CONTROL(reg)      CONTROL_P2L( GPIO_##reg(CONTROL) & CONTROL_MASK_PHYS )
 #define GPIO_MRD_PROBE(reg)        ( GPIO_##reg(PROBE)   & PROBE_MASK )
 
 // GPIO_MDIR_OUT: STEP/DIRECTION configure the PHYSICAL pins (stepper.c).

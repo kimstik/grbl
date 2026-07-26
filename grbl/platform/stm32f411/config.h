@@ -71,7 +71,10 @@
 #define SERIAL_TX_PIN       9   // PA9
 #define SERIAL_RX_PIN       10  // PA10
 
-#define PROBE_PIN           15  // PC15
+// BUG #26 follow-up (2026-07-26): moved off PC15 to PC0 in platform.h (the
+// live copy core actually reads); synced here too - a stale second copy
+// disagreeing with the live one trips a real "PROBE_PIN redefined" warning.
+#define PROBE_PIN           0   // PC0 - see platform.h's PROBE section
 
 // BITMASKS FOR GPIO OPERATIONS
 

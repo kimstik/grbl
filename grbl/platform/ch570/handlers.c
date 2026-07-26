@@ -43,8 +43,13 @@ void GPIOA_IRQHandler(void) {
   R16_PA_INT_IF = pending;                              // write-1-to-clear, FIRST (#2.3)
   R16_PA_INT_EDGE_TYPE ^= pending;                       // arm the opposite edge for next time
 
-  if (pending & LIMIT_MASK)   { LIMIT_INT_IRQHandler(); }
-  if (pending & CONTROL_MASK) { CONTROL_INT_IRQHandler(); }
+  // `pending` is the raw PHYSICAL interrupt-flag register - LIMIT_MASK is
+  // physical==logical (unaffected), but CONTROL_MASK is now core-visible
+  // LOGICAL (BUG #17 class fix, boards/generic/config.h); this dispatch
+  // test needs CONTROL_MASK_PHYS, not CONTROL_MASK, or it silently checks
+  // the wrong bits of a physical register.
+  if (pending & LIMIT_MASK)        { LIMIT_INT_IRQHandler(); }
+  if (pending & CONTROL_MASK_PHYS) { CONTROL_INT_IRQHandler(); }
 }
 
 // UART1 - vector 27 (CONTRACTS.md #7). RBR read clears DATA_RDY, THR

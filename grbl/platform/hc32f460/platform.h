@@ -96,6 +96,15 @@ typedef HC32_PORT_TypeDef* hal_gpio_port_t;
 #define Z_DIRECTION_BIT     5
 #define DIRECTION_MASK      ((1<<X_DIRECTION_PIN)|(1<<Y_DIRECTION_PIN)|(1<<Z_DIRECTION_PIN))
 
+/* This port's pin map already fits core's uint8_t port image (constraint
+   cure, not the samd21-style logical remap - CONTRACTS.md #gpio-data /
+   #limit-bit-width-second-consumer); these asserts make sure a future
+   re-pin cannot silently regress into that truncation. Missing until this
+   audit - a guard gap, not a live bug (every bit below was already <= 7). */
+_Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
+               X_DIRECTION_BIT <= 7 && Y_DIRECTION_BIT <= 7 && Z_DIRECTION_BIT <= 7,
+               "STEP/DIRECTION logical bits must fit core's uint8_t port image (BUG #17 class, CONTRACTS.md #1)");
+
 #define STEPPERS_DISABLE_PORT     GPIOA
 #define STEPPERS_DISABLE_PORT_ID  ((hal_gpio_port_t)GPIOA)
 #define STEPPERS_DISABLE_PIN      6
@@ -111,6 +120,8 @@ typedef HC32_PORT_TypeDef* hal_gpio_port_t;
 #define Y_LIMIT_BIT         1
 #define Z_LIMIT_BIT         2
 #define LIMIT_MASK          ((1<<X_LIMIT_PIN)|(1<<Y_LIMIT_PIN)|(1<<Z_LIMIT_PIN))
+_Static_assert(X_LIMIT_BIT <= 7 && Y_LIMIT_BIT <= 7 && Z_LIMIT_BIT <= 7,
+               "LIMIT logical bits must fit core's uint8_t group read / get_limit_pin_mask() return (BUG #26 class, CONTRACTS.md #1.3)");
 
 /* GPIO_INT_ON/OFF plumbing: core passes (name_PCMSK, name_INT, name_MASK) to
    HAL_GPIO_INTERRUPT_ENABLE/DISABLE; on this platform the first argument is
@@ -130,6 +141,9 @@ typedef HC32_PORT_TypeDef* hal_gpio_port_t;
 #define CONTROL_SAFETY_DOOR_BIT   6
 #define CONTROL_MASK              ((1<<CONTROL_RESET_PIN)|(1<<CONTROL_FEED_HOLD_PIN)|(1<<CONTROL_CYCLE_START_PIN)|(1<<CONTROL_SAFETY_DOOR_PIN))
 #define CONTROL_INVERT_MASK       CONTROL_MASK
+_Static_assert(CONTROL_RESET_BIT <= 7 && CONTROL_FEED_HOLD_BIT <= 7 &&
+               CONTROL_CYCLE_START_BIT <= 7 && CONTROL_SAFETY_DOOR_BIT <= 7,
+               "CONTROL logical bits must fit core's uint8_t group read (BUG #17 class, CONTRACTS.md #limit-bit-width-second-consumer)");
 
 #define CONTROL_PCMSK             CONTROL_PORT
 #define CONTROL_INT               0
@@ -139,6 +153,8 @@ typedef HC32_PORT_TypeDef* hal_gpio_port_t;
 #define PROBE_PIN           7
 #define PROBE_BIT           7
 #define PROBE_MASK          (1<<PROBE_PIN)
+_Static_assert(PROBE_BIT <= 7,
+               "PROBE logical bit must fit core's uint8_t group read / invert-mask XOR (BUG #26 class, CONTRACTS.md #limit-bit-width-second-consumer)");
 
 /* SPINDLE PINS */
 

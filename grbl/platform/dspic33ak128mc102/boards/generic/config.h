@@ -91,6 +91,8 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 
 #define LIMIT_PORT          D
 #define LIMIT_MASK          ((1UL<<X_LIMIT_BIT)|(1UL<<Y_LIMIT_BIT)|(1UL<<Z_LIMIT_BIT))
+_Static_assert(X_LIMIT_BIT <= 7 && Y_LIMIT_BIT <= 7 && Z_LIMIT_BIT <= 7,
+               "LIMIT logical bits must fit core's uint8_t group read / get_limit_pin_mask() return (BUG #26 class, CONTRACTS.md #1.3)");
 
 // GPIO_INT_ON/OFF plumbing (limits.c:53,67): core passes
 // (name_PCMSK, name_INT, name_MASK); first argument here is the port
@@ -119,6 +121,9 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define CONTROL_PORT         A
 #define CONTROL_MASK         ((1UL<<CONTROL_RESET_BIT)|(1UL<<CONTROL_FEED_HOLD_BIT)|(1UL<<CONTROL_CYCLE_START_BIT))
 #define CONTROL_INVERT_MASK  CONTROL_MASK
+_Static_assert(CONTROL_RESET_BIT <= 7 && CONTROL_FEED_HOLD_BIT <= 7 &&
+               CONTROL_CYCLE_START_BIT <= 7 && CONTROL_SAFETY_DOOR_BIT <= 7,
+               "CONTROL logical bits must fit core's uint8_t group read (BUG #17 class, CONTRACTS.md #limit-bit-width-second-consumer)");
 
 #define CONTROL_PCMSK        GPIO_PIDX(A)
 #define CONTROL_INT          0
@@ -129,6 +134,8 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define PROBE_PIN            3
 #define PROBE_BIT            3
 #define PROBE_MASK           (1UL<<PROBE_BIT)
+_Static_assert(PROBE_BIT <= 7,
+               "PROBE logical bit must fit core's uint8_t group read / invert-mask XOR (BUG #26 class, CONTRACTS.md #limit-bit-width-second-consumer)");
 
 // UART1 (U1RX = RA4/RP5 in, U1TX = RD3/RP52 out - both via PPS, Step 4)
 

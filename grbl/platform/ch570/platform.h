@@ -52,8 +52,17 @@ typedef uint8_t hal_gpio_port_t;
 #define HAL_NVMEM_FLASH_PAGE_SIZE  FLASH_BLOCK_SIZE
 
 // GPIO INTERRUPTS (CONTRACTS.md #2)
-#define HAL_GPIO_INTERRUPT_ENABLE(port, pcie, mask)   hal_gpio_interrupt_enable((mask))
-#define HAL_GPIO_INTERRUPT_DISABLE(port, pcie, mask)  hal_gpio_interrupt_disable((mask))
+//
+// Uses `port` (core's first GPIO_INT_ON/OFF argument, name_PCMSK), NOT
+// `mask` (name_MASK) - CONTROL_MASK is core-visible LOGICAL (BUG #17 class
+// fix, boards/generic/config.h), but arming real hardware needs the
+// PHYSICAL bit pattern. This chip has one port and no PCIE-equivalent bit,
+// so name_PCMSK was an unused placeholder before this fix; it is now
+// repurposed to carry that physical mask (LIMIT_PCMSK/CONTROL_PCMSK in
+// boards/generic/config.h). Do not switch this back to `mask` - that was
+// the exact regression this comment exists to prevent.
+#define HAL_GPIO_INTERRUPT_ENABLE(port, pcie, mask)   hal_gpio_interrupt_enable((port))
+#define HAL_GPIO_INTERRUPT_DISABLE(port, pcie, mask)  hal_gpio_interrupt_disable((port))
 void hal_gpio_interrupt_enable(uint32_t mask);
 void hal_gpio_interrupt_disable(uint32_t mask);
 
