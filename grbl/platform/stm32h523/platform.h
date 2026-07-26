@@ -387,14 +387,12 @@ void hal_serial_init(uint32_t baud_rate);
 // HAL SYSTEM MACROS
 // ============================================================================
 
-// Interrupt control
-#define HAL_ENABLE_INTERRUPTS()                 __enable_irq()
-#define HAL_DISABLE_INTERRUPTS()                __disable_irq()
-
-// Critical section (save/restore, ISR-safe: CONTRACTS.md section 8.2)
-// Core consumes HAL_CRITICAL_SECTION_BEGIN/END (system.c:357-401, serial.c:153)
-#define HAL_CRITICAL_SECTION_BEGIN()            uint32_t __primask = __get_PRIMASK(); __disable_irq()
-#define HAL_CRITICAL_SECTION_END()              __set_PRIMASK(__primask)
+// Interrupt control + critical sections (CONTRACTS.md #8.2/#11) live in
+// common/cortexm/cortexm_critical.h, shared verbatim with stm32f103,
+// stm32f411 and hc32f460 - it also carries this port's sei()/cli(), which
+// is why prelude.h (not this file) is what includes it: grbl.h needs those
+// two before it reaches platform.h. See that header for the full ordering
+// argument.
 
 // Delay functions
 void hal_delay_ms(uint32_t ms);
