@@ -101,9 +101,21 @@ CFLAGS += -specs=picolibc.specs
 
 CFLAGS += $(CFLAGS_EXTRA) -I$(PLATFORM_DIR) -I$(GRBL_DIR)/platform -I$(GRBL_DIR)
 
+# LTO: RELEASE only (house style, matches samd21/stm32*/hc32f460/sg2002/
+# ch32v006). DEBUG stays plain -Og for debuggability.
+#
+# LTO-PROOFING (CONTRACTS.md gap log, this batch): same fix as ch32v006 -
+# Reset_Handler is called only from _start's raw inline asm (invisible to
+# LTO's IPA) and gets deleted by naive -flto, failing the link with
+# "undefined reference to Reset_Handler" (BUG #21's mechanism, this ISA).
+# Fixed at the source: startup.c's Reset_Handler is now
+# `__attribute__((used))`. PFIC_Vector[]/handlers were already `used`/
+# address-taken (this port never had a bare-stub PORT_TODO_* phase, see
+# the --gc-sections comment above).
 BUILD ?= DEBUG
 ifeq ($(BUILD),RELEASE)
   CFLAGS += -Os -g0
+  CFLAGS += -flto -fno-fat-lto-objects
 else
   CFLAGS += -Og -g3
   CFLAGS += -DDEBUG
@@ -119,6 +131,14 @@ LDFLAGS  = $(ARCHFLAGS) -nostartfiles -specs=picolibc.specs
 LDFLAGS += -Wl,--gc-sections
 LDFLAGS += -Wl,-Map=$(MAP_FILE)
 LDFLAGS += -T script.ld
+
+# LTO for release builds (house style, matches ch32v006/samd21/stm32*).
+# vendor/ISP572.o below is a plain (non-LTO) object - gcc links mixed
+# LTO-IR + ordinary .o inputs without issue, it just isn't itself subject
+# to whole-program IPA.
+ifeq ($(BUILD),RELEASE)
+  LDFLAGS += -flto -Os
+endif
 
 # vendor/ISP572.o - the ONE vendored binary in this project's tree
 # (Apache-2.0, openwch/ch570): a real linked flash-program/erase driver,

@@ -111,8 +111,18 @@ void SystemInit(void) {
 
 // ============================================================================
 // RESET HANDLER (C portion - reached from _start with SP already valid)
+//
+// `used` (CONTRACTS.md gap log, LTO batch - same fix as ch32v006/startup.c,
+// identical mechanism, see that file's comment for the full writeup):
+// Reset_Handler's only caller is _start's raw `jal Reset_Handler` inline
+// asm below, invisible to LTO's IPA. Without `used`, -flto's whole-program
+// analysis for an executable link removes this externally-visible-but-
+// uncalled-in-C function before codegen, and the link fails with
+// "undefined reference to Reset_Handler". BUG #21's mechanism, one ISA
+// over.
 // ============================================================================
 
+__attribute__((used))
 void Reset_Handler(void) {
   uint32_t *src, *dst;
 
