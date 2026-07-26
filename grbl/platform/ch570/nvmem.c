@@ -134,36 +134,13 @@ void eeprom_put_char(unsigned int addr, unsigned char new_value) {
   nvmem_write_range(addr, &new_value, 1);
 }
 
-void memcpy_to_nvmem_with_checksum(unsigned int destination, char *source, unsigned int size) {
-  uint8_t checksum = 0;
-
-  if (destination >= EEPROM_SIZE || size >= EEPROM_SIZE ||
-      destination + size + 1 > EEPROM_SIZE) { return; }   // drop out-of-range writes (#10.6)
-
-  for (unsigned int i = 0; i < size; i++) {
-    checksum = (checksum << 1) | (checksum >> 7);   // bitwise rotate (#10.4 - never the AVR `||`)
-    checksum += (uint8_t)source[i];
-  }
-
-  // Two calls, same as every other port's nvmem.c (data, then checksum) -
-  // each re-stages the block from flash into `block_buffer` (nvmem_write_
-  // range's own static buffer, not stack-allocated) and only actually
-  // erases/programs if something changed (wear guard, #10.3) - a
-  // checksum-only delta after an identical data write is the common case
-  // and correctly costs a second stage-and-compare, not a second erase.
-  nvmem_write_range(destination, (const uint8_t *)source, size);
-  nvmem_write_range(destination + size, &checksum, 1);
-}
-
-int memcpy_from_nvmem_with_checksum(char *destination, unsigned int source, unsigned int size) {
-  uint8_t checksum = 0;
-
-  for (unsigned int i = 0; i < size; i++) {
-    destination[i] = eeprom_get_char(source + i);
-    checksum = (checksum << 1) | (checksum >> 7);
-    checksum += (uint8_t)destination[i];
-  }
-
-  uint8_t stored_checksum = eeprom_get_char(source + size);
-  return (checksum == stored_checksum) ? 1 : 0;
-}
+// Checksum-copy wrappers core GRBL calls (memcpy_to/from_nvmem_with_
+// checksum) are shared verbatim with every other non-AVR TU-replacement
+// port. GRBL_NVMEM_HAS_WRITE_RANGE opts this port into the block-staging
+// write form (samd21, which has no nvmem_write_range, takes only the read
+// half). Included HERE, after EEPROM_SIZE/eeprom_get_char/nvmem_write_
+// range above, because it is those it operates on. That header also holds
+// the CONTRACTS.md #10.4 boundary note: this is the bitwise-`|` rotate,
+// and core grbl/nvmem.c's logical-`||` AVR form must never be "fixed".
+#define GRBL_NVMEM_HAS_WRITE_RANGE
+#include "../common/nvmem_checksum.h"
