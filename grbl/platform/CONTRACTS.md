@@ -2105,6 +2105,44 @@ source file read this session, not theory.
    the ABSENCE OF AN FPU, not the absence of integer multiply/divide
    (ch32v006's rv32ec has neither; CH570's rv32imc has M but not F, and
    the same fix applies unchanged).
+10. **The vendored `FLASH_EEPROM_CMD` blob carries 276B of dead code that
+    `-ffunction-sections`/`--gc-sections` (both already on for this port,
+    Makefile) CANNOT remove — verified empirically, not assumed** (found
+    auditing this port's `.syms` artifact for compactness). `nvmem.c`
+    only ever calls `FLASH_EEPROM_CMD` with `CMD_FLASH_ROM_ERASE`/
+    `CMD_FLASH_ROM_WRITE`, but the linked RELEASE `.elf` still contains
+    `FLASH_CMD_ROM_VERIFY` (80B), `FLASH_CMD_GET_ROM_INFO` (90B),
+    `FLASH_CMD_GET_UNIQUE_ID` (62B), `FLASH_CMD_ROM_SW_RESET` (26B),
+    `FLASH_CMD_ROM_PWR` (18B) = 276B, confirmed via
+    `riscv64-unknown-elf-nm --print-size --size-sort` on a fresh RELEASE
+    build. **`vendor/ISP572.o` DOES have one section per function**
+    (`.highcode.FLASH_CMD_ROM_VERIFY` etc., `objdump -h` — unlike a naive
+    "no function-sections" read of this gap might suggest) — the reason
+    gc-sections still can't help is deeper: `FLASH_EEPROM_CMD` itself
+    (the one symbol `nvmem.c` calls, therefore always kept) contains a
+    runtime `switch` on its `cmd` argument whose EVERY case is a static
+    `R_RISCV_CALL` relocation (`objdump -dr vendor/ISP572.o` confirms all
+    seven, including the two used and five unused sub-commands) — gc-
+    sections keeps a section if anything KEPT references it via a
+    relocation, full stop; it has no way to know at link time that this
+    port only ever passes two of the eight possible `cmd` values.
+    Removing the 276B would require either (a) hand-patching the
+    already-linked vendor object to delete the switch cases reaching the
+    five unused sub-commands, which is binary-patching a vendored blob
+    (fragile against any toolchain/vendor-source update, and the whole
+    reason this object is vendored rather than reimplemented is that its
+    register-level protocol is explicitly undocumented per the datasheet
+    — item 6 above — so hand-editing it carries the same
+    transcription-error risk that vendoring was chosen to avoid), or (b)
+    reimplementing ERASE/WRITE from scratch and dropping the vendored
+    object entirely, which reverses this port's own carefully-argued
+    vendoring decision (item 6) and would remove this project's only
+    vendored binary artifact — a policy call for the project owner, not
+    a size-optimization call for this ledger entry to make unilaterally.
+    **Verdict: leave it — the 276B is genuinely unavoidable without
+    binary-patching a vendor blob or reversing an already-deliberated
+    architecture decision, and is documented here as the accepted,
+    measured cost rather than re-litigated.**
 
 GATES this batch re-ran (not just inspected): golden AVR `make validate`
 PASSED (MD5 79af184e67b27defd27a39309ac53563, text 30640); samd21 megarm

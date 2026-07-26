@@ -1,6 +1,18 @@
 # grbl_dspic33ak128mc102.syms - `/opt/xc-dsc/bin/xc-dsc-nm --print-size --size-sort --demangle` on the committed RELEASE .elf.
 # Plain-text, diffable: when a port's binary size drifts, `git diff` on this file shows WHICH function grew/shrank,
 # not just that the binary changed. Regenerate with `python3 tools/build_artifacts.py build --platforms dspic33ak128mc102`.
+# TOOLCHAIN DEFECT WORKAROUND: `/opt/xc-dsc/bin/xc-dsc-nm --print-size` only
+# populates the size field for ~10% of this port's function
+# symbols and, combined with --size-sort, silently DROPS every
+# symbol it can't size instead of printing it with a 0/blank
+# size (verified: `/opt/xc-dsc/bin/xc-dsc-nm --print-size --demangle` with no sort
+# still omits the size field for the same symbols - this is
+# nm's sizing, not the sort). Rows below tagged 'objdump
+# addr-delta estimate' were recovered via `xc-dsc-objdump -t`/`-h`
+# (address-delta to the next function, capped at the
+# containing code section's end) instead - see platform.md
+# 'known toolchain defects' and tools/build_artifacts.py
+# gen_symbol_map()/_estimate_code_symbols().
 Could not open resource file: /opt/xc-dsc/bin/c30_device.info
 Please specify the location of a DFP with the -mdfp= option.
   For more information, please refer to https://www.microchip.com/packs
@@ -24,84 +36,237 @@ Please specify the location of a DFP with the -mdfp= option.
 00004013 00000001 V _sys_rt_exec_state
 00004021 00000001 b _tx_buffer_head
 00004020 00000001 b _tx_buffer_tail
+00800812 00000002 T L11  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
 00004ee0 00000004 V ___errno_val
 00004004 00000004 b _pl_block
 00004018 00000004 b _pwm_gradient
 00004000 00000004 b _st_prep_block
-00806470 00000004 W _system_check_safety_door_ajar
-00808818 00000006 W _spindle_stop
-00800f68 00000008 W ___udivdi3
-00800f70 00000008 W ___umoddi3
-00803e80 00000008 W _report_grbl_help
-00803e78 00000008 W _report_init_message
-0080950c 0000000a W _serial_reset_read_buffer
-008010d8 0000000c W _gc_sync_position
-00807cc4 0000000c W _limits_disable
-00800c88 0000000c W _lroundf
+007f3010 00000004 T __config_JTAGEN  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+007f3030 00000004 T __config_WDTRSTEN  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+007f3810 00000004 T __config_BKUP_JTAGEN  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+007f3830 00000004 T __config_BKUP_WDTRSTEN  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00800000 00000004 T __IVTBASE_INIT  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+0080055c 00000004 T ___tls_crt_init  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00800e98 00000004 T __crt_start_mode_normal  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00806470 00000004 T _system_check_safety_door_ajar
+00808818 00000006 T _spindle_stop
+008004f8 00000008 T L12  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00800560 00000008 T __data_init_extended  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+0080059c 00000008 T L22  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008005c4 00000008 T __user_init  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008007fc 00000008 T __DefaultInterrupt  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00800f68 00000008 T ___udivdi3
+00800f70 00000008 T ___umoddi3
+00801048 00000008 T L21  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00803e78 00000008 T _report_init_message
+00803e80 00000008 T _report_grbl_help
+0080950c 0000000a T _serial_reset_read_buffer
 00004e9c 0000000c V _sys_position
 00004e90 0000000c V _sys_probe_position
-00809b5c 0000000e W _coolant_get_state
-00800c78 0000000e W _fabsf
-00809f1c 0000000e W _probe_get_state
+008005b8 0000000c T L41  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00800c88 0000000c T _lroundf
+0080103c 0000000c T L11  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008010d8 0000000c T _gc_sync_position
+00807cc4 0000000c T _limits_disable
+00800804 0000000e T ___delay32  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00800c78 0000000e T _fabsf
+00809b5c 0000000e T _coolant_get_state
+00809f1c 0000000e T _probe_get_state
 00004ecc 00000010 d _atanhi
 00004ebc 00000010 d _atanlo
-0080a100 00000010 t _gpio_ansel
-0080a0c0 00000010 t _gpio_cncon
-0080a0e0 00000010 t _gpio_cnen0
-0080a0d0 00000010 t _gpio_cnen1
-0080a0b0 00000010 t _gpio_cnf
-0080a0f0 00000010 t _gpio_cnpu
-0080a110 00000010 t _gpio_tris
-00806360 00000010 W _plan_cycle_reinitialize
-008075bc 00000010 W _settings_store_build_info
-00802f04 00000012 W ___isr_step_reset_impl
-00805ca0 00000012 W _plan_check_full_buffer
-008069d0 00000012 W _system_flag_wco_change
-00805c28 00000014 W _plan_get_system_motion_block
+00800500 00000010 T L22  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+0080054c 00000010 T L16  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00806360 00000010 T _plan_cycle_reinitialize
+008075bc 00000010 T _settings_store_build_info
+0080a0b0 00000010 T _gpio_cnf
+0080a0c0 00000010 T _gpio_cncon
+0080a0d0 00000010 T _gpio_cnen1
+0080a0e0 00000010 T _gpio_cnen0
+0080a0f0 00000010 T _gpio_cnpu
+0080a100 00000010 T _gpio_ansel
+0080a110 00000010 T _gpio_tris
+00802f04 00000012 T ___isr_step_reset_impl
+00805ca0 00000012 T _plan_check_full_buffer
+008069d0 00000012 T _system_flag_wco_change
 00004ea8 00000014 V _sys
-00809920 00000016 W _hal_gpio_pullup_enable
-00809938 0000001a W _hal_gpio_pullup_disable
-00805bd0 0000001a W _plan_reset_buffer
+008004cc 00000014 T L21  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008005a4 00000014 T L31  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00805c28 00000014 T _plan_get_system_motion_block
+00809920 00000016 T _hal_gpio_pullup_enable
+008004e0 00000018 T CORCON_RESET  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00800510 00000018 T L13  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00800584 00000018 T L21  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00804dc8 00000018 T _protocol_auto_cycle_start  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00805b8c 00000018 T _plan_next_block_index  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00805bd0 0000001a T _plan_reset_buffer
+00809938 0000001a T _hal_gpio_pullup_disable
 00004824 0000001c b _pl
-00807600 0000001c W _write_global_settings
-0080a25c 00000024 W __delay_ms
-00803d34 00000024 W _report_util_setting_prefix
-00806370 00000024 W _system_init
-008069e4 00000026 W _system_convert_axis_steps_to_mpos
-0080a234 00000028 W __delay_us
-008048c4 00000028 W _report_echo_line_received
+00800568 0000001c T L11  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00801000 0000001c T __CODE_BASE  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00806344 0000001c T _plan_get_block_buffer_count  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00806ce4 0000001c T _printPgmString  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00807600 0000001c T _write_global_settings
+00809268 0000001c T _delay_ms  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00809540 0000001c T _serial_get_rx_buffer_count  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+0080955c 0000001c T _serial_get_tx_buffer_count  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+0080101c 00000020 T __ctor  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008056f8 00000020 T _protocol_execute_realtime  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00806cc4 00000020 T _printString  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00808820 00000020 T _spindle_set_speed  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00808cac 00000020 T _eeprom_get_char  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008004a8 00000024 T L11  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00800528 00000024 T L15  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00801050 00000024 T __dtor  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00803d10 00000024 T _st_get_realtime_rate  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00803d34 00000024 T _report_util_setting_prefix
+00805c3c 00000024 T _plan_get_current_block  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00806320 00000024 T _plan_get_block_buffer_available  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00806370 00000024 T _system_init
+00807c1c 00000024 T _get_step_pin_mask  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00807c40 00000024 T _get_direction_pin_mask  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00807c64 00000024 T _get_limit_pin_mask  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+0080a25c 00000024 T __delay_ms
+008069e4 00000026 T _system_convert_axis_steps_to_mpos
 00004bb8 00000028 b _st
-008099c8 0000002a W _hal_gpio_cn_disable
-00805ba4 0000002a W _plan_reset
-008062f4 0000002a W _plan_sync_position
-00803d8c 0000002c W _report_alarm_message
-00803074 0000002c W _stepper_init
+00800480 00000028 T __resetPRI  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00800fd8 00000028 T ___moddi3  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008048c4 00000028 T _report_echo_line_received
+00809518 00000028 T _serial_get_rx_buffer_available  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+0080a234 00000028 T __delay_us
+00805ba4 0000002a T _plan_reset
+008062f4 0000002a T _plan_sync_position
+008099c8 0000002a T _hal_gpio_cn_disable
+00803074 0000002c T _stepper_init
+00803d8c 0000002c T _report_alarm_message
+00807d48 0000002c T _LIMIT_INT_IRQHandler  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+0080858c 0000002c T _mc_dwell  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00809ef0 0000002c T _probe_configure_invert_mask  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
 00004be0 00000030 b _segment_buffer
-00807588 00000032 W _settings_store_startup_line
-008075cc 00000032 W _settings_write_coord_data
+00801074 00000030 T _memcmp  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008087e8 00000030 T _spindle_get_state  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00807588 00000032 T _settings_store_startup_line
+008075cc 00000032 T _settings_write_coord_data
+008010a4 00000034 T _gc_init  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008030a0 00000034 T _st_update_plan_block_parameters  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00803d58 00000034 T _report_status_message  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008092f0 00000034 T _hypot_f  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008098b4 00000034 T _hal_gpio_set_output  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
 00004b80 00000038 b _prep
-008047cc 0000003a W _report_startup_line
+00806a0c 00000038 T _system_convert_array_steps_to_mpos  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008098e8 00000038 T _hal_gpio_set_input  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00809eb8 00000038 T _probe_init  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008047cc 0000003a T _report_startup_line
+00805bec 0000003c T _plan_discard_current_block  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00806a44 0000003c T _system_check_travel_limits  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00807c88 0000003c T _limits_init  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008085b8 0000003c T _mc_homing_cycle  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008094d0 0000003c T _serial_read  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
 00004d60 00000040 V _gc_block
+00805c60 00000040 T _plan_get_exec_block_exit_speed_sqr  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00807778 00000040 T _settings_read_build_info  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00807810 00000040 T _read_global_settings  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00807bdc 00000040 T _settings_init  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
 00004da0 00000044 V _gc_state
-008087a0 00000046 W _spindle_init
-008099f4 0000004a W _hal_timer_stepper_init
+00806394 00000044 T _system_control_get_state  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008087a0 00000046 T _spindle_init
+00806a80 00000048 T _system_set_exec_state_flag  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00806b14 00000048 T _system_set_exec_alarm  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00806b5c 00000048 T _system_clear_exec_alarm  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00806ba4 00000048 T _system_set_exec_motion_override_flag  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00806bec 00000048 T _system_set_exec_accessory_override_flag  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00806c34 00000048 T _system_clear_exec_motion_overrides  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00806c7c 00000048 T _system_clear_exec_accessory_overrides  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00809488 00000048 T _serial_write  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00809b6c 00000048 T _coolant_stop  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008099f4 0000004a T _hal_timer_stepper_init
+00806ac8 0000004c T _system_clear_exec_state_flag  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
 00004e40 00000050 b _line
-00800628 0000005a W __CCT1Interrupt
-008005cc 0000005a W __T1Interrupt
-00800744 0000005a W __U1RXInterrupt
-008007a0 0000005a W __U1TXInterrupt
-0080a18c 0000005c V _defaults
+008093bc 00000050 T _limit_value_by_axis_maximum  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00809f2c 00000050 T _probe_state_monitor  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00804808 00000054 T _report_execute_startup_message  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00806d90 00000054 T _print_uint8_base2_ndigit  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00807724 00000054 T _settings_read_startup_line  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00809b08 00000054 T _coolant_init  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008077b8 00000058 T _settings_read_coord_data  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008081c0 00000058 T _limits_soft_check  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008005cc 0000005a T __T1Interrupt
+00800628 0000005a T __CCT1Interrupt
+00800744 0000005a T __U1RXInterrupt
+008007a0 0000005a T __U1TXInterrupt
 00004de4 0000005c V _settings
-008006e4 0000005e W __CNAInterrupt
-00800684 0000005e W __CNDInterrupt
-00809a40 00000062 W _hal_timer_pulse_reset_init
-00809aa4 00000062 W _hal_timer_spindle_pwm_init
+00805930 0000005c T _protocol_buffer_synchronize  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+0080a18c 0000005c T _defaults
+00800684 0000005e T __CNDInterrupt
+008006e4 0000005e T __CNAInterrupt
+00800f78 00000060 T ___divdi3  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00806474 00000060 T _system_execute_startup  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00809a40 00000062 T _hal_timer_pulse_reset_init
+00809aa4 00000062 T _hal_timer_spindle_pwm_init
 00004c10 00000064 b _st_block_buffer
-0080485c 00000068 W _report_build_info
-008043c8 00000068 W _report_probe_parameters
+008043c8 00000068 T _report_probe_parameters
+0080485c 00000068 T _report_build_info
 00004c74 00000069 b _tx_buffer
-0080940c 0000007a W _serial_init
+00808734 0000006c T _mc_reset  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00809284 0000006c T _delay_us  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00802f18 00000070 T _st_generate_step_dir_invert_masks  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00809954 00000074 T _hal_gpio_cn_enable  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00807cd0 00000078 T _limits_get_state  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+0080940c 0000007a T _serial_init
 00004cdd 00000081 b _rx_buffer
+00805cb4 00000088 T _plan_compute_profile_nominal_speed  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00806de4 00000088 T _print_uint32_base10  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008091e0 00000088 T _delay_sec  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00808fd4 0000008c T _memcpy_from_nvmem_with_checksum  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00809bb4 0000008c T _coolant_set_state  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00806d00 00000090 T _print_uint8_base10  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+0080a020 00000090 T _jog_execute  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008063d8 00000098 T _CONTROL_INT_IRQHandler  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00809324 00000098 T _convert_delta_vector_to_unit_vector  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00802a60 000000a8 T _st_wake_up  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00809c40 000000a8 T _coolant_sync  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00808218 000000b0 T _mc_line  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00803db8 000000c0 T _report_feedback_message  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00808840 000000c0 T _spindle_compute_pwm_value  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00800c94 000000c4 T _roundf  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00800e9c 000000cc T ___udivmoddi3  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00809de8 000000d0 T _main  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00802b08 000000dc T _st_go_idle  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00808ccc 000000e0 T _eeprom_put_char  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00802f88 000000ec T _st_reset  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00809ce8 00000100 T __dinit_tbloffset  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+0080761c 00000108 T _settings_restore  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00805d3c 00000110 T _plan_update_velocity_profile_parameters  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00806e6c 00000110 T _printInteger  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+0080979c 00000118 T _hal_clock_config  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00800d58 00000140 T _sqrtf  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008085f4 00000140 T _mc_probe_cycle  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00809060 00000180 T _read_float  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00804644 00000188 T _report_gcode_modes  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00806f7c 00000188 T _printFloat  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00808900 000001c4 T _spindle_set_state  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008073b4 000001d4 T _printFloat_RateValue  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00808ac4 000001e8 T _spindle_sync  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+0080598c 00000200 T _planner_recalculate  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00800a70 00000208 T _atanf  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00804430 00000214 T _report_ngc_parameters  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00805718 00000218 T _protocol_main_loop  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00809578 00000224 T _serial_irq_dispatch  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00808dac 00000228 T _memcpy_to_nvmem_with_checksum  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00800814 0000025c T _atan2f  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00807104 000002b0 T _printFloat_CoordValue  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008082c8 000002c4 T _mc_arc  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008053ec 0000030c T _protocol_exec_rt_suspend  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00802be4 00000320 T ___isr_step_impl  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
 00004840 00000340 b _block_buffer
+00807850 0000038c T _settings_store_global_setting  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00807d74 0000044c T _limits_go_home  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00800004 0000047c T __ivt_0  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00805e4c 000004a8 T _plan_buffer_line  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008048ec 000004dc T _report_realtime_status  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008064d4 000004fc T _system_execute_line  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00803e88 00000540 T _report_grbl_settings  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+00804de0 0000060c T _protocol_exec_rt_system  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
 0081f800 00000800 b _nvmem_reservation
 00004024 00000800 b _page_buffer
+008030d4 00000c3c T _st_prep_buffer  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)
+008010e4 0000197c T _gc_execute_line  # objdump addr-delta estimate (xc-dsc-nm --print-size drops this symbol, see platform.md)

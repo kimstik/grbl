@@ -65,6 +65,63 @@ dir; the shipped `boards/generic` is a paper pinout for the bare chip).
 - NOT in CI yet: unattended toolchain fetch in CI is a separate ledger
   item (PLAN.md).
 
+## Known toolchain defects
+
+- **`xc-dsc-nm --print-size` silently drops ~90% of function symbols**
+  (found auditing `artifacts/dspic33ak128mc102/*.syms` — it summed to
+  ~8.2KB against the 41816B RELEASE binary). Root cause, confirmed via
+  `xc-dsc-objdump -t`: xc-dsc-gcc/as only emits an ELF `.size` for a small
+  minority of functions (~50-60 of ~210 in this port; libm/vendor-object
+  functions mostly, plus a handful of core ones). For the rest the symbol
+  table entry has NO size at all — not a printed `0`, an absent field —
+  and `nm --print-size` combined with `--size-sort` doesn't list a
+  sizeless symbol with a blank/zero size, it omits the row entirely. That
+  silently dropped `main`, `protocol_main_loop`, `st_prep_buffer`,
+  `gc_execute_line`, and most of the rest of this port's code from the
+  tracked artifact, understating it by ~33KB with no visible error.
+  Fixed in `tools/build_artifacts.py` (`gen_symbol_map` /
+  `_estimate_code_symbols`): for this unit only, symbols nm can't size are
+  recovered from `xc-dsc-objdump -t` (addresses) + `-h` (code-section
+  bounds) via address-delta-to-next-function, capped at the containing
+  section's end. Recovered rows are tagged `objdump addr-delta estimate`
+  in the `.syms` file — accurate to within a few bytes (jump-table/padding
+  bytes between two functions can land on either neighbour depending on
+  scan order) but no longer silently absent. Spot-checked against known
+  quantities (see "Known repo-wide dead code on this port" below): the
+  estimator reproduces `report_echo_line_received`=40B,
+  `delay_us`=108B, `serial_get_{rx,tx}_buffer_count`=28B each,
+  `plan_get_block_buffer_count`=28B exactly.
+- **No `size` tool ships with XC-DSC** (noted above already): `xc-dsc-nm`
+  and `xc-dsc-objdump` exist, `xc-dsc-size` does not.
+- **Multi-segment Harvard `.text` layout**: `objdump -h` shows five
+  separate `.text`-named output sections plus a dozen more anonymous
+  per-translation-unit scratch sections (`/tmp/ccXXXXXX.s.scnN`) at
+  disjoint addresses, all CODE-flagged and contiguous with each other in
+  the address space. The objdump-fallback code above treats every
+  CODE-flagged section (by address range, not by literal `.text` name) as
+  one flat function-address space — restricting to sections literally
+  named `.text` silently drops most of the binary's real code (confirmed
+  empirically: name-only filtering totalled ~8KB of ~42KB actual code).
+
+## Known repo-wide dead code on this port
+
+232B of core-mandated or TU-replacement-mandated code that every
+`-ffunction-sections`/`--gc-sections` port strips but this one can't (no
+`--gc-sections` on this toolchain, see Makefile): `delay_us` (108B,
+`grbl/nuts_bolts.c`, zero callers anywhere in this repo — CORE file,
+untouchable), `report_echo_line_received` (40B, `grbl/report.c`, guarded
+off by default via `REPORT_ECHO_LINE_RECEIVED` but the function itself is
+unconditional — CORE file, untouchable), `plan_get_block_buffer_count`
+(28B, `grbl/planner.c`, zero callers — CORE file, untouchable),
+`serial_get_rx_buffer_count`/`serial_get_tx_buffer_count` (28B each,
+`serial.c` — this port's own TU-replacement file, but CONTRACTS.md §7
+requires a TU-replacement to honor the FULL `serial.h` API, which
+declares both; every other TU-replacement port (samd21, ch32v006, ch570)
+implements them too, unused, for the same reason). None of the four are
+removable without either editing an untouchable core file or breaking
+the TU-replacement API-completeness contract — this cost is accepted and
+documented, not fixed.
+
 ## Toolchain (verified recipe — PLAN.md Decision Log, EULA owner-approved)
 
 1. XC-DSC v3.30 (83 MB, SHA-256
