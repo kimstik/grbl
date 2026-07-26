@@ -3097,3 +3097,48 @@ existed. The baseline lines for this specific warning were removed from
 all three files once the fix confirmed it no longer fires (`ci/
 warn_ratchet.py`'s own convention: baseline entries are removed only
 after the warning is verified gone, never speculatively).
+
+---
+
+<a id="core-purity-under-a-second-toolchain"></a>
+## §NEW. Core-purity rule for a second toolchain (placeholder number — integrator assigns the final one; cite this slug, not a number, from elsewhere)
+
+`grbl/` (outside `grbl/platform/`) is byte-for-byte frozen — written for
+avr-gcc 7.3.0 in 2011, golden-MD5-gated, and never edited to satisfy any
+tool. A second compiler (recon: `docs/TOOLCHAIN-AXIS.md`) will emit
+diagnostics on core files a single-compiler baseline never had reason to
+record; that is the entire point of running one. When that happens:
+
+1. **NEVER edit a `grbl/` core file to silence a diagnostic, on any
+   toolchain, for any reason.** Not even a redundant-qualifier or
+   dead-code-branch fix. The byte-golden AVR invariant is the project's
+   central thesis; a "harmless cleanup" on core is not exempt from it
+   just because it was clang, not gcc, that found the spot.
+2. A diagnostic on core code is handled at exactly one of two layers:
+   (a) **the flags/prelude layer**, if a compiler flag or a preprocessor
+   define can make the diagnostic legitimately not apply (example:
+   `-D_AVR_WDT_H_` skips an unused, uncallable avr-libc header whose
+   untaken branch clang validates differently than gcc — a flags-layer
+   fact about the header, not a claim about core); or (b) **accepted
+   into that toolchain's own warn baseline**
+   (`ci/warn_baseline_<port>.<tc>.txt`) if there is no legitimate
+   flag-layer suppression and the diagnostic is judged noise, with the
+   judgement written down at the point of acceptance, not silently
+   absorbed.
+3. If a diagnostic on core code cannot be handled either way — it is a
+   genuine hard error with no flags-layer bypass, and it is not
+   noise — **that toolchain does not support that port.** Record it as a
+   `TOOLCHAINS_SUPPORTED` exclusion, not as a TODO to eventually silence.
+4. **A hard ERROR (not warning) on core code under a toolchain being
+   evaluated is a headline finding, not routine baseline noise** — report
+   it prominently the moment it's found. (Precedent this rule codifies:
+   avr-libc's `wdt.h` "value out of range for constraint" under clang was
+   found this way, handled per rule 2(a) since a flags-layer bypass
+   existed; had none existed, rule 3 would have applied and AVR would
+   already be gcc-only for this reason alone, independent of the
+   golden-MD5 argument that also applies on that port.)
+
+This is the same discipline [§10.4](#nvmem-eeprom) already applies to the
+AVR checksum `||` quirk ("Never fix the AVR `||`") — generalized here
+because a second toolchain is where the temptation to "just clean up"
+core code will recur constantly, and the answer is always the same one.
