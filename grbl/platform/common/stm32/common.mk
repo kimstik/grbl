@@ -78,6 +78,18 @@ CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)
 CFLAGS += -Wall -Wextra
 CFLAGS += -ffunction-sections -fdata-sections
 
+# Build-path independence for DEBUG's DWARF info (CONTRACTS.md
+# #build-artifacts-tracked "DEBUG .elf manifest hashes are build-path
+# dependent" - adversarial review finding): -g3 embeds this Makefile's
+# absolute cwd (DW_AT_comp_dir) into debug info, so a DEBUG .elf built from
+# an identical tree checked out at a different absolute path is a
+# different file. Verified this batch: RELEASE (-g0, no debug info) is
+# UNCHANGED by this flag (nothing to remap); DEBUG becomes fully
+# path-independent with it (0-byte diff across two differently-pathed
+# checkouts, was a 20-byte path-length-sized diff without it). The target
+# string is arbitrary - only that it is IDENTICAL across checkouts matters.
+CFLAGS += -ffile-prefix-map=$(CURDIR)=/grbl-src
+
 # FP PRECISION KNOB (CONTRACTS.md #17: "FP precision is a declared port
 # property"). Landed pattern from samd21/Makefile, rolled out here to every
 # STM32 family sharing this common.mk (f103/h523/f411) in one place - see

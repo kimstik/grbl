@@ -59,9 +59,12 @@ USAGE
       artifacts/) and compare hashes against the committed artifacts/ tree
       (RELEASE) and the recorded manifest (DEBUG). Exits 1 and prints every
       drifted/missing file if the committed artifacts are stale relative to
-      a fresh build. bin/hex/syms are always required; .elf is verified
-      ONLY if present (absence is expected between tags, not a failure -
-      see --with-elf above). This is the sixth ratchet (after golden MD5,
+      a fresh build. bin/hex/syms are always required and always hash-
+      gated, for EVERY unit including dsPIC33AK (see nondeterministic_elf
+      below - only that one unit's .elf is exempt); .elf is verified ONLY
+      if present (absence is expected between tags, not a failure - see
+      --with-elf above), and even then only for units NOT flagged
+      nondeterministic_elf. This is the sixth ratchet (after golden MD5,
       warn baseline, boot integrity, no-DP assert, docs integrity).
 
   tools/build_artifacts.py --selftest
@@ -122,25 +125,34 @@ UNITS = [
                      "TOOLCHAIN_PATH": "/opt/xc-dsc/bin",
                      "DFP_PATH": "/opt/Microchip.dsPIC33AK-MC_DFP.1.5.263"},
          optional=True, toolchain_probe="/opt/xc-dsc/bin/xc-dsc-gcc",
-         # xc-dsc-gcc's restricted/Free license tier is NOT byte-reproducible:
-         # two back-to-back `make clean && make` runs of the IDENTICAL source
-         # tree produce ELFs differing in ~15% of bytes (measured empirically
-         # while building this tool - cmp -l on two consecutive builds:
-         # 25361 of 166096 bytes differ), almost certainly a deliberate
-         # anti-tamper/watermarking behavior of the restricted tier, not a
-         # build-flag or ordering bug in this Makefile. The symbol-size map
-         # (nm --print-size --size-sort) IS stable across the same two builds
-         # (verified: diff empty) - function addresses/sizes don't move, only
-         # some padding/layout bytes do. So: elf/bin/hex are still tracked for
-         # archival/inspection, but the staleness CHECK skips their hash
-         # comparison for this unit (would always false-positive) and relies
-         # on the symbol map (still hash-verified) as the real gate.
-         nondeterministic_binary=True),
+         # xc-dsc-gcc's restricted/Free license tier's .elf is NOT byte-
+         # reproducible - but ONLY the .elf. Root cause (adversarial review,
+         # this batch): the ELF's DIFFERING bytes are embedded
+         # `/tmp/ccXXXXXX.s.scnN` compiler-tempfile SECTION NAMES (as's
+         # per-invocation random temp assembly filename, echoed into a few
+         # section-name strings) - not code, not layout. Two back-to-back
+         # `make clean && make` runs of the IDENTICAL source tree were
+         # measured (this batch) to differ in ~12-13% of the .elf's bytes
+         # (20829-22185 of ~166000 bytes, exact count wobbles run to run
+         # since it's a random tempfile name), while `cmp -l` on the SAME
+         # two builds' .bin and .hex is EMPTY - byte-identical, every time.
+         # This makes sense once you see the cause: bin/hex are produced by
+         # objcopy/bin2hex from the LINKED image's actual code/data bytes,
+         # which never touch the compiler's scratch section-name strings;
+         # only the .elf (which still carries those section headers) does.
+         # So: bin/hex are fully tracked AND fully hash-gated, identically to
+         # every other unit - only the .elf hash comparison is skipped (and
+         # only in `check`; the file itself is still copied/archived at tag
+         # time like every other port, see `nondeterministic_elf` below).
+         # The symbol-size map (nm --print-size --size-sort) is ALSO stable
+         # across the same two builds (verified: diff empty) - function
+         # addresses/sizes don't move.
+         nondeterministic_elf=True),
 ]
 
 for _u in UNITS:
     _u.setdefault("artifact_dir", _u["key"])
-    _u.setdefault("nondeterministic_binary", False)
+    _u.setdefault("nondeterministic_elf", False)
     _u.setdefault("has_debug", True)
     _u.setdefault("optional", False)
 
@@ -328,6 +340,23 @@ def select_units(platforms_arg):
     return [unit_by_key(k) for k in keys]
 
 
+def hash_gated_extensions(nondeterministic_elf):
+    """Which extensions do_build/do_check hash-record/-compare for a unit's
+    RELEASE (and, when built, DEBUG) artifacts.
+
+    ADVERSARIAL REVIEW FIX (this batch): this used to be a single
+    all-or-nothing `nondeterministic_binary` flag that dropped elf AND hex
+    AND bin from the hash gate for dsPIC33AK. Measured truth: two clean
+    rebuilds of that unit differ in .elf by ~12-13% of bytes (embedded
+    /tmp/ccXXXXXX.s.scnN compiler-tempfile SECTION NAMES - see the UNITS
+    table comment), while .bin and .hex are BYTE-IDENTICAL (`cmp -l` empty)
+    across the same two builds - objcopy/bin2hex read the linked image's
+    actual code/data bytes and never see those scratch section-name
+    strings. So only .elf may ever be exempt; hex/bin stay hash-gated for
+    EVERY unit, nondeterministic_elf or not."""
+    return ("hex", "bin") if nondeterministic_elf else ("elf", "hex", "bin")
+
+
 def release_extensions(include_elf):
     """Which RELEASE extensions `build` copies into artifacts/<port>/.
 
@@ -368,9 +397,21 @@ def do_build(units, skip_debug, include_elf=False, quiet=False):
             # record in the manifest's DEBUG section for this unit.
             paths, _log = build_avr_unit()
         else:
-            if unit["has_debug"] and not skip_debug and not unit["nondeterministic_binary"]:
+            if unit["has_debug"] and not skip_debug:
                 dpaths, _dlog = build_std_unit(unit, "DEBUG")
-                for ext in ("elf", "hex", "bin"):
+                # nondeterministic_elf units (dsPIC33AK) skip ONLY the .elf
+                # hash - hex/bin are deterministic (see UNITS table comment:
+                # the drift is embedded compiler-tempfile SECTION NAMES in
+                # the .elf only, never in objcopy/bin2hex's output) and are
+                # recorded/gated exactly like every other unit's DEBUG
+                # hex/bin.
+                debug_exts = hash_gated_extensions(unit["nondeterministic_elf"])
+                if unit["nondeterministic_elf"]:
+                    print("   (skipping DEBUG .elf hash recording for {}: "
+                          "ELF is not byte-reproducible on this toolchain, "
+                          "see UNITS table comment - hex/bin ARE still "
+                          "recorded)".format(key))
+                for ext in debug_exts:
                     digest = sha256_file(dpaths[ext])
                     # Label is namespaced by artifact_dir, NOT just the raw
                     # basename: samd21's two boards both compile to the
@@ -384,10 +425,6 @@ def do_build(units, skip_debug, include_elf=False, quiet=False):
                     debug_entries.append((
                         "build/{}/{}".format(unit["artifact_dir"], os.path.basename(dpaths[ext])),
                         digest))
-            elif unit["nondeterministic_binary"] and not skip_debug:
-                print("   (skipping DEBUG hash recording for {}: binary is "
-                      "not byte-reproducible on this toolchain, see UNITS "
-                      "table comment)".format(key))
             paths, _log = build_std_unit(unit, "RELEASE")
 
         # Copy RELEASE artifacts into the tracked artifacts/ tree. ELF is
@@ -476,9 +513,17 @@ def do_check(units, skip_debug):
         if unit["kind"] == "avr":
             paths, _log = build_avr_unit()
         else:
-            if unit["has_debug"] and not skip_debug and not unit["nondeterministic_binary"]:
+            if unit["has_debug"] and not skip_debug:
                 dpaths, _dlog = build_std_unit(unit, "DEBUG")
-                for ext in ("elf", "hex", "bin"):
+                # See do_build's matching comment: only .elf is exempt for
+                # nondeterministic_elf units - hex/bin are deterministic and
+                # stay fully hash-gated in DEBUG exactly like every other unit.
+                debug_exts = hash_gated_extensions(unit["nondeterministic_elf"])
+                if unit["nondeterministic_elf"]:
+                    print("   (skipping DEBUG .elf hash check for {}: ELF is "
+                          "not byte-reproducible on this toolchain - hex/bin "
+                          "ARE still checked)".format(key))
+                for ext in debug_exts:
                     label = "build/{}/{}".format(unit["artifact_dir"], os.path.basename(dpaths[ext]))
                     fresh = sha256_file(dpaths[ext])
                     checked += 1
@@ -491,9 +536,6 @@ def do_check(units, skip_debug):
                         problems.append("{}: DEBUG {} hash changed "
                                          "(manifest={} fresh={})".format(
                                              key, label, expected[:12], fresh[:12]))
-            elif unit["nondeterministic_binary"]:
-                print("   (skipping DEBUG hash check for {}: binary is not "
-                      "byte-reproducible on this toolchain)".format(key))
             paths, _log = build_std_unit(unit, "RELEASE")
 
         out_dir = os.path.join(ARTIFACTS_DIR, unit["artifact_dir"])
@@ -503,35 +545,40 @@ def do_check(units, skip_debug):
             nm_bin = unit["nm"]
         fresh_syms = gen_symbol_map(nm_bin, paths["elf"])
 
-        if unit["nondeterministic_binary"]:
-            # See the UNITS table comment: this toolchain's restricted/Free
-            # license tier does not produce byte-reproducible output even
-            # from an unmodified source tree, so an elf/bin/hex hash
-            # comparison would always false-positive here. elf/bin/hex are
-            # still tracked (archival/inspection value), just not gated by
-            # hash; the symbol map below IS still gated (verified stable).
-            print("   (skipping elf/hex/bin hash check for {}: toolchain "
-                  "is not byte-reproducible, see UNITS table)".format(key))
-        else:
-            for ext in ("elf", "hex", "bin"):
-                committed = os.path.join(out_dir, unit["binary"] + "." + ext)
-                if ext == "elf" and not os.path.isfile(committed):
-                    # ELF is tracked ONLY at release-tag time (owner
-                    # directive, see build --with-elf) - its absence
-                    # between tags is the expected state, not a failure.
-                    # bin/hex/syms are still required below/elsewhere.
-                    continue
-                checked += 1
-                if not os.path.isfile(committed):
-                    problems.append("{}: committed {} is MISSING".format(
-                        key, os.path.relpath(committed, REPO_ROOT)))
-                    continue
-                fresh_hash = sha256_file(paths[ext])
-                committed_hash = sha256_file(committed)
-                if fresh_hash != committed_hash:
-                    problems.append("{}: {} is STALE (committed={} fresh={})".format(
-                        key, os.path.relpath(committed, REPO_ROOT),
-                        committed_hash[:12], fresh_hash[:12]))
+        # nondeterministic_elf (dsPIC33AK only): the ELF's differing bytes
+        # are embedded compiler-tempfile SECTION NAMES (/tmp/ccXXXXXX.s.scnN,
+        # a random-per-invocation `as` scratch filename echoed into a few
+        # section-name strings), not code or layout - see the UNITS table
+        # comment for the measured evidence (bin/hex `cmp -l` empty across
+        # two clean rebuilds; only .elf differs, ~12-13% of its bytes).
+        # bin/hex are produced by objcopy/bin2hex from the linked image's
+        # actual code/data bytes, which never see those scratch strings, so
+        # they are hash-gated for this unit EXACTLY like every other unit -
+        # only the .elf comparison below is skipped.
+        exts_to_check = hash_gated_extensions(unit["nondeterministic_elf"])
+        if unit["nondeterministic_elf"]:
+            print("   (skipping RELEASE .elf hash check for {}: ELF is not "
+                  "byte-reproducible on this toolchain, see UNITS table - "
+                  "hex/bin ARE still checked)".format(key))
+        for ext in exts_to_check:
+            committed = os.path.join(out_dir, unit["binary"] + "." + ext)
+            if ext == "elf" and not os.path.isfile(committed):
+                # ELF is tracked ONLY at release-tag time (owner
+                # directive, see build --with-elf) - its absence
+                # between tags is the expected state, not a failure.
+                # bin/hex/syms are still required below/elsewhere.
+                continue
+            checked += 1
+            if not os.path.isfile(committed):
+                problems.append("{}: committed {} is MISSING".format(
+                    key, os.path.relpath(committed, REPO_ROOT)))
+                continue
+            fresh_hash = sha256_file(paths[ext])
+            committed_hash = sha256_file(committed)
+            if fresh_hash != committed_hash:
+                problems.append("{}: {} is STALE (committed={} fresh={})".format(
+                    key, os.path.relpath(committed, REPO_ROOT),
+                    committed_hash[:12], fresh_hash[:12]))
 
         committed_syms_path = os.path.join(out_dir, unit["binary"] + ".syms")
         checked += 1
@@ -635,15 +682,33 @@ def selftest():
     debug_label = lambda u, fname: "build/{}/{}".format(u["artifact_dir"], fname)
     check(debug_label(megarm, "grbl_samd21_dbg.elf") != debug_label(generic, "grbl_samd21_dbg.elf"),
           "DEBUG manifest labels for the two samd21 boards do not collide")
-    # dsPIC's restricted-license toolchain is documented non-reproducible
-    # (see UNITS table comment) - the flag must be set so do_build/do_check
-    # skip the elf/hex/bin hash gate for it (would otherwise always FAIL).
-    check(unit_by_key("dspic33ak128mc102")["nondeterministic_binary"] is True,
-          "dsPIC33AK unit is flagged nondeterministic_binary")
-    check(all(u["nondeterministic_binary"] is False for u in UNITS
+    # dsPIC's restricted-license toolchain's ELF (only the ELF - see UNITS
+    # table comment: embedded compiler-tempfile section names, not code) is
+    # documented non-reproducible - the flag must be set so do_build/do_check
+    # skip ONLY the .elf hash comparison for it (would otherwise always
+    # FAIL); bin/hex must NOT be exempted (over-broad exemption is exactly
+    # the bug an adversarial review caught and this batch fixed).
+    check(unit_by_key("dspic33ak128mc102")["nondeterministic_elf"] is True,
+          "dsPIC33AK unit is flagged nondeterministic_elf")
+    check(all(u["nondeterministic_elf"] is False for u in UNITS
                if u["key"] != "dspic33ak128mc102"),
-          "no OTHER unit is flagged nondeterministic_binary (would silently "
+          "no OTHER unit is flagged nondeterministic_elf (would silently "
           "weaken the staleness gate for a port that doesn't need it)")
+
+    # --- hash_gated_extensions: the GAP1 adversarial-review fix -------------
+    # Regression guard for the exact bug found: the old flag dropped
+    # elf/hex/bin ALL THREE from the hash gate; the fix must exempt ONLY
+    # .elf, never hex/bin (measured: those are byte-identical across two
+    # clean dsPIC rebuilds, only .elf differs - see UNITS table comment).
+    check(hash_gated_extensions(False) == ("elf", "hex", "bin"),
+          "normal unit: elf/hex/bin all hash-gated")
+    check(hash_gated_extensions(True) == ("hex", "bin"),
+          "nondeterministic_elf unit: hex/bin STILL hash-gated, only elf exempt")
+    check("elf" not in hash_gated_extensions(True),
+          "nondeterministic_elf unit: elf is the ONLY exempt extension")
+    check("hex" in hash_gated_extensions(True) and "bin" in hash_gated_extensions(True),
+          "nondeterministic_elf unit: hex AND bin remain gated (the exact "
+          "over-broad-exemption bug an adversarial review caught)")
     try:
         unit_by_key("does-not-exist")
         check(False, "unit_by_key must raise KeyError for an unknown key")
