@@ -230,3 +230,72 @@ grbl/platform/atmega328p validate` → PASSED, MD5 `79af184e67b27defd27a39309ac5
 after this claim's work (see final verification at the end of this document).
 
 ---
+
+## Claim B — "All non-F_CPU warn-baseline entries are genuine noise"
+
+**Verdict: SURVIVES.** Read all 238 lines across all 9 `ci/warn_baseline_*.txt` files directly
+(not sampled) and independently re-verified the three specific entries the brief called out as
+worth re-checking, by reading the flagged source, not by re-quoting the existing PLAN.md verdict.
+
+### f103's three "redefined" macros (`CoreDebug_DEMCR_TRCENA_Msk`/`DWT_CTRL_CYCCNTENA_Msk`/`IWDG_BASE`)
+
+`grep -rn "CoreDebug_DEMCR_TRCENA_Msk\|DWT_CTRL_CYCCNTENA_Msk\|IWDG_BASE" grbl/platform/` shows:
+
+| Macro | `common/stm32/stm32_timing.c` / `stm32_watchdog.c` | `stm32f103/regs.h` | `stm32f411/regs.h` |
+|---|---|---|---|
+| `DWT_CTRL_CYCCNTENA_Msk` | `(1UL << 0)` | `(1 << 0)` | `(1UL << 0)` |
+| `CoreDebug_DEMCR_TRCENA_Msk` | `(1UL << 24)` | `(1 << 24)` | `(1UL << 24)` |
+| `IWDG_BASE` | `0x40003000UL` | `0x40003000` | `0x40003000UL` |
+
+Numerically identical in every column; f103's copies differ from the common code only by the
+missing `UL` suffix on the literal — exactly the claimed "differs only in an `1`-vs-`1UL` literal
+suffix." This also directly explains why f411 (whose `regs.h` already spells the suffix
+identically to the common code) produces **zero** redefinition warning for the same macros — GCC
+only warns on macro redefinition when the replacement token sequence differs, and f411's is
+byte-identical text. Confirmed, not re-quoted.
+
+### f103/h523 `platform.c` unused `port` parameter in `hal_gpio_interrupt_disable`
+
+Read `grbl/platform/stm32f103/platform.c:113-156` and `grbl/platform/stm32h523/platform.c:207-284`
+directly. Both follow the identical shape: `hal_gpio_interrupt_enable(port, mask)` uses `port` to
+compute a port-to-EXTI-line routing code (f103: `AFIO->EXTICR[]`; h523: `SYSCFG->EXTICR[]`) because
+EXTI lines are a shared, multiplexed resource — only one GPIO port can route to a given EXTI line
+number at a time, and enabling an interrupt must claim that routing. `hal_gpio_interrupt_disable`
+only clears `EXTI->IMR`/`FTSR`/`RTSR` bits — registers indexed purely by pin number, with no
+per-port field at all — so it has no possible use for `port`. Verified by reading both functions
+side by side on both ports; the asymmetry is architecturally required, not an oversight.
+
+### hc32f460 `efm_erase_page`'s unused `addr`
+
+Read `grbl/platform/hc32f460/flash.c:40-62` directly. `efm_erase_page(uint32_t addr)` truly never
+references `addr` anywhere in its body — only `efm_unlock()`/`EFM->FWMC`/`__DSB()`/`EFM->FSTP`/
+`efm_wait_ready()`/`efm_lock()`, none of which take an address. Contrast with its sibling
+`efm_program_word(addr, value)`, which does an address-triggered store
+(`*(volatile uint32_t *)addr = value`) — the mechanism this MCU family's flash controllers
+typically use to also tell the erase command *which page* to target. `efm_erase_page` has no
+equivalent store, so on real silicon this may well erase the wrong page (or rely on some other
+undocumented default-address behavior) — a genuinely open, disclosed risk. This is **not** graded
+"benign" anywhere in the project's own docs: `ci/warn_baseline_hc32f460.txt` carries the warning
+with no dismissive comment, and `PLAN.md`'s own entry says outright "at minimum suspicious...
+worth a real look at hardware bring-up time — not fixed here," consistent with `platform.md`'s
+blanket "EFM register layout UNVERIFIED, hardware bring-up must confirm" disclaimer (no HC32F460
+emulator exists to test against). The project is not claiming this is safe — it is holding it open
+as a known hardware-bring-up risk. Verified the code says what the project's own docs claim it
+says; did not attempt to resolve the underlying hardware question myself (no emulator, no
+silicon — same limitation the project already states).
+
+### Remaining 6 baseline files (stm32h523, stm32f411, samd21, ch570, dspic33ak128mc102,
+atmega328p, ch32v006 — all read in full)
+
+All entries fall into one of: (a) the shared core-file class (`-Wimplicit-fallthrough=` in
+gcode.c/report.c/system.c, `motion_control.c` unused `cycle_mask`, `nvmem.c`/`eeprom.c`
+`-Wint-in-bool-context` checksum quirk — all cross-checked against Claim A's own independent
+`-fanalyzer`/warning sweep above, same lines, same text); or (b) `stm32_platform.h`'s generic
+`-Wtype-limits` macro (checked: `STM32_VALIDATE_RANGE` is deliberately generic over signed/
+unsigned call sites, harmless by construction, matches the doc's own judgement). No entry found
+in this pass that the project's docs mis-graded, beyond the three already known to have been real
+bugs before this session (#25 pin-map, #26 Z-limit overflow, F_CPU) which are explicitly logged as
+fixed and absent from the current baselines (confirmed: `grep -rn "SPINDLE_ENABLE_PIN.*redefined"
+ci/warn_baseline_*.txt` → zero hits).
+
+---
