@@ -54,7 +54,7 @@ _Static_assert(STM32H523_FLASH_PAGE_SIZE * STM32H523_FLASH_NUM_PAGES <= NVMEM_WI
 // CLOCK CONFIGURATION (250 MHz from HSE 8MHz)
 // ============================================================================
 
-void hal_clock_config(void) {
+GRBL_BOOT_INIT void hal_clock_config(void) {
   // ============================================================================
   // STM32H523 Clock Configuration: HSE 8MHz → PLL → 250MHz CPU
   // ============================================================================
@@ -304,7 +304,7 @@ void hal_gpio_interrupt_disable(GPIO_TypeDef* port, uint32_t mask) {
   }
 }
 
-void hal_gpio_init(void) {
+GRBL_BOOT_INIT void hal_gpio_init(void) {
   // Enable GPIO clocks for ports A, B, C
   RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN | RCC_AHB2ENR_GPIOBEN | RCC_AHB2ENR_GPIOCEN;
 
@@ -499,7 +499,7 @@ void hal_nvmem_flush(void) {
 // SYSTEM INITIALIZATION
 // ============================================================================
 
-void hal_system_init(void) {
+GRBL_BOOT_INIT void hal_system_init(void) {
   // Configure system clock
   hal_clock_config();
 

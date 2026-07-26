@@ -22,6 +22,27 @@ jobs:
       - name: CONTRACTS.md numbering/cross-reference check
         run: python3 tools/check_contracts_numbering.py
 
+  # Pure-logic unit tests for the post-link ratchets. No toolchain, no
+  # compiler - each script builds synthetic `nm` output covering the exact
+  # historical defect it exists to catch and asserts it is still caught.
+  # The BUG #23 leg feeds init_check.sh the verbatim pre-fix stm32f103
+  # symbol table (Reset_Handler + main, init chain LTO-deleted); a
+  # regression that made the matcher permissive would pass every port build
+  # silently, so it is checked here rather than only implicitly at link time.
+  ratchet-selftests:
+    name: ratchet selftests (no toolchain)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Boot-init reachability check selftest (BUG #23)
+        run: make -C grbl/platform init-check-selftest
+      - name: FP=SINGLE no-DP assert selftest
+        run: sh tools/assert_no_double.sh --selftest
+      - name: Warning ratchet selftest
+        run: python3 ci/warn_ratchet.py --selftest
+      - name: Artifact tooling selftest
+        run: make -C grbl/platform artifacts-selftest
+
   # One matrix row per platform/board/flavor; adding a port = one new row
   # (plus its ci/warn_baseline_<platform>.txt, which may start empty).
   # Example future row: platform sg2002 with gcc-riscv64-unknown-elf.

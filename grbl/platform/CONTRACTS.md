@@ -2315,3 +2315,217 @@ of this cadence — it is tag-time only (`build --with-elf` +
 `bin`/`hex`/`syms` cadence rather than leaving it to memory — see
 `PORTING-CHECKLIST.md` and `artifacts/README.md` for the full
 contributor-facing statement of the rule.
+
+---
+
+<a id="boot-init-unreachable"></a>
+## 26. Defined but never called + LTO = silently absent; byte-invariance is a WEAK signal (placeholder number — integrator assigns the final one; cite this slug, not "§26", from elsewhere)
+
+*(Companion to [§18](#vector-table-lto), which is the same failure class one
+level down: §18 lost a **data** table the hardware reads behind the
+compiler's back; this section loses **code** that nothing calls. Cite both
+together — the fix for one does not detect the other.)*
+
+Empirical, from BUG #23: `stm32f103`, `stm32f411`, `stm32h523` and
+`hc32f460` shipped RELEASE binaries that **configured neither their clock
+nor their GPIO**. Each of those four ports contained a complete, reviewed,
+documented bring-up chain:
+
+```c
+void hal_system_init(void) {
+  hal_clock_config();     // HSE -> PLL, flash wait states
+  ...
+  hal_gpio_init();        // port clocks, directions, pull-ups, AF mux
+  ...
+}
+```
+
+and **not one line of code anywhere called `hal_system_init()`**. Core
+`grbl/main.c` is the golden gate: it opens with
+`serial_init(); settings_init(); stepper_init(); system_init();` and has
+never called platform init — that is precisely why it is golden. No
+`Reset_Handler` called it either. So the entire subgraph was unreachable
+from any root, GCC's whole-program IPA deleted it before codegen, and
+`nm` on all four RELEASE ELFs found **zero** of
+`hal_system_init` / `hal_clock_config` / `hal_gpio_init`. The chips booted
+on their reset-default internal oscillator with GPIO in reset state.
+
+### Why nothing caught it
+
+Every existing gate is satisfied by a program that never configures the
+chip:
+
+| gate | what it proves | why it passed |
+|---|---|---|
+| the link itself | symbols resolve | unreachable code is *removed*, not *unresolved* |
+| `--gc-sections` | no dead sections shipped | it did its job — the code really was dead |
+| `size` | text/data/bss are plausible | ~29 KB of core GRBL is still there |
+| `boot_check.sh` ([§18](#vector-table-lto)) | word0/word1 are a real reset record | the vector table was fine; `Reset_Handler` just did nothing useful |
+| `assert_no_double.sh` ([§17](#fp-precision)) | no DP machinery linked | orthogonal |
+| DEBUG build | everything present | **no `-flto`** — the dead chain is retained, so a DEBUG symbol dump looks perfect |
+
+That last row is the same "DEBUG works / RELEASE bricks" signature as
+[§18](#vector-table-lto), and it is worth internalizing as a *smell* rather
+than a coincidence: **any defect whose mechanism is LTO reachability
+analysis will present as DEBUG-clean.** Checking the DEBUG build is
+checking the wrong artifact.
+
+### The lesson that generalizes: byte-invariance is a WEAK signal
+
+The tell that finally exposed this was supposed to be reassuring. Changing
+`SPINDLE_ENABLE_PIN` in `stm32f103`'s board config and rebuilding produced
+a **byte-identical** RELEASE `.bin` (md5 `b12b018e…` before and after).
+Read one way that is textbook determinism. Read correctly it is proof that
+**the only code consuming the pin map was not in the image**.
+
+> A byte-identical rebuild proves two things are the same. It does **not**
+> prove either one is *present*. When the code under test may be
+> unreachable, "nothing changed" and "nothing is there" produce the
+> identical observation, and byte-invariance cannot tell them apart.
+
+So byte-invariance is only evidence *after* presence has been established
+independently. The same reasoning applies to any invariance argument in
+this tree — the extraction rebuild gates ("verified byte-identical by this
+batch's rebuild gate", used in [§24](#wch-common-extraction-ch570) among
+others) are sound **only** for code already proven to be linked in. Invert
+the test when you need presence: perturb something the code under test
+must consume and demand the binary **changes**. Post-fix, the same pin
+flip moves the f103 image (`156056…` → `340f83…`); pre-fix it did not
+move at all. That before/after pair is the actual proof, not either half
+alone.
+
+### The fix: the call comes from the platform side
+
+`grbl/main.c` is untouchable, so the call cannot go there — and it should
+not: pre-`main()` chip bring-up is not core's business. The established
+precedent in this tree is `samd21/startup.c`, whose `Reset_Handler` has
+always called `SystemInit()` and `SysTick_Config()` itself before
+`main()`. That call is exactly why samd21 was immune to BUG #23 (and,
+separately, why it was immune to BUG #21). All four broken ports now match
+that shape:
+
+```c
+void Reset_Handler(void) {
+  SCB->VTOR = (uint32_t)vector_table;   /* §18 */
+  /* copy .data, zero .bss, __DSB() */
+  hal_system_init();                    /* BUG #23 */
+  main();
+}
+```
+
+**Ordering inside that sequence is load-bearing** and is spelled out at
+every call site rather than left to be re-derived:
+
+1. `.data`/`.bss` **first** — `hal_gpio_init` and the NVMEM cache write
+   initialized statics; running before the copy loop has them overwritten.
+2. **clock before flash wait states before anything timing-dependent** —
+   each port's `hal_clock_config` raises `FLASH->ACR` latency (or the EFM
+   equivalent) *before* selecting the faster source, then the timing layer
+   (`SysTick_Config` / `stm32_timing_init` / `hc32_systick_init`) derives
+   its dividers from the final frequency.
+3. **GPIO after clock** — the port-clock enables `hal_gpio_init` writes
+   (`RCC->APB2ENR`/`AHB1ENR`/`AHB2ENR`) are meaningless until the bus
+   clocks are settled.
+4. `main()` **last** — core's `serial_init()`/`settings_init()` need the
+   final clock and a live NVMEM cache.
+5. `VTOR` before all of it, so a fault or IRQ raised *during* bring-up
+   vectors into this image rather than a bootloader's table.
+
+### The ratchet: `common/init_check.sh` (the seventh)
+
+Post-link, per port, wired into each port's own Makefile immediately after
+the no-DP assert — the same wiring point as `boot_check.sh`, so covering a
+new port needs no CI change:
+
+```make
+INIT_SYMBOLS ?= Reset_Handler,hal_system_init,hal_clock_config,hal_gpio_init
+	@sh ../common/init_check.sh $(PREFIX)nm $@ $(INIT_SYMBOLS)
+```
+
+It fails the build if any declared symbol is not **defined** (`nm` type
+other than `U`) in the linked image. **Symbol lists are per-port and
+declarable** because ports genuinely name this differently, and the
+differences are informative rather than cosmetic:
+
+| port | declared `INIT_SYMBOLS` | why this shape |
+|---|---|---|
+| stm32f103 / f411 / h523, hc32f460 | `Reset_Handler,hal_system_init,hal_clock_config,hal_gpio_init` | the shared three-function chain (default in `common/stm32/common.mk`) |
+| samd21 | `Reset_Handler,SystemInit` | clock bring-up lives in `startup.c::SystemInit`; GPIO is configured per pin group by core's `*_init` |
+| ch32v006, ch570 | `Reset_Handler,SystemInit,SystemClock_Config` | two-level split, `SystemInit` → `SystemClock_Config` in `platform.c` |
+| dspic33ak128mc102 | `__reset,__user_init,_hal_clock_config,_main` | toolchain `crt0`, not a hand-written `startup.c`; pic30 assembler underscore prefix |
+| atmega328p | `__init,main,serial_init,settings_init,stepper_init,system_init,limits_init,spindle_init,coolant_init,probe_init` | no software clock/GPIO bring-up at all — fuses plus the original per-`*_init` DDR/PORT model |
+
+`atmega328p`'s leg hangs off `grbl/platform/atmega328p/Makefile` rather
+than the port's real link, because that link happens in the golden-MD5-gated
+root `Makefile`, which stays byte-untouched. It is also the deliberate
+**control case**: the one port with no `-flto` and therefore the one port
+where this defect could not have occurred.
+
+### Why symbol presence is a reachability proof — and the one attribute that would destroy it
+
+After a `-flto` + `--gc-sections` link, a function survives **only** if
+something reaches it. "Defined in the final ELF" therefore *means*
+"reachable". There is exactly one false negative — **inlining**: a
+single-call-site init folded into its caller is present and executed but
+has no symbol. That is not hypothetical, it is the normal case here
+(`SystemInit` has one call site on samd21/ch32v006/ch570 and was being
+inlined into `Reset_Handler`, producing an `nm` output byte-for-byte
+indistinguishable from the four broken ports). The port side removes the
+ambiguity with `GRBL_BOOT_INIT` (`grbl/platform/common/boot_init.h`):
+
+```c
+#define GRBL_BOOT_INIT __attribute__((noinline))
+```
+
+**`noinline`, and deliberately NOT `used`.** This is the subtle part, and
+it is the opposite of the [§18](#vector-table-lto) answer:
+
+- `noinline` kills the false negative without keeping anything alive. An
+  init nobody calls is still deleted — which is exactly what the check
+  needs in order to have teeth.
+- `used` forces emission **even if unreferenced**. Applied to
+  `hal_clock_config()` it would have put the symbol in every image whether
+  or not a single instruction branched to it, and this ratchet would have
+  reported all four broken ports **green**. `used` is correct for a data
+  table the hardware reads behind the compiler's back (`vector_table[]`,
+  §18); it is precisely wrong for a function whose *reachability is the
+  property under test*.
+
+Generalizing: **a guard attribute must not manufacture the evidence the
+guard inspects.** §18 needs `used` because there is no reachability to
+prove — the hardware is the consumer and it is invisible to the compiler.
+This section must refuse `used` for the same reason §18 needs it.
+
+`init_check.sh --selftest` (pure logic, no compiler — matching
+`tools/assert_no_double.sh` / `ci/warn_ratchet.py` /
+`tools/build_artifacts.py`) covers both directions, including the verbatim
+pre-fix `stm32f103` symbol table as the positive case, `U`-typed
+references rejected as not-defined, weak (`W`) definitions accepted (the
+dsPIC `user_init` shape), and a substring lookalike (`hal_gpio_init_late`)
+rejected as not satisfying `hal_gpio_init` — a `grep`-based implementation
+passes that one, which is why the matcher is field-exact.
+
+### Two adjacent defects this audit surfaced (NOT fixed here — separate work items)
+
+Recorded so they are not rediscovered as novel:
+
+1. **`ch32v006` never enables GPIOC/GPIOD port clocks.** `RCC->PB2PCENR`
+   is written in exactly two places: `hal_timer_spindle_pwm_init` (adds
+   `IOPAEN`) and `serial_init` (adds `IOPDEN`). The board's STEP/DIRECTION/
+   STEPPERS_DISABLE/COOLANT pins are all on **GPIOC**, whose clock is
+   never enabled, and LIMIT is on GPIOD (enabled only incidentally, by
+   the serial path). Same *symptom class* as BUG #23 — a port whose pins
+   are never really configured — but a different *mechanism*: the register
+   write does not exist, rather than existing and being unreachable. The
+   BUG #23 ratchet cannot see this (there is no missing symbol to detect).
+2. **`SPINDLE_ENABLE_PIN` has two conflicting live values on
+   stm32f103/f411/h523.** The port's `config.h` (which shadows core's via
+   `-I.`) and `platform.h` both define it unguarded, with *different*
+   numbers — and which one wins **depends on include order per translation
+   unit**: `platform.c` includes `platform.h` then `config.h` (so
+   `config.h` wins inside `hal_gpio_init`), while core TUs reach
+   `platform.h` last through `grbl.h` (so `platform.h` wins in
+   `spindle_control.c`). The same signal is therefore configured on one
+   pin and driven on another. Additionally `stm32h523::hal_gpio_init`
+   consumes neither macro — it hardcodes `(1 << 7)` literals, so its pin
+   map is decorative regardless.

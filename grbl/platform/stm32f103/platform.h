@@ -61,6 +61,9 @@
 // Timer primitives with contract naming (STP_*/PWM_*/ISR_*), see CONTRACTS.md
 #include "timer.h"
 
+// GRBL_BOOT_INIT - the anchor attribute on the pre-main init chain (BUG #23)
+#include "common/boot_init.h"
+
 // Define hal_gpio_port_t before hal_gpio.h includes it
 // This ensures our GPIO_TypeDef* is used instead of void*
 typedef GPIO_TypeDef* hal_gpio_port_t;
@@ -424,14 +427,23 @@ uint64_t hal_micros(void);
 // PLATFORM-SPECIFIC FUNCTIONS
 // ============================================================================
 
+// BOOT INIT CHAIN (BUG #23). Called from Reset_Handler in startup.c before
+// main() - core grbl/main.c is the golden gate and never calls platform
+// init. GRBL_BOOT_INIT (== noinline, common/boot_init.h) keeps each of
+// these three a real out-of-line symbol so common/init_check.sh can prove
+// post-link that they SURVIVED the -flto + --gc-sections link, i.e. that
+// something still reaches them. Deliberately not `used`: that would force
+// the symbols in whether called or not and blind the check. Every name
+// here must stay in sync with INIT_SYMBOLS in this port's Makefile.
+
 // Platform initialization
-void hal_system_init(void);
+GRBL_BOOT_INIT void hal_system_init(void);
 
 // Clock configuration (HSE 8MHz → PLL 72MHz)
-void hal_clock_config(void);
+GRBL_BOOT_INIT void hal_clock_config(void);
 
 // GPIO initialization (all pins for GRBL)
-void hal_gpio_init(void);
+GRBL_BOOT_INIT void hal_gpio_init(void);
 
 // NVMEM (Flash emulation) functions
 void hal_nvmem_init(void);
