@@ -1,21 +1,41 @@
 /*
-  serial.c - dsPIC33AK128MC102 serial port driver (M1-M3: hardware = PORT_TODO)
+  serial.c - dsPIC33AK128MC102 serial port driver (TU-replacement route)
   Part of Grbl
 
-  TU-replacement route (CONTRACTS.md #0/#7): this file provides the whole
-  grbl/serial.h API instead of core grbl/serial.c. Ring-buffer bookkeeping
-  (head/tail math, the BUG #12 ordering discipline) is chip-agnostic and
-  reused from _template/serial.c (itself lifted from the proven
-  samd21/serial.c); only the UART1 register touches are PORT_TODO_SERIAL_*
-  (Step 4: U1BRG divisor verified at 115200 per BUG #4, U1RXB/U1TXB data
-  regs, UxSTAT flag model - all against the RM, not by F1/AVR analogy).
+  PORTING-CHECKLIST Step 4, CONTRACTS.md #7. This is the NEWER dsPIC33A
+  UART peripheral - register names are U1CON/U1STAT/U1BRG/U1RXB/U1TXB
+  (p33AK128MC102.h), NOT the classic UxMODE/UxSTA/UxTXREG/UxRXREG shape
+  used on 16-bit dsPIC33F/E - a fresh register set was mined this session,
+  not reused from any donor port (there is no donor: this is the third
+  ISA family and the first UART for it).
 
-  REALTIME INTERCEPTION (BUG #19, the samd21 lesson): the RX path below
-  routes every byte through the SAME dispatch structure core serial.c
-  uses - Step 4's PORT_TODO_SERIAL_RX_READ fill-in must keep the
-  realtime-command switch (?/!/~/ctrl-X/overrides) MIRRORING core
-  serial.c:127-145 verbatim. The skeleton already contains it so the
-  fill-in cannot forget it.
+  Ring-buffer bookkeeping (head/tail math, the BUG #12 ordering
+  discipline) is chip-agnostic and unchanged from the M1-M3 skeleton
+  (itself lifted from the proven samd21/serial.c pattern); only the
+  UART1 register touches below are new.
+
+  REALTIME INTERCEPTION (BUG #19): the dispatch switch below is
+  UNCHANGED from the M1-M3 skeleton, which already mirrors core
+  grbl/serial.c's HAL_SERIAL_RX_ISR() (serial.c:137-188) verbatim,
+  case-for-case - re-verified line-by-line this session. Do not "clean
+  this up" - the exact case list, ordering and #ifdef guards (DEBUG,
+  ENABLE_M7) are the contract.
+
+  BAUD (BUG #4 class): U1BRG is a 20-bit register (not the classic 16-bit
+  UxBRG) with a BRGS "high speed" mode bit (/4 divisor vs /16 - assumed
+  meaning, U_CON__BRGS atdf value-group only names enabled/disabled, not
+  the divisor arithmetic itself - RM-only). BRGS=1 (/4) is used for finer
+  granularity at high Fp. Formula: BRG = round(Fp/(4*baud)) - 1. Fp
+  (UART1's peripheral clock) is ASSUMED == F_CPU (platform.h, UNVERIFIED -
+  CONTRACTS.md #16.10); at F_CPU=200MHz/115200 baud this gives BRG=433,
+  actual baud 115207.4 (+0.006%) - the arithmetic is sound, the Fp
+  assumption is the open hardware-bring-up risk.
+
+  PPS: U1RX input mux (RPINR9.U1RXR) IS fully verified - the field is
+  literally the source RPn's own pin number (standard PPS input-mux
+  convention). U1TX output mux (RPOR12.RP52R) uses an UNVERIFIED
+  function-select code (platform.h PPS_RPOR_FN_U1TX_UNVERIFIED) - no
+  value-group for any RPORx field exists in the vendored .atdf.
 */
 
 #include <stdint.h>
@@ -37,7 +57,26 @@ static volatile uint8_t tx_buffer_tail = 0;
 // CONTRACTS.md #7: UART at BAUD_RATE, 8N1, RX interrupt enabled, TX
 // interrupt disabled. Context: init.
 void serial_init(void) {
-  PORT_TODO_SERIAL_HW_INIT();
+  // PPS: RA4 = RP5 -> U1RX (VERIFIED: input-mux field is the RPn number
+  // itself). RD3 = RP52 -> U1TX (UNVERIFIED output function code).
+  RPINR9bits.U1RXR = 5;
+  RPOR12bits.RP52R = PPS_RPOR_FN_U1TX_UNVERIFIED;
+
+  U1CON = 0;                      // module off while configuring
+  U1CONbits.BRGS = 1;             // high-speed (/4) baud divisor mode
+  U1BRG = (uint32_t)((F_CPU + (2UL * BAUD_RATE)) / (4UL * BAUD_RATE) - 1UL);
+  U1CONbits.MODE = 0x0;           // 8N1, no address detect (U_CON__MODE OPTION_9, atdf-verified)
+  U1CONbits.RXEN = 1;
+  U1CONbits.TXEN = 1;
+
+  _U1RXIF = 0;
+  _U1TXIF = 0;
+  _U1RXIE = 1;                    // RX interrupt enabled
+  _U1TXIE = 0;                    // TX interrupt OFF until there is data to send (contract)
+  _U1RXIP = 3;
+  _U1TXIP = 3;
+
+  U1CONbits.ON = 1;
 }
 
 void serial_write(uint8_t data) {
@@ -47,18 +86,18 @@ void serial_write(uint8_t data) {
   // Block while full, keeping the TX-empty interrupt armed so the ISR can
   // drain the buffer and make room.
   while (next_head == tx_buffer_tail) {
-    PORT_TODO_SERIAL_TX_INT_ENABLE();
+    _U1TXIE = 1;
   }
 
   // BUG #12 discipline: bracket the data-store + head-publish pair by
   // masking the consuming interrupt (#12.1). On this single-core in-order
   // chip the bracket also covers the compiler (see platform.h __DMB note).
-  PORT_TODO_SERIAL_TX_INT_DISABLE();
+  _U1TXIE = 0;
 
   tx_buffer[tx_buffer_head] = data;
   tx_buffer_head = next_head;
 
-  PORT_TODO_SERIAL_TX_INT_ENABLE();
+  _U1TXIE = 1;
 }
 
 // Pure ring-buffer math below - no hardware access. Preserve the "read
@@ -113,10 +152,13 @@ uint8_t serial_get_tx_buffer_count(void) {
 // ============================================================================
 // REALTIME-COMMAND INTERCEPTION mirrors core serial.c:127-145 verbatim
 // (BUG #19: a port whose RX ISR buffers these bytes as data has dead
-// status polling and dead feed-hold/reset - safety-relevant).
+// status polling and dead feed-hold/reset - safety-relevant). U1STAT.RXBF
+// (RX buffer full) tells us data is present; U1RXB is the data register
+// (reading it is expected to clear RXBF, standard UART shape). U1STAT.TXBE
+// (TX buffer empty) tells us we may push another byte into U1TXB.
 void serial_irq_dispatch(void) {
-  if (PORT_TODO_SERIAL_RX_PENDING()) {
-    uint8_t data = PORT_TODO_SERIAL_RX_READ();
+  if (U1STATbits.RXBF) {
+    uint8_t data = (uint8_t)U1RXB;
 
     switch (data) {
       case CMD_RESET:         mc_reset(); break; // Call motion control reset routine.
@@ -174,18 +216,18 @@ void serial_irq_dispatch(void) {
     }
   }
 
-  if (PORT_TODO_SERIAL_TX_READY()) {
+  if (U1STATbits.TXBE && _U1TXIE) {
     uint8_t tail = tx_buffer_tail;
 
     if (tx_buffer_head != tail) {
-      PORT_TODO_SERIAL_TX_WRITE(tx_buffer[tail]);
+      U1TXB = tx_buffer[tail];
       tail++;
       if (tail == TX_RING_BUFFER) { tail = 0; }
       tx_buffer_tail = tail;
     } else {
       // Buffer empty - self-disable so the TX-empty condition doesn't
       // re-fire forever (#7, PORTING-CHECKLIST Step 4).
-      PORT_TODO_SERIAL_TX_INT_DISABLE();
+      _U1TXIE = 0;
     }
   }
 }

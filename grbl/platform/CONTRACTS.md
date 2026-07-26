@@ -864,6 +864,129 @@ disassembly. RM-only facts that could not be locally verified are marked.
    class instead of adding one. Precedent: license-check the vendor
    pack FIRST; clean-room is the fallback, not the default.
 
+Items 12-18 below were found completing Steps 3-6 (timers/serial/nvmem/
+handlers) — same discipline: the real toolchain (xc-dsc-gcc 8.3.1) and
+the real DFP (1.5.263) were used end to end this session (both were
+already installed at `/opt` from the M1-M3 session), not simulated.
+`make BUILD=DEBUG` and `make BUILD=RELEASE` both compile all objects and
+LINK with **zero `PORT_TODO_*`** (verified: `nm | grep PORT_TODO` on both
+finished ELFs returns nothing) — Steps 3-6 are COMPLETE, not a next-batch
+item anymore. Every register FACT below is cited to either the DFP
+header (`p33AK128MC102.h`) or the `.atdf` (which, unlike the header,
+sometimes has named `value-group`s for a field's legal values — a
+stronger source than the header alone, checked per-field this session).
+Two specific field classes have NO value-group in either file — grepped
+exhaustively, confirmed absent — and are RM-only tables this session had
+no access to; those are called out explicitly below rather than silently
+guessed.
+
+12. **Timer/vector allocation, IRQ-audited (the #14.11 lesson applied
+   before allocating, not after)**: DFP's own vector table doc
+   (`xc16/docs/vector_docs/PIC33AK128MC102.html`) confirms all three
+   candidates have real vectors: Timer1 = stepper (`_T1Interrupt`, IRQ
+   48), SCCP1 = pulse-reset (`_CCT1Interrupt`, IRQ 49), SCCP2 = spindle
+   PWM (output-only, no ISR needed). No "TIM3-has-no-IRQ"-class trap
+   found on this device — unlike ch32v006 (#14.11), every candidate here
+   really does have an interrupt line.
+13. **SCCP MOD/CLKSEL/TMRPS field encodings are RM-only — NOT in the
+   vendored DFP/.atdf at all** (grepped: zero value-groups for any
+   `CCPxCON1` field, unlike e.g. `NVMCON_CON__NVMOP` which does have
+   one). `timer.h`/`platform.c` use MOD=0b0001 ("16-bit Timer", CCP1) and
+   MOD=0b1001 ("Edge-Aligned PWM", CCP2) based on the well-established
+   Microchip SCCP/MCCP family convention reused across dsPIC33CK/CH —
+   **UNVERIFIED against this specific device's RM** (not vendored, no
+   dsPIC33A emulator exists either). Loudly flagged in both files;
+   hardware bring-up must confirm before trusting pulse width or PWM
+   waveform shape.
+14. **The #4 8-bit overflow-horizon contract is met WITHOUT an exact
+   hardware /8 prescale** — a genuinely new resolution shape versus every
+   prior port. SCCP1 has a real period-compare register (`CCP1PR`), so
+   `hal_timer_pulse_count_set()` computes `ticks_needed = 256 - val`
+   (1..256) and multiplies by 8 IN SOFTWARE before loading `CCP1PR`,
+   running the timer at its raw tick instead of fighting a 2-bit `TMRPS`
+   field that (per the assumed family encoding) offers /1,/4,/16,/64 —
+   none of which is /8. This is the "or rescale" branch CONTRACTS.md #4
+   already names, exercised for the first time.
+15. **PPS is two different verification classes, not one**: RPn INPUT
+   muxing (`RPINRx`) is FULLY VERIFIED — the field is literally the
+   source pin's own RPn number (unchanged PIC24/dsPIC PPS convention for
+   over a decade; used with confidence for `RPINR9.U1RXR = 5`). RPn
+   OUTPUT muxing (`RPORx`) is the opposite direction — a numeric
+   function-select code from a fixed per-device table — and that table
+   has **NO value-group anywhere in the vendored `.atdf`** (grepped every
+   `RPOR*_RP*R` bitfield; zero results). `PPS_RPOR_FN_U1TX_UNVERIFIED`/
+   `PPS_RPOR_FN_CCP2_UNVERIFIED` (platform.h) are best-effort placeholders
+   (1, 2) — structurally real code, numerically unverified. This is a
+   sharper and more specific gap than "RM not vendored": half of one
+   peripheral's config is externally checkable today, half genuinely
+   is not, and the port is honest about exactly which half.
+16. **NVM flash controller — MOSTLY atdf-verified, a real surprise
+   versus every prior "RM required" assumption in this file**: unlike
+   almost everything else in this port, the flash controller's key facts
+   ARE in the vendored `.atdf` (`dsPIC33AK128MC102.atdf` "nvm" module),
+   not RM-only: `FLASH_ERASE_PAGE_SIZE_IN_INSTRUCTIONS=1024`,
+   `FLASH_WRITE_ROW_SIZE_IN_INSTRUCTIONS=128` (erase page = 2048 bytes,
+   program row = 256 bytes — one "instruction" = 2 bytes of address
+   space, cross-checked against the `.gld`'s byte-addressed program
+   region), and `NVMCON_CON__NVMOP` names its three legal values (page
+   erase=0x3, row program=0x2, word program=0x1). **No NVMKEY /
+   unlock-sequence register exists on this device at all** (grepped the
+   full header and atdf — confirmed absent, unlike classic PIC24/
+   dsPIC33F/E's 0x55/0xAA dance) — `WREN` is the write-gate used instead.
+   `NVMCON.LOCK`'s exact write protocol is the one piece left UNVERIFIED
+   (RM-only) and deliberately untouched. Row-program (`NVMOP=0x2`,
+   source=`NVMSRCADR` pointing at a RAM buffer) is the mechanism:
+   `nvmem.c` stages a whole modified page in RAM then lets the controller
+   copy it back 256 bytes at a time — the same page-batched-RMW shape as
+   `samd21`/`stm32_nvmem.c`, just with the hardware doing the byte-copy.
+17. **No PSVPAG / classic Harvard-PSV windowing exists on this core**
+   (grepped: zero `PSVPAG` anywhere in the DFP) — flash reads are plain
+   pointer dereferences, no windowing needed; `no_auto_psv` on the ISR
+   attributes (handlers.c) is a compatibility knob for a feature this
+   specific core doesn't have. **The NVMEM window reservation is
+   link-tested, not theoretical**: `__attribute__((address(0x81F800)))`
+   on a `static const` array places it at a fixed flash address and
+   links CLEAN against the *unmodified* vendor `.gld` (verified this
+   session with a minimal standalone test before writing `nvmem.c`
+   proper: object placed exactly at the requested address, zero link
+   errors). No port-authored linker script needed to reserve the window —
+   a real gap the #16.1 note ("decide in Step 5") left open, now closed:
+   any future code-size growth that collides with the window fails the
+   link LOUDLY (`ld` error: overlapping/out-of-region), never silently
+   corrupts, matching the contract's preferred failure mode everywhere
+   else in this file.
+18. **UART1 is a NEW register model, not the classic dsPIC UxMODE/UxSTA
+   shape** — this device's UART (`U1CON`/`U1STAT`/`U1BRG`/`U1RXB`/
+   `U1TXB`) was mined fresh from the DFP this session; there was no donor
+   port to reuse (first UART for this ISA family). `U1BRG` is a 20-bit
+   register (not the classic 16-bit `UxBRG`) with a `BRGS` high-speed
+   mode bit; the divisor formula (`BRG = round(Fp/(4*baud)) - 1` under
+   BRGS=1) is standard PIC-family arithmetic, but `U_CON__BRGS`'s atdf
+   value-group only names "enabled/disabled", not the underlying divisor
+   ratio — used with high but not RM-certain confidence. `U_CON__MODE`
+   IS atdf-verified (`OPTION_9` = "Asynchronous 8-bit UART", value 0x0) —
+   this one field's exact meaning is fully checkable, unlike most others
+   in this section.
+19. **Delay primitives use a real toolchain library mechanism, not a
+   hand-rolled busy-loop**: `__delay32()`/`FCY` (from the shipped
+   `libpic30.h`, confirmed present and link-tested this session with no
+   extra Makefile flags) is XC-DSC's own calibrated cycle-count delay —
+   `_delay_us/_delay_ms` (handlers.c) narrow to it directly. `FCY`
+   (instruction-cycle frequency) is ASSUMED == `F_CPU`, consistent with a
+   32-bit DSC's typical 1-cycle-per-instruction pipeline class but
+   UNVERIFIED against this device's RM — the same open question as every
+   other Fp-vs-F_CPU assumption in this port (#10 above).
+20. **CN (Change Notification) edge-style is ASSUMED, not atdf-checkable**:
+   `CNCONx.CNSTYLE`, `CNEN0x` (rising-edge enable) and `CNEN1x`
+   (falling-edge enable) exist in the DFP header with no accompanying
+   description; the port assumes the well-established enhanced-CN model
+   (CNSTYLE=1 = edge-select style using both CNEN registers together for
+   any-change detection, matching contract #2.6) used across PIC24/
+   dsPIC33 for over a decade. Both LIMIT (port D) and CONTROL (port A)
+   each own a dedicated port and vector (`_CNDInterrupt`/`_CNAInterrupt`)
+   so the #14.12 EXTI-line-collision class does not apply here (already
+   noted at #9 above, re-confirmed while implementing).
+
 
 ## 17. FP precision is a DECLARED port property (found dieting ch32v006 —
     **RUNTIME-PROVEN on samd21 under Renode, 2026-07-25**)
@@ -1035,6 +1158,26 @@ disassembly. RM-only facts that could not be locally verified are marked.
    both flavors. `FP=DOUBLE` re-verified as a true no-op vs. pre-rollout
    HEAD on all four ports (byte-identical text to the pre-knob baseline)
    before switching each to the `FP=SINGLE` default.
+7. **dsPIC33AK128MC102 IS the intended first conscious `FP=DOUBLE`
+   consumer, landed (Steps 3-6, this session)** — §17.3's own framing
+   named this chip class ("ports with a native DP FPU ... where DP costs
+   cycles, not kilobytes") before this port existed to prove it; it now
+   does. `Makefile` sets `FP ?= DOUBLE` (this port's own default, the
+   opposite of every prior port), disarms `assert_no_double.sh`
+   (`FP=DOUBLE: declared-double port property ... no-DP assert
+   disarmed`, printed post-link both flavors), and documents WHY inline:
+   the hardware DP FPU makes 64-bit float arithmetic a native operation
+   rather than either free-because-identical (AVR) or tens-of-soft-float-
+   instructions (every M0+/rv32ec port so far). `FP=SINGLE` remains wired
+   (the knob stays bidirectional — `boards/generic/prelude.h` carries the
+   same SP libm call-site shim as samd21's, guarded by `GRBL_FP_SINGLE`)
+   but is not this port's declared default and has not been runtime-
+   exercised (no dsPIC33A emulator exists, CONTRACTS.md #16). Both
+   `FP=DOUBLE` flavors (the default) link with zero `PORT_TODO_*`: RELEASE
+   ~41.8KB code / DEBUG ~53.2KB code (both well inside the 128KB budget) —
+   see CONTRACTS.md #16 items 12-20 for the Steps 3-6 register-fact
+   writeup this build rests on.
+
 ## 18. KEEP() does not survive LTO: vector tables need a real code reference
 
 *(Section number assigned by the BUG #21 work item; §17 is FP precision, landed

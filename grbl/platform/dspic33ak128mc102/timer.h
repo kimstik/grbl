@@ -2,37 +2,36 @@
   timer.h - dsPIC33AK128MC102 stepper/pulse/PWM timer primitives
   Part of Grbl
 
-  M1-M3 batch: every macro below is either (a) a pure naming convention
-  with no chip content (ISR_STEP/ISR_STEP_RESET/ISR_STEP_DELAY) or (b) a
-  call to an undeclared PORT_TODO_<name>() function - CONTRACTS.md's
-  linker-as-checklist. Steps 3 fills these in against the RM.
+  PORTING-CHECKLIST Step 3 - real implementations, CONTRACTS.md #3/#4/#5/#6.
+  IRQ-capability audited before allocation (the #14.11 lesson - "general
+  purpose timer" does not imply an interrupt line): all three candidates
+  below have a REAL vector confirmed against the DFP's own vector table
+  doc (xc16/docs/vector_docs/PIC33AK128MC102.html):
 
-  Do NOT "temporarily" make any of (b) an empty statement to get further
-  (the STP_TMR_PRESCALER_SET cautionary tale, CONTRACTS.md top-of-file).
+    - Stepper timer:     Timer1  (T1CON/_T1Interrupt,   IRQ 48)
+    - Pulse-reset timer: SCCP1   (CCP1CON1/_CCT1Interrupt, IRQ 49)
+    - Spindle PWM:       SCCP2   (CCP2CON1, PWM output only - no ISR needed)
 
-  CANDIDATE ALLOCATION for Step 3 (from the DFP vector list - every
-  candidate HAS a real interrupt vector, the CONTRACTS.md #14.11 "does
-  the timer have an IRQ" audit passes on paper):
-    - Stepper timer:     Timer1 (T1CON/_T1Interrupt) - the only classic
-                         timer on this chip; 32-bit period register.
-    - Pulse-reset timer: SCCP1 timer half (CCP1CON1/_CCT1Interrupt).
-                         The #4 8-bit-horizon contract (pulse width =
-                         (256 - val) * 8 / F_CPU) must be reproduced by
-                         biasing the load value or capping the period -
-                         do NOT load the raw 8-bit value into the 32-bit
-                         CCP timer (the samd21 TC4 COUNT16 bug).
-    - Spindle PWM:       SCCP2 PWM mode -> RP21R (RB4) via PPS, or
-                         motor-control PWM PG1 - decide in Step 3.
-                         SPINDLE_PWM_MAX_VALUE is 255 (uint8_t duty
-                         end-to-end, #6.2); PWM period register must be
-                         sized so duty 255 = full scale.
-  CLOCK WARNING for Step 3: peripheral clock source/ratio for T1/SCCP is
-  NOT the CPU clock by default on dsPIC33A (separate CLKGENs) - verify
-  against the RM before writing any period math (platform.h F_CPU note).
+  Register field FACTS below (bit widths, which SFR pairs with which flag/
+  enable/priority bit) come from the DFP header (p33AK128MC102.h) and are
+  solid. Two specific field ENCODINGS are NOT resolvable from the vendored
+  DFP/.atdf at all (grepped exhaustively - no value-group exists for
+  either, unlike e.g. NVMCON_CON__NVMOP which does) and are RM-only
+  tables: the SCCP CCPxCON1.MOD/CLKSEL/TMRPS mode-select encoding, and the
+  RPn PPS OUTPUT function-select codes (platform.h). Both are given
+  defensible, clearly-flagged placeholder values so the port builds and
+  the STRUCTURE is real; hardware bring-up must confirm the exact values
+  from Microchip's dsPIC33A family reference manual (not vendored here -
+  no dsPIC33A emulator exists either, so this whole port's runtime
+  behavior is provisionally UNVERIFIED pending real silicon, same status
+  the M1-M3 clock sequence already carries).
 */
 
 #ifndef TIMER_DSPIC33AK128MC102_H
 #define TIMER_DSPIC33AK128MC102_H
+
+#include <xc.h>
+#include <stdint.h>
 
 // ============================================================================
 // ISR DEFINITION MACROS (CONTRACTS.md #5) - naming only, no chip content.
@@ -46,37 +45,90 @@
 #define ISR_STEP_DELAY()    void __isr_step_delay_impl(void)
 
 // ============================================================================
-// STEPPER TIMER (CONTRACTS.md #3) - semantic origin: AVR Timer1 CTC.
+// STEPPER TIMER (CONTRACTS.md #3) - Timer1, semantic origin AVR Timer1 CTC.
 // ============================================================================
-#define STP_TMR_INIT()                    PORT_TODO_STP_TMR_INIT()
-#define STP_TMR_INT_ENA()                 PORT_TODO_STP_TMR_INT_ENA()
-#define STP_TMR_INT_DIS()                 PORT_TODO_STP_TMR_INT_DIS()
-#define STP_TMR_PERIOD_SET(cycles)        PORT_TODO_STP_TMR_PERIOD_SET(cycles)
-#define STP_TMR_PRESCALER_SET(prescaler)  PORT_TODO_STP_TMR_PRESCALER_SET(prescaler)
-#define STP_TMR_PRESCALER_RESET()         PORT_TODO_STP_TMR_PRESCALER_RESET()
+// hal_timer_stepper_init() (platform.c): T1CON cleared, TMR1=0, PR1 set to
+// a safe default, TCKPS=0 (/1), counter STARTED (T1CONbits.ON=1) with the
+// compare interrupt masked (_T1IE=0) - INIT+RESET together yield the
+// contract's "running, /1, interrupt masked" state (samd21 TC3 precedent,
+// CONTRACTS.md #3 INIT row).
+void hal_timer_stepper_init(void);
+#define STP_TMR_INIT()                    hal_timer_stepper_init()
+
+#define STP_TMR_INT_ENA()                 (_T1IE = 1)
+#define STP_TMR_INT_DIS()                 (_T1IE = 0)
+
+// PR1 is a real double-buffered period register (T1CONbits.PRWIP signals
+// a pending write) - functionally the same "takes effect for the next
+// compare without stopping the counter" semantic as AVR's OCR1A
+// (CONTRACTS.md #3 PERIOD_SET row); `cycles` is uint16_t per stepper.c:86,
+// PR1 is a 32-bit SFR so this just zero-extends.
+#define STP_TMR_PERIOD_SET(cycles)        (PR1 = (cycles))
+
+// TCKPS is a real 2-bit hardware prescaler (00=/1,01=/8,10=/64 - the
+// standard PIC24/dsPIC Type-B/C timer encoding, unchanged across the
+// whole family for decades); prescaler encoding fixed by stepper.c:
+// 1={1}, 2={2}, 3={3} map to /1,/8,/64 (stepper.c:1032-1044). Real
+// implementation, not a no-op - the SAMD21 cautionary tale does not
+// recur here because this hardware genuinely has the field.
+#define STP_TMR_PRESCALER_SET(prescaler)  (T1CONbits.TCKPS = ((prescaler) == 1 ? 0u : ((prescaler) == 2 ? 1u : 2u)))
+#define STP_TMR_PRESCALER_RESET()         (T1CONbits.TCKPS = 0)
 
 // ============================================================================
-// PULSE-RESET TIMER (CONTRACTS.md #4) - semantic origin: AVR Timer0, 8-bit.
+// PULSE-RESET TIMER (CONTRACTS.md #4) - SCCP1 in 16-bit Timer mode.
 // ============================================================================
-#define STP_PULSE_RESET_INIT()            PORT_TODO_STP_PULSE_RESET_INIT()
-#define STP_PULSE_RESET_COUNT_SET(val)    PORT_TODO_STP_PULSE_RESET_COUNT_SET(val)
-#define STP_PULSE_RESET_START()           PORT_TODO_STP_PULSE_RESET_START()
-#define STP_PULSE_RESET_STOP()            PORT_TODO_STP_PULSE_RESET_STOP()
+// The 8-bit overflow-horizon contract (core hands a uint8_t two's-
+// complement negative count; the real AVR hardware free-runs an 8-bit
+// counter from that preload to its natural 256-count overflow) is
+// reproduced WITHOUT needing an 8-bit counter or an exact /8 hardware
+// prescale: SCCP1 has a real period-compare register (CCP1PR), so
+// hal_timer_pulse_count_set() below computes ticks_needed = 256 - val
+// (1..256) directly and multiplies by 8 IN SOFTWARE before loading
+// CCP1PR, running the timer at its raw /1 tick (CLKSEL/TMRPS both
+// UNVERIFIED-assumed - see file header) instead of trying to force an
+// exact F_CPU/8 hardware prescale. This is the "or rescale" branch of the
+// CONTRACTS.md #4 prescale note, not the "hardware /8" branch - cleaner
+// than fighting a 2-bit TMRPS field that (per the standard family
+// encoding assumed here) offers /1,/4,/16,/64, none of which is /8.
+void hal_timer_pulse_reset_init(void);
+#define STP_PULSE_RESET_INIT()            hal_timer_pulse_reset_init()
 
-// Only compiled when STEP_PULSE_DELAY is on (default off, config.h:425) -
-// absent entirely otherwise is the contract-correct "conditional" no-op.
+static inline void hal_timer_pulse_count_set(uint8_t val) {
+  uint16_t ticks_needed = (uint16_t)(256u - (uint16_t)val);   // 1..256
+  CCP1PR = (uint32_t)(ticks_needed * 8u - 1u);                // max 2047, fits easily
+}
+#define STP_PULSE_RESET_COUNT_SET(val)    hal_timer_pulse_count_set(val)
+
+// START: reset the counter to 0 then run - each pulse gets a fresh count
+// from zero, matching the AVR "preload then free-run to overflow" shape.
+#define STP_PULSE_RESET_START()           do { CCP1TMR = 0; CCP1CON1bits.ON = 1; } while (0)
+#define STP_PULSE_RESET_STOP()            do { CCP1CON1bits.ON = 0; } while (0)
+
 #ifdef STEP_PULSE_DELAY
-  #define STP_PULSE_RESET_COMPARE_SET(val) PORT_TODO_STP_PULSE_RESET_COMPARE_SET(val)
-  #define STP_PULSE_DELAY_INIT()           PORT_TODO_STP_PULSE_DELAY_INIT()
+  // CCP1 does have a second compare channel (CCP1RB) that COULD support
+  // the two-interrupt delayed-step scheme, but the exact dual-compare
+  // interrupt semantics needed (CONTRACTS.md #4 conditional macros) are
+  // unverified against real hardware and not implemented - fail loudly
+  // per the contract's conditional-no-op rule instead of mistiming
+  // pulses silently (STEP_PULSE_DELAY defaults off, config.h:425, so
+  // this does not affect the zero-PORT_TODO_* default build).
+  #error "STEP_PULSE_DELAY is not supported on dsPIC33AK128MC102 (CCP1RB dual-compare scheme not implemented/verified - see timer.h)"
 #endif
 
 // ============================================================================
-// SPINDLE PWM (CONTRACTS.md #6) - only compiled under VARIABLE_SPINDLE.
+// SPINDLE PWM (CONTRACTS.md #6) - SCCP2, only compiled under VARIABLE_SPINDLE.
 // ============================================================================
-#define PWM_INIT()              PORT_TODO_PWM_INIT()
-#define PWM_ENABLE()            PORT_TODO_PWM_ENABLE()
-#define PWM_DISABLE()           PORT_TODO_PWM_DISABLE()
-#define PWM_IS_ENABLED()        PORT_TODO_PWM_IS_ENABLED()
-#define PWM_SET(duty_value)     PORT_TODO_PWM_SET(duty_value)
+// SPINDLE_PWM_MAX_VALUE is 255 (boards/generic/config.h) - core plumbs
+// duty as uint8_t end-to-end (#6.2); CCP2PR is fixed at 255 for full
+// 8-bit duty resolution, never touched again after init.
+void hal_timer_spindle_pwm_init(void);
+#define PWM_INIT()              hal_timer_spindle_pwm_init()
+
+static inline void hal_timer_spindle_pwm_enable(void)  { CCP2CON2bits.OCAEN = 1; }
+static inline void hal_timer_spindle_pwm_disable(void) { CCP2CON2bits.OCAEN = 0; }
+#define PWM_ENABLE()            hal_timer_spindle_pwm_enable()
+#define PWM_DISABLE()           hal_timer_spindle_pwm_disable()
+#define PWM_IS_ENABLED()        (CCP2CON2bits.OCAEN != 0)
+#define PWM_SET(duty_value)     (CCP2RA = (duty_value))
 
 #endif // TIMER_DSPIC33AK128MC102_H

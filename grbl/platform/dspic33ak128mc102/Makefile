@@ -124,6 +124,41 @@ CFLAGS  = $(ARCHFLAGS) -std=gnu11
 CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)UL
 CFLAGS += -Wall -Wextra
 
+# ----------------------------------------------------------------------------
+# FP PRECISION KNOB (CONTRACTS.md #17) - THIS PORT'S DECLARED DEFAULT IS
+# DOUBLE, the opposite default of every prior port (samd21/ch32v006 both
+# default SINGLE, template-faithful AVR double==float semantics).
+#
+# WHY: dsPIC33AK128MC102 has a NATIVE hardware DOUBLE-PRECISION FPU
+# (platform.h PLATFORM_HAS_FPU, DFP-confirmed dual-precision FPU) - the
+# first port in this tree where 64-bit float arithmetic is a few cycles
+# in silicon rather than either (a) free because it's identical to
+# single (AVR) or (b) tens of software soft-float instructions per op
+# (every M0+/rv32ec port so far). §17.3's own framing: "FP=DOUBLE ... is
+# intended for ports with a native DP FPU (dsPIC33AK class) where DP costs
+# cycles, not kilobytes. The M0+/rv32ec class is exactly who should never
+# use it." This chip is exactly who SHOULD: DOUBLE is MORE PRECISE than
+# the AVR-template SINGLE semantics (a conscious upgrade, not a template
+# violation - §17.3 requires it be declared as a port property, which
+# this comment + CONTRACTS.md #16/#17 do), and costs nothing extra in
+# code size or cycles versus SINGLE on this hardware (the FPU does 32-bit
+# and 64-bit ops at comparable cost - unlike every soft-float port where
+# DOUBLE measurably grows .text by ~25%, CONTRACTS.md #17.2).
+#
+# FP=SINGLE remains available (the knob still works both ways - a future
+# board/use-case that wants AVR-bit-exact arc/junction math could ask for
+# it) but is NOT this port's default and has not been exercised this
+# session (no Renode/emulator exists for dsPIC33A - CONTRACTS.md #16).
+FP ?= DOUBLE
+ifeq ($(FP),SINGLE)
+  CFLAGS += -fsingle-precision-constant -DGRBL_FP_SINGLE
+  ASSERT_FP = ../../../tools/assert_no_double.sh $(NM) $(ELF_FILE)
+else ifeq ($(FP),DOUBLE)
+  ASSERT_FP = @echo "FP=DOUBLE: declared-double port property (native DP FPU, CONTRACTS.md \#17) - no-DP assert disarmed"
+else
+  $(error FP must be SINGLE or DOUBLE, got "$(FP)")
+endif
+
 # CFLAGS_EXTRA must be ABSOLUTELY FIRST to override grbl headers (cpu_map.h, etc)
 CFLAGS += $(CFLAGS_EXTRA) -I$(PLATFORM_DIR) -I$(GRBL_DIR)/platform -I$(GRBL_DIR)
 
@@ -173,11 +208,11 @@ MAP_FILE  = $(OUTPUT_DIR)/$(BINARY_NAME).map
 # TARGETS
 # ============================================================================
 
-# M1-M3 posture (same as ch32v006's M3 era): default target compiles all
-# objects; `make link` is the linker-as-checklist diagnostic - it MUST fail
-# listing exactly the PORT_TODO_* symbols for timers/serial/nvmem/handlers
-# (Steps 3-6, next batch). Flip `all` to the full ELF+hex once zero remain.
-all: $(BUILD_DIR) $(OUTPUT_DIR) $(OBJECTS)
+# Steps 3-6 complete, zero PORT_TODO_* remain (per the M1-M3-era comment's
+# own instruction: "flip `all` to the full ELF+hex once zero remain") -
+# default target now builds the full ELF+hex, matching every other
+# completed port's Makefile shape.
+all: $(BUILD_DIR) $(OUTPUT_DIR) $(HEX_FILE)
 
 objects: $(BUILD_DIR) $(OUTPUT_DIR) $(OBJECTS)
 
@@ -204,11 +239,13 @@ $(BUILD_DIR)/serial.o: serial.c | $(BUILD_DIR)
 $(BUILD_DIR)/nvmem.o: nvmem.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
-# Link diagnostic (M3: enumerates remaining PORT_TODO_* work by name).
+# Link diagnostic (enumerates any remaining PORT_TODO_* work by name -
+# empty output at zero PORT_TODO_* is the Definition-of-Done proof).
 link: $(ELF_FILE)
 
 $(ELF_FILE): objects
 	$(CC) $(LDFLAGS) -o $(ELF_FILE) $(OBJECTS) $(LIBS)
+	$(ASSERT_FP)
 
 # Create hex file (xc-dsc-bin2hex writes alongside the ELF)
 $(HEX_FILE): $(ELF_FILE)
@@ -236,12 +273,13 @@ clean-all:
 
 # Help
 help:
-	@echo "GRBL $(PLATFORM_NAME) Build System (Phase 6 rolling #2 - M1-M3)"
+	@echo "GRBL $(PLATFORM_NAME) Build System (Phase 6 rolling #2 - Steps 3-6 complete)"
 	@echo ""
 	@echo "Usage:"
-	@echo "  make               - Compile all objects (DEBUG, default)"
-	@echo "  make BUILD=RELEASE - Compile all objects, optimized"
-	@echo "  make link          - Linker-as-checklist: lists PORT_TODO_* remaining"
+	@echo "  make               - Build full ELF+hex (DEBUG, default)"
+	@echo "  make BUILD=RELEASE - Build full ELF+hex, optimized"
+	@echo "  make FP=SINGLE     - Build with AVR-template single-precision FP (default: DOUBLE)"
+	@echo "  make link          - Linker-as-checklist: zero PORT_TODO_* expected"
 	@echo "  make compdb        - Generate compile_commands.json for clangd/LSP"
 	@echo "  make clean         - Clean current build"
 	@echo ""

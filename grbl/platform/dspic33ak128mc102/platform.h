@@ -4,15 +4,26 @@
 
   THE THIRD ISA FAMILY: dsPIC33A 32-bit DSC core (Microchip) - neither ARM
   nor RISC-V. 200 MHz, dual-precision hardware FPU, hardware multiply/
-  divide. Phase 6 rolling port #2, M1-M3 batch: identification, clock,
-  GPIO, interrupt-global-control and critical sections are REAL; timers/
-  serial/nvmem/CN-interrupt arming are PORT_TODO_* (Steps 3-6, next batch).
+  divide. Phase 6 rolling port #2: M1-M3 (identification, clock, GPIO,
+  interrupt-global-control, critical sections) plus Steps 3-6 (timers,
+  serial, NVMEM, GPIO-interrupt arming, handlers) are now ALL real -
+  zero PORT_TODO_* remain at link (see Makefile `make link` / CONTRACTS.md
+  #16 new items for the Step 3-6 register facts and what is still
+  UNVERIFIED pending real hardware - no dsPIC33A emulator exists).
 
   Chip facts in this file come from the Apache-2.0 DFP
   (Microchip.dsPIC33AK-MC_DFP 1.5.263: p33AK128MC102.h SFR set,
-  p33AK128MC102.gld memory map) and from toolchain-disassembly evidence
-  gathered this session; anything not verifiable from those is marked
-  UNVERIFIED loudly.
+  p33AK128MC102.gld memory map, dsPIC33AK128MC102.atdf value-groups) and
+  from toolchain-disassembly/link evidence gathered this session;
+  anything not verifiable from those is marked UNVERIFIED loudly. Two
+  specific gaps the DFP does NOT resolve (grepped exhaustively, see
+  CONTRACTS.md #16 for the full writeup): the SCCP MOD/CLKSEL/TMRPS field
+  encodings (no value-group in the .atdf) and the RPn PPS OUTPUT
+  function-select codes (ditto) - both are RM-only tables. This file picks
+  defensible, clearly-flagged placeholder values for those so the port
+  builds and links against real hardware behavior *shapes*; hardware
+  bring-up must confirm/correct them from the datasheet before trusting
+  UART TX or spindle PWM output electrically.
 */
 
 #ifndef PLATFORM_DSPIC33AK128MC102_H
@@ -21,6 +32,23 @@
 #include <xc.h>
 #include <stdint.h>
 #include "timer.h"
+
+// ============================================================================
+// PPS OUTPUT FUNCTION-SELECT CODES - UNVERIFIED (CONTRACTS.md #16 new item)
+// ============================================================================
+// RPn INPUT muxing (RPINRx) is fully verified: the field IS the target
+// RPn's own pin number (standard PPS input-mux convention, unchanged for
+// decades of PIC24/dsPIC33). RPn OUTPUT muxing (RPORx) is the opposite
+// direction - the field holds a small numeric FUNCTION code from a fixed
+// per-device table (e.g. "this code = route U1TX here") - and that table
+// is NOT present anywhere in the vendored DFP/.atdf (grepped: zero
+// `RPOR*_RP*R` value-groups exist, unlike e.g. NVMCON_CON__NVMOP which
+// does have one). These two placeholders are best-effort, clearly
+// NON-authoritative, and MUST be verified against the datasheet's
+// Peripheral Pin Select Output table before hardware bring-up trusts the
+// UART TX line or the spindle PWM pin.
+#define PPS_RPOR_FN_U1TX_UNVERIFIED   1
+#define PPS_RPOR_FN_CCP2_UNVERIFIED   2
 
 // ============================================================================
 // PLATFORM IDENTIFICATION
@@ -51,12 +79,17 @@
 // F_CPU feeds TICKS_PER_MICROSECOND (nuts_bolts.h) and all stepper timing
 // math (PORTING-CHECKLIST Step 1). Clock path: FRC 8 MHz -> PLL1
 // (FBDIV 200 / PRE 1 / POSTDIV1 4 / POSTDIV2 2 = 200 MHz) -> CLKGEN1
-// NOSC=5 (see platform.c hal_clock_config). UNVERIFIED ON SILICON - and
-// NOTE for Step 3: on dsPIC33A the CPU clock (CLKGEN1) and the peripheral
-// clock generators are SEPARATE clock generators; which CLKGEN feeds
-// Timer1/SCCP/UART1 and at what ratio is NOT yet verified - the stepper-
-// timer tick MUST be re-derived against the RM before Step 3 encodes any
-// period math (the "F_CPU lie" class, CONTRACTS.md #14.9).
+// NOSC=5 (see platform.c hal_clock_config). UNVERIFIED ON SILICON.
+//
+// Steps 3-6 UPDATE: the CLKGEN1 (CPU) vs peripheral-clock-generator split
+// noted below is STILL UNVERIFIED (no RM vendored) - Timer1/SCCP1/SCCP2/
+// UART1 period and baud math in timer.h/serial.c/platform.c all ASSUME
+// their peripheral clock (Fp) equals F_CPU (CLKGEN1 output). This is the
+// single biggest hardware-bring-up risk item in this port (CONTRACTS.md
+// #16.10, #16 new items) - if Fp turns out to be a divided-down generator
+// instead, every stepper/pulse/PWM/baud constant below needs rescaling,
+// but the STRUCTURE (double-buffered period registers, row-programmed
+// NVM, edge-style CN) does not change.
 #ifndef F_CPU
   #error "F_CPU not defined - build via this platform's Makefile (sets -DF_CPU=$(CLOCK)UL)"
 #endif
@@ -66,10 +99,23 @@ _Static_assert(F_CPU > 0, "F_CPU must be a real, verified clock frequency in Hz"
 #define FLASH_SIZE        131072      // 128 KB (DFP .gld: reset+program = 0x800000..0x820000)
 #define HAL_EEPROM_SIZE   0           // no hardware EEPROM
 
-// NVMEM flash-emulation window (Step 5, next batch): dsPIC33A program
-// flash erase granularity (page size) and the NVMCON/NVMKEY command
-// sequence are NOT yet mined from the RM - do not size the window until
-// they are (the stm32h523 cache-overflow lesson, CONTRACTS.md #15.4).
+// NVMEM flash-emulation window (Step 5, real implementation - nvmem.c).
+// Program-flash erase granularity IS in the vendored .atdf (unlike the
+// RM-only facts above): FLASH_ERASE_PAGE_SIZE_IN_INSTRUCTIONS=1024 and
+// FLASH_WRITE_ROW_SIZE_IN_INSTRUCTIONS=128 (dsPIC33AK128MC102.atdf, "nvm"
+// module params) - on this ISA one "instruction" = 2 bytes of address
+// space (classic dsPIC/PIC24 addressing; cross-checked against the .gld's
+// byte-addressed 0x1F000-byte program region), so erase page = 2048
+// bytes, program row = 256 bytes. The last erase page of program flash
+// (0x81F800-0x820000) is reserved for NVMEM via a fixed-address object
+// (nvmem.c) rather than editing the vendored .gld (link-tested this
+// session: `__attribute__((address(0x81F800)))` places a static object
+// there and links clean against the unmodified DFP script - ld would
+// error loudly on any future collision with code growth, never silently
+// corrupt).
+#define HAL_NVMEM_FLASH_PAGE_SIZE   2048u   // erase granularity (atdf-derived, see nvmem.c)
+#define HAL_NVMEM_FLASH_ROW_SIZE    256u    // row-program granularity (atdf-derived)
+#define HAL_NVMEM_FLASH_START       0x81F800UL   // last page of program flash (0x800004+0x1FFFC region)
 
 // ============================================================================
 // TYPE DEFINITIONS (must be before hal_gpio.h include)
@@ -84,17 +130,25 @@ typedef uint32_t hal_gpio_port_t;
 #define HAL_GPIO_PORT_T_DEFINED
 
 // ============================================================================
-// GPIO INTERRUPTS (CONTRACTS.md #2) - PORT_TODO (Step 6, next batch)
+// GPIO INTERRUPTS (CONTRACTS.md #2) - Step 6, real implementation.
 // ============================================================================
-// Target model (researched, not yet implemented): dsPIC33AK Change
-// Notification, per-port - CNEN0x arms per-pin, CNCONx.ON+CNIE gate the
-// port, vectors _CNAInterrupt (CONTROL) / _CNDInterrupt (LIMIT) are
-// per-port so no shared-vector dispatch is needed (#2.5). Both macros are
-// called REPEATEDLY at runtime (homing/settings writes - #2.1): arm/disarm
-// via CNEN0x per-group mask, cheap and idempotent.
+// dsPIC33AK Change Notification, per-port: CNEN0x/CNEN1x arm per-pin
+// (edge-style, both registers together = any-change trigger, #2.6),
+// CNCONx.ON+CNSTYLE gate the port, vectors _CNAInterrupt (CONTROL) /
+// _CNDInterrupt (LIMIT) are per-port so no shared-vector dispatch is
+// needed (#2.5, boards/generic/config.h). Both macros are called
+// REPEATEDLY at runtime (homing/settings writes - #2.1): hal_gpio_cn_*
+// below only OR/AND per-pin enable bits - cheap and idempotent, matches
+// contract. Implementation lives in platform.c (needs the CN register
+// tables); port_idx comes from GPIO_PIDX() via board config (LIMIT_PCMSK/
+// CONTROL_PCMSK), the middle "pcie" arg is unused on this platform (AVR
+// PCIE-bit legacy parameter - stm32f103/ch32v006 precedent).
 
-#define HAL_GPIO_INTERRUPT_ENABLE(port_idx, pcie, mask)   PORT_TODO_GPIO_INT_ON(port_idx, pcie, mask)
-#define HAL_GPIO_INTERRUPT_DISABLE(port_idx, pcie, mask)  PORT_TODO_GPIO_INT_OFF(port_idx, pcie, mask)
+void hal_gpio_cn_enable(uint32_t port_idx, uint32_t mask);
+void hal_gpio_cn_disable(uint32_t port_idx, uint32_t mask);
+
+#define HAL_GPIO_INTERRUPT_ENABLE(port_idx, pcie, mask)   hal_gpio_cn_enable(port_idx, mask)
+#define HAL_GPIO_INTERRUPT_DISABLE(port_idx, pcie, mask)  hal_gpio_cn_disable(port_idx, mask)
 
 // HAL_GPIO_IRQ_HANDLER is deliberately NOT defined here - hal_gpio.h is
 // its single owner (CONTRACTS.md #2.2); a platform-local redefinition
