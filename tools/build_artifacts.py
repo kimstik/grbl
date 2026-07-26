@@ -33,14 +33,21 @@ for, not a defect to optimize away.
 USAGE
   tools/build_artifacts.py build [--platforms p1,p2,...] [--skip-debug]
       Rebuild every port (DEBUG then RELEASE by default), copy RELEASE
-      bin/hex + a generated symbol-size map into artifacts/<port>/, and
-      (re)write artifacts/MANIFEST.sha256 covering every artifact of every
-      port AND flavor (DEBUG hashes are recorded even though DEBUG binaries
-      are not committed - see the manifest's own header). Does NOT copy
-      .elf ("Эльф на тегах" owner directive - ELF is tracked ONLY at
-      release-tag time, see --with-elf below); any stale .elf left over
-      in artifacts/<port>/ from a prior --with-elf run is removed so a
-      plain refresh can't leave a mismatched ELF sitting in the tree.
+      bin/hex + a generated symbol-size map AND a full objdump disassembly
+      dump (<binary>.elf.dump - see gen_elf_dump()/elf_dump_header() below)
+      into artifacts/<port>/, and (re)write artifacts/MANIFEST.sha256
+      covering every artifact of every port AND flavor (DEBUG hashes are
+      recorded even though DEBUG binaries are not committed - see the
+      manifest's own header; .elf.dump is NOT in the manifest at all - see
+      below). Does NOT copy .elf ("Эльф на тегах" owner directive - ELF is
+      tracked ONLY at release-tag time, see --with-elf below); any stale
+      .elf left over in artifacts/<port>/ from a prior --with-elf run is
+      removed so a plain refresh can't leave a mismatched ELF sitting in
+      the tree. .elf.dump follows a DIFFERENT lifecycle than .elf despite
+      the name - it's tracked continuously (every refresh, like bin/hex/
+      syms), not tag-time-only, because its whole purpose is a readable
+      diff of what changed BETWEEN builds; a tag-gated dump would only ever
+      be diffable release-to-release. See artifacts/README.md.
 
   tools/build_artifacts.py build --with-elf [--platforms p1,p2,...] [--skip-debug]
       Same as plain `build`, but ALSO copies RELEASE .elf into
@@ -64,8 +71,14 @@ USAGE
       below - only that one unit's .elf is exempt); .elf is verified ONLY
       if present (absence is expected between tags, not a failure - see
       --with-elf above), and even then only for units NOT flagged
-      nondeterministic_elf. This is the sixth ratchet (after golden MD5,
-      warn baseline, boot integrity, no-DP assert, docs integrity).
+      nondeterministic_elf. .elf.dump is checked for PRESENCE only, never
+      hash-compared - objdump prints its own invocation path as line 1 of
+      every dump it produces, so a fresh rebuild's dump text differs from
+      the committed one across any two different absolute checkout paths
+      even when the underlying .elf is byte-identical (measured this
+      batch); see elf_dump_header()'s "NOT HASH-GATED" paragraph. This is
+      the sixth ratchet (after golden MD5, warn baseline, boot integrity,
+      no-DP assert, docs integrity).
 
   tools/build_artifacts.py --selftest
       Pure-logic unit tests (manifest line parsing/formatting, hash
@@ -426,6 +439,134 @@ def gen_symbol_map(nm_bin, elf_path, objdump_bin=None):
     return "\n".join(line for _size, line in merged) + "\n"
 
 
+# ---------------------------------------------------------------------------
+# .elf.dump - human-readable disassembly companion, tracked CONTINUOUSLY
+# (every refresh, like .syms) even though the .elf it's derived from is
+# tag-time-only ("Эльф на тегах"). Rationale, argued from what the owner
+# wants this file FOR (a readable diff of what changed between BUILDS, not
+# just between release tags): a tag-time-only dump would only ever be
+# diffable release-to-release - the exact "now vs now" gap .bin/.hex/.syms
+# were already built to close for every OTHER artifact class. Generating it
+# from the freshly-built RELEASE .elf that already sits in the build/
+# scratch dir (never persisted itself between tags) costs nothing extra to
+# produce and needs no committed .elf to exist alongside it, exactly like
+# .syms today. See artifacts/README.md for the full argument and the
+# NOT-hash-gated rationale below.
+# ---------------------------------------------------------------------------
+
+ELF_DUMP_FLAGS = ["-d", "-S", "-h", "-t", "--no-show-raw-insn"]
+
+
+def objdump_bin_for_unit(unit):
+    """Which objdump binary produces THIS unit's .elf.dump. Independent of
+    the dsPIC-only `objdump` field's OTHER job (the nm --print-size fallback
+    inside gen_symbol_map) - reused here because it already resolves to the
+    correct xc-dsc-objdump path for that one unit, but every unit (not just
+    dsPIC) gets a dump, so the other three toolchains are resolved here."""
+    if unit["kind"] == "avr":
+        return "avr-objdump"
+    if unit["objdump"]:
+        return unit["objdump"]
+    if "riscv64" in unit["nm"]:
+        return "riscv64-unknown-elf-objdump"
+    return "arm-none-eabi-objdump"
+
+
+def elf_dump_extra_args(unit):
+    """Extra objdump arguments needed ONLY to disassemble this unit's ELF,
+    beyond the flags every unit shares (ELF_DUMP_FLAGS). Measured this
+    batch: xc-dsc-objdump's `-d` refuses to disassemble AT ALL without
+    `-mdfp=<DFP>/xc16` ("can't disassemble for architecture UNKNOWN", exit
+    255) - `-h`/`-t` alone tolerate its absence (print a resource-file
+    warning to stderr, fall back to a generic elf32-little bfd name, still
+    exit 0), but since ELF_DUMP_FLAGS always includes -d, dsPIC always needs
+    this. No other unit's objdump needs anything beyond ELF_DUMP_FLAGS."""
+    dfp = unit.get("extra_args", {}).get("DFP_PATH")
+    if dfp:
+        return ["-mdfp={}".format(os.path.join(dfp, "xc16"))]
+    return []
+
+
+def gen_elf_dump(objdump_bin, elf_path, extra_args):
+    if not os.path.isabs(objdump_bin) and shutil.which(objdump_bin) is None:
+        raise BuildError("objdump binary not found: {}".format(objdump_bin))
+    cmd = [objdump_bin] + list(extra_args) + ELF_DUMP_FLAGS + [elf_path]
+    rc, out = run(cmd)
+    if rc != 0:
+        raise BuildError("{} failed on {}:\n{}".format(objdump_bin, elf_path, out))
+    return out
+
+
+def elf_dump_header(unit, objdump_bin):
+    objdump_name = objdump_bin if os.path.isabs(objdump_bin) else os.path.basename(objdump_bin)
+    header = (
+        "# {binary}.elf.dump - `{od} {flags} <elf>` on the committed RELEASE\n"
+        "# .elf. Full disassembly + section headers + symbol table, plain\n"
+        "# text: when a size ratchet fires, `git diff` on THIS file shows the\n"
+        "# actual instruction-level change behind a byte-count drift, one\n"
+        "# level deeper than `.syms` (see artifacts/README.md).\n"
+        "#\n"
+        "# Flags, each picked for diff readability over completeness:\n"
+        "#   -d  disassemble CODE sections only - not -D/--disassemble-all,\n"
+        "#       which also decodes .data/.rodata/.debug bytes as bogus\n"
+        "#       instructions and would drown the real disassembly in noise\n"
+        "#   -S  intermix source where DWARF line info exists. RELEASE is\n"
+        "#       -g0 on every port (see each Makefile), so this is a verified\n"
+        "#       byte-for-byte no-op today (checked: identical output\n"
+        "#       with/without -S on a RELEASE build) - kept at zero cost so a\n"
+        "#       future -g-enabled RELEASE flavor gets source interleave for\n"
+        "#       free, without anyone remembering to add the flag then\n"
+        "#   -h  section headers (sizes/addresses/flags)\n"
+        "#   -t  full symbol table\n"
+        "#   --no-show-raw-insn  drop the raw hex encoding column (measured\n"
+        "#       ~24% smaller on stm32f103 RELEASE: 455508 -> 345950 bytes)\n"
+        "#       so the diff reads as instructions, not encoded bytes\n"
+        "#   (deliberately NOT -r: relocation entries are empty for a final\n"
+        "#    linked executable - verified empty on this build - so the flag\n"
+        "#    would only add a header for zero content; NOT --no-addresses:\n"
+        "#    unsupported by avr-objdump 2.26 and xc-dsc-objdump 2.32, so\n"
+        "#    using it would break two of the four toolchains this covers)\n"
+        "# Regenerate: `python3 tools/build_artifacts.py build --platforms {key}`.\n"
+        "#\n"
+        "# NOT HASH-GATED (`tools/build_artifacts.py check` verifies this\n"
+        "# file is PRESENT but does not compare its content - see do_check()\n"
+        "# and artifacts/README.md \"elf.dump is not hash-gated\"): objdump\n"
+        "# prints the exact path it was invoked with as the FIRST line of its\n"
+        "# own output, on every toolchain, regardless of any compiler flag -\n"
+        "# so this file is only byte-identical to a fresh rebuild when\n"
+        "# regenerated from the IDENTICAL absolute checkout path. Verified\n"
+        "# this batch: two RELEASE rebuilds of stm32f103 from different\n"
+        "# paths produced a BYTE-IDENTICAL .elf (cmp: no difference) but a\n"
+        "# 1-line-different .elf.dump (only the echoed path differed). This\n"
+        "# project's actual workflow (a fresh worktree per task) hits that\n"
+        "# path difference on effectively every `check` run, so hash-gating\n"
+        "# this file would false-positive constantly for zero real drift -\n"
+        "# the same CLASS of problem `-ffile-prefix-map` (see Makefiles)\n"
+        "# fixes for DEBUG .elf hashes, just not fixable the same way here\n"
+        "# since it's objdump's own invocation line, not an embedded DWARF\n"
+        "# attribute the compiler controls.\n"
+    ).format(binary=unit["binary"], od=objdump_name,
+             flags=" ".join(ELF_DUMP_FLAGS), key=unit["key"])
+    if unit["key"] == "dspic33ak128mc102":
+        header += (
+            "#\n"
+            "# dsPIC33AK128MC102 is ADDITIONALLY non-reproducible in its own\n"
+            "# right, same root cause as this unit's `nondeterministic_elf`\n"
+            "# .elf exemption: xc-dsc-gcc's per-invocation `/tmp/ccXXXXXX.s.scnN`\n"
+            "# compiler-tempfile section names, and a pointer-derived internal\n"
+            "# symbol name (`_0x<hexptr>_at_address_...`), both show up verbatim\n"
+            "# in this file's -h/-t output and were confirmed (this batch) to\n"
+            "# differ across two back-to-back `make clean && make` runs from\n"
+            "# the SAME path - so this unit's dump differs even when the\n"
+            "# path-echo line above does not. Also requires `-mdfp=<DFP>/xc16`\n"
+            "# to disassemble at all (`xc-dsc-objdump -d` with no -mdfp exits\n"
+            "# 255, \"can't disassemble for architecture UNKNOWN\", verified\n"
+            "# this batch) - the same DFP device pack every other toolchain\n"
+            "# invocation on this unit already needs.\n"
+        )
+    return header
+
+
 def sha256_file(path):
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -647,8 +788,22 @@ def do_build(units, skip_debug, include_elf=False, quiet=False):
         rel = os.path.relpath(syms_path, REPO_ROOT)
         release_entries.append((rel, sha256_file(syms_path)))
 
+        # .elf.dump: generated from the SAME freshly-built RELEASE .elf
+        # (build/, scratch, regardless of --with-elf) and tracked
+        # continuously like .syms - see the "elf.dump ... tracked
+        # CONTINUOUSLY" comment above gen_elf_dump(). Deliberately NOT added
+        # to release_entries/MANIFEST.sha256 - see elf_dump_header()'s "NOT
+        # HASH-GATED" paragraph and do_check()'s matching comment.
+        dump_objdump = objdump_bin_for_unit(unit)
+        dump_extra_args = elf_dump_extra_args(unit)
+        dump_body = gen_elf_dump(dump_objdump, paths["elf"], dump_extra_args)
+        dump_path = os.path.join(out_dir, unit["binary"] + ".elf.dump")
+        with open(dump_path, "w") as f:
+            f.write(elf_dump_header(unit, dump_objdump))
+            f.write(dump_body)
+
         if not quiet:
-            print("   -> {} (RELEASE {}/syms copied to {})".format(
+            print("   -> {} (RELEASE {}/syms/elf.dump copied to {})".format(
                 key, "elf/hex/bin" if include_elf else "hex/bin",
                 os.path.relpath(out_dir, REPO_ROOT)))
 
@@ -772,6 +927,31 @@ def do_check(units, skip_debug):
                 problems.append("{}: {} is STALE (symbol map differs from "
                                  "fresh build)".format(
                                      key, os.path.relpath(committed_syms_path, REPO_ROOT)))
+
+        # .elf.dump: PRESENCE required (tracked continuously, same cadence
+        # as .syms) but content is DELIBERATELY NOT hash-gated/diffed here -
+        # NOT added to `checked`, unlike every file above. Reason (measured
+        # this batch, see elf_dump_header()'s "NOT HASH-GATED" paragraph in
+        # full): objdump always prints the exact path it was invoked with
+        # as the FIRST line of its own output, regardless of any compiler
+        # flag - a fresh rebuild's dump is only byte-identical to the
+        # committed one when regenerated from the IDENTICAL absolute
+        # checkout path, which this project's actual workflow (a fresh
+        # worktree per task) does not provide. Hash-gating it would
+        # false-positive on effectively every `check` run for zero real
+        # drift, so `check` intentionally skips the comparison rather than
+        # papering over it with a silent pass.
+        committed_dump_path = os.path.join(out_dir, unit["binary"] + ".elf.dump")
+        if not os.path.isfile(committed_dump_path):
+            problems.append("{}: committed {} is MISSING".format(
+                key, os.path.relpath(committed_dump_path, REPO_ROOT)))
+        else:
+            print("   (skipping {} content check for {}: objdump's own "
+                  "first output line is its invocation path, not "
+                  "reproducible across checkouts/worktrees - presence "
+                  "verified, content intentionally not diffed here, see "
+                  "the file's own header)".format(
+                      os.path.relpath(committed_dump_path, REPO_ROOT), key))
 
     if problems:
         print("")
@@ -908,6 +1088,58 @@ def selftest():
           "plain refresh never re-introduces .elf (regression guard for "
           "the owner directive - ELF grew the repo 12MB->14MB in one "
           "refresh before this change)")
+
+    # --- .elf.dump: tracked continuously (NOT tag-gated like .elf itself),
+    # never hash-gated (objdump echoes its own invocation path - see
+    # elf_dump_header()/do_check() for the full argument) -----------------
+    check("elf.dump" not in release_extensions(True) and
+          "elf.dump" not in release_extensions(False),
+          ".elf.dump is not governed by the tag-time release_extensions() "
+          "toggle at all - it's written unconditionally in do_build(), "
+          "same cadence as .syms, regardless of --with-elf")
+    check("elf.dump" not in hash_gated_extensions(True) and
+          "elf.dump" not in hash_gated_extensions(False),
+          ".elf.dump must never appear in the hash-gated extension set - "
+          "it is deliberately presence-checked only, never hash-compared "
+          "(see do_check()'s dedicated elf.dump block)")
+    check(objdump_bin_for_unit(unit_by_key("atmega328p")) == "avr-objdump",
+          "AVR unit's .elf.dump objdump binary is avr-objdump")
+    check(objdump_bin_for_unit(unit_by_key("ch32v006")) ==
+          "riscv64-unknown-elf-objdump",
+          "RISC-V unit's .elf.dump objdump binary is riscv64-unknown-elf-objdump")
+    check(objdump_bin_for_unit(unit_by_key("ch570")) ==
+          "riscv64-unknown-elf-objdump",
+          "both RISC-V units resolve the same objdump binary")
+    check(objdump_bin_for_unit(unit_by_key("stm32f103")) ==
+          "arm-none-eabi-objdump",
+          "plain ARM unit's .elf.dump objdump binary is arm-none-eabi-objdump")
+    dspic_unit = unit_by_key("dspic33ak128mc102")
+    check(objdump_bin_for_unit(dspic_unit) == dspic_unit["objdump"],
+          "dsPIC's .elf.dump reuses the SAME xc-dsc-objdump path already "
+          "resolved for the nm --print-size fallback (not a second, "
+          "independently-configured binary)")
+    check(elf_dump_extra_args(dspic_unit) ==
+          ["-mdfp={}".format(os.path.join(dspic_unit["extra_args"]["DFP_PATH"], "xc16"))],
+          "dsPIC's .elf.dump gets -mdfp=<DFP>/xc16 (xc-dsc-objdump -d "
+          "refuses to disassemble at all without it - measured this batch, "
+          "exit 255 'can't disassemble for architecture UNKNOWN')")
+    check(all(elf_dump_extra_args(u) == [] for u in UNITS
+               if u["key"] != "dspic33ak128mc102"),
+          "no OTHER unit needs extra objdump args for its .elf.dump")
+    check("--no-show-raw-insn" in ELF_DUMP_FLAGS,
+          "raw instruction encoding bytes are stripped from the dump (diff "
+          "reads as instructions, not hex - measured ~24% smaller too)")
+    check("-D" not in ELF_DUMP_FLAGS and "--disassemble-all" not in ELF_DUMP_FLAGS,
+          "never --disassemble-all: would decode .data/.rodata/.debug bytes "
+          "as bogus instructions, code-only -d is deliberate")
+    check("--no-addresses" not in ELF_DUMP_FLAGS,
+          "never --no-addresses: unsupported by avr-objdump 2.26 and "
+          "xc-dsc-objdump 2.32 (added in binutils 2.36) - using it would "
+          "break disassembly on two of the four toolchains this covers")
+    check("-r" not in ELF_DUMP_FLAGS,
+          "never -r: relocation entries are empty for a final linked "
+          "executable (verified empty on a real build) - the flag would "
+          "only add a header for zero content")
 
     # CLI must parse --with-elf on 'build' and default it to False so an
     # ordinary `build` invocation (CI, a contributor's refresh) can never
