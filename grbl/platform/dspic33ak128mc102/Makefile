@@ -17,6 +17,16 @@
 #       ./xc-dsc-v3.30-full-install-linux64-installer.run --mode unattended \
 #         --unattendedmodeui none --prefix /opt/xc-dsc --LicenseType FreeMode \
 #         --ModifyAll 0 --netservername ""
+#       FreeMode is the INSTALLER'S OWN DEFAULT, not a restrictive choice made
+#       here - the alternatives (WorkstationMode/NetworkMode) need an
+#       account-bound activated license file, not a flag, so no install-recipe
+#       change avoids what FreeMode does below. Settled by codegen comparison
+#       (PLAN.md Decision Log 2026-07-26): FreeMode silently substitutes -O2
+#       codegen for -O3/-Os ("Options have been disabled due to restricted
+#       license" printed, no functional effect on -O0/-O1/-O2 which already
+#       compile at their own level) - RELEASE below is -O2-equivalent, not
+#       true -Os, but its byte count is exact and reproducible (proven via a
+#       byte-identical whole-firmware rebuild with an explicit -O2).
 #    3. Device Family Pack (SEPARATE download, Apache-2.0 licensed - see
 #       gpio.h header for why this port uses DFP headers instead of the
 #       samd21 clean-room route):
@@ -165,6 +175,10 @@ CFLAGS += $(CFLAGS_EXTRA) -I$(PLATFORM_DIR) -I$(GRBL_DIR)/platform -I$(GRBL_DIR)
 # Build-specific flags
 BUILD ?= DEBUG
 ifeq ($(BUILD),RELEASE)
+  # Requested -Os; the free-tier compiler (see toolchain header note above)
+  # silently gives -O2-equivalent codegen instead. That does not make the
+  # resulting size approximate - a whole-firmware rebuild with an explicit
+  # -O2 here is byte-identical (41816 B) to what this line actually produces.
   CFLAGS += -Os -g0
 else
   # -O0, NOT -Og: xc-dsc-gcc 8.3.1 ICEs ("insn does not satisfy its
