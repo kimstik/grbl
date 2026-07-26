@@ -14,6 +14,10 @@ mach create "grbl-samd21"
 # Compile the 16-bit TC access shim (see its header comment) before the
 # platform description references Timers.SAMD21_Timer16.
 include @ci/renode/SAMD21_Timer16.cs
+# Compile the TCC0 (spindle PWM) register-observability shim (see its
+# header comment) before the platform description references
+# Timers.SAMD21_TCC.
+include @ci/renode/SAMD21_TCC.cs
 machine LoadPlatformDescription @ci/renode/samd21_grbl.repl
 
 macro reset
