@@ -174,7 +174,9 @@ All of the following, in this order:
    `samd21-megarm,samd21-generic`) and commit the result under
    `artifacts/<name>/`. See `artifacts/README.md` (CONTRACTS.md
    [§25](CONTRACTS.md#build-artifacts-tracked)) for what gets committed
-   (RELEASE elf/bin/hex + a symbol-size map) and the growth cost.
+   (RELEASE bin/hex + a symbol-size map, every refresh) and the growth
+   cost. This step does **not** include `.elf` — see "ELF is tag-time
+   only" below; `.elf` is not something a port change needs to touch.
 
 ## Refresh policy: when to re-run `tools/build_artifacts.py build`
 
@@ -187,7 +189,9 @@ committed bytes are refreshed on the right cadence:
 - **Refresh and commit whenever a port's *content* changes** — any edit to
   `grbl/platform/<name>/**`, `grbl/*.c|h` (core), or `grbl/platform/common/**`
   that could move that port's binary by even one byte. This is step 8 above:
-  part of finishing the port change, not a separate chore.
+  part of finishing the port change, not a separate chore. Plain `python3
+  tools/build_artifacts.py build` (no flags) is what this step means —
+  it copies `bin`/`hex`/`syms` only.
 - **Do NOT refresh on every push.** Most pushes are docs, ledger updates, CI
   YAML, or work on an unrelated port — none of those change a given port's
   compiled output, so re-running the build and re-committing megabytes of
@@ -201,7 +205,45 @@ committed bytes are refreshed on the right cadence:
   refresh. Run it before committing platform/core changes, same spirit as
   `make validate` for the golden AVR gate. `--platforms <name>` scopes it to
   just the port(s) you touched when a full 10-unit rebuild is overkill.
+  `bin`/`hex`/`syms` are always required; `.elf` is verified only if
+  present (see below), so its absence between tags never fails this check.
 - This is the **sixth ratchet** in this project (after golden MD5, warn
   baseline, boot integrity, no-DP assert, docs integrity/CONTRACTS
   numbering) — same "a bugfix/change is not done until a CI check exists
   that would have caught it" law from PLAN.md's working rules.
+
+### ELF is tag-time only, not part of this cadence ("Эльф на тегах")
+
+Unlike `bin`/`hex`/`syms`, `.elf` is **not** refreshed on port-content
+changes — it is committed only when tagging a release, as a separate,
+explicit step:
+
+```sh
+python3 tools/build_artifacts.py build --with-elf
+git add -f artifacts/*/*.elf   # NOT `git add -A` - see why below
+git commit -m "artifacts: tag vX.Y.Z ELF snapshot"
+git tag vX.Y.Z
+```
+
+Why: `.elf` is the single largest artifact class (48-166KB/unit vs. `.bin`
+25-95KB, `.hex` 72-116KB, `.syms` a few KB), and git cannot delta binaries
+across recompiles (see the "Growth cost" reasoning above) — tracking it on
+every ordinary refresh meant paying close to double the storage cost for a
+byte-level view most refreshes never need. Measured when this policy
+landed: dropping `.elf` from the routine tree took the tracked snapshot
+from 2,612,919 bytes / 42 files (~2.6MB — the number that had, in one
+refresh under the old always-track policy, grown the repo's `.git` from
+12MB to 14MB) to 1,389,988 bytes / 32 files (~1.39MB, ~47% smaller); every
+subsequent full refresh now costs at most ~1.37MB instead of ~2.6-2.7MB.
+
+`.elf` is deliberately left covered by `.gitignore`'s blanket `*.elf` rule
+(no negation exception, unlike `bin`/`hex`/`syms`/`README.md`) — this is
+intentional so it's ignorable by default between tags. `git add -A`/`git
+add .` silently skip ignored paths with zero output — the same failure
+class that has bitten this repo three times before with the OPPOSITE
+problem (an intentionally-tracked file getting dropped by a blanket
+ignore: `tools/README.md`, `ch570/vendor/ISP572.o`, and this very
+`artifacts/*.elf` under the old policy). The fix here is symmetric: never
+rely on `-A` for `.elf` at tag time — force-add it by explicit path
+(`git add -f`, above), which either succeeds or fails loudly if the glob
+matches nothing, never silently.
