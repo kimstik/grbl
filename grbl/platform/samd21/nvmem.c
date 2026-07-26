@@ -4,9 +4,6 @@
 
   Copyright (c) 2025 kimstik
   Intelligence assisted
-
-  Uses last 4KB of Flash for EEPROM emulation
-  Flash: 64-byte pages, 256-byte rows (4 pages per row)
 */
 
 #include <stdint.h>

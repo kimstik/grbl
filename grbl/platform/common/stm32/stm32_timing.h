@@ -5,9 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  SysTick-based millisecond counter and DWT cycle counter for microsecond delays.
-  Works on all Cortex-M3/M4/M7/M33 cores.
 */
 
 #ifndef STM32_TIMING_H
@@ -15,9 +12,7 @@
 
 #include "stm32_platform.h"
 
-// ============================================================================
 // TIMING PUBLIC API
-// ============================================================================
 
 /**
  * Initialize timing system (DWT cycle counter)

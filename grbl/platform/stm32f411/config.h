@@ -5,8 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  STM32F411CEU6 ("Black Pill"): 96MHz Cortex-M4F, 128KB RAM, 512KB Flash.
 */
 
 #ifndef STM32F411_CONFIG_H
@@ -14,9 +12,7 @@
 
 #include "../common/stm32/stm32_platform.h"
 
-// ============================================================================
 // STM32F411 PLATFORM CONFIGURATION
-// ============================================================================
 
 // Clock frequencies: HSE 25MHz -> PLL -> 96MHz CPU/AHB.
 // APB1 prescaler /2 (max APB1 pclk is 50MHz on F411) -> APB1 pclk = 48MHz,
@@ -45,10 +41,8 @@
 #define STM32F411_HAS_32BIT_TIMERS  true    // TIM2/TIM5 are 32-bit on F411
 #define STM32F411_GPIO_MODEL        2       // F4 uses MODER/OTYPER (like H5)
 
-// ============================================================================
 // PIN MAPPING (mirrors platform.h - see that file's dual-canon note; do NOT
 // redefine SPINDLE_PWM_MAX_VALUE here, it is canonical in platform.h only)
-// ============================================================================
 
 #define X_STEP_PIN          0   // PA0
 #define Y_STEP_PIN          1   // PA1
@@ -79,9 +73,7 @@
 
 #define PROBE_PIN           15  // PC15
 
-// ============================================================================
 // BITMASKS FOR GPIO OPERATIONS
-// ============================================================================
 
 #define STEP_MASK           ((1 << X_STEP_PIN) | (1 << Y_STEP_PIN) | (1 << Z_STEP_PIN))
 #define DIRECTION_MASK      ((1 << X_DIRECTION_PIN) | (1 << Y_DIRECTION_PIN) | (1 << Z_DIRECTION_PIN))
@@ -90,9 +82,7 @@
 #define CONTROL_MASK        ((1 << RESET_PIN) | (1 << FEED_HOLD_PIN) | (1 << CYCLE_START_PIN) | (1 << SAFETY_DOOR_PIN))
 #define PROBE_MASK          (1 << PROBE_PIN)
 
-// ============================================================================
 // TIMER CONFIGURATION
-// ============================================================================
 
 #define STEPPER_TIMER_IRQn  TIM2_IRQn
 #define PULSE_TIMER_IRQn    TIM3_IRQn
@@ -104,9 +94,7 @@
 // the stm32f103/stm32h523 "duty-cap twins" bug happened (PLAN.md commits
 // 6e75218/5a56a5a) - do not reintroduce this definition here.
 
-// ============================================================================
 // SERIAL CONFIGURATION
-// ============================================================================
 
 #define SERIAL_BAUD_RATE    115200
 

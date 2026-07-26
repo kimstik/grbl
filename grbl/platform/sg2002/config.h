@@ -5,16 +5,12 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Platform-specific configuration for Sophgo SG2002
 */
 
 #ifndef SG2002_CONFIG_H
 #define SG2002_CONFIG_H
 
-// ============================================================================
 // SG2002 PLATFORM CONFIGURATION
-// ============================================================================
 
 // CPU frequency (700 MHz)
 #define SG2002_CPU_FREQ  700000000UL

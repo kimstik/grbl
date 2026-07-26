@@ -1,17 +1,6 @@
 /*
   serial.c - _template serial port driver (copy-me starting point)
   Part of Grbl
-
-  TU-replacement route (CONTRACTS.md §0/§7): this file provides the whole
-  grbl/serial.h API instead of core grbl/serial.c; this platform's Makefile
-  excludes the core file. The ring-buffer bookkeeping below (head/tail
-  math, the DMB memory-ordering fix for BUG #12) is genuinely chip-agnostic
-  and is reused verbatim from samd21/serial.c - only the actual UART
-  register touches are PORT_TODO_SERIAL_* calls. That split is deliberate:
-  copying the ring buffer logic into every port and getting the ordering
-  subtly wrong each time is worse than sharing one proven implementation
-  and localizing the hardware-specific 20% behind a handful of PORT_TODO
-  primitives.
 */
 
 #include <stdint.h>
@@ -111,9 +100,7 @@ uint8_t serial_get_tx_buffer_count(void) {
   return (TX_RING_BUFFER - (tail - head));
 }
 
-// ============================================================================
 // UART INTERRUPT DISPATCH
-// ============================================================================
 // PORT-TODO: alias your real UART IRQ vector (startup.c's vector_table[])
 // to this function. PORT_TODO_SERIAL_RX_PENDING/TX_READY stand in for
 // "read this peripheral's interrupt-flag register"; whichever your chip

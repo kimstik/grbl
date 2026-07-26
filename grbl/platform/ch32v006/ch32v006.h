@@ -1,24 +1,6 @@
 /*
   ch32v006.h - CH32V006 clean-room register definitions
   Part of Grbl
-
-  Written from scratch against the publicly available CH32V00X Reference
-  Manual V1.5 (wch-ic.com, covers CH32V002/004/005/006/007) and the
-  CH32V006 datasheet - register FACTS transcribed from documentation,
-  NOT copied from any WCH-licensed header (EVT, ch32v00x.h, etc).
-  Modeled in shape on ../samd21/samd21.h: a minimal struct-per-peripheral
-  header, not a full vendor CMSIS pack.
-
-  VERIFICATION STATUS (Phase 4 Step 3 re-verification pass - supersedes
-  the M1-M3 "best-effort placeholder" state):
-  - Peripheral base addresses, PFIC/STK register offsets, the interrupt
-    vector table, RCC/FLASH/GPIO/AFIO/EXTI/USART/TIM bit positions below
-    were all read out of CH32V00X RM V1.5 directly (section numbers cited
-    inline). Items that could NOT be verified are marked UNVERIFIED
-    individually - the blanket "everything here is a guess" caveat from
-    M1-M3 no longer applies.
-  - Cross-check: Zephyr's community ch32v006.dtsi (Apache-2.0) agrees on
-    every base address and IRQ number used by this port.
 */
 
 #ifndef CH32V006_H
@@ -27,9 +9,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-// ============================================================================
 // MEMORY MAP (RM figure 1-8)
-// ============================================================================
 // Code flash physically lives at 0x08000000 and is aliased at 0x00000000
 // (boot configuration). Code links/runs at the 0x0 alias (script.ld);
 // the FLASH controller's ADDR register and programming pointer writes use
@@ -40,9 +20,7 @@
 #define SRAM_BASE              0x20000000UL
 #define PERIPH_BASE            0x40000000UL
 
-// ============================================================================
 // PERIPHERAL BASE ADDRESSES (RM register lists, cited per block below)
-// ============================================================================
 
 #define TIM2_BASE              (PERIPH_BASE + 0x00000UL)  // RM 12: R16_TIM2_* at 0x40000000
 #define TIM3_BASE              (PERIPH_BASE + 0x00800UL)  // RM 13 "streamlined timer" - NO interrupt output
@@ -62,7 +40,6 @@
 // PFIC_BASE now comes from common/wch/wch_pfic.h (same value, 0xE000E000UL).
 #define STK_BASE               0xE000F000UL
 
-// ============================================================================
 // GPIO (RM 7.3.1). V00X ports are 8-pin wide: there is NO CFGHR - CFGLR
 // covers pins 0-7 and offset 0x04 is reserved. Per-pin nibble in CFGLR:
 //   [3:2] CNF, [1] reserved, [0] MODE   (DIFFERENT from STM32F1: MODE is
@@ -73,7 +50,6 @@
 //                    11 reserved
 //   output (MODE=1): CNF 00 GP push-pull, 01 GP open-drain,
 //                    10 AF push-pull, 11 AF open-drain
-// ============================================================================
 
 typedef struct {
   volatile uint32_t CFGLR;   // 0x00 Port configuration (pins 0-7)
@@ -128,9 +104,7 @@ typedef struct {
 
 #define EXTI ((EXTI_TypeDef*)EXTI_BASE)
 
-// ============================================================================
 // RCC (RM 3.4)
-// ============================================================================
 
 typedef struct {
   volatile uint32_t CTLR;       // 0x00 Clock control
@@ -182,11 +156,9 @@ typedef struct {
 #define RCC_PB1PCENR_TIM2EN     (1UL << 0)
 #define RCC_PB1PCENR_TIM3EN     (1UL << 2)
 
-// ============================================================================
 // FLASH controller (RM 18.3). Main flash: 62KB, 256-byte pages (0-247).
 // Programming model: fast page program/erase ONLY (no F1-style halfword
 // PG bit) - unlock LOCK (KEYR) then FLOCK (MODEKEYR), FTPG/FTER + STRT.
-// ============================================================================
 
 typedef struct {
   volatile uint32_t ACTLR;     // 0x00 LATENCY[1:0]
@@ -231,11 +203,9 @@ typedef struct {
 
 #define FLASH_PAGE_SIZE_BYTES    256u
 
-// ============================================================================
 // USART (RM 14) - F1-shape SR/DR/BRR/CR1..., WCH names. Baud (RM 14.3):
 // baud = HCLK / (16 * USARTDIV), BRR = mantissa[15:4] + fraction[3:0]/16.
 // USART1 default pin map (RM table 7-10, USART1_RM=0000): TX=PD5, RX=PD6.
-// ============================================================================
 
 typedef struct {
   volatile uint32_t STATR;  // 0x00 Status
@@ -261,14 +231,12 @@ typedef struct {
 #define USART_CTLR1_TXEIE      (1UL << 7)
 #define USART_CTLR1_UE         (1UL << 13)
 
-// ============================================================================
 // TIM1 (advanced, RM 11) / TIM2 (general purpose, RM 12) - 16-bit, F1-shape
 // register order confirmed against RM register lists (offsets identical for
 // both; RPTCR/BDTR are TIM1-only, reserved on TIM2).
 // TIM3 (RM 13) is a "streamlined" compare-only timer with NO interrupt
 // output - it is deliberately NOT given a macro here so nobody wires an ISR
 // to it by mistake (this port's pulse-reset timer is the core STK instead).
-// ============================================================================
 
 typedef struct {
   volatile uint32_t CTLR1;     // 0x00
@@ -305,7 +273,6 @@ typedef struct {
 #define TIM_CCER_CC1E          (1UL << 0)
 #define TIM_BDTR_MOE           (1UL << 15)
 
-// ============================================================================
 // PFIC (RM 6.5.2) - offsets confirmed against the RM register list.
 // Two 32-bit words cover all sources (<= 64 IRQs on QingKe V2).
 //
@@ -315,16 +282,13 @@ typedef struct {
 // layout, differing only in IRQ-bank width (WCH_PFIC_IRQ_WORDS below) -
 // see that file's header for the byte-identity gate this extraction was
 // held to.
-// ============================================================================
 
 #define WCH_PFIC_IRQ_WORDS 2
 #include "../common/wch/wch_pfic.h"
 
-// ============================================================================
 // STK - QingKe V2 SysTick (RM 6.5.4). 32-bit up-counter + 32-bit compare.
 // SR.CNTIF is WRITE-0-TO-CLEAR (RW0) - the opposite polarity of most W1C
 // flag registers on this chip; `STK->SR = 0` is the whole clear idiom.
-// ============================================================================
 
 typedef struct {
   volatile uint32_t CTLR;    // 0x00 Control
@@ -343,10 +307,8 @@ typedef struct {
 #define STK_CTLR_STRE       (1UL << 3)   // auto-reload to 0 on compare
 #define STK_CTLR_SWIE       (1UL << 31)  // software interrupt trigger
 
-// ============================================================================
 // IRQ NUMBERS (RM table 6-1, CH32V00X series vector table - VERIFIED).
 // 25 peripheral channels + 4 kernel channels; entry address = number * 4.
-// ============================================================================
 
 typedef enum {
   SysTick_IRQn      = 12,   // STK compare - this port's pulse-reset timer

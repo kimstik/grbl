@@ -5,22 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Macro route (CONTRACTS.md section 10): core grbl/nvmem.c IS compiled
-  (Makefile GRBL_SOURCES) - its platform-agnostic
-  memcpy_to/from_nvmem_with_checksum functions are used unmodified, exactly
-  like every STM32 port in this tree. This file supplies the two functions
-  those call through the eeprom_get_char/eeprom_put_char macros
-  (platform.h): hal_nvmem_read_byte/hal_nvmem_write_byte, backed by a
-  write-through RAM cache of one EFM flash page.
-
-  EFM register layout (regs.h) is UNVERIFIED placeholder - see regs.h file
-  header. This file's structure (unlock/erase/program/wait-ready/lock,
-  __DSB() before the commit command, poll READY after every erase/write,
-  skip-write-if-equal wear guard) is the CONTRACTS.md section 10.5/12.4
-  discipline applied regardless of whether the exact bit values are right;
-  hardware bring-up must confirm the register facts before trusting actual
-  flash retention.
 */
 
 #include "../hal.h"

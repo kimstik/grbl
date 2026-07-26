@@ -26,16 +26,12 @@
 #define SysTick_CTRL_TICKINT_Msk    (1UL << 1)
 #define SysTick_CTRL_CLKSOURCE_Msk  (1UL << 2)
 
-// ============================================================================
 // TIMING STATE
-// ============================================================================
 
 static volatile uint32_t systick_millis = 0;
 static bool timing_initialized = false;
 
-// ============================================================================
 // PUBLIC FUNCTIONS
-// ============================================================================
 
 stm32_status_t stm32_timing_init(void) {
   // Enable DWT cycle counter (for accurate microsecond delays)

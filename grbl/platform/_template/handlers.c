@@ -1,20 +1,6 @@
 /*
   handlers.c - _template interrupt dispatch + integration glue (copy-me starting point)
   Part of Grbl
-
-  Houses the ISR *vector* dispatch wrappers PORTING-CHECKLIST.md Step 6
-  groups together (CONTRACTS.md §2 gpio, §5 timer): naming/clearing/
-  forwarding glue between a real vector slot and core's ISR_STEP()-class
-  bodies. Stateful chip bring-up (delay calibration, GPIO-IRQ controller
-  arm-up) lives in platform.c instead - see its header comment for why the
-  split matches every landed port's own file boundary.
-
-  Every dispatcher below is deliberately named *_irq_dispatch rather than a
-  real vector name (TC3_Handler, EIC_Handler, ...) - this template does not
-  know your chip's vector table layout. Wire each one into startup.c's
-  vector_table[] under its real IRQ slot once you know it; until then they
-  are kept reachable only by the __keep_alive table at the bottom of this
-  file (see its comment - delete that table once real wiring exists).
 */
 
 #warning "PORT-TODO: handlers.c"
@@ -23,9 +9,7 @@
 #include "platform.h"
 #include "timer.h"
 
-// ============================================================================
 // STEPPER TIMER ISR (CONTRACTS.md §3, §5)
-// ============================================================================
 // Core's ISR_STEP() macro (timer.h) named this function; it is defined in
 // stepper.c. Clear the peripheral's compare-match flag FIRST, then call the
 // body (§2.3/§5.1) - clearing after can ghost or drop an edge that arrives
@@ -37,9 +21,7 @@ void stepper_timer_irq_dispatch(void) {
   __isr_step_impl();
 }
 
-// ============================================================================
 // PULSE-RESET TIMER ISR (CONTRACTS.md §4, §5)
-// ============================================================================
 // ISR_STEP_RESET() stops the timer inside its body (stepper.c:503) -
 // clearing the overflow flag after that write can ghost the final overflow,
 // so PORT_TODO_STP_PULSE_RESET_IRQ_CLEAR_FLAG() must run before the call,
@@ -60,9 +42,7 @@ void pulse_delay_timer_irq_dispatch(void) {
 }
 #endif
 
-// ============================================================================
 // GPIO PIN-CHANGE / EXTERNAL INTERRUPT DISPATCH (CONTRACTS.md §2)
-// ============================================================================
 // limits.c/system.c define these via HAL_GPIO_IRQ_HANDLER(LIMIT_INT) /
 // HAL_GPIO_IRQ_HANDLER(CONTROL_INT) (hal_gpio.h owns that expansion:
 // `void <name>_IRQHandler(void)`).
@@ -84,9 +64,7 @@ void gpio_irq_dispatch(void) {
   if (PORT_TODO_GPIO_IRQ_CONTROL_PENDING()) { CONTROL_INT_IRQHandler(); }
 }
 
-// ============================================================================
 // KEEP-ALIVE TABLE - delete once real vector wiring exists
-// ============================================================================
 // Nothing in startup.c's placeholder vector table calls the dispatchers
 // above yet (this chip's IRQ layout is unknown). This template's Makefile
 // omits --gc-sections specifically so that omission does not also delete

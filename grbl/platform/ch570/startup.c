@@ -1,41 +1,13 @@
 /*
   startup.c - CH570 reset entry + PFIC vector table
   Part of Grbl
-
-  Same shape as ch32v006/startup.c (RISC-V has no ARM-style hardware SP/PC
-  autoload): `_start` (naked, .init) sets SP, Reset_Handler does
-  .data/.bss init, points mtvec at the vector table via
-  common/wch/wch_vectors.h::wch_mtvec_set_vectored(), then calls main().
-
-  INTERRUPT MODE: mtvec MODE0=MODE1=1 (absolute-address vectored mode) -
-  CONTRACTS.md §14 item 2/§20: confirmed identical on QingKe V3C.
-
-  INTSYSCR - UNLIKE ch32v006, this port explicitly WRITES INTSYSCR=0
-  (common/wch/wch_vectors.h::wch_intsyscr_clear()) rather than only
-  trusting the documented reset-0 value. Reason (CONTRACTS.md §20 gap log,
-  this batch): this port's own recon found WCH's OFFICIAL startup
-  assembly for this exact silicon family (`startup_CH572.S`, Apache-2.0)
-  explicitly REPROGRAMS INTSYSCR to 0x3 (HWSTKEN=1, INESTEN=1) during
-  boot - the opposite of what this project's plain `__attribute__((interrupt))`
-  handlers need (GCC's software prologue, not the vendor hardware one).
-  A future silicon revision or boot-ROM path could plausibly leave this
-  CSR non-zero for the same reason WCH's own example sets it - explicit
-  defense-in-depth, not just documentation.
-    - HWSTKEN=0: handlers need a full software frame - exactly what GCC's
-      interrupt attribute emits (spill + `mret`).
-    - INESTEN=0: no preemption - core's sei() inside ISR_STEP
-      (stepper.c) cannot nest the pulse-reset interrupt into the running
-      handler; delivery defers to handler exit. Same accepted posture as
-      ch32v006 (CONTRACTS.md §5.2) and the SAMD21 M0+ reference.
 */
 
 #include <stdint.h>
 #include "platform.h"
 #include "../common/wch/wch_vectors.h"
 
-// ============================================================================
 // EXTERNAL SYMBOLS (from script.ld)
-// ============================================================================
 
 extern uint32_t _estack;
 extern uint32_t _sdata;
@@ -52,9 +24,7 @@ extern void SysTick_Handler(void);
 extern void GPIOA_IRQHandler(void);
 extern void UART_IRQHandler(void);
 
-// ============================================================================
 // DEFAULT HANDLER - loud hang for exceptions and unexpected interrupts.
-// ============================================================================
 __attribute__((interrupt))
 void Default_Handler(void) {
   while (1) {
@@ -62,11 +32,9 @@ void Default_Handler(void) {
   }
 }
 
-// ============================================================================
 // PFIC VECTOR TABLE (absolute-address mode). 36 entries, numbers 0-35.
 // `used` + KEEP(.vectors) in script.ld guard it from any future
 // --gc-sections reinstatement (CONTRACTS.md §14 item 3 lesson).
-// ============================================================================
 
 __attribute__((used, section(".vectors"), aligned(4)))
 static void (* const PFIC_Vector[PFIC_VECTOR_COUNT])(void) = {
@@ -100,9 +68,7 @@ static void (* const PFIC_Vector[PFIC_VECTOR_COUNT])(void) = {
   [WDOG_BAT_IRQn] = Default_Handler,    // 35
 };
 
-// ============================================================================
 // SYSTEM CLOCK BRING-UP
-// ============================================================================
 GRBL_BOOT_INIT void SystemClock_Config(void);
 
 // GRBL_BOOT_INIT (== noinline) on both SystemInit and SystemClock_Config:
@@ -116,7 +82,6 @@ GRBL_BOOT_INIT void SystemInit(void) {
   SystemClock_Config();
 }
 
-// ============================================================================
 // RESET HANDLER (C portion - reached from _start with SP already valid)
 //
 // `used` (CONTRACTS.md gap log, LTO batch - same fix as ch32v006/startup.c,
@@ -127,7 +92,6 @@ GRBL_BOOT_INIT void SystemInit(void) {
 // uncalled-in-C function before codegen, and the link fails with
 // "undefined reference to Reset_Handler". BUG #21's mechanism, one ISA
 // over.
-// ============================================================================
 
 __attribute__((used))
 void Reset_Handler(void) {
@@ -172,9 +136,7 @@ void Reset_Handler(void) {
   }
 }
 
-// ============================================================================
 // _start - the real reset entry point
-// ============================================================================
 __attribute__((naked, section(".init")))
 void _start(void) {
   __asm__ volatile (

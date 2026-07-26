@@ -7,13 +7,11 @@
 #include "ch570.h"
 #include "platform.h"
 
-// ============================================================================
 // GPIO PULL-UP / PULL-DOWN (Step 2) - two independent full-width
 // registers (PD_DRV forces pull-down regardless of PU when set), truth
 // table matches the vendor SDK's own GPIOA_ModeCfg exactly (CH57x_gpio.c):
 //   floating: PD_DRV=0, PU=0      pull-up: PD_DRV=0, PU=1
 //   pull-down: PD_DRV=1 (PU irrelevant once PD_DRV=1)
-// ============================================================================
 void hal_gpio_pullup_enable(hal_gpio_port_t port, uint32_t mask) {
   (void)port;   // single real port - see gpio.h's note on hal_gpio.h's shared signature
   R32_PA_PD_DRV &= ~mask;
@@ -27,7 +25,6 @@ void hal_gpio_pullup_disable(hal_gpio_port_t port, uint32_t mask) {
   R32_PA_PU &= ~mask;
 }
 
-// ============================================================================
 // GPIO INTERRUPTS (CONTRACTS.md #2) - ONE port, ONE shared vector
 // (GPIOA_IRQn), per-pin edge/level select + per-pin enable + write-1-
 // clear flags (datasheet-confirmed register names/positions, ch570.h).
@@ -46,7 +43,6 @@ void hal_gpio_pullup_disable(hal_gpio_port_t port, uint32_t mask) {
 // arms the interrupt to fire on the transition AWAY from it (so the
 // first interrupt is guaranteed to correspond to a real change, not a
 // stale edge left over from before the enable call).
-// ============================================================================
 void hal_gpio_interrupt_enable(uint32_t mask) {
   uint16_t m = (uint16_t)mask;
 
@@ -66,7 +62,6 @@ void hal_gpio_interrupt_disable(uint32_t mask) {
   R16_PA_INT_EN &= (uint16_t)~mask;
 }
 
-// ============================================================================
 // SYSTEM CLOCK BRING-UP (Step 1) - HSE (external 32MHz crystal, "X32M")
 // -> fixed x18.75 PLL -> 600MHz internal -> /N divider -> Fsys.
 // This port targets 60MHz (CLK_SOURCE_HSE_PLL_60MHz = 0x40 | 10, i.e.
@@ -82,7 +77,6 @@ void hal_gpio_interrupt_disable(uint32_t mask) {
 // result - UNVERIFIED on real silicon (no CH570 emulator exists; PLAN.md
 // hardware-validation item, same posture as every RISC-V port in this
 // tree so far).
-// ============================================================================
 GRBL_BOOT_INIT void SystemClock_Config(void) {
   // 1. Bring up the external 32MHz crystal (X32M) if not already running
   //    - the vendor's own "warm nudge" sequence (brief over-drive pulse
@@ -128,9 +122,7 @@ GRBL_BOOT_INIT void SystemClock_Config(void) {
   }
 }
 
-// ============================================================================
 // STEPPER TIMER INIT (Step 3, CONTRACTS.md #3) - TMR0
-// ============================================================================
 uint32_t g_ch570_stepper_divisor = 1u;   // timer.h's software prescaler (no hw divider on TMR0)
 
 void hal_timer_stepper_init(void) {
@@ -144,10 +136,8 @@ void hal_timer_stepper_init(void) {
   PFIC_EnableIRQ(TMR_IRQn);
 }
 
-// ============================================================================
 // PULSE-RESET TIMER INIT (STK) - identical shape to ch32v006's STK usage.
 // AVR Timer0 semantics: interrupt source enabled, timer STOPPED.
-// ============================================================================
 void hal_timer_pulse_reset_init(void) {
   STK->CTLR  = STK_CTLR_STIE;   // STE=0 (stopped), STCLK=0 (HCLK/8), STRE=0, MODE=0
   STK->SR    = 0;                // clear CNTIF (write-0-to-clear)
@@ -157,13 +147,11 @@ void hal_timer_pulse_reset_init(void) {
   PFIC_EnableIRQ(SysTick_IRQn);
 }
 
-// ============================================================================
 // SPINDLE PWM INIT (CONTRACTS.md #6) - PWM1, FIXED pin PA7 (no remap
 // exists for PWM1-5 on this chip - datasheet pin table, ch570.h header).
 // 8-bit cycle (256 steps) matches core's uint8_t duty domain 0-255
 // EXACTLY - no rescale needed, unlike ch32v006's ATRLR=255 timer-compare
 // approach (same numeric result, simpler mechanism here).
-// ============================================================================
 void hal_timer_spindle_pwm_init(void) {
   // PA7 needs no GPIO_DIR_OUT undo/remux step (unlike ch32v006's AF-mux
   // pins) - PWM1 drives PA7 directly once R8_PWM_OUT_EN's PWM1 bit is
@@ -178,11 +166,9 @@ void hal_timer_spindle_pwm_init(void) {
   R8_PWM_OUT_EN &= (uint8_t)~RB_PWM1_OUT_EN;        // disconnected until PWM_ENABLE()
 }
 
-// ============================================================================
 // DELAYS - calibrated busy-wait (samd21/ch32v006 pattern: correct from
 // reset onward, no peripheral state needed). STK and TMR0 are both
 // already spoken for (pulse-reset timer / stepper timer respectively).
-// ============================================================================
 #define DELAY_LOOP_CYCLES        3u
 #define DELAY_LOOP_ITERS_PER_US  (F_CPU / (DELAY_LOOP_CYCLES * 1000000uL))
 

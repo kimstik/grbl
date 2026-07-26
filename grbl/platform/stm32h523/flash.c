@@ -5,9 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Flash controller for STM32H5 family (H523, H533, H563).
-  Uses 8KB pages, dual-bank architecture.
 */
 
 #include <stddef.h>
@@ -23,9 +20,7 @@
 // Flash timeout
 #define FLASH_TIMEOUT_MS  2000  // H5 flash is slower
 
-// ============================================================================
 // FLASH API IMPLEMENTATION (STM32H5-specific)
-// ============================================================================
 
 stm32_status_t stm32_flash_unlock(void) {
   // Check if already unlocked

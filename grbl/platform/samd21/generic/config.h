@@ -3,29 +3,18 @@
   Part of Grbl HAL
 
   Copyright (c) 2025 GRBL HAL Contributors
-
-  Board: Generic SAMD21G18A
-  MCU: SAMD21G18A
-  Description: Generic configuration for SAMD21 development boards
-
-  This is a template configuration. Copy this file to create
-  a custom board configuration in a new boards/ subdirectory.
 */
 
 #ifndef BOARD_GENERIC_CONFIG_H
 #define BOARD_GENERIC_CONFIG_H
 
-// ============================================================================
 // BOARD IDENTIFICATION
-// ============================================================================
 
 #define BOARD_NAME "Generic SAMD21"
 #define BOARD_MCU  "SAMD21G18A"
 #define BOARD_URL  ""
 
-// ============================================================================
 // STEP PINS
-// ============================================================================
 // LOGICAL PORT-IMAGE CONTRACT (BUG #17, PLAN.md Phase 3 / CONTRACTS.md #1):
 // see samd21/megarm/config.h for the full rationale. X/Y/Z_STEP_BIT are
 // LOGICAL (core's native uint8_t port image, stepper.c get_step_pin_mask());
@@ -59,9 +48,7 @@
 #define STEP_MASK_A         ((1UL<<X_STEP_BIT)|(1UL<<Y_STEP_BIT)|(1UL<<Z_STEP_BIT))
 #define STEP_MASK_B         0
 
-// ============================================================================
 // DIRECTION PINS
-// ============================================================================
 // Same contract, same contiguous-shift shape as STEP above.
 
 #define X_DIRECTION_PORT    PORT_GROUPA
@@ -92,9 +79,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
                X_DIRECTION_BIT <= 7 && Y_DIRECTION_BIT <= 7 && Z_DIRECTION_BIT <= 7,
                "STEP/DIRECTION logical bits must fit core's uint8_t port image (BUG #17 class, CONTRACTS.md #1)");
 
-// ============================================================================
 // STEPPER ENABLE PIN
-// ============================================================================
 
 #define STEPPERS_DISABLE_PORT   PORT_GROUPA
 #define STEPPERS_DISABLE_PIN    22
@@ -103,9 +88,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define STEPPERS_DISABLE_MASK_A (1UL<<STEPPERS_DISABLE_PIN)
 #define STEPPERS_DISABLE_MASK_B 0
 
-// ============================================================================
 // LIMIT SWITCH PINS
-// ============================================================================
 
 #define X_LIMIT_PORT        PORT_GROUPA
 #define X_LIMIT_PIN         4
@@ -122,9 +105,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define LIMIT_MASK_A        ((1UL<<X_LIMIT_PIN)|(1UL<<Y_LIMIT_PIN)|(1UL<<Z_LIMIT_PIN))
 #define LIMIT_MASK_B        0
 
-// ============================================================================
 // CONTROL PINS
-// ============================================================================
 
 #define CONTROL_RESET_PORT      PORT_GROUPA
 #define CONTROL_RESET_PIN       7
@@ -147,9 +128,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 
 #define CONTROL_INVERT_MASK CONTROL_MASK_A
 
-// ============================================================================
 // PROBE PIN
-// ============================================================================
 
 #define PROBE_PORT          PORT_GROUPA
 #define PROBE_PIN           10
@@ -158,9 +137,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define PROBE_MASK_A        (1UL<<PROBE_PIN)
 #define PROBE_MASK_B        0
 
-// ============================================================================
 // SPINDLE CONTROL PINS
-// ============================================================================
 
 #define SPINDLE_PWM_PORT       PORT_GROUPA
 #define SPINDLE_PWM_PIN        14   // TCC0/WO[0]
@@ -198,9 +175,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 _Static_assert(SPINDLE_PWM_MAX_VALUE <= 255,
                "SPINDLE_PWM_MAX_VALUE must fit core's uint8_t duty domain (CONTRACTS.md #6.2, duty-cap-twins class)");
 
-// ============================================================================
 // COOLANT CONTROL PINS
-// ============================================================================
 
 #define COOLANT_FLOOD_PORT     PORT_GROUPA
 #define COOLANT_FLOOD_PIN      24
@@ -212,9 +187,7 @@ _Static_assert(SPINDLE_PWM_MAX_VALUE <= 255,
   #define COOLANT_MIST_BIT     25
 #endif
 
-// ============================================================================
 // UART PINS
-// ============================================================================
 
 #define UART_RX_PORT           PORT_GROUPA
 #define UART_RX_PIN            11   // SERCOM0 PAD[3]
@@ -229,9 +202,7 @@ _Static_assert(SPINDLE_PWM_MAX_VALUE <= 255,
 #define UART_SERCOM            SERCOM0
 #define UART_SERCOM_PMUX       0x2  // Function C
 
-// ============================================================================
 // PERIPHERAL ASSIGNMENTS
-// ============================================================================
 
 #define STEPPER_TIMER          TC3
 #define STEPPER_TIMER_IRQn     TC3_IRQn
@@ -246,9 +217,7 @@ _Static_assert(SPINDLE_PWM_MAX_VALUE <= 255,
 #define SPINDLE_PWM_GCLK_ID    GCLK_CLKCTRL_ID_TCC0_TCC1
 #define UART_GCLK_ID           GCLK_CLKCTRL_ID_SERCOM0_CORE
 
-// ============================================================================
 // SINGLE-PORT ALIASES (for gpio.h compatibility)
-// ============================================================================
 // generic board uses single port (PORT A), so map _MASK to _MASK_A
 
 #define STEP_MASK               STEP_MASK_A

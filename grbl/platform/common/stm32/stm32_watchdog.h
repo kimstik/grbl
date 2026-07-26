@@ -5,9 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  IWDG uses internal 40kHz RC oscillator, independent from main clock.
-  Identical API across all STM32 families (F1/F4/H5).
 */
 
 #ifndef STM32_WATCHDOG_H
@@ -15,9 +12,7 @@
 
 #include "stm32_platform.h"
 
-// ============================================================================
 // WATCHDOG PUBLIC API
-// ============================================================================
 
 /**
  * Initialize independent watchdog with specified timeout
