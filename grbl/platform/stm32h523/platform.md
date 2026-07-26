@@ -1,7 +1,12 @@
 # STM32H523 Platform Documentation
 
-**Status**: ✅ Ready for Hardware Testing
-**Completion**: 100%
+**Status**: Builds clean (DEBUG + RELEASE), zero `PORT_TODO_*`, boot-integrity
+and `FP=SINGLE` assert both PASSED. **Never run on real hardware, and never
+executed even in emulation** (no Renode/emulator model exists for this chip
+in this repo) - "ready for hardware validation" per PORTING-CHECKLIST.md's
+definition of done, not a claim that testing has occurred.
+**Completion**: 100% (build/link/contract gates); 0% hardware- or
+emulator-validated
 **Last Updated**: 2025-11-18
 
 ---
@@ -310,11 +315,9 @@ See `flash.c` for implementation details.
 
 ## GRBL Build Statistics
 
-**Release Build (with LTO)**:
-- Flash usage: ~24KB (19% of 128KB)
-- RAM usage: ~10KB (31% of 32KB)
-- Free flash: 96KB (75%)
-- Free RAM: 22KB (69%)
+Verified this session (fresh build, both flavors):
+- DEBUG: .text 41,508 bytes, .data 388 bytes
+- RELEASE (with LTO): .text 25,132 bytes (19.6% of 128KB), .data 388 bytes
 
 **Optimization Level**: `-Os -flto`
 

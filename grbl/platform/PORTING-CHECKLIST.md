@@ -5,7 +5,7 @@ Contracts for each macro family: `CONTRACTS.md` (section numbers cited as §N).
 Do steps in order — each layer's exit test depends on the previous layer.
 
 Ground rules (PLAN.md, standing laws):
-- Copy the `_template` skeleton (planned) (or the closest existing port) —
+- Copy the `_template` skeleton (landed, PORT_TODO_*-driven) (or the closest existing port) —
   never start from a blank directory. Reuse `common/` and
   `common/stm32/common.mk`-style sharing before writing anything new.
 - NO silent no-op stubs. Unimplemented macro = call to undeclared

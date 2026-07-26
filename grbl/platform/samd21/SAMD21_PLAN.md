@@ -2,7 +2,14 @@
 
 **Platform**: SAMD21G18A (Arduino Zero, MKR series)
 **Vendor**: Microchip (formerly Atmel)
-**Status**: 🚧 Work In Progress (WIP)
+**Status**: STALE — this file predates the actual bring-up. samd21 is
+now COMPLETE: builds clean (both `megarm`/`generic` boards, both flavors),
+zero `PORT_TODO_*`, and is the only port in this tree with any runtime
+evidence (Renode boot + `$$` dump + a `G2` arc motion test with real
+STEP-pin toggling). Never run on physical hardware, like every other port
+here. Treat `PLAN.md` Phase 3 and `samd21/README.md` as authoritative over
+this file's plan/status — it is kept for implementation history, not as a
+live status page.
 **Priority**: HIGH (Popular platform + custom rSamba bootloader integration)
 
 ---
