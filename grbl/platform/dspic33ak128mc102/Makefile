@@ -32,6 +32,10 @@
 #  item (PLAN.md Phase 6) - this Makefile is CI-shaped (all knowledge here,
 #  thin-invoker compatible) but no .github/workflows/ci.yml row exists.
 
+# A failed recipe must not leave a half-built target on disk for the next
+# `make` to mistake for up to date (skipping objcopy/the FP+boot guards).
+.DELETE_ON_ERROR:
+
 # ============================================================================
 # Chip identification
 # ============================================================================

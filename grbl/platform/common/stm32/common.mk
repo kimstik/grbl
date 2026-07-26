@@ -16,6 +16,10 @@
 #    FLASH_ORIGIN  - Flash base address, must match script.ld (e.g. 0x08000000)
 #    FLASH_LENGTH  - Flash size in bytes, must match script.ld (e.g. 65536)
 
+# A failed recipe must not leave a half-built target on disk for the next
+# `make` to mistake for up to date (skipping objcopy/the FP+boot guards).
+.DELETE_ON_ERROR:
+
 # Build configuration
 BUILD ?= DEBUG
 

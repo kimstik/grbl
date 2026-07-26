@@ -23,7 +23,7 @@ SECTIONS
   {
     /* ARMv7-M VTOR ignores bits [6:0], so the table needs at least 128-byte
        alignment; the architectural rule is "next power of two >= 4*vectors".
-       F103 has 60 vectors = 240 bytes -> 256. FLASH ORIGIN is already 256-byte
+       F103 has 59 vectors = 236 bytes -> 256. FLASH ORIGIN is already 256-byte
        aligned so the ALIGN is a no-op today; it keeps the guarantee if ORIGIN
        moves (bootloader offset). The ASSERT at the bottom enforces it. */
     . = ALIGN(256);
@@ -82,7 +82,7 @@ SECTIONS
 }
 
 /* BUG #21 ratchet: Reset_Handler programs SCB->VTOR = vector_table.
- * ARMv7-M VTOR ignores bits [6:0]; 60 vectors * 4 = 240 bytes -> 256-byte
+ * ARMv7-M VTOR ignores bits [6:0]; 59 vectors * 4 = 236 bytes -> 256-byte
  * alignment.
  * NOTE: this ASSERT does NOT catch a vanished table. Verified empirically:
  * with the fix reverted, ld resolves the undefined `vector_table` to 0, and

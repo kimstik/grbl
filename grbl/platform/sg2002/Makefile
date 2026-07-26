@@ -7,6 +7,10 @@
 #
 #  Sophgo SG2002: RISC-V C906, 700MHz, RV64IMAFDC, 256MB DDR3
 
+# A failed recipe must not leave a half-built target on disk for the next
+# `make` to mistake for up to date (skipping objcopy/the FP+boot guards).
+.DELETE_ON_ERROR:
+
 # Platform-specific configuration
 PLATFORM_NAME  = sg2002
 DEVICE         = SG2002

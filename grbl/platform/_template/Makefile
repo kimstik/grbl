@@ -23,6 +23,10 @@
 # into extra, broken words. Comments live on their own line instead.
 # ============================================================================
 
+# A failed recipe must not leave a half-built target on disk for the next
+# `make` to mistake for up to date (skipping objcopy/the FP+boot guards).
+.DELETE_ON_ERROR:
+
 # Rename to your platform's directory name.
 PLATFORM_NAME  = _template
 # Your chip part number, e.g. STM32F103C8.

@@ -20,6 +20,10 @@
 #  CONTRACTS.md's new RISC-V section - PLAN.md's recipe should be
 #  corrected the same way for the next RISC-V port.
 
+# A failed recipe must not leave a half-built target on disk for the next
+# `make` to mistake for up to date (skipping objcopy/the FP+boot guards).
+.DELETE_ON_ERROR:
+
 # ============================================================================
 # Chip identification
 # ============================================================================

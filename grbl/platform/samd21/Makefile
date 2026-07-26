@@ -8,6 +8,10 @@
 #  SAMD21G18A: ARM Cortex-M0+, 48MHz, 32KB RAM, 256KB Flash
 #  Used in Arduino Zero, MKR series
 
+# A failed recipe must not leave a half-built target on disk for the next
+# `make` to mistake for up to date (skipping objcopy/the FP+boot guards).
+.DELETE_ON_ERROR:
+
 # Platform-specific configuration
 PLATFORM_NAME  = samd21
 DEVICE         = SAMD21G18A
