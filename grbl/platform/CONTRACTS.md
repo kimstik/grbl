@@ -2482,187 +2482,6 @@ contributor-facing statement of the rule.
 
 ---
 
-<a id="lto-asm-only-reachable-symbols"></a>
-## 30. `-flto` on ch32v006/ch570: an assembly-only-reachable symbol is BUG #21's mechanism, one ISA over (cite the slug, not "§30", from elsewhere)
-
-A compactness audit measured real, rebuilt savings from enabling `-flto`
-`-fno-fat-lto-objects` (RELEASE only, house style — see below) on the two
-RISC-V ports: ch32v006 41072 → **39012** (−2060 B, −5.0%); ch570 40674 →
-**38422** (−2252 B, −5.5%). Both numbers reproduced exactly on a real
-rebuild in this batch, not projected.
-
-**The precondition the audit hit before either number was real: naive
-`-flto` breaks the boot path.** Both RISC-V startup files
-(`ch32v006/startup.c`, `ch570/startup.c`) reach `Reset_Handler` from
-exactly one place — `_start`'s raw inline assembly:
-
-```c
-__attribute__((naked, section(".init")))
-void _start(void) {
-  __asm__ volatile (
-    "la sp, _estack \n"
-    "jal Reset_Handler \n"
-  );
-}
-```
-
-`jal Reset_Handler` is a string GCC's LTO frontend never parses for symbol
-references — it is opaque to the whole-program IPA pass that decides what
-survives into codegen. `Reset_Handler` has no other caller anywhere in the
-C call graph (nothing else in the tree calls it; it is reached only via
-this one `jal`). With `-flto` and no visible reference, IPA for an
-executable link (GCC treats a non-PIC executable link as implicitly
-whole-program) concludes `Reset_Handler` is dead and deletes its
-*definition* before codegen ever runs. `_start` itself survives (`ld`'s
-`ENTRY(_start)` — reinforced here by `script.ld`'s `KEEP(*(.init))` —
-keeps the linker's own root set anchored on it), so the build does not
-silently produce a bricked image the way [§18](#vector-table-lto)'s
-ARM vector-table case did. Instead the *link fails loudly*:
-`undefined reference to 'Reset_Handler'` — the one call site referencing it
-(the `.init` object's relocation) now points at nothing. Loud is better
-than silent, but it is still the same root cause as BUG #21, seen through a
-different ISA's boot mechanism: **a symbol reachable only from raw assembly
-(or only from a hardware-loaded table) is invisible to LTO's IPA and must
-be pinned with `__attribute__((used))`, regardless of which architecture or
-which flavor of "invisible to the compiler" is in play.** §18's ARM ports
-dodge this specific instance only because their `Reset_Handler` happens to
-be address-taken from a C-visible `vector_table[]` (`SCB->VTOR = (uint32_t)
-vector_table;`) — a defense that has no equivalent here, because RISC-V
-reset is entered by hand-written asm, not a hardware-loaded pointer table.
-
-**Fix**: `__attribute__((used))` on `Reset_Handler` in both
-`ch32v006/startup.c` and `ch570/startup.c` — nothing else. `used` pins the
-symbol to GCC's emitted-symbols root set independent of visible callers,
-the same role it already plays on `PFIC_Vector[]` in the same two files
-(landed earlier, `--gc-sections` lifecycle fix, [§14 item 3](#ch32v006-riscv-gaps)).
-
-**The rest of the audit: every other assembly-/table-reachable symbol on
-both ports was already `used`-pinned before this batch, verified by nm/
-disassembly, not assumed:**
-- `PFIC_Vector[]` (both ports): `__attribute__((used, section(".vectors")))`
-  already, plus `script.ld`'s `KEEP(*(.init)) KEEP(*(.vectors))` — landed
-  during the M1-M3 `--gc-sections` reachability fix, unaffected by this
-  batch.
-- Every ISR body addressed only via `PFIC_Vector[]`
-  (`Default_Handler`, `SysTick_Handler`, `TIM2_IRQHandler`,
-  `EXTI7_0_IRQHandler`, `USART1_IRQHandler` on ch32v006;
-  `Default_Handler`, `SysTick_Handler`, `TMR_IRQHandler`,
-  `GPIOA_IRQHandler`, `UART_IRQHandler` on ch570): address-taken by a
-  `used`-anchored array initializer, so IPA treats them as reachable —
-  confirmed present by name in a post-`-flto` `nm` on both RELEASE ELFs
-  (`_start`, `Reset_Handler`, `PFIC_Vector`, and all of the above, every
-  one), and `mret` (opcode `0x30200073`) disassembly-confirmed as the last
-  instruction of two ISR bodies per port ([§20](#wch-isr-attribute)'s
-  trap-return contract — `TIM2_IRQHandler`/`USART1_IRQHandler` on
-  ch32v006, `TMR_IRQHandler`/`UART_IRQHandler` on ch570).
-- `_start` itself: not `used`, and does not need to be — it is the
-  linker's `ENTRY()` symbol, a root the linker plugin's own symbol
-  resolution keeps independent of C-level call-graph visibility. The
-  Makefile's existing RISC-V boot-integrity check (`nm | grep ' _start$'`
-  must equal the flash origin) is unchanged and still the correct
-  belt-and-suspenders assertion for this fact — if a future toolchain
-  ever failed to protect the entry symbol under LTO, this check catches it
-  the same way it already catches any other reason `_start` might not land
-  at the flash base.
-- `ch570/vendor/ISP572.o` (the one vendored non-LTO object, linked as a
-  plain `.o`, not compiled with `-flto`): mixing an ordinary object into an
-  otherwise-LTO link is supported by design — it participates in the final
-  link as opaque machine code, not LTO IR, and needs no `used` audit of its
-  own (nothing in it is reached only from assembly; its one entry point is
-  called from ordinary C in `nvmem.c`).
-
-**House style matched, not invented**: `-flto -fno-fat-lto-objects` in
-`CFLAGS` and `-flto -Os` in `LDFLAGS`, gated on `BUILD==RELEASE` only —
-copied from `samd21/Makefile` (`grbl/platform/samd21/Makefile:134,150`) and
-`grbl/platform/common/stm32/common.mk:114,130`, which every ARM port in
-this tree already uses the same way. DEBUG stays `-Og -g3` on both RISC-V
-ports, untouched — same reasoning as every other port: LTO's cross-TU
-inlining/reordering makes single-stepping/variable inspection unreliable,
-and DEBUG has no size pressure `-Og` doesn't already relieve. Confirmed
-both DEBUG binaries are byte-for-byte unaffected by this batch (`used` is
-inert without `-flto`): ch32v006 DEBUG 46988/0 unchanged, ch570 DEBUG
-46830/4 unchanged (both match the pre-batch recorded figures exactly).
-
-**GATES this batch re-ran (not just inspected)**: golden AVR `make -C
-grbl/platform/atmega328p validate` **PASSED** (MD5
-`79af184e67b27defd27a39309ac53563`, text 30640); boot integrity OK both
-RISC-V ports both flavors (`_start=0x00000000`); FP=SINGLE post-link assert
-PASSED all four RISC-V builds; warning ratchet clean against
-`ci/warn_baseline_ch32v006.txt`/`ci/warn_baseline_ch570.txt` for all four
-logs (ch570 RELEASE additionally dropped 4 warnings that no longer fire —
-recorded as ratchet-reported removal candidates, baseline left as-is per
-the one-way-ratchet rule); zero `PORT_TODO_*` in all four ELFs;
-`tools/build_artifacts.py check` **OK** across all 10 buildable units after
-refreshing `artifacts/ch32v006/` and `artifacts/ch570/` (`bin`/`hex`/`syms`
-+ `MANIFEST.sha256`) — the other 8 units rebuilt byte-identical to their
-already-committed artifacts (confirmed via `git diff --stat`: zero bytes
-changed outside `ch32v006/`, `ch570/`, and `MANIFEST.sha256`), so this
-batch's `-flto` change is confirmed scoped to exactly the two ports it
-targets. `tools/build_artifacts.py --selftest`,
-`tools/assert_no_double.sh --selftest`, `ci/warn_ratchet.py --selftest`,
-and `tools/check_contracts_numbering.py` all still PASS unchanged.
-**`grbl_<port>.elf.dump` added — a readable disassembly diff, tracked
-CONTINUOUSLY, never hash-gated (this batch)**: owner directive was to put
-an objdump log next to each ELF so a build-to-build change is visually
-diffable even though the ELF itself (and now the dump) legitimately
-differs every compile. Full flag-by-flag rationale, measured per-unit/
-total sizes, and the `.gitignore`/`git archive` proof live in
-`artifacts/README.md` (the `.elf.dump` sections); summarized here for the
-canonical-detail location:
-
-- **Flags**: `-d -S -h -t --no-show-raw-insn`, run through each port's own
-  `objdump`. `-d` (not `-D`) keeps the disassembly to CODE sections only.
-  `-S` is a verified no-op on today's `-g0` RELEASE builds, kept free for
-  future-proofing. `--no-show-raw-insn` measured ~24% smaller (stm32f103:
-  455,508 → 345,950 bytes) and keeps the diff about instructions, not
-  encoded bytes. `--no-addresses` was rejected — unsupported by
-  `avr-objdump` 2.26 / `xc-dsc-objdump` 2.32, would break two of the four
-  toolchains. `-r` was rejected — relocations are empty in a final linked
-  executable, verified.
-- **Tracking policy: CONTINUOUS** (every refresh, same cadence as `.syms`),
-  not tag-gated like `.elf` despite the shared name — argued from purpose:
-  the owner wants a diff of what changed *between builds*, and a tag-only
-  dump would only ever be diffable release-to-release, reopening the exact
-  gap `.bin`/`.hex`/`.syms` exist to close. Generated from the same
-  scratch-built RELEASE `.elf` `.syms` already reads; no committed `.elf`
-  needs to exist alongside it between tags.
-- **Size cost, measured**: 293 KB (hc32f460) – 649 KB (dsPIC33AK) per unit,
-  2.5-3.9x each unit's `.elf` (atmega328p 9.6x, AVR disassembly density,
-  not a flag bug). Total across ten units: **3,942,120 bytes (~3.76 MiB)**
-  added to every full refresh — bringing the tracked tree from 32 files/
-  1,403,154 bytes to 42 files/5,345,274 bytes (~281% growth). Stated
-  plainly, same posture as every other growth-cost number in this section.
-- **NOT hash-gated, proven not asserted**: `objdump` prints its own
-  invocation path as line 1 of every dump, on every toolchain — proven by
-  rebuilding stm32f103 RELEASE from two different absolute paths: `.elf`
-  byte-identical (`cmp`: no difference), `.elf.dump` differs by exactly
-  that one echoed-path line. This repo's actual workflow (fresh worktree
-  per task) hits that difference on effectively every `check` run.
-  dsPIC33AK's dump is additionally non-reproducible even from the SAME
-  path (same tempfile-section-name/pointer-derived-symbol-name root cause
-  as its existing `nondeterministic_elf` `.elf` exemption, reconfirmed this
-  batch). `tools/build_artifacts.py check` verifies `.elf.dump` PRESENCE
-  only, explicitly, per unit, every run — never silently. The pre-existing
-  56-file hash-gated set is unchanged (`check` still reports "56 file(s)
-  verified fresh across 10 unit(s)").
-- **`-ffile-prefix-map=$(CURDIR)=/grbl-src` (DEBUG `.elf` manifest-hash
-  path-independence, subsection above) reviewed against this batch's "ELF
-  variation is storage, not diffing" framing, and KEPT**: that ruling is
-  about not chasing `.elf` byte-stability for a binary diff (correct, and
-  exactly why `.elf.dump` now exists instead) — it does not bear on
-  `-ffile-prefix-map`, which fixes a *different*, still-live problem
-  (spurious DEBUG-hash "drift" in `check` purely from checkout-path
-  differences, which this project's actual multi-worktree workflow hits
-  constantly). Zero storage cost either way (compiler flag, not a tracked
-  byte), so dropping it would only reintroduce a real false-positive risk
-  for no benefit. Left unchanged in every port's `Makefile`.
-- **`.gitignore` proof**: `*.elf` matches paths ending `.elf`, not
-  `.elf.dump`; no `*.dump` rule exists. `git check-ignore -v` on every
-  committed `.elf.dump` prints nothing / exits 1 (all ten units); a
-  post-commit `git archive HEAD` extraction was checked to include all ten
-  paths — the same class of proof `tools/README.md`'s original fix needed,
-  applied before this became a fourth blanket-ignore surprise.
-
 <a id="cross-arch-dedup-byte-invariance"></a>
 ## 26. Cross-architecture de-duplication under a byte-identity gate — four extractions, and the one that had to stop at three ports (placeholder number — integrator assigns the final one; cite this slug, not "§26", from elsewhere)
 
@@ -3236,6 +3055,187 @@ file's own include chain is invisible to it, permanently, once an
 `#ifndef` guard has already made its one pass.
 
 ---
+
+<a id="lto-asm-only-reachable-symbols"></a>
+## 30. `-flto` on ch32v006/ch570: an assembly-only-reachable symbol is BUG #21's mechanism, one ISA over (cite the slug, not "§30", from elsewhere)
+
+A compactness audit measured real, rebuilt savings from enabling `-flto`
+`-fno-fat-lto-objects` (RELEASE only, house style — see below) on the two
+RISC-V ports: ch32v006 41072 → **39012** (−2060 B, −5.0%); ch570 40674 →
+**38422** (−2252 B, −5.5%). Both numbers reproduced exactly on a real
+rebuild in this batch, not projected.
+
+**The precondition the audit hit before either number was real: naive
+`-flto` breaks the boot path.** Both RISC-V startup files
+(`ch32v006/startup.c`, `ch570/startup.c`) reach `Reset_Handler` from
+exactly one place — `_start`'s raw inline assembly:
+
+```c
+__attribute__((naked, section(".init")))
+void _start(void) {
+  __asm__ volatile (
+    "la sp, _estack \n"
+    "jal Reset_Handler \n"
+  );
+}
+```
+
+`jal Reset_Handler` is a string GCC's LTO frontend never parses for symbol
+references — it is opaque to the whole-program IPA pass that decides what
+survives into codegen. `Reset_Handler` has no other caller anywhere in the
+C call graph (nothing else in the tree calls it; it is reached only via
+this one `jal`). With `-flto` and no visible reference, IPA for an
+executable link (GCC treats a non-PIC executable link as implicitly
+whole-program) concludes `Reset_Handler` is dead and deletes its
+*definition* before codegen ever runs. `_start` itself survives (`ld`'s
+`ENTRY(_start)` — reinforced here by `script.ld`'s `KEEP(*(.init))` —
+keeps the linker's own root set anchored on it), so the build does not
+silently produce a bricked image the way [§18](#vector-table-lto)'s
+ARM vector-table case did. Instead the *link fails loudly*:
+`undefined reference to 'Reset_Handler'` — the one call site referencing it
+(the `.init` object's relocation) now points at nothing. Loud is better
+than silent, but it is still the same root cause as BUG #21, seen through a
+different ISA's boot mechanism: **a symbol reachable only from raw assembly
+(or only from a hardware-loaded table) is invisible to LTO's IPA and must
+be pinned with `__attribute__((used))`, regardless of which architecture or
+which flavor of "invisible to the compiler" is in play.** §18's ARM ports
+dodge this specific instance only because their `Reset_Handler` happens to
+be address-taken from a C-visible `vector_table[]` (`SCB->VTOR = (uint32_t)
+vector_table;`) — a defense that has no equivalent here, because RISC-V
+reset is entered by hand-written asm, not a hardware-loaded pointer table.
+
+**Fix**: `__attribute__((used))` on `Reset_Handler` in both
+`ch32v006/startup.c` and `ch570/startup.c` — nothing else. `used` pins the
+symbol to GCC's emitted-symbols root set independent of visible callers,
+the same role it already plays on `PFIC_Vector[]` in the same two files
+(landed earlier, `--gc-sections` lifecycle fix, [§14 item 3](#ch32v006-riscv-gaps)).
+
+**The rest of the audit: every other assembly-/table-reachable symbol on
+both ports was already `used`-pinned before this batch, verified by nm/
+disassembly, not assumed:**
+- `PFIC_Vector[]` (both ports): `__attribute__((used, section(".vectors")))`
+  already, plus `script.ld`'s `KEEP(*(.init)) KEEP(*(.vectors))` — landed
+  during the M1-M3 `--gc-sections` reachability fix, unaffected by this
+  batch.
+- Every ISR body addressed only via `PFIC_Vector[]`
+  (`Default_Handler`, `SysTick_Handler`, `TIM2_IRQHandler`,
+  `EXTI7_0_IRQHandler`, `USART1_IRQHandler` on ch32v006;
+  `Default_Handler`, `SysTick_Handler`, `TMR_IRQHandler`,
+  `GPIOA_IRQHandler`, `UART_IRQHandler` on ch570): address-taken by a
+  `used`-anchored array initializer, so IPA treats them as reachable —
+  confirmed present by name in a post-`-flto` `nm` on both RELEASE ELFs
+  (`_start`, `Reset_Handler`, `PFIC_Vector`, and all of the above, every
+  one), and `mret` (opcode `0x30200073`) disassembly-confirmed as the last
+  instruction of two ISR bodies per port ([§20](#wch-isr-attribute)'s
+  trap-return contract — `TIM2_IRQHandler`/`USART1_IRQHandler` on
+  ch32v006, `TMR_IRQHandler`/`UART_IRQHandler` on ch570).
+- `_start` itself: not `used`, and does not need to be — it is the
+  linker's `ENTRY()` symbol, a root the linker plugin's own symbol
+  resolution keeps independent of C-level call-graph visibility. The
+  Makefile's existing RISC-V boot-integrity check (`nm | grep ' _start$'`
+  must equal the flash origin) is unchanged and still the correct
+  belt-and-suspenders assertion for this fact — if a future toolchain
+  ever failed to protect the entry symbol under LTO, this check catches it
+  the same way it already catches any other reason `_start` might not land
+  at the flash base.
+- `ch570/vendor/ISP572.o` (the one vendored non-LTO object, linked as a
+  plain `.o`, not compiled with `-flto`): mixing an ordinary object into an
+  otherwise-LTO link is supported by design — it participates in the final
+  link as opaque machine code, not LTO IR, and needs no `used` audit of its
+  own (nothing in it is reached only from assembly; its one entry point is
+  called from ordinary C in `nvmem.c`).
+
+**House style matched, not invented**: `-flto -fno-fat-lto-objects` in
+`CFLAGS` and `-flto -Os` in `LDFLAGS`, gated on `BUILD==RELEASE` only —
+copied from `samd21/Makefile` (`grbl/platform/samd21/Makefile:134,150`) and
+`grbl/platform/common/stm32/common.mk:114,130`, which every ARM port in
+this tree already uses the same way. DEBUG stays `-Og -g3` on both RISC-V
+ports, untouched — same reasoning as every other port: LTO's cross-TU
+inlining/reordering makes single-stepping/variable inspection unreliable,
+and DEBUG has no size pressure `-Og` doesn't already relieve. Confirmed
+both DEBUG binaries are byte-for-byte unaffected by this batch (`used` is
+inert without `-flto`): ch32v006 DEBUG 46988/0 unchanged, ch570 DEBUG
+46830/4 unchanged (both match the pre-batch recorded figures exactly).
+
+**GATES this batch re-ran (not just inspected)**: golden AVR `make -C
+grbl/platform/atmega328p validate` **PASSED** (MD5
+`79af184e67b27defd27a39309ac53563`, text 30640); boot integrity OK both
+RISC-V ports both flavors (`_start=0x00000000`); FP=SINGLE post-link assert
+PASSED all four RISC-V builds; warning ratchet clean against
+`ci/warn_baseline_ch32v006.txt`/`ci/warn_baseline_ch570.txt` for all four
+logs (ch570 RELEASE additionally dropped 4 warnings that no longer fire —
+recorded as ratchet-reported removal candidates, baseline left as-is per
+the one-way-ratchet rule); zero `PORT_TODO_*` in all four ELFs;
+`tools/build_artifacts.py check` **OK** across all 10 buildable units after
+refreshing `artifacts/ch32v006/` and `artifacts/ch570/` (`bin`/`hex`/`syms`
++ `MANIFEST.sha256`) — the other 8 units rebuilt byte-identical to their
+already-committed artifacts (confirmed via `git diff --stat`: zero bytes
+changed outside `ch32v006/`, `ch570/`, and `MANIFEST.sha256`), so this
+batch's `-flto` change is confirmed scoped to exactly the two ports it
+targets. `tools/build_artifacts.py --selftest`,
+`tools/assert_no_double.sh --selftest`, `ci/warn_ratchet.py --selftest`,
+and `tools/check_contracts_numbering.py` all still PASS unchanged.
+**`grbl_<port>.elf.dump` added — a readable disassembly diff, tracked
+CONTINUOUSLY, never hash-gated (this batch)**: owner directive was to put
+an objdump log next to each ELF so a build-to-build change is visually
+diffable even though the ELF itself (and now the dump) legitimately
+differs every compile. Full flag-by-flag rationale, measured per-unit/
+total sizes, and the `.gitignore`/`git archive` proof live in
+`artifacts/README.md` (the `.elf.dump` sections); summarized here for the
+canonical-detail location:
+
+- **Flags**: `-d -S -h -t --no-show-raw-insn`, run through each port's own
+  `objdump`. `-d` (not `-D`) keeps the disassembly to CODE sections only.
+  `-S` is a verified no-op on today's `-g0` RELEASE builds, kept free for
+  future-proofing. `--no-show-raw-insn` measured ~24% smaller (stm32f103:
+  455,508 → 345,950 bytes) and keeps the diff about instructions, not
+  encoded bytes. `--no-addresses` was rejected — unsupported by
+  `avr-objdump` 2.26 / `xc-dsc-objdump` 2.32, would break two of the four
+  toolchains. `-r` was rejected — relocations are empty in a final linked
+  executable, verified.
+- **Tracking policy: CONTINUOUS** (every refresh, same cadence as `.syms`),
+  not tag-gated like `.elf` despite the shared name — argued from purpose:
+  the owner wants a diff of what changed *between builds*, and a tag-only
+  dump would only ever be diffable release-to-release, reopening the exact
+  gap `.bin`/`.hex`/`.syms` exist to close. Generated from the same
+  scratch-built RELEASE `.elf` `.syms` already reads; no committed `.elf`
+  needs to exist alongside it between tags.
+- **Size cost, measured**: 293 KB (hc32f460) – 649 KB (dsPIC33AK) per unit,
+  2.5-3.9x each unit's `.elf` (atmega328p 9.6x, AVR disassembly density,
+  not a flag bug). Total across ten units: **3,942,120 bytes (~3.76 MiB)**
+  added to every full refresh — bringing the tracked tree from 32 files/
+  1,403,154 bytes to 42 files/5,345,274 bytes (~281% growth). Stated
+  plainly, same posture as every other growth-cost number in this section.
+- **NOT hash-gated, proven not asserted**: `objdump` prints its own
+  invocation path as line 1 of every dump, on every toolchain — proven by
+  rebuilding stm32f103 RELEASE from two different absolute paths: `.elf`
+  byte-identical (`cmp`: no difference), `.elf.dump` differs by exactly
+  that one echoed-path line. This repo's actual workflow (fresh worktree
+  per task) hits that difference on effectively every `check` run.
+  dsPIC33AK's dump is additionally non-reproducible even from the SAME
+  path (same tempfile-section-name/pointer-derived-symbol-name root cause
+  as its existing `nondeterministic_elf` `.elf` exemption, reconfirmed this
+  batch). `tools/build_artifacts.py check` verifies `.elf.dump` PRESENCE
+  only, explicitly, per unit, every run — never silently. The pre-existing
+  56-file hash-gated set is unchanged (`check` still reports "56 file(s)
+  verified fresh across 10 unit(s)").
+- **`-ffile-prefix-map=$(CURDIR)=/grbl-src` (DEBUG `.elf` manifest-hash
+  path-independence, subsection above) reviewed against this batch's "ELF
+  variation is storage, not diffing" framing, and KEPT**: that ruling is
+  about not chasing `.elf` byte-stability for a binary diff (correct, and
+  exactly why `.elf.dump` now exists instead) — it does not bear on
+  `-ffile-prefix-map`, which fixes a *different*, still-live problem
+  (spurious DEBUG-hash "drift" in `check` purely from checkout-path
+  differences, which this project's actual multi-worktree workflow hits
+  constantly). Zero storage cost either way (compiler flag, not a tracked
+  byte), so dropping it would only reintroduce a real false-positive risk
+  for no benefit. Left unchanged in every port's `Makefile`.
+- **`.gitignore` proof**: `*.elf` matches paths ending `.elf`, not
+  `.elf.dump`; no `*.dump` rule exists. `git check-ignore -v` on every
+  committed `.elf.dump` prints nothing / exits 1 (all ten units); a
+  post-commit `git archive HEAD` extraction was checked to include all ten
+  paths — the same class of proof `tools/README.md`'s original fix needed,
+  applied before this became a fourth blanket-ignore surprise.
 
 <a id="limit-bit-width-second-consumer"></a>
 ## 31. A width contract has as many consumers as there are call sites — audit all of them, not the one you found first (cite the slug, not "§31", from elsewhere)
