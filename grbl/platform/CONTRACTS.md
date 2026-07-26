@@ -3702,7 +3702,7 @@ rule 3); stating it in advance, once, removes the temptation to
 reconsider it under the pressure of a red CI run.
 
 <a id="logical-contract-vs-constraint-cure"></a>
-## §NEW. Two cures for one disease: when to promote the logical port-image contract vs. keep the `<=7` constraint (cite the slug, not a number, from elsewhere)
+## 35. Two cures for one disease: when to promote the logical port-image contract vs. keep the `<=7` constraint (cite the slug, not a number, from elsewhere)
 
 [§limit-bit-width-second-consumer](#limit-bit-width-second-consumer) closed
 BUG #26 on stm32f103/f411/h523 by moving `Z_LIMIT_BIT` back under 8 and
