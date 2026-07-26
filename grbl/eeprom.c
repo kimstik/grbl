@@ -1,3 +1,16 @@
+// NOTE (repo hygiene audit, kept vs. deleted - see CONTRACTS.md #0/#10):
+// this file is IN NO PORT'S BUILD (every Makefile that lists GRBL core
+// sources excludes it explicitly - grep "eeprom.c" any grbl/platform/*/
+// Makefile) and contributes 0 bytes to any tracked artifact. It is kept
+// anyway, unmodified, as the original upstream Atmel/grbl AVR EEPROM
+// driver this fork's `nvmem.c`/platform `nvmem.c` TU-replacements grew
+// out of - this project's thesis is an UNMODIFIED core (golden AVR MD5,
+// CONTRACTS.md's "cautionary tale"), and deleting a retained upstream
+// source file is itself a provenance change, not a neutral cleanup.
+// CONTRACTS.md #10 already says the same thing in one line: "Legacy
+// grbl/eeprom.c is in no build - do not port it." This header just makes
+// the reason visible from the file itself, not only from CONTRACTS.md.
+//
 // This file has been prepared for Doxygen automatic documentation generation.
 /*! \file ********************************************************************
 *
