@@ -93,6 +93,17 @@ else
   $(error FP must be SINGLE or DOUBLE, got "$(FP)")
 endif
 
+# BOOT-INIT REACHABILITY KNOB (BUG #23, CONTRACTS.md #boot-init-unreachable).
+# This port's bring-up chain was DEFINED and CALLED FROM NOWHERE until BUG
+# #23: core grbl/main.c is the golden gate and never calls platform init, no
+# Reset_Handler called it either, so -flto deleted the whole subgraph and the
+# shipped RELEASE image configured neither clock nor GPIO. The call now lives
+# in this port's Reset_Handler; THIS is the check that it is still there.
+# Declarable per port (ports name their init differently - samd21/ch32v006/
+# ch570 use SystemInit, the dsPIC uses _hal_clock_config).
+INIT_SYMBOLS ?= Reset_Handler,hal_system_init,hal_clock_config,hal_gpio_init
+INIT_CHECK = ../common/init_check.sh
+
 # CFLAGS_EXTRA must be ABSOLUTELY FIRST to override grbl headers (cpu_map.h, etc)
 CFLAGS_EXTRA = -I. -I../common/dummy -include prelude.h
 CFLAGS += $(CFLAGS_EXTRA) -I$(PLATFORM_DIR) -I$(GRBL_DIR)/platform -I$(GRBL_DIR)
@@ -156,6 +167,7 @@ $(ELF_FILE): $(OBJECTS)
 	$(CC) $(LDFLAGS) -o $@ $(OBJECTS) $(LIBS)
 	$(SIZE) --format=berkeley $@
 	$(ASSERT_FP)
+	@sh $(INIT_CHECK) $(PREFIX)nm $@ $(INIT_SYMBOLS)
 
 $(HEX_FILE): $(ELF_FILE)
 	$(OBJCOPY) -O ihex $< $@

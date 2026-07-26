@@ -93,7 +93,25 @@ void (* const vector_table[])(void) = {
   width, delay loops all derive from F_CPU) - verify against a scope or
   emulator cycle count, not by assumption.
 */
-void SystemInit(void) {
+/*
+  GRBL_BOOT_INIT (common/boot_init.h) == __attribute__((noinline)), and it
+  is NOT optional decoration (BUG #23, CONTRACTS.md #boot-init-unreachable).
+
+  This function has exactly one call site (Reset_Handler, below). Without
+  noinline, LTO folds it into that caller and the out-of-line symbol
+  disappears - so `nm` on the RELEASE ELF shows nothing, which is
+  byte-for-byte the same observation you get from a port whose clock init
+  is NEVER CALLED AT ALL. Four landed ports shipped in exactly that state.
+  common/init_check.sh cannot tell those two cases apart unless the symbol
+  is pinned, which is what this attribute does.
+
+  Do NOT "strengthen" this to `used`. `used` emits the function even when
+  unreferenced, which would make the check pass on a port that never calls
+  its clock init - the precise defect the check exists to find. (`used` IS
+  correct on vector_table[] below, where the hardware is the consumer and
+  there is no reachability to prove. Different problem, opposite answer.)
+*/
+GRBL_BOOT_INIT void SystemInit(void) {
   PORT_TODO_SYSTEM_CLOCK_INIT();
 }
 

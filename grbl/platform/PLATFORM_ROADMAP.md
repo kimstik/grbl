@@ -29,8 +29,10 @@ that fails the build if the vector table or reset SP look wrong.
 - **Status**: 🟢 Builds clean, both flavors, zero regressions in golden/sibling gates
 - **Architecture**: ARM Cortex-M3, 72MHz
 - **Memory**: 20KB RAM, 64KB Flash
-- **RELEASE flash body** (re-measured 2026-07-26, `text`/`data`): **28700 / 80** — smaller than
-  the AVR golden reference (30640/0). DEBUG: 43120/80.
+- **RELEASE flash body** (re-measured 2026-07-26 after BUG #23, `text`/`data`): **29028 / 80** —
+  still smaller than the AVR golden reference (30640/0). The +328 over the previous 28700/80
+  figure is the clock+GPIO bring-up chain returning to the image: it had been LTO-deleted because
+  nothing called `hal_system_init()` (BUG #23, CONTRACTS.md `boot-init-unreachable`).
 - **History**: was build-broken (undeclared spindle macros, `PLATFORM_NAME`/`sei`/`cli`
   redefinitions, a `LIMIT_DDR` self-collision) until PLAN.md Phase 1 fixed it, then briefly shipped
   a RELEASE binary with NO vector table at all (BUG #21, LTO ate it) until the fix landed

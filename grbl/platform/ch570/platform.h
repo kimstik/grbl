@@ -17,6 +17,9 @@
 #include "ch570.h"
 #include "timer.h"
 
+// GRBL_BOOT_INIT - the anchor attribute on the pre-main init chain (BUG #23)
+#include "common/boot_init.h"
+
 // ============================================================================
 // PLATFORM IDENTIFICATION
 // ============================================================================

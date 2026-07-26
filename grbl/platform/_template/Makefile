@@ -234,6 +234,38 @@ $(BUILD_DIR)/nvmem.o: nvmem.c | $(BUILD_DIR)
 link: objects
 	$(CC) $(LDFLAGS) -o $(ELF_FILE) $(OBJECTS) $(LIBS)
 	$(SIZE) --format=berkeley $(ELF_FILE)
+	@sh $(INIT_CHECK) $(PREFIX)nm $(ELF_FILE) $(INIT_SYMBOLS)
+
+# BOOT-INIT REACHABILITY (BUG #23 ratchet, CONTRACTS.md
+# #boot-init-unreachable) - DO NOT DELETE THIS.
+#
+# Four landed ports shipped a complete, reviewed hal_system_init() ->
+# hal_clock_config() + hal_gpio_init() chain that NOTHING CALLED. Core
+# grbl/main.c is the golden gate and never calls platform init; no
+# Reset_Handler called it either; -flto deleted the entire subgraph. The
+# link succeeded, --gc-sections was happy, `size` looked normal,
+# boot_check.sh above PASSED (the vector table was fine) - and the chips
+# booted on their reset-default oscillator with unconfigured GPIO. DEBUG
+# (no LTO) retained the dead code and looked perfect.
+#
+# After -flto + --gc-sections a function survives ONLY if something reaches
+# it, so "defined in the final ELF" == "reachable". This check demands that
+# of every symbol you list.
+#
+# PORT-TODO: list every function that must run before main() - your
+#            Reset_Handler (or the toolchain crt0 entry on a target where
+#            crt0 is supplied, see dspic33ak128mc102/Makefile), plus each
+#            clock/GPIO bring-up function it reaches. Names differ per port
+#            by design; that is why this is declared here and not shared.
+# PORT-TODO: tag every function you list GRBL_BOOT_INIT (common/boot_init.h)
+#            at BOTH its declaration and its definition. That macro is
+#            `noinline` and deliberately NOT `used`: a single-call-site init
+#            inlined into Reset_Handler leaves no symbol and would look
+#            exactly like the bug, while `used` would force the symbol into
+#            the image whether or not anything called it - blinding this
+#            check completely.
+INIT_CHECK   = ../common/init_check.sh
+INIT_SYMBOLS = Reset_Handler,SystemInit
 
 # Create hex file
 $(HEX_FILE): $(ELF_FILE)

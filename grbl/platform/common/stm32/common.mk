@@ -15,6 +15,10 @@
 #    OPENOCD_TARGET - OpenOCD target config (e.g., stm32f1x.cfg, stm32h5x.cfg)
 #    FLASH_ORIGIN  - Flash base address, must match script.ld (e.g. 0x08000000)
 #    FLASH_LENGTH  - Flash size in bytes, must match script.ld (e.g. 65536)
+#
+#  and MAY override:
+#    INIT_SYMBOLS  - comma-separated boot-init symbols that must survive the
+#                    link (BUG #23 ratchet, see the default below)
 
 # A failed recipe must not leave a half-built target on disk for the next
 # `make` to mistake for up to date (skipping objcopy/the FP+boot guards).
@@ -105,6 +109,23 @@ else
   $(error FP must be SINGLE or DOUBLE, got "$(FP)")
 endif
 
+# BOOT-INIT REACHABILITY KNOB (BUG #23, CONTRACTS.md #boot-init-unreachable)
+#
+# The three-function bring-up chain every STM32 family in this tree shares.
+# It was DEFINED and CALLED FROM NOWHERE on f103/f411/h523 until BUG #23:
+# core grbl/main.c is the golden gate and never calls platform init, no
+# Reset_Handler called it either, so -flto deleted the whole subgraph and
+# the shipped RELEASE images configured neither clock nor GPIO. The call
+# now lives in each port's Reset_Handler; THIS is the check that the call
+# is still there, and that LTO still keeps what it reaches.
+#
+# Declarable per port (a port that renames or splits its bring-up sets its
+# own list in its Makefile before including this file) - ports genuinely
+# name this differently: samd21/ch32v006/ch570 use SystemInit, the dsPIC
+# uses _hal_clock_config via a crt0 user_init hook.
+INIT_SYMBOLS ?= Reset_Handler,hal_system_init,hal_clock_config,hal_gpio_init
+INIT_CHECK = ../common/init_check.sh
+
 # CFLAGS_EXTRA must be ABSOLUTELY FIRST to override grbl headers (cpu_map.h, etc)
 CFLAGS += $(CFLAGS_EXTRA) -I$(PLATFORM_DIR) -I$(COMMON_DIR) -I$(GRBL_DIR)/platform -I$(GRBL_DIR)
 
@@ -191,6 +212,7 @@ $(ELF_FILE): $(OBJECTS)
 	$(CC) $(LDFLAGS) -o $@ $(OBJECTS) $(LIBS)
 	$(SIZE) --format=berkeley $@
 	$(ASSERT_FP)
+	@sh $(INIT_CHECK) $(PREFIX)nm $@ $(INIT_SYMBOLS)
 
 # Create hex file
 $(HEX_FILE): $(ELF_FILE)

@@ -1603,6 +1603,29 @@ identity to integration time.
   sibling ports keep moving underneath them (see the dsPIC entry above for
   the failure mode this guards against).
 
+  **SUPERSEDED BY BUG #23 (2026-07-26) — use the figures below as canon.**
+  The `post-FP=SINGLE` column above stays as the historical record of what
+  the FP=SINGLE rollout measured; it is no longer the current size of any
+  ARM port. BUG #23 restored the clock+GPIO bring-up chain that LTO had been
+  deleting from four ports (nothing called `hal_system_init()`), so those
+  images legitimately grew. Current canonical RELEASE `text`/`data`:
+
+  | port      | text  | data | body  | Δ vs the table above | why |
+  |-----------|-------|------|-------|----------------------|-----|
+  | AVR (golden) | 30640 | 0  | 30640 | 0 | untouched, MD5 79af184e67b27defd27a39309ac53563 |
+  | stm32f103 | 29028 | 80   | 29108 | **+328** | clock+GPIO init resurrected |
+  | stm32f411 | 26132 | 80   | 26212 | **+336** | clock+GPIO init resurrected |
+  | stm32h523 | 25468 | 388  | 25856 | **+336** | clock+GPIO init resurrected |
+  | hc32f460  | 25796 | 80   | 25876 | **+200** | clock+GPIO init resurrected |
+  | samd21 megarm  | 31956 | 296 | 32252 | +4 | `GRBL_BOOT_INIT` un-inlines `SystemInit` |
+  | samd21 generic | 31944 | 296 | 32240 | +4 | same |
+  | ch32v006  | 41076 | 0    | 41076 | +4 (`text`; body +8 vs the 41072 bin) | same |
+  | ch570     | 40678 | 4    | 40682 | -4 `text` / body byte-count unchanged at 40684, but **bytes moved** | same anchor, layout-neutral in total |
+  | dspic33ak128mc102 | — | — | 94996 (bin) | 0, byte-identical | Makefile-only change |
+
+  The four large deltas ARE the fix — that code was absent from the shipped
+  RELEASE images. Do not "optimize" them back out.
+
   DEBUG sizes (all assert-PASSING, all boot-integrity-PASSING): ch32v006 60648
   -> 46988; stm32f103 48852 -> 43120; stm32h523 48660 -> 41508; stm32f411
   48488 -> 41644.
@@ -1875,3 +1898,260 @@ identity to integration time.
     adversarial review's finding that this was a significant, previously
     live spindle-output bug, not a cosmetic no-op, is accepted and recorded
     here rather than argued with.
+
+---
+
+- **2026-07-26 — BUG #23 FIXED (CRITICAL): four ports booted with NO clock and
+  NO GPIO configuration — `hal_system_init()` was defined and called from
+  nowhere.** Same failure *class* as BUG #21 one level up: BUG #21 lost a
+  data table the hardware reads behind the compiler's back (`vector_table[]`);
+  BUG #23 lost the **code** that brings the chip up, because nothing called
+  it and LTO deletes what nothing reaches. CONTRACTS.md gap-log section
+  `boot-init-unreachable` (placeholder number 26 — integrator assigns the
+  final one) is the authored lesson; this entry is the evidence.
+  - **What was wrong.** `stm32f103`, `stm32f411`, `stm32h523` and `hc32f460`
+    each contained a complete, reviewed, documented
+    `hal_system_init()` → `hal_clock_config()` + `hal_gpio_init()` chain
+    (`stm32f103/platform.c:528`, `stm32f411/platform.c:386`,
+    `stm32h523/platform.c:502`, `hc32f460/platform.c:299`) that **no caller
+    ever reached**. Core `grbl/main.c` is the golden gate and opens with
+    `serial_init(); settings_init(); stepper_init(); system_init();` — it has
+    never called platform init. No `Reset_Handler` called it either. GCC's
+    whole-program IPA deleted the whole subgraph before codegen.
+  - **Proof it shipped that way** — `nm` on the pre-fix RELEASE ELFs found
+    **zero** of the three symbols on all four ports; the only boot-adjacent
+    symbols present were `Reset_Handler` and `main`:
+
+    ```
+    grbl_stm32f103.elf : 080041f8 T Reset_Handler   08005f0c T main
+    grbl_stm32f411.elf : 08003f94 T Reset_Handler   08005394 T main
+    grbl_stm32h523.elf : 08003ffc T Reset_Handler   08005250 T main
+    grbl_hc32f460.elf  : 00003f30 T Reset_Handler   00005330 T main
+    ```
+
+    Those chips ran on their reset-default internal oscillator (8 MHz HSI on
+    f103, 16 MHz HSI on f411, HSI on h523, MRC on hc32f460) with GPIO in
+    reset state — no port clocks, no directions, no pull-ups, no AF mux.
+  - **Why every existing gate passed.** The link resolves (unreachable code
+    is *removed*, not *unresolved*); `--gc-sections` did exactly its job;
+    `size` still shows ~29 KB of core GRBL; `boot_check.sh` (BUG #21 ratchet)
+    passes because the vector table really is fine — `Reset_Handler` simply
+    did nothing useful; `assert_no_double.sh` is orthogonal. And DEBUG (no
+    `-flto`) retains the dead chain, so a DEBUG symbol dump looks perfect.
+    **Any defect whose mechanism is LTO reachability will present as
+    DEBUG-clean** — checking the DEBUG build is checking the wrong artifact.
+  - **Byte-invariance is a WEAK signal — the headline lesson.** The symptom
+    that exposed this looked like determinism: flipping `SPINDLE_ENABLE_PIN`
+    in `stm32f103/config.h` produced a **byte-identical** RELEASE `.bin`. It
+    was not determinism; it was proof that the only code consuming the pin
+    map was not in the image. A byte-identical rebuild proves two things are
+    the same — it does **not** prove either is *present*, and "nothing
+    changed" vs "nothing is there" produce the identical observation. When
+    you need presence, invert the test: perturb something the code must
+    consume and demand the binary **changes**.
+
+### Nine-port boot-init audit (the reason this was found)
+
+Every landed port was audited, not just the four that were broken.
+
+| port | init entry point | called from | in pre-fix RELEASE ELF | in post-fix RELEASE ELF |
+|---|---|---|---|---|
+| atmega328p | none by design (fuses set the clock; `*_init` set DDR/PORT) | `main()` → `serial/settings/stepper/system_init` | **yes** (10/10, no LTO) | yes (unchanged) |
+| stm32f103 | `hal_system_init` → `hal_clock_config`, `hal_gpio_init` | **NOWHERE** | **NO (0/3)** | **yes (3/3)** |
+| stm32f411 | `hal_system_init` → `hal_clock_config`, `hal_gpio_init` | **NOWHERE** | **NO (0/3)** | **yes (3/3)** |
+| stm32h523 | `hal_system_init` → `hal_clock_config`, `hal_gpio_init` | **NOWHERE** | **NO (0/3)** | **yes (3/3)** |
+| hc32f460 | `hal_system_init` → `hal_clock_config`, `hal_gpio_init` | **NOWHERE** | **NO (0/3)** | **yes (3/3)** |
+| samd21 | `startup.c::SystemInit` (+`SysTick_Config`) | `Reset_Handler`, before `main()` | executed, **symbol inlined away** | yes (pinned `noinline`) |
+| ch32v006 | `SystemInit` → `platform.c::SystemClock_Config` | `Reset_Handler` (← `_start`), before `main()` | executed, **symbols inlined away** | yes (pinned `noinline`) |
+| ch570 | `SystemInit` → `platform.c::SystemClock_Config` | `Reset_Handler` (← `_start`), before `main()` | executed, **symbols inlined away** | yes (pinned `noinline`) |
+| dspic33ak128mc102 | `hal_clock_config` tagged `__attribute__((user_init))` | toolchain `crt0`: `__reset` → `__data_init`/`.dinit` → `__user_init` table → `main` | **yes** (`W _hal_clock_config`, address-taken) | yes (unchanged) |
+
+  - **The three healthy shapes are genuinely different, which is why the new
+    ratchet's symbol lists are per-port and declarable.** samd21/ch32v006/
+    ch570 call their init from `Reset_Handler` — verified by reading the
+    handler, not assumed. dsPIC has no hand-written `startup.c` at all: the
+    xc-dsc `crt0` runs `__reset` → `__data_init`/`.dinit` → `__user_init`
+    (which walks a table of function pointers, hence
+    `__has_user_init = 1`) → `main`, and `hal_clock_config`'s
+    `user_init` attribute is what puts its address in that table — an
+    address-taken function can never be inlined away, so it was already
+    present and needs no anchor. atmega328p is the control case: no software
+    clock bring-up, no GPIO clock gating, no `-flto` — the one port where
+    this defect could not have happened and the one port that was not broken.
+  - **A false negative the audit had to solve first.** samd21/ch32v006/ch570
+    were *correct* but their `SystemInit` did **not** appear in `nm` either —
+    a single-call-site function inlined into `Reset_Handler` leaves no
+    symbol, producing output byte-for-byte indistinguishable from the four
+    broken ports. Absence in `nm` is therefore ambiguous until inlining is
+    ruled out, which is what `GRBL_BOOT_INIT` exists for.
+
+### The fix
+
+  - **Call site (platform side only — `grbl/main.c` untouched).**
+    `hal_system_init()` added to `Reset_Handler` in
+    `stm32f103/startup.c`, `stm32f411/startup.c`, `stm32h523/startup.c`,
+    `hc32f460/startup.c`, after `.data`/`.bss` init and before `main()`,
+    matching the samd21 precedent that made samd21 immune. Ordering verified
+    and documented at each call site: `.data`/`.bss` first (init writes
+    initialized statics) → clock, which raises flash wait states *before*
+    switching source → timing layer derived from the final frequency → GPIO
+    after clock (port-clock enables need settled bus clocks) → `main()` last
+    (`serial_init`/`settings_init` need the final clock and a live NVMEM
+    cache). `VTOR` stays first so faults during bring-up vector into this
+    image.
+  - **`GRBL_BOOT_INIT` (`grbl/platform/common/boot_init.h`) = `noinline`,
+    deliberately NOT `used`.** Applied to every symbol a port declares. This
+    is the opposite of the BUG #21 answer and the reason is worth keeping:
+    `used` forces emission *even if unreferenced*, so putting it on
+    `hal_clock_config()` would have made the new ratchet report all four
+    broken ports **green**. `used` is right for a data table the hardware
+    reads behind the compiler's back (`vector_table[]`); it is precisely
+    wrong for a function whose *reachability is the property under test*.
+    A guard attribute must not manufacture the evidence the guard inspects.
+  - **Dead-code removal**: `samd21/platform.c` carried a second
+    `hal_clock_config()` — a near-copy of `SystemInit`'s DFLL48M sequence
+    that nothing called. Pure BUG #23 bait (unreachable, LTO-stripped, free
+    to drift out of sync with the copy that actually runs). Deleted;
+    `SystemInit()` is now the port's single documented clock bring-up.
+
+### Ratchet #7: `grbl/platform/common/init_check.sh`
+
+  - Post-link, per port, wired into each port's own Makefile immediately
+    after the no-DP assert — the **same wiring point as `boot_check.sh`**, so
+    a new port is covered without touching CI. Fails the build if any symbol
+    in the port's declared `INIT_SYMBOLS` is not *defined* (`nm` type other
+    than `U`) in the linked image. Declared per port:
+    `common/stm32/common.mk` (default, covers f103/f411/h523),
+    `hc32f460/Makefile`, `samd21/Makefile`, `ch32v006/Makefile`,
+    `ch570/Makefile`, `dspic33ak128mc102/Makefile`, and
+    `atmega328p/Makefile` — the AVR leg hangs off the shim Makefile CI
+    already invokes (`make -C grbl/platform/atmega328p validate`) because the
+    port's real link is in the golden-MD5-gated root `Makefile`, which stays
+    byte-untouched.
+  - **Why symbol presence is a real reachability proof**: after `-flto` +
+    `--gc-sections` a function survives only if something reaches it, so
+    "defined in the final ELF" *means* "reachable". The single false negative
+    (inlining) is removed by `GRBL_BOOT_INIT`.
+  - **`--selftest` (10 checks, pure logic, no compiler)** — house style,
+    matching `tools/assert_no_double.sh` / `ci/warn_ratchet.py` /
+    `tools/build_artifacts.py`. Positive cases: the **verbatim pre-fix
+    stm32f103 symbol table** (`Reset_Handler` + `main` only) must be caught;
+    partial loss (gpio dropped, clock kept) must name exactly the one
+    missing; a `U`-typed reference must **not** count as defined. Negative
+    cases: a healthy post-fix table, weak (`W`) definitions accepted (the
+    dsPIC `user_init` shape), and a substring lookalike
+    (`hal_gpio_init_late`) rejected as not satisfying `hal_gpio_init` — a
+    `grep`-based implementation passes that one, which is why the matcher is
+    field-exact. Plus end-to-end runs through the real entry point with a
+    fake `nm`, and a missing-ELF case. Wired into CI as a new toolchain-free
+    `ratchet-selftests` job that also runs the other three selftests
+    (`assert_no_double`, `warn_ratchet`, `build_artifacts`), none of which
+    had been wired before.
+  - **Negative test on the real defect**, not just synthetic input: run
+    against the retained pre-fix `stm32f103` RELEASE ELF it exits 1 and
+    names `hal_clock_config`, `hal_gpio_init`, `hal_system_init`.
+
+### Evidence: pin-map sensitivity, before vs after
+
+For each broken port, one pin literal that `hal_gpio_init` consumes was
+flipped and the RELEASE `.bin` rebuilt — first with the `Reset_Handler` call
+commented out (pre-fix state, ratchet disarmed via `INIT_SYMBOLS=Reset_Handler`,
+which also exercises the per-port knob), then with it live.
+
+| port | perturbation | PRE-FIX baseline → perturbed | POST-FIX baseline → perturbed |
+|---|---|---|---|
+| stm32f103 | `config.h SPINDLE_ENABLE_PIN 7→3` | `b12b018e…` → `b12b018e…` **identical** | `156056 82…` → `340f835e…` **changed** |
+| stm32f411 | `config.h SPINDLE_ENABLE_PIN 12→3` | `945a2b58…` → `945a2b58…` **identical** | `d97ab514…` → `c78eed29…` **changed** |
+| stm32h523 | `platform.c hal_gpio_init (1<<7)→(1<<3)` | `de36d6bf…` → `de36d6bf…` **identical** | `73bf8c48…` → `1f6548cf…` **changed** |
+| hc32f460 | `platform.h SPINDLE_ENABLE_PIN 9→3` | `b17a625a…` → `b17a625a…` **identical** | `f8e8f5c0…` → `ecdd27b3…` **changed** |
+
+Every perturbation was reverted and the baseline hash reproduced exactly in
+all four cases. `stm32h523` needed a source-level perturbation rather than a
+config one because its `hal_gpio_init` hardcodes `(1 << 7)` literals instead
+of consuming the pin map — recorded below as a separate finding.
+
+### Size deltas (RELEASE `.bin`, resurrected code)
+
+| port | before | after | delta |
+|---|---|---|---|
+| stm32f103 | 28780 | 29108 | **+328** |
+| stm32f411 | 25876 | 26212 | **+336** |
+| stm32h523 | 25520 | 25856 | **+336** |
+| hc32f460 | 25676 | 25876 | **+200** |
+| samd21-megarm | 32248 | 32252 | +4 |
+| samd21-generic | 32236 | 32240 | +4 |
+| ch32v006 | 41072 | 41080 | +8 |
+| ch570 | 40684 | 40684 | 0 (size), **bytes moved** |
+| dspic33ak128mc102 | 94996 | 94996 | 0 |
+| atmega328p | 30640 | 30640 | 0 (golden, byte-identical) |
+
+The four large deltas are the clock+GPIO bring-up code returning to the
+image — that is the fix, not a regression. Do not "optimize" them back out.
+The +4/+8 on samd21/ch32v006 is the `noinline` anchor turning an inlined
+`SystemInit` back into a real call. ch570 is the interesting one: its total
+byte count is **unchanged at 40684**, but the bytes **moved** (`text`
+40682→40678 with `data` 4, and the `.bin`/`.hex`/`.syms` all differ) — a
+worked example of why a size table is not a substitute for hashing the
+artifact, and a second small illustration of this batch's own lesson that
+sameness of one measurement does not imply sameness of the thing. dsPIC and
+atmega328p took Makefile-only changes and are byte-identical.
+
+  - **Artifacts regenerated** for the **eight** units whose binaries
+    legitimately grew or moved: `stm32f103`, `stm32f411`, `stm32h523`,
+    `hc32f460`, `samd21-megarm`, `samd21-generic`, `ch32v006` and `ch570`
+    (`bin`/`hex`/`syms` + `MANIFEST.sha256`). `dspic33ak128mc102` and
+    `atmega328p` are byte-identical on disk and were not re-committed.
+    `tools/build_artifacts.py check` clean afterwards (52 files across 10
+    units).
+  - **Canonical size table updated** in this file (the FP=SINGLE table's
+    "SUPERSEDED BY BUG #23" block), plus `README.md`'s platform matrix,
+    `ARCHITECTURE.md`'s memory-usage table and `PLATFORM_ROADMAP.md`'s
+    stm32f103 entry. Historical ledger entries that quote the old sibling
+    sizes were deliberately left alone — they are records of what was
+    measured then, not claims about now.
+
+### Gates
+
+  - AVR golden `make -C grbl/platform/atmega328p validate` **PASSED,
+    byte-identical** (MD5 `79af184e67b27defd27a39309ac53563`).
+  - Every port builds **both flavors** (DEBUG + RELEASE): f103, f411, h523,
+    hc32f460, samd21 (megarm + generic), ch32v006, ch570, dspic33ak128mc102.
+  - Boot-integrity (`boot_check.sh`) OK on every ARM image; `_start=0x0` on
+    both RISC-V images.
+  - No-DP assert (`assert_no_double.sh`) PASSED on every port.
+  - Boot-init (`init_check.sh`) OK on every port including the AVR reference.
+  - Warning ratchet clean on all 14 port×flavor combinations against the
+    unmodified checked-in baselines — no baseline edits were needed.
+  - Docs integrity: `tools/check_contracts_numbering.py` OK (27 sections,
+    27 slugs, 11 cross-file links).
+
+### Two adjacent defects surfaced by the audit — NOT fixed here
+
+Recorded so they are not rediscovered as novel; both are outside BUG #23's
+mechanism and deserve their own work items.
+
+  1. **`ch32v006` never enables the GPIOC/GPIOD port clocks.**
+     `RCC->PB2PCENR` is written in exactly two places in the whole port:
+     `platform.c:202` (`hal_timer_spindle_pwm_init`, adds `IOPAEN`) and
+     `serial.c:48` (adds `IOPDEN`). The generic board puts STEP, DIRECTION,
+     STEPPERS_DISABLE and COOLANT_FLOOD on **GPIOC**, whose clock is never
+     enabled at all, and LIMIT on GPIOD (enabled only incidentally, by the
+     serial path). Same *symptom class* as BUG #23 — a port whose pins are
+     never really configured — but a different *mechanism*: the register
+     write does not exist, rather than existing and being unreachable. The
+     new ratchet cannot see this: there is no missing symbol to detect.
+  2. **`SPINDLE_ENABLE_PIN` has two conflicting live values on
+     stm32f103/f411/h523.** The port's `config.h` (which shadows core's via
+     `-I.`) and `platform.h` both define it unguarded with *different*
+     numbers on f103 and h523 (`config.h` says **7**, `platform.h` says
+     **12**; f411 happens to agree at 12 in both, so it is latent there
+     rather than live), and which one wins **depends on include order per
+     translation unit**: `platform.c` includes `platform.h` then
+     `config.h`, so `config.h` wins inside `hal_gpio_init`; core TUs reach
+     `platform.h` last through `grbl.h`, so `platform.h` wins in
+     `spindle_control.c`. Verified by preprocessing: `SPINDLE_ENABLE_PIN`
+     expands to `12` in a core TU and `7` in `platform.c` on f103. The same
+     signal is configured on one pin and driven on another. Additionally
+     `stm32h523::hal_gpio_init` consumes neither macro — it hardcodes
+     `(1 << 7)` literals, so its pin map is decorative regardless of which
+     header wins.

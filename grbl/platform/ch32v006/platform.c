@@ -123,7 +123,7 @@ void hal_gpio_interrupt_disable(GPIO_TypeDef* port, uint32_t mask) {
     "F_CPU lie" failure PORTING-CHECKLIST Step 1 warns about. Gap logged
     in CONTRACTS.md #14.
 */
-void SystemClock_Config(void) {
+GRBL_BOOT_INIT void SystemClock_Config(void) {
   // 1. HSI on + ready (power-on default, belt-and-braces).
   RCC->CTLR |= RCC_CTLR_HSION;
   while (!(RCC->CTLR & RCC_CTLR_HSIRDY)) { /* spin */ }

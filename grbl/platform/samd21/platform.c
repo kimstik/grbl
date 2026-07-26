@@ -55,40 +55,17 @@ uint64_t hal_micros(void) {
 }
 
 // ============================================================================
-// CLOCK CONFIGURATION
+// CLOCK CONFIGURATION - see startup.c::SystemInit()
 // ============================================================================
-
-void hal_clock_config(void) {
-  // SAMD21 clock configuration for 48 MHz
-
-  // Enable DFLL48M in open-loop mode (simplest configuration)
-  // Note: For production, use closed-loop mode with USB SOF or external 32kHz
-
-  // ISSUE #11 (MINOR): Magic number needs explanation
-  // 0x87 = ENABLE=1, PRESC=0 (no prescaling), ONDEMAND=0, RUNSTDBY=0
-  SYSCTRL->OSC8M = 0x87;  // Enable OSC8M at 8MHz
-
-  // Configure DFLL48M in open-loop mode
-  SYSCTRL->DFLLCTRL = 0;  // Disable DFLL
-  while (!(SYSCTRL->PCLKSR & (1 << 0)));  // Wait for ready
-
-  // ISSUE #11 (MINOR): Magic address needs explanation
-  // 0x00806020 = NVM Software Calibration Area (factory programmed)
-  // Load factory calibration values for DFLL48M
-  uint32_t coarse_cal = (*((uint32_t*)0x00806020) >> 26) & 0x3F;
-  SYSCTRL->DFLLVAL = (coarse_cal << 10);
-
-  // Enable DFLL in open-loop mode
-  SYSCTRL->DFLLCTRL = SYSCTRL_DFLLCTRL_ENABLE;
-  while (!(SYSCTRL->PCLKSR & (1 << 1)));  // Wait for DFLL ready
-
-  // Configure GCLK Generator 0 to use DFLL48M
-  GCLK->GENDIV = (0 << GCLK_GENCTRL_ID_Pos);  // Generator 0, no division
-  GCLK->GENCTRL = (0 << GCLK_GENCTRL_ID_Pos) |
-                  (GCLK_SOURCE_DFLL48M << GCLK_GENCTRL_SRC_Pos) |
-                  GCLK_GENCTRL_GENEN;
-  while (GCLK->STATUS & GCLK_STATUS_SYNCBUSY);
-}
+//
+// BUG #23: a second hal_clock_config() used to live here - a near-copy of
+// startup.c's SystemInit() DFLL48M sequence that NOTHING CALLED. It was
+// unreachable, LTO stripped it from every RELEASE image (verified by nm),
+// and its only real effect was to look like the port's clock bring-up
+// while being free to drift out of sync with the copy that actually runs.
+// Deleted. The one and only clock bring-up on this port is
+// startup.c::SystemInit(), called from Reset_Handler before main() and
+// enforced post-link by common/init_check.sh via INIT_SYMBOLS.
 
 // ============================================================================
 // TIMER FUNCTIONS - Now implemented as macros in timer.h

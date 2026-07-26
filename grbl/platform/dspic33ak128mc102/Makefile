@@ -160,6 +160,35 @@ CFLAGS += -Wall -Wextra
 # it) but is NOT this port's default and has not been exercised this
 # session (no Renode/emulator exists for dsPIC33A - CONTRACTS.md #16).
 FP ?= DOUBLE
+# BOOT-INIT REACHABILITY KNOB (BUG #23, CONTRACTS.md #boot-init-unreachable).
+# Post-link proof that this port's pre-main bring-up is still REACHABLE.
+# Four sibling ARM ports (stm32f103/f411/h523, hc32f460) shipped a complete
+# bring-up chain that nothing called - core grbl/main.c is the golden gate
+# and never calls platform init - and LTO silently deleted all of it.
+#
+# This port reaches its clock config by a DIFFERENT mechanism and so needs a
+# different symbol list, which is exactly why the list is per-port:
+#   __reset            - the toolchain crt0 reset entry (this port has no
+#                        hand-written startup.c; xc-dsc supplies crt0).
+#   __user_init        - the crt0 phase that walks the .user_init table of
+#                        function pointers, after __data_init/.dinit and
+#                        before main().
+#   _hal_clock_config  - platform.c's 200MHz PLL1 bring-up, tagged
+#                        __attribute__((user_init)) so its ADDRESS lands in
+#                        that table. Address-taken means it can never be
+#                        inlined away, so it needs no GRBL_BOOT_INIT anchor;
+#                        this check is what proves the table still points at
+#                        it. Underscore prefix = the pic30 assembler naming
+#                        convention, hence a per-port list rather than a
+#                        shared one.
+#   _main              - end of the chain.
+# There is no _hal_gpio_init: this port follows the AVR model where TRIS/
+# ANSEL/CNPU are set per pin group by core's stepper_init/limits_init/
+# system_init/spindle_init/coolant_init/probe_init, and the device has no
+# GPIO clock gating to enable first.
+INIT_SYMBOLS ?= __reset,__user_init,_hal_clock_config,_main
+INIT_CHECK = ../common/init_check.sh
+
 ifeq ($(FP),SINGLE)
   CFLAGS += -fsingle-precision-constant -DGRBL_FP_SINGLE
   ASSERT_FP = ../../../tools/assert_no_double.sh $(NM) $(ELF_FILE)
@@ -264,6 +293,7 @@ link: $(ELF_FILE)
 $(ELF_FILE): objects
 	$(CC) $(LDFLAGS) -o $(ELF_FILE) $(OBJECTS) $(LIBS)
 	$(ASSERT_FP)
+	@sh $(INIT_CHECK) $(NM) $(ELF_FILE) $(INIT_SYMBOLS)
 
 # Create hex file (xc-dsc-bin2hex writes alongside the ELF).
 # -mdfp= is REQUIRED here exactly as for nm/objdump below: bin2hex hard-
