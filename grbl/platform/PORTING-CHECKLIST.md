@@ -169,3 +169,39 @@ All of the following, in this order:
 7. Smoke test where emulation exists (Renode class): boot banner + `$$` + jog
    ack. Hardware validation is delegated to the community; mark the port
    "ready for hardware validation" in PLATFORM_ROADMAP.md.
+8. **Tracked artifacts refreshed**: `python3 tools/build_artifacts.py build
+   --platforms <name>` (add both board keys for a multi-board port, e.g.
+   `samd21-megarm,samd21-generic`) and commit the result under
+   `artifacts/<name>/`. See `artifacts/README.md` (CONTRACTS.md
+   [§25](CONTRACTS.md#build-artifacts-tracked)) for what gets committed
+   (RELEASE elf/bin/hex + a symbol-size map) and the growth cost.
+
+## Refresh policy: when to re-run `tools/build_artifacts.py build`
+
+`artifacts/` is a **tracked-state** directory, not an end-of-project report —
+it exists so any port's CURRENT byte-level state is diffable over time
+(`git log -p artifacts/<name>/`), the same way the AVR golden MD5 has always
+been diffable, just extended to every port. That only stays true if the
+committed bytes are refreshed on the right cadence:
+
+- **Refresh and commit whenever a port's *content* changes** — any edit to
+  `grbl/platform/<name>/**`, `grbl/*.c|h` (core), or `grbl/platform/common/**`
+  that could move that port's binary by even one byte. This is step 8 above:
+  part of finishing the port change, not a separate chore.
+- **Do NOT refresh on every push.** Most pushes are docs, ledger updates, CI
+  YAML, or work on an unrelated port — none of those change a given port's
+  compiled output, so re-running the build and re-committing megabytes of
+  unchanged-content binaries would be pure storage cost for zero
+  observability gain. If in doubt, run `python3 tools/build_artifacts.py
+  check` first: a clean report means nothing to refresh.
+- **The staleness checker enforces this, not honor system**:
+  `python3 tools/build_artifacts.py check` rebuilds every port fresh (into
+  the ordinary `build/` scratch dir, never touching `artifacts/`) and fails
+  loudly, naming every drifted file, if a commit landed without its artifacts
+  refresh. Run it before committing platform/core changes, same spirit as
+  `make validate` for the golden AVR gate. `--platforms <name>` scopes it to
+  just the port(s) you touched when a full 10-unit rebuild is overkill.
+- This is the **sixth ratchet** in this project (after golden MD5, warn
+  baseline, boot integrity, no-DP assert, docs integrity/CONTRACTS
+  numbering) — same "a bugfix/change is not done until a CI check exists
+  that would have caught it" law from PLAN.md's working rules.
