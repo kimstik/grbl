@@ -307,9 +307,13 @@
 //   th.dcache.iva  a0 -> 0265000b      th.dcache.call    -> 0010000b
 //   th.sync.s         -> 0190000b      th.sync.is        -> 01b0000b
 // Adding those two extension strings to -march does NOT change multilib
-// selection (still rv64imac/lp64, checked with -print-multi-directory) and
-// does NOT let the compiler emit these ops on its own - they only appear
-// where this file's inline asm puts them.
+// selection - re-checked 2026-07-26 against this port's CURRENT
+// rv64imafc_zicsr/lp64f (still resolves rv64imafc/lp64f, checked with
+// -print-multi-directory; originally checked against the port's prior
+// rv64imac_zicsr/lp64, same non-effect) - and does NOT let the compiler
+// emit these ops on its own - they only appear where this file's inline
+// asm puts them. The encodings themselves are pure hex-value facts,
+// unaffected by the port's F/D ABI choice either way.
 //
 // UNVERIFIED: that the C906L *implements* XTheadCmo. The C906 does (it is a
 // documented part of the XuanTie ISA extension set); the cut-down "L"
