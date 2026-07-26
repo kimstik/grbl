@@ -66,8 +66,12 @@
 // comment for the F1-vs-F4 base-address traps this file avoids.
 #include "regs.h"
 
-// Timer primitives with contract naming (STP_*/PWM_*/ISR_*), see CONTRACTS.md
-#include "timer.h"
+// Timer primitives with contract naming (STP_*/PWM_*/ISR_*), see CONTRACTS.md.
+// Shared by every STM32 port here: the TIM2/TIM3/TIM1 macro encodings were
+// 100% code-identical across f103/f411/h523 - only the base addresses differ,
+// and those come from this port's own regs.h (included above, and by name
+// from the shared header via -I.).
+#include "../common/stm32/stm32_timer.h"
 
 // Define hal_gpio_port_t before hal_gpio.h includes it
 // This ensures our GPIO_TypeDef* is used instead of void*
