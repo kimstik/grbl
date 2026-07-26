@@ -1165,6 +1165,79 @@ identity to integration time.
 
 ## Current State (update each session)
 
+- **[x] BUILD_DIR/BOARD FIX WAS HALF THE STORY - FINAL ELF PATH STILL
+  ALIASED ACROSS BOARDS (2026-07-26, orchestrator-reproduced follow-up)** —
+  the immediately-preceding entry keyed the intermediate OBJECT dirs by
+  BOARD (`build/<platform>/<board>/<BUILD>/`), which is necessary but not
+  sufficient: the FINAL artifact (`ELF_FILE` = `build/grbl_<plat>[_dbg]
+  .elf`, and everything objcopy'd from it) is deliberately left un-keyed,
+  because `.github/actions/build-platform/action.yml`,
+  `ci/renode/smoke.sh`, and `tools/build_artifacts.py` all expect it at
+  exactly that shared path. Consequence, reproduced cold on the merged
+  tree by the orchestrator: `rm -rf build; make BOARD=megarm
+  BUILD=RELEASE` -> 31952/296 (correctly under `build/samd21/megarm/
+  RELEASE/`); `make BOARD=generic BUILD=RELEASE` (no rm) -> 31940/296
+  (correctly under `build/samd21/generic/RELEASE/`, objects don't alias
+  anymore); `make BOARD=megarm BUILD=RELEASE` again (no rm, no clean) ->
+  **"make: Nothing to be done for 'all'"** - megarm's own (unchanged,
+  already-fresh) objects are all older than the existing `grbl_samd21.elf`
+  that generic's build just wrote, so make declares the link step
+  up-to-date and leaves GENERIC's binary on disk under the name a megarm
+  build just "produced". Object-dir separation alone cannot fix this: it
+  is the LINK step's staleness check that's blind to BOARD, one level up
+  from the bug this session already closed once.
+  **Options considered** (per the orchestrator's brief): (a) a board-stamp
+  file the link target depends on, forcing a relink on board switch while
+  every consumer path stays put; (b) key the output name/dir by board and
+  update all three consumers + CI matrix expectations; (c) something
+  better. **Chose (a)**: it's the only option that doesn't touch
+  `.github/actions/build-platform/action.yml`, `ci/renode/smoke.sh`, or
+  `tools/build_artifacts.py` at all (re-verified by grep before
+  implementing, same three files as the previous entry) - (b) would ripple
+  into the CI matrix's artifact names and every downstream consumer of
+  them for a purely-local build-hygiene bug, all cost and no benefit here.
+  **Mechanism**: `BOARD_STAMP = $(OUTPUT_DIR)/.board_stamp_$(PLATFORM_NAME)`
+  (keyed by platform since `OUTPUT_DIR` = `build/` is shared across every
+  port); its rule depends on a `.PHONY: FORCE` prerequisite so the recipe
+  runs on every invocation, but the recipe only rewrites the stamp file's
+  content/mtime `if [ "$$(cat $@)" != "$(BOARD)" ]` - a same-board rebuild
+  never spuriously forces a relink, only an actual board switch does.
+  `$(ELF_FILE)` (or, on the `boards/`-style ports, the `link:`/`$(ELF_FILE)
+  : objects` rule) now lists `$(BOARD_STAMP)` as an extra prerequisite.
+  Applied to `grbl/platform/samd21/Makefile` (the only port with a real
+  second board today) AND, per the orchestrator's explicit ask that a
+  second board must never reintroduce this, to the four `boards/<name>/`
+  -style ports: `_template/Makefile`, `ch32v006/Makefile`,
+  `ch570/Makefile`, `dspic33ak128mc102/Makefile`. Those four were checked
+  empirically first (not assumed safe or unsafe): their `$(ELF_FILE):
+  objects` rule already relinks on EVERY invocation today, because
+  `objects` is `.PHONY` and phony prerequisites are always "out of date" -
+  so they're accidentally immune right now, but only as a side effect of
+  an unrelated inefficiency that a future cleanup could remove without
+  anyone noticing it was load-bearing. The stamp makes their safety
+  explicit and independent of that accident.
+  **Proof, real rebuilds, no `make clean`/`rm` between the last two, RELEASE**:
+  A (fresh, BOARD=megarm) 31952/296/6160; B (fresh, BOARD=generic)
+  31940/296/6160; A2 (BOARD=megarm again) 31952/296/6160 - and A2's `make`
+  output shows the actual `arm-none-eabi-gcc ... -o
+  .../grbl_samd21.elf ...` link recipe running (a real relink, not
+  "Nothing to be done"). **Same proof for DEBUG**: A 48112/296/6160, B
+  48028/296/6160, A2 48112/296/6160, link recipe confirmed running again.
+  `build/samd21/{megarm,generic}/RELEASE/` still separate directories
+  post-fix; `build/.board_stamp_samd21` observed holding `megarm` after
+  A2. Also confirmed ch32v006 (RELEASE+DEBUG), ch570 (RELEASE), and
+  dspic33ak128mc102 (RELEASE, via the real `/opt/xc-dsc` toolchain) still
+  build at their canonical sizes after adding the stamp mechanism - zero
+  drift, since single-board `generic` never triggers a stamp rewrite.
+  Gates re-run this batch: golden AVR `make validate` PASSED (MD5
+  `79af184e67b27defd27a39309ac53563`); `tools/build_artifacts.py check`
+  OK, 56 files verified fresh across all 10 units (this fix only changes
+  WHEN the link step reruns, never what it produces, so every tracked
+  artifact byte was already correct - no regeneration needed);
+  `ci/warn_ratchet.py` OK against every touched port's baseline (samd21,
+  ch32v006, ch570, dspic33ak128mc102), both flavors, real build logs;
+  `check_contracts_numbering.py` unaffected (`--selftest` PASS 9 checks,
+  real run OK 26/26/12).
 - **[x] BUILD_DIR MISSED THE BOARD DIMENSION (2026-07-26) — the repo-wide
   BUILD_DIR/$(BUILD) fix (line ~81 above) keyed object dirs by build
   flavor but never by BOARD, and samd21 is the only port with a real

@@ -190,6 +190,33 @@ $(BUILD_DIR):
 $(OUTPUT_DIR):
 	mkdir -p $(OUTPUT_DIR)
 
+# Board stamp: the FINAL artifact path (ELF_FILE = build/grbl_samd21[_dbg].elf,
+# and everything objcopy'd from it) is deliberately left un-keyed by BOARD -
+# .github/actions/build-platform/action.yml, ci/renode/smoke.sh, and
+# tools/build_artifacts.py all expect it at exactly this path (verified by
+# grep before adding this). BUILD_DIR above already keys the OBJECT dirs by
+# board, so object staleness is correct per-board - but that alone doesn't
+# save the LINK step: after `make BOARD=generic` leaves grbl_samd21.elf newer
+# than megarm's (unchanged, already-fresh) object files, a later no-clean
+# `make BOARD=megarm` finds every megarm prerequisite older than the existing
+# ELF and reports "Nothing to be done" - silently shipping generic's binary
+# under megarm's name (bit samd21 a FOURTH time). Force a relink on ANY board
+# switch, without moving a single consumer path: the stamp's CONTENT is the
+# board that produced the current ELF, and FORCE makes the recipe run every
+# invocation - but it only rewrites (and so only touches mtime) the file when
+# that content actually changes, so a same-board rebuild never spuriously
+# forces a relink.
+BOARD_STAMP = $(OUTPUT_DIR)/.board_stamp_$(PLATFORM_NAME)
+
+$(BOARD_STAMP): FORCE
+	@mkdir -p $(OUTPUT_DIR)
+	@if [ ! -f $@ ] || [ "$$(cat $@ 2>/dev/null)" != "$(BOARD)" ]; then \
+	  echo $(BOARD) > $@; \
+	fi
+
+.PHONY: FORCE
+FORCE:
+
 # Compile GRBL core files
 $(BUILD_DIR)/%.o: $(GRBL_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
@@ -211,7 +238,7 @@ $(BUILD_DIR)/nvmem.o: nvmem.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 # Link
-$(ELF_FILE): $(OBJECTS)
+$(ELF_FILE): $(OBJECTS) $(BOARD_STAMP)
 	$(CC) $(LDFLAGS) -o $@ $(OBJECTS) $(LIBS)
 	$(SIZE) --format=berkeley $@
 	$(ASSERT_FP)

@@ -192,6 +192,25 @@ $(BUILD_DIR):
 $(OUTPUT_DIR):
 	mkdir -p $(OUTPUT_DIR)
 
+# Board stamp: same mechanism as samd21/Makefile (the only port with a real
+# second board today) - kept here so a second BOARD under boards/ never
+# reintroduces the "final ELF path outlives the board that built it" bug.
+# BUILD_DIR already keys the object dirs by board; this keys the LINK step
+# too, without moving ELF_FILE/HEX_FILE/BIN_FILE/MAP_FILE (CI/smoke/
+# build_artifacts.py all expect them at this exact un-keyed path). FORCE
+# makes the recipe run every invocation; it only rewrites (and so only
+# touches mtime) when BOARD actually changed since the last stamp.
+BOARD_STAMP = $(OUTPUT_DIR)/.board_stamp_$(PLATFORM_NAME)
+
+$(BOARD_STAMP): FORCE
+	@mkdir -p $(OUTPUT_DIR)
+	@if [ ! -f $@ ] || [ "$$(cat $@ 2>/dev/null)" != "$(BOARD)" ]; then \
+	  echo $(BOARD) > $@; \
+	fi
+
+.PHONY: FORCE
+FORCE:
+
 $(BUILD_DIR)/%.o: $(GRBL_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
@@ -212,7 +231,7 @@ $(BUILD_DIR)/nvmem.o: nvmem.c | $(BUILD_DIR)
 
 link: $(ELF_FILE)
 
-$(ELF_FILE): objects
+$(ELF_FILE): objects $(BOARD_STAMP)
 	$(CC) $(LDFLAGS) -o $(ELF_FILE) $(OBJECTS) $(VENDOR_OBJECTS) $(LIBS)
 	$(SIZE) --format=berkeley $(ELF_FILE)
 	$(ASSERT_FP)
