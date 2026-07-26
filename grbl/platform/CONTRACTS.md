@@ -2613,6 +2613,8 @@ vendor's cores. Every claim below is a real build in this session.
 <a id="boot-init-unreachable"></a>
 ## 27. Defined but never called + LTO = silently absent; byte-invariance is a WEAK signal (cite the slug, #boot-init-unreachable, not "§27", from elsewhere)
 
+## 27. Defined but never called + LTO = silently absent; byte-invariance is a WEAK signal (renumbered from a duplicate "26" during BUG #25's docs pass - see PLAN.md's numbering-collision note; cite this slug, not a number, from elsewhere)
+
 *(Companion to [§18](#vector-table-lto), which is the same failure class one
 level down: §18 lost a **data** table the hardware reads behind the
 compiler's back; this section loses **code** that nothing calls. Cite both
@@ -3374,3 +3376,227 @@ This is the same discipline [§10.4](#nvmem-eeprom) already applies to the
 AVR checksum `||` quirk ("Never fix the AVR `||`") — generalized here
 because a second toolchain is where the temptation to "just clean up"
 core code will recur constantly, and the answer is always the same one.
+
+---
+
+<a id="gpio-pin-map-single-owner"></a>
+## §NEW. Two headers both defining the pinout: which one wins is a per-translation-unit accident, not a decision (BUG #25)
+
+Same *symptom class* as the "GPIO port clock gating" section above
+(anchor `gpio-port-clock-gating`, BUG #24 - not a real link here: that
+section's own heading is still `§NEW`, and a link to a `§NEW` section's
+anchor reports as dangling until the integrator's renumbering pass, per
+this file's own numbering-collision note at the top) and
+[§boot-init-unreachable](#boot-init-unreachable) (BUG #23) -
+"the pin looks wired and isn't" - but a third, distinct *mechanism*: this
+time the code exists, runs, and even configures a real GPIO pin as an
+output. The pin it configures is simply not the pin anything else drives,
+because two headers both claim to own the same pin's number and the
+compiler silently resolves the conflict by C's ordinary `#define`
+redefinition rule (last one wins, per translation unit) rather than by
+anyone's decision.
+
+### The mechanism, proven on stm32f103/stm32h523, from real preprocessor output
+
+`stm32f103/config.h` and `stm32f103/platform.h` (and the h523 sibling, a
+near-identical file) each defined `SPINDLE_ENABLE_PIN`, unguarded, with
+different values - `config.h`: 7 (`// PB7`); `platform.h`: 12. Both files
+are legitimately included in every translation unit (this is not the
+[§boundary-wiring](#boundary-wiring) 4-step per-board chain - these three
+single-board STM32 ports use the 2-step chain documented there - `config.h`
+is simply the port's *second* header, included directly by `platform.c`
+and indirectly, through `hal.h`'s `PLATFORM_STM32F103` branch, by every
+core `.c` file). Which value survives depends entirely on **the order those
+two `#include`s happen to appear in the one `.c` file currently being
+compiled**:
+
+- `stm32f103/platform.c` (and h523's) includes `platform.h` first, then
+  `config.h` - so `config.h`'s 7 is the value alive inside `hal_gpio_init()`,
+  the function that configures the pin as an output.
+- Every core `.c` file (`grbl/spindle_control.c`, `grbl/coolant_control.c`,
+  ...) reaches `platform.h` LAST, through `grbl.h`'s `PLATFORM_STM32F103`
+  branch - `config.h` is never even on that path a second time - so
+  `platform.h`'s 12 is the value alive inside `GPIO_BSET`/`GPIO_BCLR`, the
+  macros that actually toggle the pin (via `name##_BIT`, itself never
+  split - only `_PIN` was duplicated, not `_BIT`).
+
+Proven with `arm-none-eabi-gcc -E -dM` (not inferred from reading the
+`#include` order and reasoning about it - actually run, both files, real
+toolchain), pre-fix:
+
+```
+$ gcc ... -E -dM stm32f103/platform.c   | grep SPINDLE_ENABLE_PIN
+#define SPINDLE_ENABLE_PIN 7
+$ gcc ... -E -dM grbl/spindle_control.c | grep SPINDLE_ENABLE_PIN
+#define SPINDLE_ENABLE_PIN 12
+```
+
+Net effect on real hardware: `hal_gpio_init()` configures **PB7** as a
+push-pull output and clears it once, then nothing ever touches PB7 again
+(`SPINDLE_ENABLE_BIT`, the macro `GPIO_BSET`/`GPIO_BCLR` actually use, is
+12 everywhere - never split). **PB12** is the pin `spindle_set_state()`
+actually sets and clears on every M3/M4/M5 command, all session long - and
+PB12 was never configured as an output, so it sits in its GPIO reset state
+(floating input on F1) for the life of the firmware. Whichever physical pin
+the relay is wired to, it does not work: PB7 is a real push-pull output
+that is written exactly once, at boot, to logic 0, and never again: PB12 is
+written constantly but drives nothing because its output stage was never
+enabled. This is worse than either candidate pin "just being wrong" - there
+is no wiring that makes the shipped binary's spindle-enable output work.
+
+### Not confined to the one macro named in the bug report
+
+A split pin number is never the only split. The same config.h/platform.h
+pair also duplicated `SPINDLE_DIRECTION_PIN` (7 vs 13) and
+`COOLANT_FLOOD_PIN`/`COOLANT_MIST_PIN` (0/1 vs 13/14), plus six `*_MASK`
+macros (`STEP_MASK`, `DIRECTION_MASK`, `STEPPERS_DISABLE_MASK`,
+`LIMIT_MASK`, `CONTROL_MASK`, `PROBE_MASK`) and every individual STEP/
+DIRECTION/LIMIT `*_PIN` - all unguarded duplicates of names `platform.h`
+already owned. Most of those were numerically **benign** (same value in
+both files, so no compiler warning and no functional defect - GCC only
+warns on a redefinition when the token sequence actually differs). Two
+were **live but self-healing by accident**: `spindle_init()`/`coolant_init()`
+(`grbl/spindle_control.c`/`coolant_control.c`) unconditionally call
+`GPIO_DIR_OUT(SPINDLE_DIRECTION)` / `GPIO_DIR_OUT(COOLANT_FLOOD)` at
+startup, which resolve through `_BIT` (never split) and therefore
+reconfigure the correct pin as an output every boot regardless of what
+`hal_gpio_init()` did first - masking the direction/coolant split from ever
+manifesting under this project's *default* build config. This healing is
+NOT robust: `spindle_init()` skips that call for `SPINDLE_DIRECTION`
+specifically under `ENABLE_DUAL_AXIS` (config.h default off, but a real,
+supported build option), and skips it for `SPINDLE_ENABLE` under every
+default build because `VARIABLE_SPINDLE` is on and
+`USE_SPINDLE_DIR_AS_ENABLE_PIN` is off (grbl/config.h defaults) - which is
+exactly why the enable pin, and only the enable pin, is live in the
+project's default configuration. A macro class that "happens to be masked
+by an unrelated unconditional call in one specific build configuration" is
+not a fixed class; it is a live one with a lucky default.
+
+`stm32f411`'s `config.h` carried the identical duplicate set but every
+value agreed with `platform.h` (hand-mirrored, per that file's own former
+header comment) - **latent, not live**, confirmed the same way (`-E -dM`
+on both `platform.c` and `spindle_control.c` returns 12/13 in both files).
+Latent is not the same as safe: a hand-mirrored duplicate is one
+unreviewed edit away from splitting exactly like its siblings did, and nothing
+would warn about a *matching* redefinition drifting apart later - the
+warning this class produces only ever detects existing duplication, never
+future divergence of a currently-agreeing pair.
+
+`stm32h523`'s `hal_gpio_init()` additionally didn't consume either macro
+for the affected pins at all - it hardcoded raw literals
+(`hal_gpio_set_output(GPIOB, (1 << 7))`, with a comment claiming "PB7:
+Spindle enable"), so its copy of the pin map was decorative regardless of
+which header would have won. The direction pin was hardcoded onto **GPIOA**
+(`hal_gpio_set_output(GPIOA, (1 << 9))`) while `platform.h`'s
+`SPINDLE_DIRECTION_PORT` is GPIOB - a port mismatch, not just a bit
+mismatch, one rung further down the same "the pin map is fiction" ladder
+than f103's.
+
+`hc32f460` has no `config.h` at all - `platform.h` is its only pin-map
+source, structurally immune by construction, not by luck. No other port in
+this tree (samd21, ch32v006, ch570, dspic33ak128mc102, sg2002, `_template`)
+has a config.h/platform.h pair that both claim the same pin-shaped macro
+name at all - a repo-wide sweep (every `config.h`/`boards/*/config.h`
+against its port's `platform.h`, comparing every macro name defined in
+both) found zero hits anywhere outside these three. samd21's `platform.h`
+DOES redefine two of its board `config.h`'s names (`PROBE_PIN`,
+`PROBE_MASK`) - but always preceded by an explicit `#undef`, which is a
+deliberate, visible, warning-free repurposing (the chip layer needs
+`PROBE_PIN` to mean "the port register" for one read-back site, not "a pin
+number"), not this bug's silent-shadow mechanism. `#undef` is the
+line between "an override" and "an accident": one announces itself in the
+diff and in the file, the other only announces itself in a compiler
+warning nobody read.
+
+### The baseline was hiding it - read literally, not inferred
+
+This is not a hypothetical about baselines in general: `ci/warn_baseline_stm32f103.txt`
+and `ci/warn_baseline_stm32h523.txt` carried these exact nine "redefined"
+warnings (six on `stm32f411`, the benign-value set) under a comment reading,
+verbatim, **"Known debt (config.h vs platform.h dual pin-map canon, PLAN.md
+Phase 1/2)"** - and h523's copy of that same comment said **"same pattern
+already accepted for stm32f103"**, and f411's said **"same accepted pattern
+already carried by stm32f103/stm32h523"**. The pattern was noticed
+recurring across three ports and was propagated as an accepted baseline
+entry each time rather than escalated - `ci/warn_ratchet.py` is a strictly
+one-way ratchet by design (new warnings fail the build; existing baseline
+entries are trusted forever, `PLAN.md`'s "Phase 0" rationale for choosing a
+baseline over `-Werror`), so an accepted entry provides exactly zero
+ongoing protection once it is in the file - it is not "we are watching
+this", it is "we have stopped watching this, permanently, unless a human
+manually deletes the line." A baseline is supposed to hold down debt that
+is inert; it held down a live wiring defect for at least three ports'
+worth of porting sessions.
+
+### The fix: one owner, not one value
+
+Making both headers agree on 12 today would have reconciled the symptom
+and left the mechanism intact - the next porter (or the next `sed`) is
+still free to edit one file's copy of a pin number without the other,
+and nothing structural would stop them. Per
+[§boundary-wiring](#boundary-wiring), these three ports are legitimately
+single-board (no per-board `config.h` selection to inject, unlike samd21/
+ch32v006/ch570), so there is no board-vs-chip split to *build* here - there
+is just one file too many claiming the same ownership. `platform.h` is now
+the **sole** owner of every GPIO pin/port/bit/mask macro on all three ports
+(it was already the file every *working* accessor macro - `GPIO_BSET`,
+`GPIO_DIR_OUT`, all `_BIT`-driven - actually respected): the duplicate PIN
+MAPPING and BITMASKS sections were deleted from `config.h` on all three,
+each replaced with a comment naming this section and stating the rule for
+future porters. `stm32h523/platform.c`'s `hal_gpio_init()` was rewritten to
+derive every mask it configures from `platform.h`'s own macros
+(`STEP_MASK`, `SPINDLE_ENABLE_BIT`, `SPINDLE_ENABLE_PORT`, ...) instead of
+hardcoding literals, the same "derive the enable set from the pin map, not
+a literal" principle the `gpio-port-clock-gating` section above (BUG #24)
+already established for its clock-gate mask - a hardcoded mask and a
+silently-shadowed macro are the same failure with a different-looking
+diff: both let the pin map drift out of sync with whatever a `.h` file
+actually says, invisibly.
+
+If a genuinely per-board pin map is ever needed on one of these three chips
+(a second board variant), the correct shape is the samd21/ch32v006/ch570
+one: a `boards/<name>/config.h` selected via that board's own `prelude.h`,
+chained `gpio.h -> common/gpio.h -> config.h -> platform.h` per
+[§boundary-wiring](#boundary-wiring) - not a second file living beside a
+single-board `platform.h` and hoping the two stay in sync by hand.
+
+### Byte-invariance again - two of three ports changed, one did not, and that is the proof
+
+Per [§boot-init-unreachable](#boot-init-unreachable)'s own lesson, a binary
+that does not change proves nothing about correctness on its own - so both
+directions were checked here. f103's RELEASE `.bin` changed (29116 -> 29120
+bytes, +4) because `hal_gpio_init()` now configures a genuinely different
+bit pattern on GPIOB; f103's DEBUG `.bin` is the sharper illustration -
+**identical size** (43740 bytes both), but a **different MD5** (the
+immediate operand inside a `MOVS`-class instruction changes value, not the
+instruction's byte count) - proof that size alone would have missed this
+fix exactly the way it would have missed the bug. h523's RELEASE changed
+25856 -> 25852 (-4) and DEBUG 42396 -> 42392 (-4). f411's RELEASE and DEBUG
+`.bin`s are **byte-identical, MD5-for-MD5**, before and after - the
+predicted result for the one port whose duplicate was already numerically
+benign, and the negative control that makes the other two ports' changes
+mean something rather than being an artifact of touching the build.
+
+### The ratchet: no new mechanism invented - the existing one had been told to stop looking
+
+Unlike the `gpio-port-clock-gating` section above (BUG #24), which
+needed a new reachability check because none existed for that mechanism,
+this bug's detector already existed and had already fired - `ci/warn_ratchet.py`
+had recorded every one of these warnings correctly. The fix is not a new
+guard; it is deleting nine (f103), nine (h523) and six (f411) lines from
+the three baseline files, with a comment explaining why they must never
+come back. Re-running the ratchet against a fresh build log after the
+source fix confirms all nine/nine/six are "no longer observed" (the
+script's own built-in candidate-for-removal report) - the removal is
+therefore verified against a real build, not merely asserted. A synthetic
+regression test (re-inserting one baseline-format line for
+`SPINDLE_ENABLE_PIN redefined` and re-running the comparator) confirms the
+ratchet now reports it as **new** and fails the build - proving the guard
+can fail, per this project's standing rule that a guard which cannot fail
+is worse than none. No additional, broader "ban all macro redefinitions"
+rule was added: a repo-wide grep confirms the other six baselines (samd21,
+ch32v006, ch570, dspic33ak128mc102, hc32f460, atmega328p) carry zero
+"redefined" entries of any kind today, so there was nothing further to
+narrow, and inventing a heuristic name-pattern scanner for a class with
+zero current instances would be exactly the kind of guard that cannot
+meaningfully fail that this project's standing rule warns against.
