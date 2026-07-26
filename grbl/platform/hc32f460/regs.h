@@ -169,6 +169,60 @@ typedef struct {
 #define PWC_FPRC_UNLOCK_CODE   0xA5U   /* UNVERIFIED exact value for this device - HDSC F4-family convention cited in community sources, not confirmed against the HC32F460 manual */
 #define PWC_FPRC_LOCK_CODE     0x00U
 
+/* PWC peripheral clock gates (FCG0-FCG3) - CONTRACTS.md #gpio-port-clock-gating
+   (BUG #24) audit, this port (2026-07-26). CONFIRMED existence, real base
+   address, and the specific bits below via a real, permissively-licensed
+   vendor CMSIS header + driver source found this session: Xiaohua
+   Semiconductor (XHSC - HC32F460's actual current vendor name) `hc32f460.h`
+   and `hc32_ll_fcg.c`, redistributed BSD-3-Clause by Zephyr's mirror
+   (github.com/zephyrproject-rtos/hal_xhsc,
+   hc32_ddl/hc32f460/{soc/hc32f460.h,drivers/src/hc32_ll_fcg.c}). This
+   CORRECTS CONTRACTS.md #hc32f460-gaps item 1 ("no permissively-licensed
+   vendor SDK could be confirmed this session") - one exists and was missed.
+
+   NOT the same base as PWC_BASE above (0x40054000, still-UNVERIFIED,
+   used only by FPRC/STPMCR - deliberately left untouched, out of scope for
+   this audit): the real `CM_PWC_BASE` is 0x40048000, and FCG0..FCG3 are its
+   first four words. Modeled as independent absolute addresses rather than
+   folded into `PWC_TypeDef` above, the same "sparse register block, don't
+   fake a packed struct" pattern this file's own CMU section already uses -
+   the real struct's FPRC field lands ~0xC3FE bytes further into the same
+   block, so one struct spanning both would put one of the two at the wrong
+   offset.
+
+   GPIO/PORT verdict (the actual question this audit was for): a full scan
+   of every bit in the real FCG0/FCG1/FCG2/FCG3 registers, AND of the real
+   GPIO driver source (`hc32_ll_gpio.c`, 713 lines - zero FCG/clock
+   references anywhere) and the real FCG driver source (`hc32_ll_fcg.c` -
+   zero GPIO/PORT references anywhere), found NO GPIO/PORT clock-gate bit on
+   this chip at all. GPIO on HC32F460 is NOT FCG-gated - confirmed, not
+   assumed; see hal_gpio_init()'s comment in platform.c. Nothing to fix for
+   GPIO.
+
+   It DID find real gate bits for three peripherals this port already
+   drives without ever setting them - USART1 (FCG1 bit 24), TIMER0 units 1/2
+   (FCG2 bits 0/1), TIMERA unit 1 (FCG2 bit 2) - a genuine BUG #24 instance,
+   just not the GPIO one this audit was looking for. Fixed in
+   hal_clock_config() (platform.c). Polarity CONFIRMED from
+   `hc32_ll_fcg.c`'s `FCG_FcgxPeriphClockCmd()`: `ENABLE` -> `CLR_REG32_BIT`,
+   `DISABLE` -> `SET_REG32_BIT` - i.e. 1=gated off, 0=clocked, the OPPOSITE
+   polarity of the STM32-style RCC enable bits every prior ARM port in this
+   tree uses. Getting this backwards would silently gate the clock OFF
+   instead of on - the exact inverse of the bug being fixed, and just as
+   dead on real hardware. FCG1/FCG2/FCG3 need no FPRC unlock: the driver's
+   own `IS_FCGx_UNLOCKED()` check exists ONLY for FCG0 (gated by the
+   separate `FCG0PC`/`PRT0` protect-control register, not by `PWC_FPRC` at
+   all) - FCG1/FCG2/FCG3 are written directly with no unlock sequence in the
+   real driver, so the writes below are placed outside this port's existing
+   FPRC unlock/lock bracket. */
+#define PWC_FCG1        (*(volatile uint32_t*)0x40048004UL)   /* CONFIRMED address (XHSC hal_xhsc) */
+#define PWC_FCG2        (*(volatile uint32_t*)0x40048008UL)   /* CONFIRMED address (XHSC hal_xhsc) */
+
+#define PWC_FCG1_USART1     (1UL << 24)   /* CONFIRMED bit position (XHSC hal_xhsc) */
+#define PWC_FCG2_TIMER0_1   (1UL << 0)    /* CONFIRMED bit position (XHSC hal_xhsc) */
+#define PWC_FCG2_TIMER0_2   (1UL << 1)    /* CONFIRMED bit position (XHSC hal_xhsc) */
+#define PWC_FCG2_TIMERA_1   (1UL << 2)    /* CONFIRMED bit position (XHSC hal_xhsc) */
+
 /* CMU (Clock control) - the three sub-register addresses below ARE
    CONFIRMED: quoted from a real Voxelab Aquila HC32F460
    bootloader (see file header). They are absolute addresses, not struct

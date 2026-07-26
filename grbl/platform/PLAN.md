@@ -1320,6 +1320,71 @@ identity to integration time.
 
 ## Current State (update each session)
 
+- **[x] Two refuted "confinement" claims closed (2026-07-26, adversarial
+  review follow-up — REVIEW-SESSION-CLAIMS.md claims C1/C2).**
+  - **C2 (BUG #24, [§28](CONTRACTS.md#gpio-port-clock-gating)) — hc32f460
+    GPIO clock-gating, fifth port audited.** Ground truth established from
+    a real, permissively-licensed (BSD-3-Clause, Xiaohua Semiconductor)
+    vendor CMSIS header + driver source found this session
+    (github.com/zephyrproject-rtos/hal_xhsc — missed by this port's
+    original porting session, which only checked one unlicensed mirror).
+    **Verdict: GPIO/PORT has NO clock-gate bit on this chip at all** — a
+    full scan of the real `PWC_FCG0..FCG3` bit tables and both the real
+    GPIO and FCG driver sources (zero cross-references either direction)
+    confirms it, the same "not applicable" outcome ch570 already
+    established for a different chip. `hal_gpio_init()` unchanged, per the
+    brief's own instruction for this branch. The SAME audit found a real,
+    previously undocumented BUG #24 instance on this port's OTHER
+    peripherals — USART1 and TIMER0/TIMERA_1 have real FCG gate bits that
+    were never being set — fixed in `hal_clock_config()` (polarity
+    CONFIRMED from the real driver: clearing the bit enables the clock on
+    this chip, opposite of every STM32 port's convention here — getting it
+    backwards would have gated the clock further off, not on). Real code,
+    real byte cost: RELEASE 25596/80 -> 25824/80 (+228), DEBUG 41220/80 ->
+    41724/80 (+504); zero `PORT_TODO_*`, boot-init/boot-integrity/FP=SINGLE
+    gates all still green, warn ratchet green (6/6 baseline). CONTRACTS.md
+    [§22](CONTRACTS.md#hc32f460-gaps) item 10 has the full writeup.
+  - **C1 (BUG #25, [§33](CONTRACTS.md#gpio-pin-map-single-owner)) — samd21
+    macro-overlap sweep re-run independently, own tooling.** Confirmed the
+    review's count (4 overlapping names — `PROBE_PIN`/`PROBE_MASK`/
+    `CONTROL_MASK`/`LIMIT_MASK` — not the original claim's 2) and its
+    finding (`LIMIT_MASK` had no preceding `#undef`, unlike the other
+    three). Fixed: added `#undef LIMIT_MASK` immediately before
+    `platform.h`'s `#define LIMIT_MASK LIMIT_MASK_A`, matching
+    `CONTROL_MASK`'s already-correct pattern one line below. Zero-codegen:
+    RELEASE `.bin` MD5-identical on both boards to the pre-fix build and
+    the committed `artifacts/samd21-*`; DEBUG `.bin`/`.hex` byte-identical
+    too (only the DEBUG `.elf`'s DWARF line-number metadata shifts, from
+    the added comment lines). **New permanent ratchet**:
+    `ci/pinmap_overlap_check.py` (discovers every config.h/platform.h pair
+    in the tree automatically, fails on any unguarded common macro name),
+    wired into `.github/workflows/ci.yml`'s `docs-integrity` job plus its
+    own `--selftest` in `ratchet-selftests`. Proven to actually fire: run
+    against the real pre-fix `platform.h` (temporarily restored), it
+    failed with `'LIMIT_MASK' is defined in both files, but
+    grbl/platform/samd21/platform.h:225 has no preceding '#undef
+    LIMIT_MASK'`, exit 1; restored, re-ran, exit 0. CONTRACTS.md
+    [§33](CONTRACTS.md#gpio-pin-map-single-owner)'s samd21 paragraph
+    corrected in place (not just appended to) so it no longer misstates
+    "always preceded by an explicit `#undef`".
+  - **Also fixed**: `docs/TOOLCHAIN-VERSIONS.md`'s headline sentence
+    claimed "zero `-fanalyzer` findings... under... arm-none-eabi-gcc
+    14.2.1" while its own table three lines later lists one (settings.c:208,
+    CWE-787, independently re-verified false positive). Headline corrected
+    to state the true split (zero under avr-gcc 16.1.0; one, a confirmed
+    false positive, under avr-gcc 15.2.0 and arm-none-eabi-gcc 14.2.1) —
+    table left exactly as it was, per instruction not to weaken it.
+  - **Gates**: golden AVR `make -C grbl/platform/atmega328p validate`
+    PASSED (`79af184e67b27defd27a39309ac53563`) before and after every
+    change in this batch. Full-tree `python3 tools/build_artifacts.py
+    build` re-run (11 units) after the hc32f460 byte change;
+    `tools/build_artifacts.py check` OK (62 files fresh); every sibling
+    port's `.bin`/`.hex`/`.syms` confirmed untouched (`git status
+    artifacts/` shows only hc32f460's three files + `.elf.dump` on every
+    port, the latter a known non-reproducible objdump-invocation-path
+    artifact, not a real diff). `tools/check_contracts_numbering.py`: OK
+    (38 sections, 39 slugs, 37 cross-file links).
+
 - **[x] BUG #18 CLASS CLOSED FOR REAL: F_CPU needs ULL, not UL (2026-07-26,
   toolchain-probe follow-up).** The probe that opened this batch reported
   "pre-existing, already-baselined -Woverflow in stepper.c:1015 (missing UL

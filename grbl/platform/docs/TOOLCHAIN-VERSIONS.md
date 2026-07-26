@@ -63,8 +63,12 @@ three compilers.
 
 **(a) Frozen core (`grbl/*.c,h`) — the headline.** Zero `-fanalyzer`
 findings (zero CWE-tagged diagnostics) anywhere in the core under
-avr-gcc 16.1.0 or arm-none-eabi-gcc 14.2.1, across the full modern set the
-owner named. Two ordinary-warning classes, both judged, plus one
+avr-gcc 16.1.0. Under avr-gcc 15.2.0 and arm-none-eabi-gcc 14.2.1, exactly
+**one** CWE-tagged diagnostic appears (settings.c:208, `-Wanalyzer-out-of-
+bounds` [CWE-787]) — independently re-verified as a false positive (see the
+table row below), not a live defect, but a real diagnostic under two of the
+three fresh compilers this session measured; "zero" does not hold for those
+two. Two ordinary-warning classes, both judged, plus that one
 compiler-version-dependent analyzer false positive:
 
 | File:line | Diagnostic | Judgement |
