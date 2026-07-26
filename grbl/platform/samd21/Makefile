@@ -194,7 +194,7 @@ MAP_FILE  = $(OUTPUT_DIR)/$(BINARY_NAME).map
 # TARGETS
 # ============================================================================
 
-all: $(BUILD_DIR) $(OUTPUT_DIR) $(HEX_FILE) $(BIN_FILE) $(DUMP_FILE)
+all: $(BUILD_DIR) $(OUTPUT_DIR) $(HEX_FILE) $(BIN_FILE) $(DUMP_FILE) warn_check
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -275,6 +275,45 @@ $(BIN_FILE): $(ELF_FILE)
 $(DUMP_FILE): $(ELF_FILE)
 	$(OBJDUMP) -Sxdstr $< >$@
 
+# WARNING RATCHET (ci/warn_ratchet.py) wired at build time - CONTRACTS.md
+# #warn-ratchet-build-time-wiring. See common/warn_check.sh's header for the
+# full soundness rationale: this forces its own from-scratch build in a
+# scratch directory (never the developer's own $(BUILD_DIR)) so the
+# captured log can never be an incomplete/incremental one, and the object
+# count check after the rebuild proves that really happened rather than
+# trusting it.
+#
+# $(BOARD) is folded into the scratch path: this port's baseline is a UNION
+# over megarm+generic (PLAN.md), so a run under either BOARD is checked
+# against the same file - correct, if narrower than checking both boards in
+# one invocation (CI's matrix already runs them as separate legs, each its
+# own `make BUILD=... BOARD=...` - this mirrors that shape rather than
+# inventing a two-board single-target one).
+#
+# The recursive $(MAKE) targets the scratch ELF path directly (never `all`/
+# `warn_check`) to avoid a `warn_check -> rebuild -> all -> warn_check ->
+# ...` infinite recursion, since `all` above lists `warn_check` as its own
+# prerequisite. BUILD_DIR/OUTPUT_DIR are overridden to two DISTINCT scratch
+# subdirectories (obj/ vs out/) - overriding both to the same path makes
+# this Makefile's own directory-creation rules collide ("overriding recipe
+# for target", a real warning the ratchet then correctly fails on - caught
+# by this exact mechanism while landing it on stm32f103, see common.mk).
+WARN_SCRATCH     = $(OUTPUT_DIR)/.warncheck/$(PLATFORM_NAME)/$(BOARD)/$(BUILD)
+WARN_SCRATCH_OBJ = $(WARN_SCRATCH)/obj
+WARN_SCRATCH_OUT = $(WARN_SCRATCH)/out
+WARN_LOG         = $(WARN_SCRATCH)/build.log
+WARN_BASELINE    = ../../../ci/warn_baseline_$(PLATFORM_NAME).txt
+WARN_RATCHET     = ../../../ci/warn_ratchet.py
+WARN_CHECK       = ../common/warn_check.sh
+
+warn_check:
+	@mkdir -p $(WARN_SCRATCH_OUT)
+	@sh $(WARN_CHECK) $(WARN_SCRATCH_OBJ) $(words $(OBJECTS)) $(WARN_LOG) \
+	    $(WARN_BASELINE) $(WARN_RATCHET) -- \
+	    $(MAKE) --no-print-directory BUILD=$(BUILD) BOARD=$(BOARD) FP=$(FP) \
+	      BUILD_DIR=$(WARN_SCRATCH_OBJ) OUTPUT_DIR=$(WARN_SCRATCH_OUT) \
+	      $(WARN_SCRATCH_OUT)/$(BINARY_NAME).elf
+
 # Flash using OpenOCD
 flash: $(HEX_FILE)
 	openocd -f interface/cmsis-dap.cfg -f target/$(OPENOCD_TARGET) \
@@ -307,6 +346,7 @@ clean:
 	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.dump \
 	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.map
 	rm -rf $(PLATFORM_BUILD_ROOT)
+	rm -rf $(OUTPUT_DIR)/.warncheck/$(PLATFORM_NAME)
 
 # Clean all build artifacts
 clean-all:
@@ -339,7 +379,7 @@ help:
 	@echo "  FP precision = $(FP)"
 	@echo "  Output directory = $(BUILD_DIR)"
 
-.PHONY: all clean clean-all flash flash-bossa debug help compdb
+.PHONY: all clean clean-all flash flash-bossa debug help compdb warn_check
 
 # Include dependencies
 -include $(BUILD_DIR)/*.d

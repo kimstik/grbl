@@ -4089,3 +4089,206 @@ third port after the first.
    did across every `ci/warn_baseline_*.txt` in the tree) rather than
    mass-removing or mass-keeping. Silence in either direction is the same
    mistake this rule exists to stop.
+
+<a id="warn-ratchet-build-time-wiring"></a>
+## §NEW. A ratchet invoked only from CI is a ratchet the developer never sees - and "boot integrity" has more than one correct shape per ISA
+
+**The measured gap.** Four ratchets exist in this tree: `tools/assert_no_double.sh`
+(FP=SINGLE enforcement), `common/init_check.sh` (BUG #23 boot-init
+reachability), `common/boot_check.sh` (BUG #21 vector-table/reset-record
+integrity), and `ci/warn_ratchet.py` (the warning baseline). The first three
+are wired into every landed port's own Makefile, right after the link step -
+a developer's plain `make` catches a regression locally, the same run CI
+does. `ci/warn_ratchet.py` was the one exception: until this entry, it was
+invoked ONLY from `.github/workflows/ci.yml`, against a log the CI job
+captured itself. Every port's local `make` was completely blind to warning
+regressions even though the baseline files (`ci/warn_baseline_*.txt`) exist
+specifically to police them. That mattered more here than it would in a
+typical repo: this session's audit of those baseline files found entries
+that were live defects wearing "known debt" comments (the BUG #25 dual
+pin-map class that left a spindle relay unreachable, the BUG #18 class
+`-Woverflow` that under-clocked or over-clocked stepper timing by up to
+7.09x depending on port) - see [§37](#baseline-entry-discipline) for the rule
+those findings produced. The one guard whose contents proved most dangerous
+was the one that never ran where the work happens.
+
+**Corrected coverage table** (measured by grepping every port Makefile and
+`common/stm32/common.mk` for each ratchet's invocation, not assumed from an
+earlier pass - an earlier count of this exact table undercounted
+`boot_check.sh`'s effective coverage by miscounting which two ports lacked
+it):
+
+| ratchet | ports invoking it (of 10 real ports; `_template` and `sg2002` excluded - see notes) |
+|---|---|
+| `tools/assert_no_double.sh` | 8/10 - missing on `atmega328p` (golden AVR reference; FP=SINGLE is architecturally moot there, `double`==`float` since 2009) and `sg2002` (no functional platform code exists yet - implementation-deferred, PLAN.md) |
+| `common/init_check.sh` | 9/10 - missing only on `sg2002` (same reason) |
+| `common/boot_check.sh` **or an architecture-equivalent boot-integrity check** | 7/10 - missing on `atmega328p`, `dspic33ak128mc102`, `sg2002` (see below; **not** ch570 - corrected) |
+| `ci/warn_ratchet.py` | 0/10 before this entry; 9/10 after (all but `sg2002`, out of scope - see Coordination note) |
+
+The `boot_check.sh` row needed correcting, not just reporting. `ch32v006`
+and `ch570` do **not** call `common/boot_check.sh` - the script says so
+itself ("Not applicable to RISC-V: see the note in ch32v006/Makefile") -
+they each carry their own RISC-V-shaped inline check instead (`_start` must
+link at the flash base, since RISC-V has no Cortex-M SP-in-word0
+convention for the ARM script to inspect). ch570's is a verbatim copy of
+ch32v006's mechanism, explicitly commented "same core family, same
+reasoning" - it is not missing, it is the correct per-ISA shape of the same
+guard. A prior pass over this table had assumed `ch32v006` counted as a
+literal `boot_check.sh` caller (it doesn't - same RISC-V exemption) and so
+misattributed the resulting "one short" to `ch570` instead of to the two
+ports that actually lack ANY boot-integrity ratchet: `atmega328p` (see the
+next paragraph) and `dspic33ak128mc102` (see the paragraph after).
+`atmega328p`'s golden build has no LTO and AVR's reset vector is a jump
+instruction at a fixed address, not a Cortex-M-style (SP, PC) pair at word
+0/1 - `boot_check.sh`'s check does not describe this architecture's reset
+record at all, and the golden byte-identity gate (`make validate` against
+the fixed MD5) is already a strictly stronger per-build integrity check
+than a structural vector-table probe would add. `sg2002` has no functional
+platform code yet (PLAN.md, "DESIGN-COMPLETE/IMPLEMENTATION-DEFERRED") -
+wiring a boot check to a Makefile with no real `startup.c`/vector table
+would be a guard with nothing to check, exactly the "cannot fail"
+anti-pattern this entry's own doctrine (below) rejects.
+
+**dsPIC33AK128MC102: boot_check.sh genuinely does not apply, on different
+grounds than the RISC-V ports.** Checked, not assumed: (1) this port's
+RELEASE build has **no `-flto`** anywhere in its Makefile (confirmed by
+grep) - the exact mechanism BUG #21/`boot_check.sh` guards against (LTO's
+whole-program IPA deleting an unreferenced hand-rolled `vector_table[]`
+before codegen, defeating `KEEP(*(.isr_vector))`) cannot occur if LTO is
+never invoked. (2) This port has **no hand-authored vector table array** to
+lose in the first place - unlike every ARM/RISC-V port here, it has no
+`startup.c`; the XC-DSC toolchain's own crt0 owns boot (`__reset` sets
+W15/SPLIM/IVTBASE, walks `.dinit`, then the `__user_init` function-pointer
+table, then `main`) and the interrupt vector table is linker-synthesized,
+not a C array a `-flto` pass could see as unreferenced and delete. (3) The
+one thing `boot_check.sh` is actually a proxy for on this class of bug -
+"does the pre-`main` bring-up chain still run after the real build's
+optimizer has had a pass at it" - is already covered, more directly, by
+`common/init_check.sh`'s own `INIT_SYMBOLS` list on this port
+(`__reset,__user_init,_hal_clock_config,_main`): that check already proves
+the crt0-to-`main` chain (including the clock bring-up hung off the
+`user_init` table) survives the link. A `boot_check.sh`-shaped guard here
+would have nothing left to catch that `init_check.sh` doesn't already catch
+more precisely for this boot model - adding one anyway would be exactly the
+"guard that cannot fail" this entry's doctrine (next section) rejects.
+Recorded, not silently assumed: this port's Makefile documents each of
+these three facts at their own definition sites (the DEBUG/RELEASE flag
+block, the `PLATFORM_SOURCES` comment, and `INIT_SYMBOLS`'s own header
+comment) so a future change that reintroduces LTO or a hand-rolled vector
+table on this port trips a re-examination of this exemption rather than
+inheriting it silently.
+
+**Wiring `ci/warn_ratchet.py` into every port's build.** The other three
+ratchets inspect the linked ELF/bin - a single, already-final artifact
+that is unambiguously right or wrong. The warning ratchet instead needs a
+build LOG (every translation unit's compiler stdout/stderr), and that is
+where the actual engineering problem lives:
+
+1. **A log only proves what it captures.** `make`'s entire point is to
+   skip recompiling files whose dependencies did not change - an
+   incremental build's log silently lacks whatever warnings an untouched
+   file would still emit today. A ratchet that green-lights a build
+   because the evidence for a warning happened to be missing is the exact
+   failure class this project has already been burned by twice:
+   `assert_no_double.sh` once denylisted only the generic libgcc
+   double-precision symbol family and would have PASSED an ARM object full
+   of `__aeabi_dadd` (the family ARM's own ABI actually emits, not the
+   generic one); a `-fanalyzer` pass elsewhere turned out to be silently
+   inert under `-fsyntax-only`. **The fix is structural, not procedural**:
+   `common/warn_check.sh` (new) forces every ratchet run to be a genuine
+   full rebuild, in a directory it clears of every `*.o` itself before
+   invoking the rebuild - not a promise the caller has to keep honestly.
+   For every port except the `atmega328p` shim this is a dedicated scratch
+   directory (`$(OUTPUT_DIR)/.warncheck/<platform>[/<board>]/<BUILD>`,
+   built via a recursive `$(MAKE) BUILD_DIR=... OUTPUT_DIR=...` invocation
+   that never touches the developer's own incremental object directory);
+   for the golden-gated `atmega328p` shim (no scratch-directory knob exists
+   on the byte-frozen root Makefile) it is the root build directory itself,
+   cleared of `*.o` the same way `make clean` already does for that file
+   set. **The script then proves the clean-and-rebuild actually happened**:
+   it counts the `*.o` files sitting in the object directory afterward and
+   demands the count matches the caller-declared expectation
+   (`$(words $(OBJECTS))` for every scratch-dir port; a documented literal
+   `18` - the root Makefile's own `SOURCE` list length - for the
+   `atmega328p` shim, which has no `$(OBJECTS)` of its own to query). A
+   mismatch - wrong directory, a silent no-op, a tool crash swallowed under
+   `-k` - **fails loudly** rather than ratcheting a log that cannot be
+   trusted to represent a full build. This is "fail or skip loudly, never
+   silently pass" made concrete instead of aspirational: caught for real
+   while landing it, on the FIRST port wired (`stm32f103`) - an early draft
+   overrode `BUILD_DIR` and `OUTPUT_DIR` to the identical scratch path,
+   which collides two of the Makefile's own directory-creation rules
+   ("overriding recipe for target", a real GNU Make warning); the ratchet
+   correctly failed the build on its own new warning before a single line
+   of source was touched, exposing the bug in the wiring, not in a port.
+2. **The log is captured with a single, unconditional `>file 2>&1`
+   redirection - never a `| tee` pipeline.** That class of shell trap
+   already broke this project's CI for real once (the dsPIC RELEASE
+   workflow's `elf="...$([ "$X" = Y ] && echo z)..."`, which silently
+   killed a `run:` step under `bash -eo pipefail` the moment the test was
+   false - PLAN.md, dsPIC CI-wiring entry). A plain redirection has no
+   pipeline, so there is no pipefail hazard, and the exit status read
+   immediately afterward is unambiguously the rebuild's own - not
+   `tee`'s. It is also safe under `make -j`: this is one process tree (the
+   recursive `$(MAKE)`, itself free to use `-j` for its own compiles)
+   writing to one inherited file descriptor. Individual compiler
+   diagnostics can still interleave with each other at the OS's whim
+   between distinct child processes - exactly as they already do in this
+   project's existing CI log capture
+   (`.github/actions/build-platform/action.yml`'s own `2>&1 | tee`) - this
+   design does not make that pre-existing characteristic worse, and each
+   single diagnostic is still written by one process's own ordered output,
+   so `ci/warn_ratchet.py`'s line-oriented parsing stays sound regardless.
+3. **The recursive rebuild targets the scratch ELF file path directly -
+   never `all` or `warn_check` themselves.** `all` lists `warn_check` as
+   an extra prerequisite (the same "wire it where the other ratchets are
+   wired" shape `ASSERT_FP`/`INIT_CHECK`/`BOOT_CHECK` already use); if the
+   inner rebuild also targeted `all`, that inner `all` would try to run
+   `warn_check` again, which would rebuild `all` again - unbounded
+   recursion. Targeting the concrete `$(ELF_FILE)`-equivalent path (which
+   carries no such prerequisite) sidesteps the cycle entirely without a
+   recursion-guard variable.
+
+Every wired port was proven, not just inspected: for each of the 9 real
+ports (everything except `sg2002`, which this session did not touch - see
+Coordination note - and `_template`, which is deliberately left
+documented-but-inactive since it is not expected to link), a known baseline
+entry was temporarily removed, the build was shown to FAIL with
+`warn_ratchet`'s own message and a nonzero `make` exit code, the entry was
+restored, the build was shown to PASS, and `git status`/`git diff` on the
+baseline file showed zero residue. The `atmega328p` shim's own
+object-count mechanism (the one point of this design with no scratch
+directory to lean on) was separately proven by temporarily mis-declaring
+its expected count, confirming the loud, specific `warn_check: FAIL -
+expected N ... found M` message rather than a silent pass. The same
+count-mismatch class was independently re-proven on the scratch-directory
+mechanism itself (`stm32f103`, a deliberately-wrong literal count),
+confirming both of this design's two soundness paths, not just one.
+`ch570`'s RELEASE-only fallthrough warnings (documented in its own
+baseline: `-Og` DEBUG does not emit them, `-Os` RELEASE does) meant its
+break/restore proof had to run against `BUILD=RELEASE` specifically -
+running it against DEBUG would have "passed" for the wrong reason (the
+warning was never in that log to begin with), which is itself a small
+live instance of the missing-evidence trap this whole design exists to
+close.
+
+**Byte-neutrality.** This wiring adds one new Make target and a handful of
+new variables per port; it does not touch a single compiler or linker flag
+for the REAL build. `python3 tools/build_artifacts.py check` (which rebuilds
+DEBUG and compares hex/bin/map against the committed artifacts for every
+unit) passed before and after this batch with no artifact refresh needed:
+`artifacts check: OK - 56 file(s) verified fresh across 10 unit(s)`. If a
+future change to this wiring ever perturbs a real build's bytes, that is a
+bug in the wiring, not an accepted cost of it.
+
+**Coordination note**: `grbl/platform/sg2002/**` was not touched by this
+entry (owned by a concurrent session). Its Makefile has zero ratchets of
+any kind wired today, correctly - it has no functional platform.c yet
+(PLAN.md, "DESIGN-COMPLETE/IMPLEMENTATION-DEFERRED"). None of this entry's
+changes alter any existing guard's pass/fail behavior on any port already
+landed - `assert_no_double.sh`/`init_check.sh`/`boot_check.sh` are
+unmodified, and every `ci/warn_baseline_*.txt` file is unchanged from HEAD
+(temporarily edited during the break/restore proofs above, then restored
+byte-for-byte - confirmed via `git diff` showing no residue). A concurrent
+session stress-testing this session's claims should see identical guard
+behavior before and after this entry.
