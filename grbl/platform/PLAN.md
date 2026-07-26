@@ -389,8 +389,52 @@ Priority order (revise as hardware/toolchain reality dictates):
         natively, the first port that can honor this AVR sei()-nesting
         semantic for real). FP knob: `FP ?= DOUBLE` declared default
         (native DP FPU, CONTRACTS §17 item 7).
-      * [ ] CI wiring: cached XC-DSC installer or fetch step + 2 matrix rows +
-        warn baseline from real logs
+      * [x] **CI wiring LANDED 2026-07-26**: dedicated `build-dspic33ak128mc102`
+        job (NOT a `build` matrix row - the shared composite action is
+        apt-only; see the job's own header comment in `ci.yml` for the
+        justification), 2 matrix legs (DEBUG/RELEASE). Installer + DFP each
+        cached via `actions/cache`, keyed on version+SHA-256 (not just
+        version), verified with `sha256sum -c` every run (cache hit AND
+        miss) before install/unzip. Re-verified end-to-end this session,
+        for real, not re-quoted from the recon entry below: fresh 83 MB
+        installer download, SHA-256 MATCHED
+        (0df20c1a552bf0ce08aa139b9cb1efd71bf65b9d9f37e3982763f4f8738bfa11);
+        fresh unattended install to a clean prefix (~19-23s, no network);
+        fresh 15 MB DFP download, SHA-256
+        811360fb86d92e3d4519dab3948bf895e8468b37ab7203a7d5ca2bfac2b07bbb —
+        NEW this session (the original recon below only recorded the
+        installer's hash), cross-checked against the download server's own
+        `x-amz-meta-sha256` header, independent match; `make BUILD=DEBUG
+        link` and `make BUILD=RELEASE link` both succeed (~3-5s each),
+        zero `PORT_TODO_*` in both ELFs (nm-verified). Warn baseline
+        (`ci/warn_baseline_dspic33ak128mc102.txt`) generated from these
+        real logs: identical 4-warning core-only class every other port's
+        baseline has (gcode.c/motion_control.c/report.c/system.c).
+        TWO real gaps found and handled, neither a port-source fix (gate:
+        no port sources touched):
+        (1) the landed Makefile's `$(HEX_FILE)` rule calls `$(BIN2HEX) $<`
+        without `-mdfp=`, but bin2hex hard-requires it (confirmed: same
+        command + `-mdfp=` succeeds) — `make ... all` therefore currently
+        fails at the hex step for both flavors. Worked around at the
+        workflow level (`make ... link` + a workflow-level `bin2hex
+        -mdfp=...` step) instead of patching the Makefile; tracked here as
+        a follow-up for whoever next touches this port's Makefile.
+        (2) a shell bug caught in this job's OWN first draft, not the
+        port: `elf="...$( [ "$X" = Y ] && echo z )..."` silently kills a
+        `run:` step under GitHub Actions' default `bash -eo pipefail` the
+        moment the test is false (no `echo` runs to absorb the nonzero) —
+        would have broken the RELEASE leg's hex/assert steps specifically,
+        every time, silently. Fixed to plain `if/then` before landing.
+        RELEASE caveat carried into the workflow (`::notice::` + comment,
+        not asserted): XC-DSC FreeMode prints "Options have been disabled
+        due to restricted license" on every `-Os` TU (confirmed: 20/20
+        RELEASE compiles this session) — RELEASE size figures are
+        approximate, never to be reported as an exact `-Os` byte count.
+        Gates re-run: golden AVR MD5 PASSED (79af184e…) — untouched by
+        this session, CI-wiring-only. ch570: not landed on origin as of
+        this session (`grbl/platform/ch570/` absent, checked via
+        `git ls-tree` against this branch and `origin/master`) — a
+        clearly-marked TODO left in `ci.yml` instead of a guessed row.
 - [x] **hc32f460 COMPLETE** (rolling #3, first HDSC/Huada vendor-exotic chip):
       `make BUILD=DEBUG`/`BUILD=RELEASE` both build all objects and LINK with
       **zero `PORT_TODO_*`**, zero undefined symbols (`nm -u` empty both
@@ -982,6 +1026,47 @@ identity to integration time.
   never minutes. Same incident: `git apply` is atomic (one file's conflict rolls
   back the whole patch, pre-failure "Applied cleanly" lines are misleading) —
   always check `git status` after, use `--3way`, never `head`-truncate its output.
+
+- 2026-07-26 **dsPIC33AK128MC102 CI WIRING** (closes the last "toolchain fetch,
+  not the port" item — see rolling-port entry above for the full writeup):
+  dedicated `ci.yml` job, not a `build` matrix row (justification in the job's
+  own header comment — the shared composite action is apt-only, dsPIC's fetch/
+  cache/verify/unattended-install shape doesn't fit it without smuggling that
+  ceremony into every future apt-based port's action file). `actions/cache`
+  keyed on version+SHA-256 for both the installer and the DFP; SHA-256
+  verified with `sha256sum -c` unconditionally (cache hit or miss) before
+  either file is touched — a stale/poisoned cache entry fails loudly here
+  instead of "installing" quietly. DFP SHA-256
+  (811360fb86d92e3d4519dab3948bf895e8468b37ab7203a7d5ca2bfac2b07bbb) is NEW
+  this session — the original TOOLCHAIN RECON entry below only ever recorded
+  the installer's hash; cross-checked against the CDN's own
+  `x-amz-meta-sha256` response header as an independent second source, same
+  value both ways. Two real, unrelated bugs found and NOT silently papered
+  over: (1) the Makefile's `$(HEX_FILE)` rule omits `-mdfp=` on the
+  `bin2hex` call it needs (bin2hex/nm/objdump all hard-require it, unlike
+  gcc/ld which get it via `$(ARCHFLAGS)`) — `make all` currently fails at
+  the hex step for both flavors; worked around at the workflow level
+  (`make link` + a workflow-level `bin2hex -mdfp=` step), NOT by patching
+  the Makefile (CI-wiring-only gate) — left as a Makefile follow-up, not
+  fixed here; (2) this job's own first-draft shell had
+  `elf="...$( [ "$X" = Y ] && echo z )..."`, which silently kills a `run:`
+  step under GitHub Actions' default `bash -eo pipefail` whenever the test
+  is false — would have broken the RELEASE leg specifically, every time,
+  with no useful error. Caught locally before landing (see the executor's
+  returned proof log for both bugs' repro) and fixed to plain `if/then`.
+  Everything else re-verified for real this session, not re-quoted: fresh
+  installer download (SHA-256 match), fresh unattended install to a clean
+  prefix (~19-23s, no network), fresh DFP download+unzip, `make BUILD=DEBUG
+  link` and `make BUILD=RELEASE link` both succeed (~3-5s each) with zero
+  `PORT_TODO_*` (nm-verified both ELFs), warn baseline generated from these
+  real logs (same 4-warning core-only class as every sibling port). RELEASE
+  size caveat (FreeMode disables `-Os` silently — 20/20 TUs this session)
+  carried into the workflow as a `::notice::`, not asserted, matching
+  platform.md's existing wording. Gates re-run: golden AVR MD5 PASSED
+  (79af184e…), untouched (CI-wiring-only, no port sources touched). ch570:
+  confirmed NOT landed on origin this session (`grbl/platform/ch570/`
+  absent — checked this branch and `origin/master` via `git ls-tree`); a
+  clearly-marked TODO was left in `ci.yml` rather than a guessed row/recipe.
 
 ## Current State (update each session)
 

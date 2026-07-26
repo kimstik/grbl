@@ -168,13 +168,17 @@ that fails the build if the vector table or reset SP look wrong.
 
 There was no CI when this roadmap was first written; there is now (landed 2026-07-23, `.github/workflows/`):
 
-- **Build matrix** (`ci.yml`, 15 rows, re-verified 2026-07-26 by rebuilding every row locally):
-  atmega328p (RELEASE only, 1), stm32f103 × {DEBUG, RELEASE} (2), stm32h523 × {DEBUG, RELEASE} (2),
-  stm32f411 × {DEBUG, RELEASE} (2), samd21 × {megarm, generic} × {DEBUG, RELEASE} (4), ch32v006 ×
-  {DEBUG, RELEASE} (2), hc32f460 × {DEBUG, RELEASE} (2). Not in the matrix: dsPIC33AK128MC102
-  (toolchain fetch/licensing unresolved — see its entry below), sg2002 (non-functional, deferred by
-  design), `_template` (intentionally excluded — it's a checklist, not a shippable port). It's a thin
-  invoker: the platform Makefiles remain the actual build authority, CI just calls `make`.
+- **Build matrix** (`ci.yml`, 15 rows in the shared apt-toolchain matrix, re-verified 2026-07-26 by
+  rebuilding every row locally): atmega328p (RELEASE only, 1), stm32f103 × {DEBUG, RELEASE} (2),
+  stm32h523 × {DEBUG, RELEASE} (2), stm32f411 × {DEBUG, RELEASE} (2), samd21 × {megarm, generic} ×
+  {DEBUG, RELEASE} (4), ch32v006 × {DEBUG, RELEASE} (2), hc32f460 × {DEBUG, RELEASE} (2).
+  **dsPIC33AK128MC102 landed in CI 2026-07-26** too, as its own dedicated `build-dspic33ak128mc102`
+  job (2 legs, DEBUG/RELEASE) rather than a matrix row — the shared composite action is apt-only and
+  XC-DSC's fetch/cache/SHA-256-verify/unattended-install shape doesn't fit it (see the job's header
+  comment in `ci.yml`). Still not in any matrix: sg2002 (non-functional, deferred by design),
+  `_template` (intentionally excluded — it's a checklist, not a shippable port), ch570 (not yet
+  landed — see its own entry below). It's a thin invoker: the platform Makefiles remain the actual
+  build authority, CI just calls `make`.
 - **`docs-integrity` job**: `tools/check_contracts_numbering.py` fails the build on any
   CONTRACTS.md numbering/anchor/cross-reference inconsistency (24 sections today, all consistent).
 - **CI is confirmed running on this fork (corrected 2026-07-26)**: PLAN.md's Current State
@@ -220,7 +224,7 @@ There was no CI when this roadmap was first written; there is now (landed 2026-0
   - MPLAB XC-DSC compiler is now free including optimizations, removing what used to be a licensing barrier to porting here
   - Community hardware reference: MC106 Curiosity board
 - **Why it matters**: this would be the third distinct ISA family in the platform matrix, after ARM and RISC-V — the sharpest portability stress test yet for the macro/contract abstraction, since dsPIC's instruction set and toolchain conventions diverge furthest from AVR/ARM/RISC-V.
-- **Toolchain note**: XC-DSC isn't apt-installable; verified unattended-install recipe (URL, SHA-256, the undocumented `--netservername ""` flag, Apache-2.0 DFP) lives in `dspic33ak128mc102/platform.md` and PLAN.md's Decision Log. EULA owner-approved 2026-07-24; CI wiring (cached installer or a fetch step) is still a separate, unresolved ledger item — no CI rows yet.
+- **Toolchain note**: XC-DSC isn't apt-installable; verified unattended-install recipe (URL, SHA-256, the undocumented `--netservername ""` flag, Apache-2.0 DFP) lives in `dspic33ak128mc102/platform.md` and PLAN.md's Decision Log. EULA owner-approved 2026-07-24; **CI wiring landed 2026-07-26** as a dedicated `build-dspic33ak128mc102` job (cached+SHA-256-verified installer/DFP, 2 legs) — see PLAN.md Decision Log entry and `ci.yml` for the details, including two bugs found and fixed/worked-around along the way (a Makefile `bin2hex` gap and a shell `set -e` foot-gun).
 - **Current status**: **COMPLETE (Steps 3-6 landed 2026-07-26)** — both `make BUILD=DEBUG` and
   `make BUILD=RELEASE` build and link the full ELF with **zero `PORT_TODO_*`** (confirmed via
   `nm | grep PORT_TODO`, empty on both). T1 stepper timer, SCCP1 pulse-reset, SCCP2 spindle PWM,
@@ -332,7 +336,7 @@ Per [PLAN.md](PLAN.md) (the authoritative queue — this list is kept in sync wi
 1. **CH32V006** (RISC-V) — ✅ DONE. Dedicated Phase 4 milestone, first port built strictly from `_template` + written contracts.
 2. **Phase 6 rolling-ports queue** thereafter, revised as hardware/toolchain reality dictates:
    1. STM32F411 (ARM M4F) — ✅ DONE, see above
-   2. dsPIC33AK128MC102 (third ISA family) — ✅ DONE (build/link), CI wiring still pending
+   2. dsPIC33AK128MC102 (third ISA family) — ✅ DONE (build/link), ✅ CI wiring landed 2026-07-26
    3. HC32F460 (ARM M4F, vendor-exotic — tests contract completeness) — ✅ DONE, see above
    4. SG2002 (RISC-V64 runtime core, Linux-adjacent) — scope DECIDED 2026-07-26: bare-metal blob
       only, Linux side out of scope; design DESIGN-COMPLETE/IMPLEMENTATION-DEFERRED per PLAN.md,
@@ -344,10 +348,11 @@ Per [PLAN.md](PLAN.md) (the authoritative queue — this list is kept in sync wi
 
 ATSAMC21E18A is not currently scheduled — see its tracking note above.
 
-**Toolchain-gated, not in CI today**: dsPIC33AK128MC102 and CH570 both build with real
-toolchains available to whoever is porting/maintaining, but neither has an unattended CI fetch
-story yet (XC-DSC's EULA has no CI carve-out worked out; CH570's toolchain story is unstarted) —
-this is a CI-wiring gap, not a build-quality gap.
+**Toolchain-gated, not in CI today**: CH570 hasn't landed as a port yet (no `grbl/platform/ch570/`
+on `origin` as of 2026-07-26 — its toolchain story is unstarted, so no CI row is guessed for it;
+see `ci.yml`'s marked TODO). dsPIC33AK128MC102 is no longer in this bucket — its CI wiring landed
+2026-07-26 (dedicated job, cached+SHA-256-verified XC-DSC installer + DFP, EULA owner-approved for
+unattended CI use); see PLAN.md Decision Log for the full writeup.
 
 ---
 
