@@ -206,6 +206,12 @@ _Static_assert(X_LIMIT_BIT <= 7 && Y_LIMIT_BIT <= 7 && Z_LIMIT_BIT <= 7,
 #define CONTROL_SAFETY_DOOR_BIT   6
 #define CONTROL_MASK              ((1<<CONTROL_RESET_PIN)|(1<<CONTROL_FEED_HOLD_PIN)|(1<<CONTROL_CYCLE_START_PIN)|(1<<CONTROL_SAFETY_DOOR_PIN))
 #define CONTROL_INVERT_MASK       CONTROL_MASK
+// Same truncation class as the LIMIT assert above (system.c:43 narrows
+// GPIO_MRD(CONTROL,IREG) to a uint8_t) - this port's bits already fit;
+// codified so a future re-pin cannot silently regress.
+_Static_assert(CONTROL_RESET_BIT <= 7 && CONTROL_FEED_HOLD_BIT <= 7 &&
+               CONTROL_CYCLE_START_BIT <= 7 && CONTROL_SAFETY_DOOR_BIT <= 7,
+               "CONTROL logical bits must fit core's uint8_t group read (BUG #17 class, CONTRACTS.md #limit-bit-width-second-consumer)");
 
 // GPIO_INT_ON plumbing (see LIMIT_PCMSK note above)
 #define CONTROL_PCMSK             CONTROL_PORT
@@ -217,13 +223,21 @@ _Static_assert(X_LIMIT_BIT <= 7 && Y_LIMIT_BIT <= 7 && Z_LIMIT_BIT <= 7,
 #define CONTROL_EXTI_LINE_CYCLE_START EXTI_Line5
 #define CONTROL_EXTI_LINE_SAFETY_DOOR EXTI_Line6
 
-// PROBE PIN (GPIOC: PC15)
+// PROBE PIN (GPIOC: PC0)
+//
+// BUG #26 follow-up (same audit, 2026-07-26): PROBE_BIT was 15 here (PC15),
+// same defect and same fix as stm32f103/platform.h's PROBE section - see
+// that file's comment for the full mechanism (probe.c narrows to uint8_t at
+// two sites, neither ever caught by -Woverflow since both truncations are a
+// runtime AND, not a constant shift). PROBE moved to PC0.
 
 #define PROBE_PORT          GPIOC
 #define PROBE_PORT_ID       ((hal_gpio_port_t)GPIOC)
-#define PROBE_PIN           15
-#define PROBE_BIT           15
+#define PROBE_PIN           0
+#define PROBE_BIT           0
 #define PROBE_MASK          (1<<PROBE_PIN)
+_Static_assert(PROBE_BIT <= 7,
+               "PROBE logical bit must fit core's uint8_t group read / invert-mask XOR (BUG #26 class, CONTRACTS.md #limit-bit-width-second-consumer)");
 
 // SPINDLE PINS
 
