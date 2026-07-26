@@ -44,7 +44,7 @@
 # since it's objdump's own invocation line, not an embedded DWARF
 # attribute the compiler controls.
 
-/home/user/grbl/build/grbl_atmega328p.elf:     file format elf32-avr
+/home/user/grbl/.claude/worktrees/agent-a682ed26b4e1b6004/build/grbl_atmega328p.elf:     file format elf32-avr
 
 Sections:
 Idx Name          Size      VMA       LMA       File off  Algn
