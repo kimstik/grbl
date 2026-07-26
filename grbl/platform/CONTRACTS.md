@@ -2589,6 +2589,68 @@ batch's `-flto` change is confirmed scoped to exactly the two ports it
 targets. `tools/build_artifacts.py --selftest`,
 `tools/assert_no_double.sh --selftest`, `ci/warn_ratchet.py --selftest`,
 and `tools/check_contracts_numbering.py` all still PASS unchanged.
+**`grbl_<port>.elf.dump` added — a readable disassembly diff, tracked
+CONTINUOUSLY, never hash-gated (this batch)**: owner directive was to put
+an objdump log next to each ELF so a build-to-build change is visually
+diffable even though the ELF itself (and now the dump) legitimately
+differs every compile. Full flag-by-flag rationale, measured per-unit/
+total sizes, and the `.gitignore`/`git archive` proof live in
+`artifacts/README.md` (the `.elf.dump` sections); summarized here for the
+canonical-detail location:
+
+- **Flags**: `-d -S -h -t --no-show-raw-insn`, run through each port's own
+  `objdump`. `-d` (not `-D`) keeps the disassembly to CODE sections only.
+  `-S` is a verified no-op on today's `-g0` RELEASE builds, kept free for
+  future-proofing. `--no-show-raw-insn` measured ~24% smaller (stm32f103:
+  455,508 → 345,950 bytes) and keeps the diff about instructions, not
+  encoded bytes. `--no-addresses` was rejected — unsupported by
+  `avr-objdump` 2.26 / `xc-dsc-objdump` 2.32, would break two of the four
+  toolchains. `-r` was rejected — relocations are empty in a final linked
+  executable, verified.
+- **Tracking policy: CONTINUOUS** (every refresh, same cadence as `.syms`),
+  not tag-gated like `.elf` despite the shared name — argued from purpose:
+  the owner wants a diff of what changed *between builds*, and a tag-only
+  dump would only ever be diffable release-to-release, reopening the exact
+  gap `.bin`/`.hex`/`.syms` exist to close. Generated from the same
+  scratch-built RELEASE `.elf` `.syms` already reads; no committed `.elf`
+  needs to exist alongside it between tags.
+- **Size cost, measured**: 293 KB (hc32f460) – 649 KB (dsPIC33AK) per unit,
+  2.5-3.9x each unit's `.elf` (atmega328p 9.6x, AVR disassembly density,
+  not a flag bug). Total across ten units: **3,942,120 bytes (~3.76 MiB)**
+  added to every full refresh — bringing the tracked tree from 32 files/
+  1,403,154 bytes to 42 files/5,345,274 bytes (~281% growth). Stated
+  plainly, same posture as every other growth-cost number in this section.
+- **NOT hash-gated, proven not asserted**: `objdump` prints its own
+  invocation path as line 1 of every dump, on every toolchain — proven by
+  rebuilding stm32f103 RELEASE from two different absolute paths: `.elf`
+  byte-identical (`cmp`: no difference), `.elf.dump` differs by exactly
+  that one echoed-path line. This repo's actual workflow (fresh worktree
+  per task) hits that difference on effectively every `check` run.
+  dsPIC33AK's dump is additionally non-reproducible even from the SAME
+  path (same tempfile-section-name/pointer-derived-symbol-name root cause
+  as its existing `nondeterministic_elf` `.elf` exemption, reconfirmed this
+  batch). `tools/build_artifacts.py check` verifies `.elf.dump` PRESENCE
+  only, explicitly, per unit, every run — never silently. The pre-existing
+  56-file hash-gated set is unchanged (`check` still reports "56 file(s)
+  verified fresh across 10 unit(s)").
+- **`-ffile-prefix-map=$(CURDIR)=/grbl-src` (DEBUG `.elf` manifest-hash
+  path-independence, subsection above) reviewed against this batch's "ELF
+  variation is storage, not diffing" framing, and KEPT**: that ruling is
+  about not chasing `.elf` byte-stability for a binary diff (correct, and
+  exactly why `.elf.dump` now exists instead) — it does not bear on
+  `-ffile-prefix-map`, which fixes a *different*, still-live problem
+  (spurious DEBUG-hash "drift" in `check` purely from checkout-path
+  differences, which this project's actual multi-worktree workflow hits
+  constantly). Zero storage cost either way (compiler flag, not a tracked
+  byte), so dropping it would only reintroduce a real false-positive risk
+  for no benefit. Left unchanged in every port's `Makefile`.
+- **`.gitignore` proof**: `*.elf` matches paths ending `.elf`, not
+  `.elf.dump`; no `*.dump` rule exists. `git check-ignore -v` on every
+  committed `.elf.dump` prints nothing / exits 1 (all ten units); a
+  post-commit `git archive HEAD` extraction was checked to include all ten
+  paths — the same class of proof `tools/README.md`'s original fix needed,
+  applied before this became a fourth blanket-ignore surprise.
+
 <a id="cross-arch-dedup-byte-invariance"></a>
 ## 26. Cross-architecture de-duplication under a byte-identity gate — four extractions, and the one that had to stop at three ports (placeholder number — integrator assigns the final one; cite this slug, not "§26", from elsewhere)
 
