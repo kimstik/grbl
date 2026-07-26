@@ -1,20 +1,6 @@
 /*
   serial.c - CH570 serial port driver (TU-replacement route)
   Part of Grbl
-
-  CONTRACTS.md #7. UART1 at BAUD_RATE, 8N1, interrupt-driven RX/TX ring
-  buffers. Register shape here is GENUINELY 16550 (MCR/IER/FCR/LCR/IIR/
-  LSR/RBR/THR/DLL/DLM/DIV, ch570.h) - NOT ch32v006's F1-style STATR/DATAR/
-  BRR, so that port's serial.c is not reusable (PLAN.md recon).
-
-  BUG #19 (contract #7): realtime command bytes intercepted HERE, in the
-  RX interrupt path, mirroring core grbl/serial.c HAL_SERIAL_RX_ISR()
-  verbatim.
-
-  BUG #12 (contract #7): producer publishes data store -> __DMB() -> head
-  store on the RX path; TX path brackets the store+publish pair by masking
-  the consuming interrupt (THR-empty IE) - straight from samd21/serial.c,
-  the reference implementation every port in this tree follows.
 */
 
 #include <stdint.h>
@@ -102,11 +88,9 @@ void serial_write(uint8_t data) {
 // header for what it requires and why it is a header at all.
 #include "../common/serial_ring_accessors.h"
 
-// ============================================================================
 // UART INTERRUPT DISPATCH - called from UART1's PFIC vector (handlers.c).
 // RBR read clears DATA_RDY; THR write clears TX_FIFO_EMP (16550 shape) -
 // flag hygiene is inherent in servicing, nothing to pre-clear here.
-// ============================================================================
 void serial_irq_dispatch(void) {
   while (UART1->LSR & RB_LSR_DATA_RDY) {
     uint8_t data = UART1->RBR_THR;

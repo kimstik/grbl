@@ -5,17 +5,13 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  SAMD21G18A: ARM Cortex-M0+, 48MHz, 32KB RAM, 256KB Flash
 */
 
 #include "platform.h"
 #include "../hal.h"
 #include "config.h"
 
-// ============================================================================
 // CRITICAL SECTIONS
-// ============================================================================
 
 // ISSUE #10 (MINOR): Unused global variable - never referenced anywhere
 // TODO: Remove or use properly
@@ -32,9 +28,7 @@ void hal_critical_exit(uint32_t state) {
   __asm volatile ("MSR primask, %0" : : "r" (state) : "memory");
 }
 
-// ============================================================================
 // SYSTEM TIMING
-// ============================================================================
 
 static volatile uint32_t system_milliseconds = 0;
 static volatile uint64_t system_microseconds = 0;
@@ -54,9 +48,7 @@ uint64_t hal_micros(void) {
   return system_microseconds;
 }
 
-// ============================================================================
 // CLOCK CONFIGURATION - see startup.c::SystemInit()
-// ============================================================================
 //
 // BUG #23: a second hal_clock_config() used to live here - a near-copy of
 // startup.c's SystemInit() DFLL48M sequence that NOTHING CALLED. It was
@@ -67,9 +59,7 @@ uint64_t hal_micros(void) {
 // startup.c::SystemInit(), called from Reset_Handler before main() and
 // enforced post-link by common/init_check.sh via INIT_SYMBOLS.
 
-// ============================================================================
 // TIMER FUNCTIONS - Now implemented as macros in timer.h
-// ============================================================================
 // Timer initialization, control, and ISR definitions moved to timer.h
 // All timer operations use platform-agnostic macros:
 //   STP_TMR_*          - Stepper timer (TC3)
@@ -77,9 +67,7 @@ uint64_t hal_micros(void) {
 //   PWM_*              - Spindle PWM (TCC0)
 //   ISR_STEP, ISR_STEP_RESET, ISR_STEP_DELAY - Interrupt handlers
 
-// ============================================================================
 // WATCHDOG FUNCTIONS
-// ============================================================================
 
 void hal_watchdog_init(uint32_t timeout_ms) {
   // Initialize watchdog timer
@@ -90,9 +78,7 @@ void hal_watchdog_feed(void) {
   // Reset watchdog timer
 }
 
-// ============================================================================
 // DELAY FUNCTIONS (AVR <util/delay.h> compatibility)
-// ============================================================================
 //
 // GRBL core calls these with small integral arguments only:
 //   nuts_bolts.c delay_ms()  -> _delay_ms(1) in a loop (homing debounce,
@@ -202,9 +188,7 @@ void _delay_ms(double __ms) {
   float rem = ms_f - (float)ms;
   if (rem > 0.0f) { delay_us_f(rem * 1000.0f); }
 }
-// ============================================================================
 // GPIO INTERRUPT INITIALIZATION
-// ============================================================================
 
 void hal_gpio_interrupt_init(void) {
   // Initialize EIC
@@ -240,9 +224,7 @@ void hal_gpio_interrupt_init(void) {
   NVIC_EnableIRQ(EIC_IRQn);
 }
 
-// ============================================================================
 // INTERRUPT CONTROL
-// ============================================================================
 
 void hal_system_enable_interrupts(void) {
   __enable_irq();

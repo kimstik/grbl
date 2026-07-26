@@ -2780,7 +2780,7 @@ vendor's cores. Every claim below is a real build in this session.
    dropped — a dedup that loses the per-chip *why* is a net loss even when
    the code is identical.
 <a id="boot-init-unreachable"></a>
-## 26. Defined but never called + LTO = silently absent; byte-invariance is a WEAK signal (placeholder number — integrator assigns the final one; cite this slug, not "§26", from elsewhere)
+## 27. Defined but never called + LTO = silently absent; byte-invariance is a WEAK signal (cite the slug, #boot-init-unreachable, not "§27", from elsewhere)
 
 *(Companion to [§18](#vector-table-lto), which is the same failure class one
 level down: §18 lost a **data** table the hardware reads behind the

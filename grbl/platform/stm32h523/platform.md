@@ -373,3 +373,82 @@ Consider implementing for industrial/commercial applications:
 - **STM32H5 Examples**: https://github.com/STMicroelectronics/STM32CubeH5
 
 ---
+
+
+---
+
+# Design notes moved out of file banners
+
+Source-compactness directive: file banners carry one purpose line plus
+the license block; the rationale that used to sit above the `#include`s
+lives here, keyed by file.
+
+## `config.h`
+
+config.h - STM32H523 platform configuration
+
+STM32H523CBT6: 250MHz Cortex-M33, 32KB RAM, 128KB Flash
+
+## `flash.c`
+
+flash.c - STM32H5 flash programming implementation
+
+Flash controller for STM32H5 family (H523, H533, H563).
+Uses 8KB pages, dual-bank architecture.
+
+## `gpio.h`
+
+gpio.h - STM32H523 GPIO register accessors and macro overrides
+
+Injected by prelude.h BEFORE platform/common/gpio.h: that file only
+supplies AVR-style defaults for accessors/macros that are not already
+defined (all of its definitions are #ifndef-guarded), so everything
+here wins by coming first.
+Composition contract (platform/CONTRACTS.md section 1): core code calls
+GPIO_*(NAME) macros; NAME##_PORT / NAME##_BIT / NAME##_MASK come from the
+pin map in platform.h (NAME##_PORT is a GPIO_TypeDef*).
+Ported from stm32f103/gpio.h (same shape - MODER/OTYPER/PUPDR direction and
+pull configuration is no more a simple bitfield than F1's CRL/CRH, so every
+macro that would touch them is overridden below with function calls,
+implemented in platform.c: hal_gpio_set_output/set_input/pullup_enable/
+pullup_disable).
+
+## `handlers.c`
+
+handlers.c - STM32H523 interrupt vector wrappers
+
+Real IRQ vectors for the timers (TIM2/TIM3) and external interrupts
+(EXTI, limit switches + control pins). Each wrapper clears the peripheral
+interrupt flag FIRST, then calls the core-supplied ISR body - clearing
+after would lose edges/updates that arrive during the body, and for
+ISR_STEP_RESET specifically would ghost the final overflow after the
+timer is stopped (CONTRACTS.md sections 2.3 and 5.1). Ported from
+stm32f103/handlers.c: same core-ISR dedup pattern, adapted to H523's EXTI
+mechanics (separate rising/falling pending registers, RPR1/FPR1, and a
+dedicated vector per line 0-15 instead of F1's shared EXTI9_5/EXTI15_10).
+
+## `platform.c`
+
+platform.c - STM32H523 platform implementation
+
+STM32H523 (Black Pill H5): 250MHz Cortex-M33, 32KB RAM, 128KB Flash
+
+## `platform.h`
+
+platform.h - STM32H523 platform HAL interface
+
+Platform-specific HAL interface for STM32H523 (Black Pill H5).
+ARM Cortex-M33, 250 MHz, 32KB RAM, 128KB Flash
+
+## `regs.h`
+
+regs.h - STM32H5 register definitions
+
+Minimal register definitions for STM32H523.
+For production use, recommend using official CMSIS headers.
+
+## `startup.c`
+
+startup.c - Startup code for STM32H523
+
+Interrupt vector table and reset handler for STM32H523C8T6.

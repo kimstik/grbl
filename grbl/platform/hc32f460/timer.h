@@ -5,24 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Contracts: platform/CONTRACTS.md sections 3-6; naming: platform/common/timer.md.
-
-  Allocation (PORTING-CHECKLIST Step 3's "audit IRQ capability before
-  allocating" rule, CONTRACTS.md section 14 item 11):
-    - Stepper timer:      TIMER0 unit 1 (datasheet 1.4.22, "2 16bit basic
-      Timer(Timer0)", each generates a real compare-match event/interrupt
-      per the datasheet feature description - confirmed at the
-      feature-existence level, register layout UNVERIFIED, see regs.h).
-    - Pulse-reset timer:  TIMER0 unit 2 (second instance of the same IP).
-    - Spindle PWM:        TIMERA unit 1 channel 1 (datasheet 1.4.21, "6
-      16bit universal Timer(TimerA)" - CONFIRMED via Klipper's hard_pwm.c
-      to be this chip family's real PWM peripheral).
-
-  regs.h flags every register offset/bit position in this file's
-  dependencies as UNVERIFIED placeholder - hardware bring-up must confirm
-  before trusting pulse width or PWM waveform shape (same posture as
-  CONTRACTS.md section 16 item 13's SCCP note on dsPIC33AK).
 */
 
 #ifndef HC32F460_TIMER_H
@@ -30,9 +12,7 @@
 
 #include "regs.h"
 
-/* ============================================================================
- * ISR DEFINITIONS
- * ============================================================================
+/* ISR DEFINITIONS
  * Core defines the ISR bodies through these macros as plain named functions.
  * The real vectors (handlers.c) clear the peripheral flag FIRST, then call
  * the body (CONTRACTS.md section 5.1).
@@ -42,9 +22,7 @@
 #define ISR_STEP_RESET()    void __isr_step_reset_impl(void)
 #define ISR_STEP_DELAY()    void __isr_step_delay_impl(void)
 
-/* ============================================================================
- * STEPPER TIMER (TIMER0 unit 1)
- * ============================================================================
+/* STEPPER TIMER (TIMER0 unit 1)
  * hal_timer_stepper_init() (platform.c) leaves the counter running at /1
  * with the compare interrupt masked; INIT + STP_TMR_PRESCALER_RESET()
  * therefore yield the AVR post-init state: running, /1, interrupt masked.
@@ -66,9 +44,7 @@ void hal_timer_stepper_init(void);
                 (((v) == 1 ? 0u : ((v) == 2 ? 1u : 2u)) << TMR0_CR_PRESCALE_Pos))
 #define STP_TMR_PRESCALER_RESET()  (TMR0_1->CR &= ~(0x3u << TMR0_CR_PRESCALE_Pos))
 
-/* ============================================================================
- * PULSE RESET TIMER (TIMER0 unit 2)
- * ============================================================================
+/* PULSE RESET TIMER (TIMER0 unit 2)
  * 8-bit overflow horizon contract (CONTRACTS.md section 4): core hands us
  * a uint8_t two's-complement negative count; the compare event must fire
  * after (256 - val) ticks of F_CPU/8. Modeled as an auto-reload compare
@@ -90,9 +66,7 @@ void hal_timer_pulse_reset_init(void);
   #define STP_PULSE_DELAY_INIT()        (TMR0_2->IER |= TMR0_IER_CMPBIE)
 #endif
 
-/* ============================================================================
- * SPINDLE PWM TIMER (TIMERA unit 1, channel 1)
- * ============================================================================
+/* SPINDLE PWM TIMER (TIMERA unit 1, channel 1)
  * hal_timer_spindle_pwm_init() (platform.c) configures PERAR =
  * SPINDLE_PWM_MAX_VALUE and starts the counter with the channel output
  * disconnected (CCONR1 channel-enable bit clear). All macros are single

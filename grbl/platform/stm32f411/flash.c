@@ -5,15 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Flash controller for the STM32F4 family (F401/F411/F405/...): SECTOR
-  erase, not the F1/H5 PAGE erase model - PLATFORM_ROADMAP.md and
-  common/stm32/ARCHITECTURE.md both flagged this as the expected divergence
-  point for this platform. Sectors on F411CE (512KB) are non-uniform in
-  size (4x16KB, 1x64KB, 3x128KB); this file only implements the address
-  range this port actually uses (sector 7, the last 128KB sector, per
-  config.h/platform.h HAL_NVMEM_FLASH_START) rather than a full generic
-  address-to-sector table for the whole part.
 */
 
 #include <stddef.h>
@@ -28,9 +19,7 @@
 
 #define FLASH_TIMEOUT_MS  2000  // Sector erase of a 128KB sector is slow
 
-// ============================================================================
 // FLASH API IMPLEMENTATION (STM32F4-specific)
-// ============================================================================
 
 stm32_status_t stm32_flash_unlock(void) {
   if (!(FLASH->CR & FLASH_CR_LOCK)) {

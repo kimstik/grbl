@@ -5,8 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Flash controller for STM32F1 family (F103, F105, F107).
 */
 
 #include <stddef.h>
@@ -22,9 +20,7 @@
 // Flash timeout (in milliseconds)
 #define FLASH_TIMEOUT_MS  1000
 
-// ============================================================================
 // FLASH API IMPLEMENTATION (STM32F1-specific)
-// ============================================================================
 
 stm32_status_t stm32_flash_unlock(void) {
   // Check if already unlocked

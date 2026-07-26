@@ -5,13 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  STM32F411CEU6 ("Black Pill"): 96MHz Cortex-M4F, 128KB RAM, 512KB Flash.
-  GPIO/clock code ported from stm32h523/platform.c (same MODER/OTYPER/PUPDR
-  model - CONTRACTS.md notes this is F4-style, and H5 kept it); EXTI/SYSCFG
-  wiring reverts to stm32f103's single-PR-register model (F4 does NOT have
-  H5's RPR1/FPR1 split); USART uses the classic SR/DR register pair (F4 is
-  NOT H5's ISR/RDR/TDR - see regs.h and platform.h HAL_SERIAL_* comments).
 */
 
 #include "../hal.h"
@@ -21,9 +14,7 @@
 #include "../common/stm32/stm32_nvmem.h"
 #include "../common/stm32/stm32_watchdog.h"
 
-// ============================================================================
 // PLATFORM CONFIGURATION INSTANCE
-// ============================================================================
 
 const stm32_platform_config_t stm32_config = {
   .cpu_freq               = STM32F411_CPU_FREQ,
@@ -52,9 +43,7 @@ const stm32_platform_config_t stm32_config = {
 _Static_assert(STM32F411_FLASH_PAGE_SIZE * STM32F411_FLASH_NUM_PAGES <= NVMEM_WINDOW_SIZE,
                "STM32F411 NVMEM window exceeds stm32_nvmem.c cache buffer (NVMEM_WINDOW_SIZE) - BUG #20 class");
 
-// ============================================================================
 // CLOCK CONFIGURATION (HSE 25MHz -> PLL -> 96MHz, Black Pill crystal)
-// ============================================================================
 // PLLM=25, PLLN=192, PLLP=/2, PLLSRC=HSE: VCO_in = 25/25 = 1MHz (within the
 // 1-2MHz recommended range for jitter), VCO_out = 1MHz*192 = 192MHz (within
 // the 192-432MHz valid VCO range), SYSCLK = 192/2 = 96MHz. This is the
@@ -100,9 +89,7 @@ GRBL_BOOT_INIT void hal_clock_config(void) {
   while ((RCC->CFGR & RCC_CFGR_SWS_Msk) != RCC_CFGR_SWS_PLL);
 }
 
-// ============================================================================
 // GPIO FUNCTIONS (F4 uses MODER/OTYPER model, same shape as H5)
-// ============================================================================
 
 void hal_gpio_set_output(GPIO_TypeDef* port, uint32_t mask) {
   for (uint8_t pin = 0; pin < 16; pin++) {
@@ -230,9 +217,7 @@ GRBL_BOOT_INIT void hal_gpio_init(void) {
   hal_gpio_pullup_enable(GPIOC, PROBE_MASK);
 }
 
-// ============================================================================
 // TIMER FUNCTIONS (contract macros: timer.h - STP_TMR_*/STP_PULSE_RESET_*/PWM_*)
-// ============================================================================
 
 void hal_timer_stepper_init(void) {
   RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
@@ -277,9 +262,7 @@ void hal_timer_spindle_pwm_init(void) {
   TIM1->CR1 = TIM_CR1_CEN;
 }
 
-// ============================================================================
 // SERIAL/UART FUNCTIONS (F4 classic SR/DR model)
-// ============================================================================
 
 void hal_serial_init(uint32_t baud_rate) {
   RCC->APB2ENR |= RCC_APB2ENR_USART1EN;
@@ -316,9 +299,7 @@ void USART1_IRQHandler(void) {
   }
 }
 
-// ============================================================================
 // SYSTEM TIMING (thin wrappers over common/stm32/stm32_timing.c)
-// ============================================================================
 
 void SysTick_Handler(void) {
   stm32_systick_handler();
@@ -346,11 +327,9 @@ void _delay_ms(double ms) {
   hal_delay_ms((uint32_t)ms);
 }
 
-// ============================================================================
 // NVMEM (thin wrappers over common/stm32/stm32_nvmem.c - link-level API
 // expected by platform.h's eeprom_get_char/put_char macros, CONTRACTS.md
 // section 10)
-// ============================================================================
 
 unsigned char hal_nvmem_read_byte(unsigned int addr) {
   uint8_t data = 0xFF;
@@ -370,18 +349,14 @@ void hal_nvmem_init(void) {
   stm32_nvmem_init();
 }
 
-// ============================================================================
 // WATCHDOG (thin wrapper - stm32_watchdog.c is 100% shared, CONTRACTS.md
 // section 9: not a core contract macro family here, opt-in via -DENABLE_WATCHDOG)
-// ============================================================================
 
 void hal_watchdog_refresh(void) {
   stm32_watchdog_refresh();
 }
 
-// ============================================================================
 // SYSTEM INITIALIZATION
-// ============================================================================
 
 GRBL_BOOT_INIT void hal_system_init(void) {
   hal_clock_config();

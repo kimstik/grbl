@@ -5,9 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Minimal register definitions for SG2002 (RISC-V C906)
-  Based on Sophgo SG2002 datasheet and XuanTie C906 manual
 */
 
 #ifndef SG2002_REGS_H
@@ -15,9 +12,7 @@
 
 #include <stdint.h>
 
-// ============================================================================
 // BASE ADDRESSES (SG2002 Memory Map)
-// ============================================================================
 
 // UART base addresses
 #define UART0_BASE    0x04140000
@@ -41,9 +36,7 @@
 // System control
 #define SYSCON_BASE   0x03002000
 
-// ============================================================================
 // UART REGISTERS
-// ============================================================================
 
 typedef struct {
   volatile uint32_t RBR_THR_DLL;  // 0x00: Receive/Transmit/Divisor Latch Low
@@ -79,9 +72,7 @@ typedef struct {
 #define UART_IER_ERBFI  (1 << 0)  // Enable Received Data Available Interrupt
 #define UART_IER_ETBEI  (1 << 1)  // Enable Transmit Holding Register Empty Interrupt
 
-// ============================================================================
 // GPIO REGISTERS
-// ============================================================================
 
 typedef struct {
   volatile uint32_t SWPORTA_DR;   // 0x00: Port A Data Register
@@ -102,9 +93,7 @@ typedef struct {
 #define GPIO2  ((GPIO_TypeDef*)GPIO2_BASE)
 #define GPIO3  ((GPIO_TypeDef*)GPIO3_BASE)
 
-// ============================================================================
 // TIMER REGISTERS
-// ============================================================================
 
 typedef struct {
   volatile uint32_t LOAD_COUNT;   // 0x00: Timer Load Count
@@ -130,9 +119,7 @@ typedef struct {
 #define TIMER_CTRL_MODE_USER  (1 << 1)  // User-defined count mode
 #define TIMER_CTRL_INT_MASK   (1 << 2)
 
-// ============================================================================
 // PLIC (Platform-Level Interrupt Controller)
-// ============================================================================
 
 #define PLIC_PRIORITY_BASE    (PLIC_BASE + 0x000000)
 #define PLIC_PENDING_BASE     (PLIC_BASE + 0x001000)
@@ -152,9 +139,7 @@ typedef struct {
 #define IRQ_GPIO3   63
 #define IRQ_TIMER0  16
 
-// ============================================================================
 // RISC-V CSR (Control and Status Registers)
-// ============================================================================
 
 // Machine Status Register (mstatus) bits
 #define MSTATUS_MIE  (1UL << 3)   // Machine Interrupt Enable

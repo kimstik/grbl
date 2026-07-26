@@ -5,32 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Injected into every translation unit by the Makefile via -include, same
-  pattern as samd21's $(BOARD)/prelude.h and stm32f103/stm32h523's prelude.h.
-  Order is load-bearing:
-
-    1. gpio.h               STM32F411 register accessors (GPIO_OREG/IREG) and
-                            MODER/PUPDR-based direction/pull overrides. MUST
-                            come first: platform/common/gpio.h only supplies
-                            AVR-style defaults for names not already defined.
-    2. ../common/gpio.h     Generic GPIO bit-op helpers (GPIO_MWO, GPIO_MRD,
-                            GPIO_BGETOUT, ...) built on the accessors above.
-    3. ../common/cortexm/cortexm_critical.h
-                            sei/cli plus the HAL critical-section and
-                            interrupt-control macros, shared verbatim by every
-                            Cortex-M port here. MUST be injected before grbl.h:
-                            grbl.h pulls <avr/io.h> (the shared common/dummy
-                            stub) at its line 29, and that stub errors out
-                            unless sei/cli already exist. This port used to
-                            satisfy that with a LOCAL avr/io.h shadowing the
-                            shared stub; see that header for the full argument.
-
-  The pin map and chip HAL (platform.h, which includes timer.h) arrive through
-  grbl.h's ordinary include chain (grbl.h -> platform/hal.h -> platform.h).
-
-  GRBL_PRELUDE is the marker grbl/platform/hal.h checks to reject compiles
-  that bypass the platform Makefile.
 */
 
 #ifndef GRBL_PRELUDE_STM32F411_H

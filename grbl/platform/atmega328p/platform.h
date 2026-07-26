@@ -3,26 +3,19 @@
   Part of Grbl HAL
 
   Copyright (c) 2025 GRBL HAL Contributors
-
-  This file provides platform-specific definitions for AVR ATmega328P.
-  All definitions expand to original GRBL code for ZERO overhead.
 */
 
 #ifndef PLATFORM_AVR_ATMEGA328P_H
 #define PLATFORM_AVR_ATMEGA328P_H
 
 #include "timer.h"
-// ============================================================================
 // PLATFORM IDENTIFICATION
-// ============================================================================
 
 #define PLATFORM_NAME     "AVR ATmega328P"
 #define PLATFORM_CPU      "8-bit AVR"
 #define PLATFORM_ARCH     "AVR"
 
-// ============================================================================
 // PLATFORM CAPABILITIES
-// ============================================================================
 
 #define HAL_HAS_FPU           0
 #define HAL_HAS_DMA           0
@@ -31,18 +24,14 @@
 #define HAL_HAS_HW_MULTIPLY   0
 #define HAL_HAS_HW_DIVIDE     0
 
-// ============================================================================
 // PLATFORM SPECIFICATIONS
-// ============================================================================
 
 #define HAL_CPU_FREQ        F_CPU           // 16000000UL
 #define HAL_RAM_SIZE        2048            // 2 KB
 #define HAL_FLASH_SIZE      32768           // 32 KB
 #define HAL_EEPROM_SIZE     1024            // 1 KB
 
-// ============================================================================
 // AVR HARDWARE INCLUDES
-// ============================================================================
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -50,9 +39,7 @@
 #include <avr/wdt.h>
 #include <util/delay.h>
 
-// ============================================================================
 // CPU MAPPING - PIN DEFINITIONS
-// ============================================================================
 
 /*
   NOTE: For AVR ATmega328P, pin definitions are already in cpu_map.h
@@ -69,9 +56,7 @@
 #endif
 
 
-// ============================================================================
 // TIMING FUNCTIONS (AVR-specific implementations)
-// ============================================================================
 
 // These will be implemented in platform.c (or inline here for AVR)
 
@@ -93,9 +78,7 @@ static inline uint32_t hal_micros(void) {
   return (m * 1000) + (t * (64 / 16));  // Approximate
 }
 
-// ============================================================================
 // HAL GPIO MACROS (ZERO OVERHEAD - expand to original AVR code)
-// ============================================================================
 /*
 // Basic GPIO operations - expand to original GRBL code EXACTLY
 #define HAL_GPIO_SET_BITS(port, mask)           ((port) |= (mask))
@@ -215,9 +198,7 @@ static inline uint32_t hal_micros(void) {
 // Timer macros moved to timer.h
 
 
-// ============================================================================
 // HAL SERIAL/UART MACROS (ZERO OVERHEAD - expand to original AVR code)
-// ============================================================================
 
 #define HAL_SERIAL_RX_BUFFER_SIZE               128
 #define HAL_SERIAL_TX_BUFFER_SIZE               64
@@ -257,9 +238,7 @@ static inline uint32_t hal_micros(void) {
 #define HAL_SERIAL_RX_INTERRUPT_ENABLE()        (UCSR0B |= (1 << RXCIE0))
 #define HAL_SERIAL_RX_INTERRUPT_DISABLE()       (UCSR0B &= ~(1 << RXCIE0))
 
-// ============================================================================
 // HAL SYSTEM MACROS (ZERO OVERHEAD - expand to original AVR code)
-// ============================================================================
 
 // Global interrupt control
 #define HAL_INTERRUPTS_ENABLE()                 sei()
@@ -280,9 +259,7 @@ static inline uint32_t hal_micros(void) {
 #define HAL_DELAY_MS(ms)                        _delay_ms(ms)
 #define HAL_DELAY_US(us)                        _delay_us(us)
 
-// ============================================================================
 // HAL NVMEM (EEPROM) - Defined in hal_nvmem.h
-// ============================================================================
 
 // NVMEM macros are defined in platform/hal_nvmem.h for all platforms
 // AVR uses optimized eeprom_get_char/eeprom_put_char from nvmem.c

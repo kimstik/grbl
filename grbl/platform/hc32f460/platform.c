@@ -5,24 +5,13 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  HC32F460JETA: up to 200MHz Cortex-M4F. Every register access below routes
-  through regs.h, which grades each fact CONFIRMED vs UNVERIFIED placeholder
-  - see that file's header for the full methodology. This file's job is to
-  give every CONTRACTS.md macro a genuine, self-consistent implementation so
-  the port BUILDS and LINKS with zero PORT_TODO_*; electrical correctness on
-  real silicon is explicitly deferred to hardware bring-up (no HC32F460
-  emulator exists, same posture as CONTRACTS.md section 16's dsPIC33AK
-  notes).
 */
 
 #include "../hal.h"
 #include "platform.h"
 
-/* ============================================================================
- * WRITE-PROTECT UNLOCK (PWC_FPRC) - gates writes to CMU control registers.
- * See regs.h for the UNVERIFIED-unlock-code disclosure.
- * ==========================================================================*/
+/* WRITE-PROTECT UNLOCK (PWC_FPRC) - gates writes to CMU control registers.
+   See regs.h for the UNVERIFIED-unlock-code disclosure. */
 
 static void pwc_registers_unlock(void) {
   PWC->FPRC = PWC_FPRC_UNLOCK_CODE;
@@ -32,15 +21,13 @@ static void pwc_registers_lock(void) {
   PWC->FPRC = PWC_FPRC_LOCK_CODE;
 }
 
-/* ============================================================================
- * CLOCK CONFIGURATION (XTAL -> PLL -> 200MHz system clock)
- * ============================================================================
- * Sequence shape (enable XTAL, wait ready, configure+enable PLL, wait
- * ready, switch CKSWR to MPLL) is architecturally standard; every bit
- * position and the exact 200MHz PLL coefficient set is UNVERIFIED - see
- * regs.h. CMU_CKSWR_MPLL (0x05) and the three CMU sub-register addresses
- * ARE confirmed (Klipper bootloader cross-check, regs.h header).
- * --------------------------------------------------------------------------*/
+/* CLOCK CONFIGURATION (XTAL -> PLL -> 200MHz system clock)
+   ============================================================================
+   Sequence shape (enable XTAL, wait ready, configure+enable PLL, wait
+   ready, switch CKSWR to MPLL) is architecturally standard; every bit
+   position and the exact 200MHz PLL coefficient set is UNVERIFIED - see
+   regs.h. CMU_CKSWR_MPLL (0x05) and the three CMU sub-register addresses
+   ARE confirmed (Klipper bootloader cross-check, regs.h header). */
 
 GRBL_BOOT_INIT void hal_clock_config(void) {
   pwc_registers_unlock();
@@ -76,14 +63,12 @@ GRBL_BOOT_INIT void hal_clock_config(void) {
   pwc_registers_lock();
 }
 
-/* ============================================================================
- * GPIO FUNCTIONS
- * ============================================================================
- * Direction/pull-up are per-pin PCONR words (regs.h) - UNVERIFIED bit
- * positions, function calls rather than bit-op macros (same shape-class
- * reasoning as stm32f411/stm32h523's MODER/PUPDR, CONTRACTS.md section 14
- * item 5).
- * --------------------------------------------------------------------------*/
+/* GPIO FUNCTIONS
+   ============================================================================
+   Direction/pull-up are per-pin PCONR words (regs.h) - UNVERIFIED bit
+   positions, function calls rather than bit-op macros (same shape-class
+   reasoning as stm32f411/stm32h523's MODER/PUPDR, CONTRACTS.md section 14
+   item 5). */
 
 void hal_gpio_set_output(HC32_PORT_TypeDef* port, uint32_t mask) {
   for (uint8_t pin = 0; pin < 16; pin++) {
@@ -176,9 +161,7 @@ GRBL_BOOT_INIT void hal_gpio_init(void) {
   hal_gpio_pullup_enable(GPIOB, PROBE_MASK);
 }
 
-/* ============================================================================
- * TIMER FUNCTIONS (contract macros: timer.h - STP_TMR_, STP_PULSE_RESET_, PWM_ families)
- * ==========================================================================*/
+/* TIMER FUNCTIONS (contract macros: timer.h - STP_TMR_, STP_PULSE_RESET_, PWM_ families) */
 
 void hal_timer_stepper_init(void) {
   TMR0_1->CR = 0;
@@ -211,9 +194,7 @@ void hal_timer_spindle_pwm_init(void) {
   TMRA_1->CR = TMRA_CR_START;
 }
 
-/* ============================================================================
- * SERIAL/UART FUNCTIONS
- * ==========================================================================*/
+/* SERIAL/UART FUNCTIONS */
 
 void hal_serial_init(uint32_t baud_rate) {
   /* Baud divisor: standard oversampled-count formula (UNVERIFIED BRR
@@ -232,10 +213,8 @@ void hal_serial_init(uint32_t baud_rate) {
   NVIC_EnableIRQ(USART1_TX_IRQn);
 }
 
-/* ============================================================================
- * SYSTEM TIMING (SysTick-based millis/micros/delay - architectural
- * Cortex-M4 SysTick, same confidence class as every other ARM port)
- * ==========================================================================*/
+/* SYSTEM TIMING (SysTick-based millis/micros/delay - architectural
+   Cortex-M4 SysTick, same confidence class as every other ARM port) */
 
 static volatile uint32_t hc32_ms_ticks = 0;
 
@@ -283,18 +262,14 @@ void _delay_ms(double ms) {
   hal_delay_ms((uint32_t)ms);
 }
 
-/* ============================================================================
- * WATCHDOG (stub - not a core contract macro family, CONTRACTS.md section 9;
- * left as a no-op refresh since this port does not enable a hardware
- * watchdog)
- * ==========================================================================*/
+/* WATCHDOG (stub - not a core contract macro family, CONTRACTS.md section 9;
+   left as a no-op refresh since this port does not enable a hardware
+   watchdog) */
 
 void hal_watchdog_refresh(void) {
 }
 
-/* ============================================================================
- * SYSTEM INITIALIZATION
- * ==========================================================================*/
+/* SYSTEM INITIALIZATION */
 
 GRBL_BOOT_INIT void hal_system_init(void) {
   hal_clock_config();

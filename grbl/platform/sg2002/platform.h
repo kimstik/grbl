@@ -5,8 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Sophgo SG2002 (RISC-V C906) HAL implementation for LicheeRV-Nano
 */
 
 #ifndef SG2002_PLATFORM_H
@@ -20,9 +18,7 @@
 // Define platform identifier
 #define PLATFORM_SG2002 1
 
-// ============================================================================
 // PIN MAPPING - GPIO DEFINITIONS (LicheeRV-Nano)
-// ============================================================================
 
 // Stepper motor step pins (GPIO0)
 #define X_STEP_PORT      GPIO0
@@ -89,9 +85,7 @@
                             (1UL << CONTROL_CYCLE_START_PIN) | (1UL << CONTROL_SAFETY_DOOR_PIN))
 #define PROBE_MASK         (1UL << PROBE_PIN)
 
-// ============================================================================
 // HAL GPIO MACROS
-// ============================================================================
 
 // GPIO port type
 typedef GPIO_TypeDef* hal_gpio_port_t;
@@ -118,9 +112,7 @@ typedef GPIO_TypeDef* hal_gpio_port_t;
     (port)->SWPORTA_DR = _tmp; \
   } while(0)
 
-// ============================================================================
 // HAL SERIAL (UART) MACROS
-// ============================================================================
 
 // Use UART0 for GRBL communication
 #define HAL_SERIAL_UART  UART0
@@ -151,9 +143,7 @@ void hal_serial_init(uint32_t baud_rate);
 #define HAL_SERIAL_RX_ISR()  void uart0_rx_handler(void)
 #define HAL_SERIAL_TX_ISR()  void uart0_tx_handler(void)
 
-// ============================================================================
 // HAL TIMER MACROS (for stepper interrupt)
-// ============================================================================
 
 // Use TIMER0 channel 0 for stepper interrupt
 #define HAL_TIMER_STEPPER  (&TIMER0->TIMER[0])
@@ -176,9 +166,7 @@ uint32_t hal_timer_stepper_get_count(void);
 // Timer ISR
 #define HAL_TIMER_STEPPER_ISR()  void timer0_ch0_handler(void)
 
-// ============================================================================
 // HAL SYSTEM MACROS
-// ============================================================================
 
 // Critical section
 uint32_t hal_critical_enter(void);
@@ -203,9 +191,7 @@ void hal_delay_us(uint32_t us);
 void hal_system_reset(void);
 #define HAL_SYSTEM_RESET()  hal_system_reset()
 
-// ============================================================================
 // HAL NVMEM MACROS (Non-volatile memory emulation)
-// ============================================================================
 
 #define HAL_NVMEM_SIZE  1024  // 1KB NVMEM for settings
 
@@ -217,9 +203,7 @@ void hal_nvmem_write_byte(uint32_t addr, uint8_t data);
 #define HAL_NVMEM_READ_BYTE(addr)     hal_nvmem_read_byte(addr)
 #define HAL_NVMEM_WRITE_BYTE(addr, d) hal_nvmem_write_byte(addr, d)
 
-// ============================================================================
 // PLATFORM CONFIGURATION
-// ============================================================================
 
 // CPU frequency (700 MHz)
 #define F_CPU  700000000UL
@@ -236,15 +220,11 @@ const char* hal_platform_get_name(void);
 const char* hal_platform_get_cpu(void);
 uint32_t hal_platform_get_cpu_freq(void);
 
-// ============================================================================
 // HAL INITIALIZATION
-// ============================================================================
 
 void hal_platform_init(void);
 
-// ============================================================================
 // AVR COMPATIBILITY - cpu_map.h stubs
-// ============================================================================
 // These are used by core GRBL code (limits.c, probe.c, system.c)
 // Platform-specific values override dummy/cpu_map.h defaults via #ifndef
 

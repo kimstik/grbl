@@ -5,9 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Platform-specific flash operations. Each platform implements these functions
-  according to its flash controller (F1/F4/H5 have different registers).
 */
 
 #ifndef STM32_FLASH_H
@@ -15,9 +12,7 @@
 
 #include "stm32_platform.h"
 
-// ============================================================================
 // FLASH PROGRAMMING API (platform-specific implementation)
-// ============================================================================
 
 /**
  * Unlock flash for programming

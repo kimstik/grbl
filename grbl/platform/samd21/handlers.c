@@ -5,17 +5,13 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Interrupt handlers for GRBL on SAMD21
 */
 
 #include "../hal.h"
 #include "platform.h"
 #include "timer.h"
 
-// ============================================================================
 // TIMER ISR WRAPPERS - Auto-clear interrupt flags before calling implementation
-// ============================================================================
 // ARM Cortex-M requires manual clearing of peripheral INTFLAG registers
 // These wrappers clear flags then call the actual ISR implementation from stepper.c
 
@@ -46,14 +42,10 @@ void TC4_Handler(void) {
   }
 #endif
 
-// ============================================================================
 // SERIAL INTERRUPT (SERCOM3)
-// ============================================================================
 // SERCOM3_Handler is implemented in serial.c
 
-// ============================================================================
 // GPIO INTERRUPTS (EIC - External Interrupt Controller)
-// ============================================================================
 
 // Forward declarations - these functions are defined in base GRBL code:
 // - LIMIT_INT_IRQHandler() is defined in limits.c via HAL_GPIO_IRQ_HANDLER(LIMIT_INT)

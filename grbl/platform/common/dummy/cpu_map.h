@@ -1,12 +1,6 @@
 /*
   cpu_map.h - Dummy stub for non-AVR platforms
   Part of Grbl
-
-  This is a compatibility stub for platforms that don't use AVR-style
-  pin mappings. Each platform defines its pins in platform.h instead.
-
-  This file is only used when a platform doesn't provide its own cpu_map.h.
-  AVR platform has its own full cpu_map.h with real pin definitions.
 */
 
 #ifndef cpu_map_h

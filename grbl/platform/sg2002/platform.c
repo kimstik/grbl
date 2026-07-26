@@ -5,17 +5,13 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Sophgo SG2002 (RISC-V C906) HAL implementation
 */
 
 #include "../hal.h"
 #include "platform.h"
 #include "config.h"
 
-// ============================================================================
 // PLATFORM INFO
-// ============================================================================
 
 const char* hal_platform_get_name(void) {
   return "Sophgo SG2002 (LicheeRV-Nano)";
@@ -29,9 +25,7 @@ uint32_t hal_platform_get_cpu_freq(void) {
   return F_CPU;
 }
 
-// ============================================================================
 // CRITICAL SECTION
-// ============================================================================
 
 uint32_t _hal_critical_state = 0;
 
@@ -45,9 +39,7 @@ void hal_critical_exit(uint32_t state) {
   restore_interrupts(state);
 }
 
-// ============================================================================
 // GPIO INITIALIZATION
-// ============================================================================
 
 void hal_gpio_init(void) {
   // Configure stepper step pins as outputs
@@ -87,9 +79,7 @@ void hal_gpio_init(void) {
   HAL_GPIO_SET_INPUT(PROBE_PORT, 1UL << PROBE_PIN);
 }
 
-// ============================================================================
 // SERIAL (UART) FUNCTIONS
-// ============================================================================
 
 void hal_serial_init(uint32_t baud_rate) {
   // Calculate divisor for baud rate
@@ -110,9 +100,7 @@ void hal_serial_init(uint32_t baud_rate) {
   HAL_SERIAL_UART->DLH_IER = UART_IER_ERBFI;
 }
 
-// ============================================================================
 // TIMER FUNCTIONS (Stepper interrupt)
-// ============================================================================
 
 void hal_timer_stepper_init(void) {
   // Disable timer
@@ -141,9 +129,7 @@ uint32_t hal_timer_stepper_get_count(void) {
   return HAL_TIMER_STEPPER->CURRENT_VALUE;
 }
 
-// ============================================================================
 // DELAY FUNCTIONS
-// ============================================================================
 
 void hal_delay_ms(uint32_t ms) {
   // Simple busy-wait delay (should be replaced with timer-based delay)
@@ -160,9 +146,7 @@ void hal_delay_us(uint32_t us) {
   }
 }
 
-// ============================================================================
 // NVMEM FUNCTIONS (Simple RAM-based implementation for now)
-// ============================================================================
 
 static uint8_t nvmem_buffer[HAL_NVMEM_SIZE];
 
@@ -184,9 +168,7 @@ void hal_nvmem_write_byte(uint32_t addr, uint8_t data) {
   }
 }
 
-// ============================================================================
 // SYSTEM RESET
-// ============================================================================
 
 void hal_system_reset(void) {
   // Trigger software reset via WDT or system control register
@@ -197,9 +179,7 @@ void hal_system_reset(void) {
   }
 }
 
-// ============================================================================
 // PLIC (Platform-Level Interrupt Controller) FUNCTIONS
-// ============================================================================
 
 static void hal_plic_init(void) {
   volatile uint32_t *plic_priority = (volatile uint32_t*)PLIC_PRIORITY_BASE;
@@ -223,9 +203,7 @@ static void hal_plic_init(void) {
   *plic_threshold = 0;
 }
 
-// ============================================================================
 // PLATFORM INITIALIZATION
-// ============================================================================
 
 void hal_platform_init(void) {
   // Initialize GPIO

@@ -5,8 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  STM32H523 (Black Pill H5): 250MHz Cortex-M33, 32KB RAM, 128KB Flash
 */
 
 #include "../hal.h"
@@ -16,9 +14,7 @@
 #include "../common/stm32/stm32_nvmem.h"
 #include "../common/stm32/stm32_watchdog.h"
 
-// ============================================================================
 // PLATFORM CONFIGURATION INSTANCE
-// ============================================================================
 
 const stm32_platform_config_t stm32_config = {
   // Clock configuration
@@ -50,14 +46,10 @@ const stm32_platform_config_t stm32_config = {
 _Static_assert(STM32H523_FLASH_PAGE_SIZE * STM32H523_FLASH_NUM_PAGES <= NVMEM_WINDOW_SIZE,
                "STM32H523 NVMEM window exceeds stm32_nvmem.c cache buffer (NVMEM_WINDOW_SIZE) - BUG #20 class");
 
-// ============================================================================
 // CLOCK CONFIGURATION (250 MHz from HSE 8MHz)
-// ============================================================================
 
 GRBL_BOOT_INIT void hal_clock_config(void) {
-  // ============================================================================
   // STM32H523 Clock Configuration: HSE 8MHz → PLL → 250MHz CPU
-  // ============================================================================
   // Target clocks:
   // - CPU: 250 MHz (from PLL1)
   // - APB1/2/3: 125 MHz (CPU/2)
@@ -80,7 +72,6 @@ GRBL_BOOT_INIT void hal_clock_config(void) {
   //   M=2 (VCO input = 4 MHz)
   //   N=125 (VCO freq = 500 MHz)
   //   P=2 (CPU freq = 250 MHz)
-  // ============================================================================
 
   // 1. Enable HSE oscillator and wait for ready
   RCC->CR |= RCC_CR_HSEON;
@@ -149,9 +140,7 @@ GRBL_BOOT_INIT void hal_clock_config(void) {
   // Will be done by stm32_timing_init()
 }
 
-// ============================================================================
 // GPIO FUNCTIONS (H5 uses MODER/OTYPER model like F4)
-// ============================================================================
 
 void hal_gpio_set_output(GPIO_TypeDef* port, uint32_t mask) {
   // H5 uses MODER register (2 bits per pin)
@@ -348,9 +337,7 @@ GRBL_BOOT_INIT void hal_gpio_init(void) {
   GPIOC->BSRR = (1 << (0 + 16)) | (1 << (1 + 16)); // Coolant off
 }
 
-// ============================================================================
 // TIMER FUNCTIONS (contract macros: timer.h - STP_TMR_*/STP_PULSE_RESET_*/PWM_*)
-// ============================================================================
 
 void hal_timer_stepper_init(void) {
   // Enable TIM2 clock
@@ -401,9 +388,7 @@ void hal_timer_spindle_pwm_init(void) {
   TIM1->CR1 = TIM_CR1_CEN;          // Enable counter
 }
 
-// ============================================================================
 // SERIAL/UART FUNCTIONS
-// ============================================================================
 
 void hal_serial_init(uint32_t baud_rate) {
   // Enable USART1 clock
@@ -445,9 +430,7 @@ void USART1_IRQHandler(void) {
   }
 }
 
-// ============================================================================
 // SYSTEM TIMING (thin wrappers over common/stm32/stm32_timing.c)
-// ============================================================================
 
 void SysTick_Handler(void) {
   stm32_systick_handler();
@@ -475,11 +458,9 @@ void _delay_ms(double ms) {
   hal_delay_ms((uint32_t)ms);
 }
 
-// ============================================================================
 // NVMEM (thin wrappers over common/stm32/stm32_nvmem.c - link-level API
 // expected by platform.h's eeprom_get_char/put_char macros, CONTRACTS.md
 // section 10)
-// ============================================================================
 
 unsigned char hal_nvmem_read_byte(unsigned int addr) {
   uint8_t data = 0xFF;
@@ -495,9 +476,7 @@ void hal_nvmem_flush(void) {
   stm32_nvmem_flush();
 }
 
-// ============================================================================
 // SYSTEM INITIALIZATION
-// ============================================================================
 
 GRBL_BOOT_INIT void hal_system_init(void) {
   // Configure system clock

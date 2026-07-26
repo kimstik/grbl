@@ -1,23 +1,6 @@
 /*
   serial.c - CH32V006 serial port driver (TU-replacement route)
   Part of Grbl
-
-  PORTING-CHECKLIST Step 4, CONTRACTS.md #7. USART1 at BAUD_RATE, 8N1,
-  interrupt-driven RX/TX ring buffers. Register names on this chip are
-  STATR/DATAR/CTLR1 (ch32v006.h) - F1 bit positions, WCH names, all
-  TRM-verified (RM 14). Default pin map: TX=PD5, RX=PD6 (RM table 7-10,
-  USART1_RM=0000 - no remap write needed).
-
-  BUG #19 (contract #7): realtime command bytes are intercepted HERE, in
-  the RX interrupt path, mirroring core grbl/serial.c HAL_SERIAL_RX_ISR()
-  verbatim - without this, '?'/'!'/'~'/ctrl-X and every extended-ASCII
-  override byte would fall into the line buffer and be parsed (and
-  rejected) as g-code: no status reports, no feed hold, no reset.
-
-  BUG #12 (contract #7): producer publishes data store -> __DMB() -> head
-  store on the RX path; the TX path brackets the store+publish pair by
-  masking the consuming interrupt (TXEIE) - both patterns straight from
-  samd21/serial.c, the reference implementation.
 */
 
 #include <stdint.h>
@@ -96,12 +79,10 @@ void serial_write(uint8_t data) {
 // header for what it requires and why it is a header at all.
 #include "../common/serial_ring_accessors.h"
 
-// ============================================================================
 // UART INTERRUPT DISPATCH - called from USART1's PFIC vector (handlers.c),
 // which owns the __attribute__((interrupt)) frame. RXNE clears on DATAR
 // read; TXE clears on DATAR write (RM 14.8.1/14.8.2) - flag hygiene is
 // inherent in servicing, nothing to pre-clear here.
-// ============================================================================
 void serial_irq_dispatch(void) {
   if (USART1->STATR & USART_STATR_RXNE) {
     uint8_t data = (uint8_t)USART1->DATAR;
