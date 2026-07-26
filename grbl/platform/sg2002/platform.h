@@ -46,7 +46,7 @@
 // ============================================================================
 // PLATFORM CAPABILITIES
 // ============================================================================
-#define PLATFORM_HAS_FPU           0   // see the ARCH/ABI note below - built soft-float
+#define PLATFORM_HAS_FPU           1   // hardware single-precision (F) - see the ARCH/ABI note below; no D
 #define PLATFORM_HAS_DMA           1   // SoC has DMA (unused by this port)
 #define PLATFORM_HAS_USB           1   // owned by Linux, never by this core
 #define PLATFORM_HAS_HW_EEPROM     0   // NVMEM lives in the shared carve-out (nvmem.c)
@@ -55,32 +55,34 @@
 
 /*
   ARCH/ABI NOTE (the toolchain decision, recorded where it is consumed).
-  Built rv64imac / lp64 - SOFT FLOAT - even though the C906 family nominally
-  implements rv64gc. Two independent reasons, both checked against the
-  installed toolchain rather than assumed:
+  Built rv64imafc / lp64f - HARDWARE SINGLE-PRECISION FLOAT - not rv64gc,
+  and (as of 2026-07-26) not the soft-float rv64imac/lp64 this port shipped
+  with either:
 
   1. rv64gc/lp64d IS NOT BUILDABLE HERE. `gcc -march=rv64gc -mabi=lp64d
      -print-multi-directory` resolves to `rv64imafdc/lp64d`, and
      picolibc-riscv64-unknown-elf ships no such multilib - its rv64 list
      stops at rv64imafc/lp64f (verified by listing the installed lib tree).
-     A double-precision-ABI build has no libc to link against on this
-     toolchain, full stop.
-  2. THE "L" IN C906L IS UNDOCUMENTED. The cut-down runtime core is
-     community-described as a C906 with the MMU (certainly) and some
-     extensions (unclearly) removed; nothing states whether F/D survive.
-     rv64imafc/lp64f DOES have a multilib and would be the natural home for
-     this project's FP=SINGLE posture - but an lp64f binary on a core
-     without F traps on its first FLW. rv64imac is a strict subset of every
-     C906 variant, so it runs regardless of how that question resolves.
+  2. WHETHER F/D SURVIVE THE CUT-DOWN "L" CORE IS RESOLVED, not merely
+     re-asserted, by a primary source: Milk-V/Sophgo's own shipped FreeRTOS
+     SDK for this exact core (github.com/milkv-duo/milkv-duo-smallcore-
+     freertos - same "C906L"/"C906-NOMMU" silicon, same CV1800B/SG2002
+     family) builds `cvitek/scripts/toolchain-riscv64-elf.cmake` with
+     `-march=rv64imafdc -mabi=lp64d -mcmodel=medany` - the vendor compiling
+     real, shipped, hardware-run firmware for THIS core with hardware DOUBLE
+     precision. A core implementing D structurally implements F, so
+     rv64imafc/lp64f (single precision only) is a strict, safe subset of
+     what the vendor's own build proves the hardware executes.
 
-     This is a deliberately reversible decision: if F is confirmed present,
-     flipping the Makefile's ARCH/ABI to rv64imafc_zicsr/lp64f is a two-line
-     change that the FP=SINGLE knob and the post-link no-double assert
-     already cover unchanged.
-
-  Soft float is not a hardship here: FP=SINGLE (CONTRACTS.md §17) keeps
-  everything in 32-bit soft float, which is what the AVR origin semantics
-  were, and 700 MHz has cycles to spare at GRBL's arithmetic rates.
+  This port still targets single precision only, by this project's own
+  tree-wide FP=SINGLE default (CONTRACTS.md §17) - not because double is
+  unavailable on this silicon (it demonstrably is, per point 2 above).
+  Multilib confirmed present (not merely requested):
+  /usr/lib/picolibc/riscv64-unknown-elf/lib/rv64imafc/lp64f/ ships
+  crt0.o/libc.a/libm.a. Measured RELEASE effect of the ABI switch alone
+  (before also enabling LTO): text 37156 -> 31348, 5 soft-float helper
+  symbols -> 0 (nm-verified). Full before/after table: PLAN.md's sg2002
+  hardware-float entry.
 */
 
 // ============================================================================
