@@ -84,21 +84,41 @@ a `uint8_t` at all. `platform.h` carries static asserts that fail the build if
 The CPU frequency is a separate constant used for nothing timing-critical;
 delays come from the CLINT `mtime` counter, not a calibrated busy loop.
 
-### ARCH/ABI: `rv64imac_zicsr` / `lp64` (soft float)
+### ARCH/ABI: `rv64imafc_zicsr` / `lp64f` (hardware single-precision float)
 
-Not `rv64gc`, for two independent reasons:
+Not `rv64gc` (no picolibc multilib for `rv64imafdc/lp64d` on this toolchain —
+its rv64 set stops at `rv64imafc/lp64f`), and — as of 2026-07-26 — not the
+soft-float `rv64imac/lp64` this port shipped with either. That choice's own
+stated reason ("whether F/D survive the cut-down C906L core is undocumented,
+an `lp64f` binary traps on its first `FLW` if F is absent") is RESOLVED, not
+merely re-asserted, by a primary source: Milk-V/Sophgo's own shipped FreeRTOS
+SDK for this exact core, `github.com/milkv-duo/milkv-duo-smallcore-freertos`
+(same "C906L"/"C906-NOMMU" silicon, same CV1800B/SG2002 family), builds its
+`cvitek/scripts/toolchain-riscv64-elf.cmake` with `-march=rv64imafdc
+-mabi=lp64d -mcmodel=medany` — the vendor compiling real, shipped, hardware-
+run firmware for THIS core with hardware DOUBLE precision. A core that
+implements D structurally implements F, so `rv64imafc/lp64f` is a strict,
+safe subset of what the vendor's own build proves the hardware executes.
 
-1. **`rv64gc/lp64d` is not buildable on this toolchain.** It resolves to the
-   `rv64imafdc/lp64d` multilib, which picolibc does not ship — its rv64 set
-   stops at `rv64imafc/lp64f`.
-2. **The "L" in C906L is undocumented.** Nothing states whether F/D survive
-   the cut-down core. `rv64imafc/lp64f` *does* have a multilib, but an lp64f
-   binary traps on its first `FLW` if F is absent. `rv64imac` is a strict
-   subset of every C906 variant.
+This port still targets single precision only, by this project's own
+tree-wide FP=SINGLE default (CONTRACTS §17) — not because double is
+unavailable on this silicon. Multilib confirmed present (not merely
+requested): `/usr/lib/picolibc/riscv64-unknown-elf/lib/rv64imafc/lp64f/`
+ships `crt0.o`/`libc.a`/`libm.a`. Measured effect on this port's own RELEASE
+build (ABI change alone, before also enabling LTO): text 37156 → 31348,
+5 soft-float helper symbols (`__addsf3`/`__subsf3`/`__mulsf3`/`__divsf3`/
+`__floatsisf`) → 0, confirmed by `nm`, not inferred; disassembly shows real
+`fmul.s`/`fadd.s`/`fdiv.s`/`fsqrt.s`/etc. hardware instructions in the linked
+image. `RELEASE` also now builds with `-flto` (matching every sibling
+RISC-V/ARM port) — `_start` needs no `used` attribute for this, since it is
+the linker `ENTRY()` point and `ld` requires it resolved regardless of any
+C-visible caller; `Reset_Handler`/`SystemClock_Config`/`sg2002_plic_init` DO
+need `GRBL_BOOT_INIT`/`used`, and `init_check.sh` proves each survives the
+LTO'd link. Full before/after size table and vendor citation: PLAN.md's
+sg2002 hardware-float entry.
 
-Reversible in two lines if F is ever confirmed. `_zicsr` is explicit because
-this binutils generation does not imply it from the base ISA letters
-(CONTRACTS §14 item 1).
+`_zicsr` is explicit because this binutils generation does not imply it from
+the base ISA letters (CONTRACTS §14 item 1).
 
 `-mcmodel=medany` is **required**, not tuning: the default `medlow` addresses
 globals as a signed 32-bit offset from zero and cannot reach `0x8FE00000`.
@@ -177,7 +197,9 @@ offers the non-cacheable window as a declared alternative. Why:
 3. **The alternative is built, not dismissed.** If an integrator *confirms*
    the window is non-cacheable, `SHM_COHERENCY=NONCACHEABLE` removes every
    cache op and keeps the fences. Measured cost of the safe default: **472
-   bytes of text** (37156 vs 36684, RELEASE).
+   bytes of text** (29244 vs 28772, RELEASE, current hardware-float+LTO
+   build — the delta is unchanged from the original soft-float measurement,
+   as expected: CMO's cost is architecturally independent of the FP ABI).
 
 Neither setting is a no-op — under `NONCACHEABLE` the ordering fences remain,
 because ordering is still an obligation. An unrecognised value is a hard
@@ -277,13 +299,18 @@ conditional rule, not a silent wrong-pin write.
 | §18 boot integrity | RISC-V form — `_start` must link at the carve-out base |
 | §19 `.DELETE_ON_ERROR:` | present |
 
-## Sizes (RELEASE, `FP=SINGLE`, `SHM_COHERENCY=CMO`)
+## Sizes (RELEASE, `FP=SINGLE`, `SHM_COHERENCY=CMO`, `rv64imafc/lp64f`, RELEASE `-flto`)
 
 ```
    text    data     bss
-  37156       8   18056   grbl_sg2002.elf     (RELEASE)
-  41180       8   18056   grbl_sg2002_dbg.elf (DEBUG, -Og)
+  29244       8   18072   grbl_sg2002.elf     (RELEASE, -flto)
+  35748       8   18056   grbl_sg2002_dbg.elf (DEBUG, -Og, no LTO)
 ```
+
+(2026-07-26 hardware-float + LTO follow-up. Earlier same-day soft-float/
+no-LTO numbers, for history: RELEASE 37156/8/18056, DEBUG 41180/8/18056 —
+see PLAN.md's sg2002 hardware-float entry for the full before/after table
+and the vendor-SDK evidence that motivated the ABI switch.)
 
 ## Before you power a machine with this
 

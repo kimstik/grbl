@@ -9,27 +9,37 @@
 #    sudo apt-get install -y gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
 #
 #  ===========================================================================
-#  ARCH/ABI: rv64imac_zicsr / lp64 - AND WHY IT IS NOT rv64gc
+#  ARCH/ABI: rv64imafc_zicsr / lp64f - HARDWARE SINGLE-PRECISION FLOAT
 #  ===========================================================================
-#  The C906 family nominally implements rv64gc, so rv64gc/lp64d looks like
-#  the obvious choice. It is not buildable here, and it is not clearly
-#  correct either:
+#  Previously rv64imac/lp64 (soft float) on the reasoning that whether F/D
+#  survive the cut-down "L" core was undocumented community guesswork and an
+#  lp64f binary traps on its first FLW if F is actually absent. That
+#  uncertainty is now RESOLVED by a primary source stronger than community
+#  inference: Milk-V/Sophgo's own shipped FreeRTOS SDK for this EXACT core -
+#  github.com/milkv-duo/milkv-duo-smallcore-freertos (the small-core runtime,
+#  same C906L / "C906-NOMMU" silicon this port targets, same chip family
+#  CV1800B/SG2002 share) - builds with
+#  `cvitek/scripts/toolchain-riscv64-elf.cmake`:
+#    -march=rv64imafdc -mabi=lp64d -mcmodel=medany
+#  That is the VENDOR compiling real, shipped, hardware-run firmware for this
+#  silicon with hardware DOUBLE-precision float. F is therefore not merely
+#  present - a core implementing D structurally must implement F too - so
+#  targeting rv64imafc/lp64f (single precision only) is a strict, safe SUBSET
+#  of what the vendor itself proves the hardware executes.
 #
-#   1. NO MULTILIB. `riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d
-#      -print-multi-directory` answers `rv64imafdc/lp64d`, and
-#      picolibc-riscv64-unknown-elf ships no such directory - its rv64 set
-#      stops at `rv64imafc/lp64f` (verified against the installed tree, not
-#      assumed from documentation). A double-ABI build has no libc to link.
-#   2. THE "L" IN C906L IS UNDOCUMENTED. The cut-down runtime core is
-#      community-described as a C906 minus the MMU and minus some
-#      extensions; nothing states whether F/D survive. `rv64imafc/lp64f` DOES
-#      have a multilib and would suit this project's FP=SINGLE posture
-#      perfectly - but an lp64f binary traps on its first FLW if F is absent.
-#      rv64imac is a strict subset of every C906 variant and runs regardless.
+#  This project stays on SINGLE, not double, by its own project-wide FP
+#  policy (CONTRACTS.md #17's default, `tools/assert_no_double.sh`), not
+#  because double is unavailable here - unlike dspic33ak128mc102, which
+#  affirmatively chose FP=DOUBLE as ITS default because ITS FPU is native DP
+#  and its port author wanted that. sg2002 keeps the tree-wide SINGLE default.
 #
-#  Reversible in two lines if F is ever confirmed: set ARCH/ABI to
-#  rv64imafc_zicsr / lp64f. The FP knob and the post-link no-double assert
-#  cover that case unchanged.
+#  Toolchain multilib CONFIRMED (not merely requested) on the installed tree:
+#  `riscv64-unknown-elf-gcc -march=rv64imafc_zicsr -mabi=lp64f
+#  -print-multi-directory` answers `rv64imafc/lp64f`, and
+#  `/usr/lib/picolibc/riscv64-unknown-elf/lib/rv64imafc/lp64f/` ships
+#  crt0.o/libc.a/libm.a. Measured effect on this port's own real objects, not
+#  a synthetic test TU: see the RELEASE/DEBUG size table in PLAN.md's
+#  sg2002 hardware-float entry.
 #
 #  `_zicsr` is appended explicitly for the reason CONTRACTS.md §14 item 1
 #  records: this binutils generation treats Zicsr as unbundled from the base
@@ -44,8 +54,8 @@
 
 PLATFORM_NAME  = sg2002
 DEVICE         = SG2002
-ARCH           = rv64imac_zicsr
-ABI            = lp64
+ARCH           = rv64imafc_zicsr
+ABI            = lp64f
 
 # ---------------------------------------------------------------------------
 # CLOCK -> F_CPU. THIS IS THE APB TIMER'S INPUT CLOCK, NOT THE CPU CLOCK.
@@ -161,9 +171,11 @@ else
 endif
 
 # ---------------------------------------------------------------------------
-# FP PRECISION KNOB (CONTRACTS.md #17). rv64imac has no F extension - the
-# identical DP-soft-float leak class as ch32v006's rv32ec and ch570's rv32imc,
-# same fix, same post-link proof.
+# FP PRECISION KNOB (CONTRACTS.md #17). rv64imafc has F (hardware single
+# precision) but deliberately not D - a `double` anywhere in port code would
+# be DP-soft-float, unlike ch32v006's rv32ec/ch570's rv32imc which have
+# neither F nor D. Same leak class, same fix (FP=SINGLE keeps all arithmetic
+# in float), same post-link proof (assert_no_double.sh).
 # ---------------------------------------------------------------------------
 FP ?= SINGLE
 ifeq ($(FP),SINGLE)
@@ -181,11 +193,12 @@ CFLAGS += -specs=picolibc.specs
 
 # BOOT-INIT REACHABILITY (BUG #23, CONTRACTS.md #boot-init-unreachable): the
 # post-link proof that Reset_Handler's pre-main chain is still reachable, not
-# silently dropped. This port has no -flto today (see LDFLAGS below), so the
-# check is currently "cheap insurance" rather than catching a live LTO
-# deletion - same posture ch570/_template document for the same reason - but
-# it still catches symbol-renamed/dropped regressions and stands ready the
-# day this port's RELEASE flavor turns LTO on.
+# silently dropped. RELEASE now builds with -flto (see LDFLAGS below), so this
+# is a LIVE check, not "cheap insurance" - GRBL_BOOT_INIT/`used` are what keep
+# SystemClock_Config/sg2002_plic_init/Reset_Handler from being IPA-deleted as
+# apparently-uncalled (LTO's whole-program analysis never parses the asm text
+# inside _start that calls Reset_Handler - CONTRACTS.md gap log, same
+# mechanism ch32v006/ch570 already document for their own Reset_Handler).
 INIT_SYMBOLS ?= Reset_Handler,SystemClock_Config,sg2002_plic_init
 INIT_CHECK = ../common/init_check.sh
 
@@ -194,6 +207,16 @@ CFLAGS += $(CFLAGS_EXTRA) -I$(PLATFORM_DIR) -I$(GRBL_DIR)/platform -I$(GRBL_DIR)
 BUILD ?= DEBUG
 ifeq ($(BUILD),RELEASE)
   CFLAGS += -Os -g0
+  # LTO: RELEASE only (house style, matches samd21/stm32*/hc32f460/ch32v006/
+  # ch570). DEBUG stays plain -Og for debuggability. `_start` needs no `used`
+  # (unlike Reset_Handler): it is this image's linker ENTRY() point, which ld
+  # requires resolved independent of any C-visible caller, so LTO's IPA
+  # cannot treat it as dead the way it can an ordinary internally-referenced
+  # function - same reasoning already holds for ch32v006/ch570's own `_start`,
+  # neither of which carries `used` either. Reset_Handler/SystemClock_Config/
+  # sg2002_plic_init DO need it/GRBL_BOOT_INIT - see the INIT_SYMBOLS comment
+  # above - and init_check.sh proves it below, not just by assertion.
+  CFLAGS += -flto -fno-fat-lto-objects
 else
   CFLAGS += -Og -g3
   CFLAGS += -DDEBUG
@@ -211,6 +234,13 @@ LDFLAGS  = $(ARCHFLAGS) -nostartfiles -specs=picolibc.specs
 LDFLAGS += -Wl,--gc-sections
 LDFLAGS += -Wl,-Map=$(MAP_FILE)
 LDFLAGS += -T script.ld
+
+# LTO for RELEASE (house style, matches ch32v006/ch570/samd21/stm32*/
+# hc32f460): -flto must be present at link time too, not just in CFLAGS,
+# for the linker's LTO plugin to drive the whole-program IR.
+ifeq ($(BUILD),RELEASE)
+  LDFLAGS += -flto -Os
+endif
 
 LIBS = -lm
 

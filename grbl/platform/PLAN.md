@@ -646,6 +646,78 @@ Priority order (revise as hardware/toolchain reality dictates):
           ratchets green including a freshly regenerated
           `ci/warn_baseline_sg2002.txt` cross-check (4 distinct warnings, all
           core-file, all in baseline, both flavors).
+      * **HARDWARE SINGLE-PRECISION FLOAT + RELEASE LTO (2026-07-26, same-day
+        follow-up, coordinator-directed adversarial re-check).** Two closed
+        items:
+        1. **ARCH/ABI switched from soft float (`rv64imac_zicsr`/`lp64`) to
+           hardware single-precision float (`rv64imafc_zicsr`/`lp64f`).** The
+           soft-float choice's stated reason - "whether F/D survive the
+           cut-down C906L core is undocumented, an `lp64f` binary traps on
+           its first `FLW` if F is absent" - is RESOLVED, not just
+           re-asserted, by a primary source stronger than community
+           inference: Milk-V/Sophgo's own shipped FreeRTOS SDK for this exact
+           core, `github.com/milkv-duo/milkv-duo-smallcore-freertos` (the
+           small-core / "C906L" / "C906-NOMMU" runtime, same silicon family
+           CV1800B/SG2002 share), builds its
+           `cvitek/scripts/toolchain-riscv64-elf.cmake` with `-march=rv64imafdc
+           -mabi=lp64d -mcmodel=medany` - the VENDOR compiling real, shipped,
+           hardware-run firmware for THIS core with hardware DOUBLE-precision
+           float. A core implementing D structurally implements F, so
+           `rv64imafc/lp64f` (single precision only) is a strict, safe subset
+           of what the vendor's own build proves the hardware executes -
+           stronger evidence than the toolchain-only test that resolved the
+           math.h/picolibc question earlier this same session. This project
+           stays on FP=SINGLE by its own tree-wide default (CONTRACTS.md #17),
+           not because double is unavailable - unlike dspic33ak128mc102,
+           which affirmatively defaults FP=DOUBLE because ITS FPU is native
+           DP and its author wanted that; sg2002 keeps the SINGLE default.
+           Multilib confirmed on the installed tree (not merely requested):
+           `rv64imafc/lp64f` ships crt0.o/libc.a/libm.a under
+           `/usr/lib/picolibc/riscv64-unknown-elf/lib/`. Measured effect on
+           this port's own real objects (RELEASE, no LTO yet, so this row
+           isolates the ABI change alone):
+
+           | | text | data | bss | soft-float helper syms (`nm`) |
+           |---|---:|---:|---:|---|
+           | before (`rv64imac`/`lp64`, soft float) | 37156 | 8 | 18056 | 5 (`__addsf3`/`__subsf3`/`__mulsf3`/`__divsf3`/`__floatsisf`) |
+           | after (`rv64imafc`/`lp64f`, hw float) | 31348 | 8 | 18056 | 0 |
+
+           `nm`-verified zero soft-float symbols (not inferred); disassembly
+           confirms real hardware instructions in the linked image (166
+           `fmul.s`, 122 `fsub.s`, 92 `fadd.s`, 56 `fmv.s`, 42 `flt.s`, 26
+           `fdiv.s`, 21 `fcvt.s`, 15 `feq.s`, 11 `fsqrt.s`, 9 `fle.s`).
+           `assert_no_double.sh` PASSED (an ABI change is exactly where a
+           double could sneak back in - it didn't). DEBUG: 41180 -> 35748.
+        2. **RELEASE gained `-flto`**, matching every sibling RISC-V/ARM port
+           (ch32v006/ch570/samd21/stm32*/hc32f460) instead of the rebase's
+           earlier "cheap insurance, no LTO" posture - that posture was
+           reasonable mid-rebase but stops being the safer choice once the
+           port already carries the exact guards LTO is the reason for
+           (`GRBL_BOOT_INIT`, `used` on `Reset_Handler`, `init_check.sh`).
+           `_start` needs no `used` attribute (unlike `Reset_Handler`): it is
+           this image's linker `ENTRY()` point, which `ld` requires resolved
+           independent of any C-visible caller, so LTO's whole-program IPA
+           cannot treat it as dead the way it treats an ordinary
+           internally-referenced function - the same reasoning already holds
+           for ch32v006/ch570's own `_start`, neither of which carries `used`
+           either; verified, not just reasoned about: `nm` on the linked
+           LTO'd RELEASE ELF shows `_start` present at the correct address.
+           Guards re-proved WITH LTO on, not merely re-asserted: `BOOT INIT:
+           OK  [Reset_Handler,SystemClock_Config,sg2002_plic_init]`; `BOOT
+           INTEGRITY: OK  _start=0x000000008fe00000`; `assert_no_double.sh`
+           PASSED. RELEASE with LTO: 29244/8/18072 text/data/bss (down a
+           further 2104 bytes of text from the no-LTO hardware-float row
+           above; +16 bytes bss from LTO's own layout, not a correctness
+           signal). No guard fired - had one fired, that would have been
+           reported here as a real finding, not silently reverted.
+        - Gates re-run after both changes: golden AVR `make validate` PASSED
+          (`79af184e67b27defd27a39309ac53563`, unchanged - untouched by this
+          sg2002-only batch); sg2002 warn ratchet green on fresh DEBUG+RELEASE
+          logs (still the same 4 baseline warnings, all core-file); every
+          sibling port's artifact hex/bin/syms byte-identical (only each
+          `.elf.dump`'s non-reproducible objdump-invocation line differs);
+          full-tree `python3 tools/build_artifacts.py build` + `check` (11
+          units, 62 files verified fresh).
       * Original design-pass record, kept verbatim below for provenance:
 - [x] **sg2002** DESIGN-COMPLETE / IMPLEMENTATION-DEFERRED (2026-07-26 runtime-core
       design batch; owner's scope ruling below; the deferral recommendation was

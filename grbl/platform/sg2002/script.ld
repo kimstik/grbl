@@ -34,10 +34,13 @@
   DELIBERATELY ABSENT: `_template/script.ld`'s blanket
   /DISCARD/ { libc.a(*) libm.a(*) libgcc.a(*) }. CONTRACTS.md §14 item 4 -
   that block is a latent bug for any target that genuinely needs library
-  code, and this one does: rv64imac has no F extension, so every float
-  operation in core grbl resolves to a real libgcc soft-float routine.
-  Discarding those would silently strip a hard dependency instead of
-  failing loudly.
+  code, and this one does: even with this port's hardware single-precision
+  float (rv64imafc/lp64f - see platform.h's ARCH/ABI note), transcendentals
+  core grbl calls (sinf/atan2f/etc, per the FP=SINGLE libm-pin macros in
+  every board's prelude.h) are real libm.a calls, not compiler-inlined
+  hardware instructions, and crt0/libc still supply startup and memcpy-class
+  routines. Discarding those would silently strip a hard dependency instead
+  of failing loudly.
 */
 
 ENTRY(_start)
