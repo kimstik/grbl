@@ -30,6 +30,13 @@
 # reappears, a duplicate pin-map definition has come back and the ratchet is
 # now supposed to fail on it.
 #
+# Removed 2026-07-26: `stepper.c: ... integer overflow ... '2115098112'
+# [-Woverflow]` (BUG #18 class, CONTRACTS.md #18). Root cause:
+# common/stm32/common.mk's F_CPU lacked a suffix wide enough for 250 MHz -
+# the true compile-time constant is 15000000000, not 2115098112 (a real
+# ~7.09x-too-fast stepper timing bug). Fixed at the source (common.mk now
+# uses ULL); do NOT re-add.
+#
 # common/stm32 shared code (regs.h vs CMSIS-style headers, both stm32 ports):
 stm32_platform.h: warning: comparison of unsigned expression in '< 0' is always false [-Wtype-limits]
 #
@@ -41,5 +48,4 @@ gcode.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
 motion_control.c: warning: unused parameter 'cycle_mask' [-Wunused-parameter]
 nvmem.c: warning: '<<' in boolean context, did you mean '<'? [-Wint-in-bool-context]
 report.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
-stepper.c: warning: integer overflow in expression of type 'int' results in '2115098112' [-Woverflow]
 system.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
