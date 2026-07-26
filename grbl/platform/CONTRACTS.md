@@ -287,9 +287,13 @@ Contracts:
 2. **Duty domain**: full scale = `SPINDLE_PWM_MAX_VALUE`, defined by
    cpu_map/board config, and it must fit `uint8_t` because the core plumbs
    duty as `uint8_t` end-to-end (spindle_control.c:122). AVR fixes it at 255
-   (cpu_map.h:131). SAMD21 megarm declares 65535 (megarm/config.h:139) against
-   `PER = 0xFF` (samd21/timer.h:109) — both sides of that are contract
-   violations (values >255 truncate in core; CC[0] > PER saturates). Known gap.
+   (cpu_map.h:131). **Closed 2026-07-26** (was: SAMD21 megarm/generic
+   declared 65535 against `PER = 0xFF`, samd21/timer.h:109 — the value
+   silently truncated to 255 at compile time, so the port worked BY ACCIDENT
+   of that truncation; see the static-assert-sweep entry below for the
+   before/after disassembly proof). Both samd21 boards now declare
+   `SPINDLE_PWM_MAX_VALUE 255`, matching `PER` exactly — no port violates
+   this contract any longer.
 3. `PWM_SET(x); PWM_ENABLE()` in either order must yield duty `x` — core does
    SET before ENABLE (spindle_control.c:124-129).
 4. `PWM_DISABLE()` must drive the spindle pin inactive, not float it
@@ -480,9 +484,12 @@ The SAMD21 port is the ARM *adaptation reference*, not a compliance gold
 standard. Open violations, all cited above: prescaler silent no-op ([§3](#stepper-timer)),
 empty critical sections ([§8](#critical-sections)), CONTROL input bits above bit 7 ([§1.3](#gpio-data)),
 pull-up accessor mapped to PORT CTRL ([§1.4](#gpio-data)), pulse-width 16-bit overflow
-horizon ([§4](#pulse-reset-timer)), PWM range 65535 vs PER=0xFF vs core uint8_t ([§6.2](#spindle-pwm)),
-EIC arming never called ([§2.1](#gpio-interrupts)). Each is a Phase-3 closure item; each future
-port must clear this whole file instead.
+horizon ([§4](#pulse-reset-timer)), EIC arming never called ([§2.1](#gpio-interrupts)). Each is a
+Phase-3 closure item; each future port must clear this whole file instead.
+
+Closed: PWM range 65535 vs `PER=0xFF` vs core `uint8_t` ([§6.2](#spindle-pwm)) — both boards now
+declare `SPINDLE_PWM_MAX_VALUE 255`, matching `PER` exactly (2026-07-26, see the
+static-assert-sweep closure entry).
 
 Closed: `_delay_us/_delay_ms` empty stubs — real calibrated busy-wait
 implementations landed (samd21/platform.c:169-214, commit dd5c5e7). The
@@ -1504,14 +1511,33 @@ living only in prose or a code comment:
    against a `uint8_t` core duty, capping actual duty at 25.5%) before
    REVIEW #3 caught it by inspection — a build-time assert would have
    caught both instances the moment the wrong value was typed.
-   **samd21 (megarm + generic) deliberately does NOT get this assert**:
-   both boards still declare `SPINDLE_PWM_MAX_VALUE 65535` ([§6](#spindle-pwm) item 2,
-   "Known gap" above) — a live, tracked violation, not a stale doc. Adding
-   the assert there today would turn a runtime bug into an unrelated build
-   break inside a static-assert-sweep batch that does not own fixing PWM
-   range (that needs its own `PER`/`CC[0]` rework and a Renode re-verify).
-   Each samd21 board's config.h carries a comment saying so, with an
-   instruction to add the assert in the SAME commit that fixes the range.
+   **CLOSED 2026-07-26 — the class now has NO exception on any port.**
+   samd21 (megarm + generic) originally did NOT get this assert: both
+   boards declared `SPINDLE_PWM_MAX_VALUE 65535` against `PER = 0xFF`
+   ([§6.2](#spindle-pwm)) — a live, tracked violation, not a stale doc — and
+   adding the assert at sweep time would have turned a runtime bug into an
+   unrelated build break. That fix has now landed in its own Renode-verified
+   batch, as the exclusion comment instructed: both boards' `config.h` now
+   declare `SPINDLE_PWM_MAX_VALUE 255` (matching `PER` exactly, correct by
+   construction) and carry the identical `_Static_assert` the other 6 ports
+   have. Truth was established before the fix, not assumed: a fresh DEBUG
+   build reproduced the exact `-Woverflow` diagnostic
+   (`unsigned conversion from 'int' to 'uint8_t' ... changes value from
+   '65535' to '255'`), and disassembly of `spindle_control.o` showed the
+   assignment already compiled to `movs r2, #255` / `strb r2, [r3, #0]` —
+   the port worked only because the compiler silently truncated the
+   declared value down to what the hardware could actually hold.
+   Post-fix disassembly of the same function is byte-identical (still
+   `movs r2, #255`) — the fix changes how the value is arrived at, not what
+   reaches the hardware, so it is behaviour-preserving by construction; this
+   was cross-checked with a `git stash`/rebuild/`stash pop` A-B size
+   comparison on both boards (0 byte delta) and a full Renode
+   `smoke.sh --arc` run (banner/settings/motion/arc/dwell all PASS, exit 0)
+   plus a live `M3 S1000` / `M5` spindle command exchange over the emulated
+   UART (both acknowledged `ok`, no error/ALARM). The `ci/warn_baseline_
+   samd21.txt` `-Woverflow` entry this exact truncation had recorded is
+   removed (one-way ratchet, removal-on-real-fix direction), confirmed gone
+   from fresh logs on all 4 megarm/generic × DEBUG/RELEASE combos.
 2. **[§10](#nvmem-eeprom) NVMEM window vs cache buffer, BUG #20 class**: stm32h523 and
    stm32f411 already had `_Static_assert(FLASH_PAGE_SIZE * FLASH_NUM_PAGES
    <= NVMEM_WINDOW_SIZE, ...)`; stm32f103 (sharing the same

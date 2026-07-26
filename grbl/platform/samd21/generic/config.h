@@ -175,17 +175,23 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define SPINDLE_ENABLE_PIN     23
 #define SPINDLE_ENABLE_BIT     23
 
-#define SPINDLE_PWM_MAX_VALUE  65535
+// PWM duty domain: core plumbs duty as uint8_t end-to-end
+// (spindle_control.c:122, CONTRACTS.md #6.2) - full scale MUST fit uint8_t.
+// TCC0 runs with PER = 0xFF (samd21/timer.h:109); CC[0] must never exceed
+// that or the compare saturates. Full scale is therefore 255, matching PER
+// exactly - correct by construction, not by truncation.
+#define SPINDLE_PWM_MAX_VALUE  255
 #define SPINDLE_PWM_MIN_VALUE  1      // Must be > 0 to avoid floating
 #define SPINDLE_PWM_OFF_VALUE  0
 #define SPINDLE_PWM_RANGE      (SPINDLE_PWM_MAX_VALUE - SPINDLE_PWM_MIN_VALUE)
 
-// NOT guarded by a `SPINDLE_PWM_MAX_VALUE <= 255` _Static_assert (unlike
-// the stm32/ch32v006/dsPIC/_template ports, PLAN.md Phase 2 static-assert
-// sweep, 2026-07-26) - same documented, pre-existing CONTRACTS.md #6.2
-// violation as the megarm board (see its config.h for the full reasoning);
-// fixing spindle PWM range needs its own Renode-verified batch, not a
-// config edit inside an unrelated contracts sweep.
+// PLAN.md Phase 2 static-assert sweep (2026-07-26) closure (2026-07-26):
+// same fix/reasoning as megarm/config.h - this board shared the identical
+// tracked violation (65535 vs PER=0xFF vs uint8_t core duty, truncating to
+// 255 by accident at compile time). Fixed to the single canon (255); the
+// duty-cap-twins class is now closed on every port, no exceptions.
+_Static_assert(SPINDLE_PWM_MAX_VALUE <= 255,
+               "SPINDLE_PWM_MAX_VALUE must fit core's uint8_t duty domain (CONTRACTS.md #6.2, duty-cap-twins class)");
 
 // ============================================================================
 // COOLANT CONTROL PINS

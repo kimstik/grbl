@@ -185,23 +185,28 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define SPINDLE_ENABLE_BIT     9    // PA9 (optional)
 
 // Spindle PWM configuration
-#define SPINDLE_PWM_MAX_VALUE  65535  // 16-bit PWM
+// PWM duty domain: core plumbs duty as uint8_t end-to-end
+// (spindle_control.c:122, CONTRACTS.md #6.2) - full scale MUST fit uint8_t.
+// TCC0 runs with PER = 0xFF (samd21/timer.h:109); CC[0] must never exceed
+// that or the compare saturates. Full scale is therefore 255, matching PER
+// exactly - correct by construction, not by truncation.
+#define SPINDLE_PWM_MAX_VALUE  255
 #define SPINDLE_PWM_MIN_VALUE  1      // Must be > 0 to avoid floating
 #define SPINDLE_PWM_OFF_VALUE  0
 #define SPINDLE_PWM_RANGE      (SPINDLE_PWM_MAX_VALUE - SPINDLE_PWM_MIN_VALUE)
 
-// NOT guarded by a `SPINDLE_PWM_MAX_VALUE <= 255` _Static_assert (unlike
-// the stm32/ch32v006/dsPIC/_template ports, PLAN.md Phase 2 static-assert
-// sweep, 2026-07-26): this board is the DOCUMENTED, PRE-EXISTING violation
-// CONTRACTS.md #6.2 already names ("SAMD21 megarm declares 65535 ... both
-// sides of that are contract violations ... Known gap"). Core plumbs duty
-// as uint8_t end-to-end (spindle_control.c:122), so 65535 here silently
-// truncates - a real, tracked bug, not a documentation gap. Adding the
-// assert here would just turn a known runtime bug into a build break for
-// this one static-assert-sweep batch, which is not the batch that owns
-// fixing spindle PWM range (that needs its own Renode-verified change, not
-// a config edit slipped in alongside an unrelated contracts sweep). Land
-// the assert here in the SAME commit that fixes the PWM range, not before.
+// PLAN.md Phase 2 static-assert sweep (2026-07-26) closure (2026-07-26):
+// this board was the one deliberately-excluded, tracked violation of the
+// duty-cap-twins class (CONTRACTS.md static-assert-sweep slug) - it shipped
+// SPINDLE_PWM_MAX_VALUE=65535 while TCC0's PER=0xFF and core's duty is
+// uint8_t, so the value silently truncated to 255 at compile time (the
+// port worked BY ACCIDENT of that truncation; see the now-removed
+// -Woverflow entry this exact truncation left in
+// ci/warn_baseline_samd21.txt). Fixed to the single canon (255) in the
+// same commit that adds this assert, per the instruction the exclusion
+// comment left. The class is now closed on every port, no exceptions.
+_Static_assert(SPINDLE_PWM_MAX_VALUE <= 255,
+               "SPINDLE_PWM_MAX_VALUE must fit core's uint8_t duty domain (CONTRACTS.md #6.2, duty-cap-twins class)");
 
 // ============================================================================
 // COOLANT CONTROL PINS (C3, C4)

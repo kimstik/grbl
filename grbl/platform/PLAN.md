@@ -172,12 +172,16 @@ assumptions); BUG #4 (baud arithmetic) — none catchable without stated contrac
       (1) **SPINDLE_PWM_MAX_VALUE <= 255** (duty-cap-twins class, CONTRACTS.md
       #6.2 — the exact bug h523 and f103 both shipped: PWM_MAX=1000 against a
       uint8_t core duty) added to stm32f103/h523/f411, ch32v006, dspic33ak128mc102,
-      `_template` (6 ports). samd21 (megarm+generic) DELIBERATELY EXCLUDED — it
-      is the one port that still genuinely violates this (65535, a documented
-      pre-existing gap, CONTRACTS.md #6.2), so adding the assert there would
-      convert a known runtime bug into an unrelated build break; a comment at
-      each board's config.h says so and the actual PWM-range fix is left for
-      its own Renode-verified batch. (2) **NVMEM window <= cache size**
+      `_template` (6 ports). samd21 (megarm+generic) DELIBERATELY EXCLUDED at the
+      time — it was the one port that still genuinely violated this (65535, a
+      documented pre-existing gap, CONTRACTS.md #6.2), so adding the assert then
+      would have converted a known runtime bug into an unrelated build break; a
+      comment at each board's config.h said so and left the actual PWM-range fix
+      for its own Renode-verified batch. **CLOSED 2026-07-26** (see the dated
+      entry near the end of this file, "samd21 duty-cap-twins closure"): both
+      boards now declare `SPINDLE_PWM_MAX_VALUE 255` and carry the same
+      `_Static_assert` as the other 6 ports — the class has no exception left on
+      any port. (2) **NVMEM window <= cache size**
       (BUG #20 class) already existed on stm32h523/stm32f411; stm32f103 was
       missing it (never violated it — 1024×2=2048 <= the 4096 default — but
       had no guard against a future regression) — added, matching the
@@ -1292,3 +1296,77 @@ identity to integration time.
     overwrite `build/grbl_samd21_dbg.elf`, and the PA25 STEP assertion is
     megarm-specific — always rebuild megarm DEBUG immediately before the smoke
     or the pin check reads as a false phantom-motion FAIL.
+
+- **2026-07-26 — samd21 duty-cap-twins closure: LAST tracked
+  `SPINDLE_PWM_MAX_VALUE<=255` exception removed, class now closed on every
+  port.** (agent-authored entry) Follow-up to the `_Static_assert` sweep
+  above, which deliberately left samd21 (megarm+generic) excluded because it
+  was declaring `SPINDLE_PWM_MAX_VALUE 65535` — a live, tracked violation, not
+  a stale doc.
+  - **Truth established before touching anything** (per the brief — do not
+    assume the accident, verify it): rebuilt samd21/megarm DEBUG and captured
+    the exact compiler diagnostic: `megarm/config.h:188:32: warning: unsigned
+    conversion from 'int' to 'uint8_t' changes value from '65535' to '255'
+    [-Woverflow]`, attributed to `spindle_compute_pwm_value` in
+    spindle_control.c (GCC points macro-expansion diagnostics at the macro's
+    definition site, not the use site — this is why the warning reads
+    "config.h" not "spindle_control.c"). Disassembled
+    `build/samd21/DEBUG/spindle_control.o`: the assignment compiles straight
+    to `movs r2, #255` / `strb r2, [r3, #0]` — the compiler folds 65535 into
+    255 at compile time and the byte store proves core's duty really is
+    `uint8_t`. `samd21/timer.h:109` confirms `TCC0->PER = 0xFF` (255) is the
+    hardware's actual full scale. All three legs of the bug (65535 declared,
+    255 truncated by construction, PER=255 the real ceiling) confirmed by
+    instrument, not assumption.
+  - **Fix**: `SPINDLE_PWM_MAX_VALUE` changed from `65535` to `255` in both
+    `samd21/megarm/config.h` and `samd21/generic/config.h` — full scale now
+    equals `PER` exactly, correct by construction instead of by accidental
+    truncation. Added the same `_Static_assert(SPINDLE_PWM_MAX_VALUE <= 255,
+    ...)` wording the other 6 ports already carry (CONTRACTS.md #6.2,
+    duty-cap-twins class) to both files. Post-fix disassembly of the same
+    function is byte-identical (`movs r2, #255` still there) — the value the
+    hardware sees does not change, only how it's arrived at.
+  - **Ratchet**: removed the now-dead `config.h: ... -Woverflow ...` line from
+    `ci/warn_baseline_samd21.txt` (one-way ratchet, removal-on-real-fix
+    direction). Confirmed gone from fresh build logs across all 4 combos
+    (megarm/generic × DEBUG/RELEASE); `ci/warn_ratchet.py` OK against the
+    trimmed baseline on all 4 (4 distinct warnings each, all baselined, 0 new).
+  - **Gates**: AVR golden `make validate` PASSED (text 30640, data 0, bss
+    1633, MD5 79af184e67b27defd27a39309ac53563, `AVR_GCC_PATH=/usr/bin` in
+    this environment). samd21 megarm RELEASE **31952/296/6160 — byte-identical
+    to canon, delta 0** (DEBUG 48112/296/6160, also unchanged). generic
+    RELEASE 31940/296/6160 and DEBUG 48028/296/6160, both unchanged pre- vs
+    post-fix (verified via `git stash`/rebuild/`stash pop` A-B comparison —
+    the constant-fold means the fix is size-neutral, as expected). All 6
+    sibling ports rebuilt and confirmed byte-identical to the canonical table:
+    f103 28700/80, h523 25132/388, f411 25796/80, hc32f460 25596/80, ch32v006
+    41072/0 (dsPIC not in this environment's toolchain roster; untouched by
+    the diff regardless — `git diff --stat` shows only
+    `ci/warn_baseline_samd21.txt` and the two samd21 board config.h files).
+  - **Runtime proof (Renode)**: `ci/renode/smoke.sh --arc` on a freshly
+    rebuilt megarm DEBUG image — banner, `$$`, motion (MPos 0→1.000, Idle),
+    arc (`G2 X2 I1 F200`, Y peak 1.000, endpoint (3,0,0), Idle), dwell (`G4
+    P0.5` ok in 0.49s) all PASS, PA25 X STEP driven high 427 times, **exit
+    0**. Additionally drove the actual spindle path live over the UART
+    socket: `M3 S1000` → `ok`, `?` → `<Idle|MPos:0.000,0.000,0.000|FS:0,1000|
+    Pn:XYZ|WCO:0.000,0.000,0.000>` (spindle speed 1000 accepted and reported),
+    `M5` → `ok` — no error/ALARM, no hang, the exact code path this fix
+    touches (`spindle_compute_pwm_value`/`spindle_set_speed`) runs clean.
+  - **Renode monitor caveat, recorded rather than glossed over**: attempted to
+    read `TCC0->PER`/`CC[0]` back live via the monitor
+    (`sysbus ReadDoubleWord 0x4200204C`/`0x42002050`) to show the duty
+    register taking the new value directly. `samd21_grbl.repl` models TCC0 as
+    a plain `Tag` (by design — the smoke harness doesn't need real PWM
+    timing), which has no backing store: `peripherals` doesn't list it, reads
+    always return the tag's constant 0 regardless of what firmware wrote, and
+    `SetHookBeforePeripheralWrite` (which works fine on named peripherals like
+    `portA` — that's how the PA25 STEP-pin evidence above is captured)
+    rejects Tag ranges because they aren't a bindable `IBusPeripheral`. Making
+    TCC0 register-accurate is a platform-model extension, out of scope for a
+    duty-cap-domain fix; the compile-time/disassembly proof above plus the
+    live M3/M5 execution is the evidence this environment can produce.
+  - **Docs**: this closes the samd21 exception noted in the `_Static_assert`
+    sweep item above; CONTRACTS.md static-assert-sweep section (slug
+    `static-assert-sweep`) and §6.2 (slug `spindle-pwm`) updated to match —
+    "Known gap" language for the PWM range replaced with closure text, no
+    exceptions remaining.

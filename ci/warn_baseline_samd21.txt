@@ -12,7 +12,11 @@
 # suffix, samd21/Makefile) fixed; confirmed gone from fresh build logs,
 # all 4 board x build-type combos (megarm/generic x DEBUG/RELEASE).
 # To extend after a legit new warning: python3 ci/warn_ratchet.py --log <log> --emit
-config.h: warning: unsigned conversion from 'int' to 'uint8_t' {aka 'unsigned char'} changes value from '65535' to '255' [-Woverflow]
+# 2026-07-26: removed the config.h -Woverflow entry (SPINDLE_PWM_MAX_VALUE
+# 65535 -> 255 truncation) - fixed at the source (PLAN.md static-assert
+# sweep closure, CONTRACTS.md duty-cap-twins class); confirmed gone from
+# fresh build logs, all 4 board x build-type combos (megarm/generic x
+# DEBUG/RELEASE). One-way ratchet: this removal reflects a real fix.
 gcode.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
 motion_control.c: warning: unused parameter 'cycle_mask' [-Wunused-parameter]
 report.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
