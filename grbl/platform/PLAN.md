@@ -32,6 +32,53 @@ The single highest-leverage phase. Converts manual review marathons into automat
       first real CI run may need recalibration (expected, not a defect).
 - [x] `compile_commands.json`: tools/gen_compile_commands.py + `make compdb` (samd21),
       -include flags preserved verbatim, 21 entries verified locally.
+- [x] **`ci/warn_ratchet.py` wired into build-time for every real port
+      (2026-07-26) - measured gap closed.** Grepped every port Makefile plus
+      `common/stm32/common.mk` and found the other three ratchets
+      (`assert_no_double.sh` 8/10, `init_check.sh` 9/10, `boot_check.sh`-
+      or-equivalent 7/10 - corrected count, see below) all fire from local
+      `make`; `warn_ratchet.py` fired from NOWHERE but
+      `.github/workflows/ci.yml` - 0/10. A developer's plain `make` was
+      blind to warning regressions even though this session's baseline
+      audit found real defects (BUG #25 pin-map class, BUG #18 clock-
+      overflow class) sitting in those exact files as "known debt". Full
+      writeup, corrected coverage table, the log-capture design (forced
+      from-scratch scratch-directory rebuild + object-count proof so a
+      partial/incremental log can never silently pass), and the
+      break/restore proof per port: [CONTRACTS.md
+      #warn-ratchet-build-time-wiring](CONTRACTS.md#warn-ratchet-build-time-wiring)
+      (new §, appended - not numbered, per this file's own numbering rule).
+      Wired: stm32f103/f411/h523 (shared `common.mk`, one edit covers all
+      three), samd21 (both boards), hc32f460, ch32v006, ch570,
+      dspic33ak128mc102, and the `atmega328p` shim (golden root Makefile
+      itself untouched, same precedent as its existing `init_check.sh`
+      attachment). `_template` gets a documented-but-inactive comment block
+      instead (it is not expected to link). `sg2002` deliberately excluded -
+      owned by a concurrent session this batch, and it has no functional
+      platform code to ratchet yet. Corrected in the same pass: `boot_check.sh`
+      coverage is 7/10, not "ch570 and dspic33ak128mc102 both missing it" -
+      `ch32v006`/`ch570` both carry the documented RISC-V-shaped equivalent
+      (the script's own header says "Not applicable to RISC-V"), so only
+      `dspic33ak128mc102` (established genuinely exempt this batch: no
+      `-flto` anywhere on this toolchain, no hand-rolled vector table to
+      lose to it - crt0-owned boot instead - and `init_check.sh` already
+      covers the one thing a boot check would be a proxy for here) and
+      `atmega328p`/`sg2002` (architecturally moot / not yet applicable) lack
+      one. All 9 wired ports rebuilt clean both flavors where applicable
+      post-wiring; `python3 tools/build_artifacts.py check` passed
+      unchanged (`OK - 56 file(s) verified fresh across 10 unit(s)`) - byte-
+      neutral, no artifact refresh needed. Every wired guard proven to
+      actually fire (not just inspected): a known baseline entry
+      temporarily removed per port -> `make` FAILs with `warn_ratchet`'s own
+      message and nonzero exit -> restored -> `make` PASSes -> `git status`
+      clean; the `atmega328p` shim's object-count mechanism and the
+      scratch-directory object-count mechanism (`stm32f103`) each separately
+      proven with a deliberately-wrong count. Two stale ledger checkboxes
+      found and corrected in the same sweep (both a few lines up/down in
+      this file, evidence inline at each): the samd21 warn-baseline
+      regeneration item (already done, never ticked) and the hc32f460 queue
+      placeholder (port landed months of ledger-lines ago, placeholder
+      never removed).
 
 **Exit criterion**: green pipeline on push — CONFIRMED RUNNING 2026-07-26 (see Current State):
 `github.com/kimstik/grbl/actions` shows 78 CI runs + 67 Smoke runs on this branch, one per push,
@@ -253,9 +300,17 @@ without reverse-engineering an existing port.
       negative control: pre-fix tree must FAIL the motion stage).
 - [x] **BUG #18 FIXED**: -DF_CPU=$(CLOCK)UL — stepper.c:1015 computes unsigned,
       warning gone.
-- [ ] Regenerate ci/warn_baseline_samd21.txt from a REAL build log — 8 pre-existing
-      core warnings missing (gcode/settings/stepper/motion_control/report/config.h);
-      first CI run will trip the ratchet until then
+- [x] **STALE, corrected 2026-07-26 (warn-ratchet build-time-wiring batch):**
+      this line claimed 8 pre-existing core warnings were missing from
+      `ci/warn_baseline_samd21.txt` and that the first CI run would trip the
+      ratchet until regenerated. Re-verified from a REAL fresh full DEBUG
+      rebuild of samd21 this session: `warn_ratchet: OK - 4 distinct
+      warning(s), all in baseline.` The regeneration this item asked for had
+      already landed (see the "samd21 warn baseline regenerated from REAL
+      build log" line above, a few lines up in this same list) - this was a
+      leftover duplicate checkbox from before that fix, never ticked when
+      the work landed. No baseline edit was needed to close this; the
+      earlier fix already covers it.
 - [x] **Renode smoke test — FIRST EXECUTION OF THE PORT EVER (2026-07-23): PASSED.**
       Full boot: blank-EEPROM error:7 → settings_restore (~100 NVMCTRL row rewrites) →
       banner → interactive `$$` via RXC interrupt → full stock-correct dump → ok.
@@ -491,8 +546,28 @@ Priority order (revise as hardware/toolchain reality dictates):
       "gaps require hardware bring-up" rather than "ready for hardware
       validation" in PLATFORM_ROADMAP.md, reflecting the UNVERIFIED register
       facts honestly.
-- [ ] sg2002 (RISC-V 64, linux-class — decide scope first: bare-metal vs linux userspace)
-- [ ] hc32f460 (ARM M4, vendor-exotic — tests contract completeness)
+- [x] **STALE, corrected 2026-07-26 (warn-ratchet build-time-wiring batch):**
+      "sg2002 (RISC-V 64, linux-class — decide scope first: bare-metal vs
+      linux userspace)" was a queue placeholder from before the scope
+      question was actually settled. It is superseded by the fuller entry a
+      few lines below ("**sg2002** DESIGN-COMPLETE / IMPLEMENTATION-DEFERRED"),
+      which records the owner's actual scope ruling (bare-metal runtime
+      core, Linux side out of scope) - this line predates that ruling and
+      duplicates a decision that already has its own, better-documented
+      entry. Checked off as superseded, not as "done": sg2002 implementation
+      itself remains deferred (see that entry, and the Coordination note -
+      `grbl/platform/sg2002/**` is owned by a concurrent session this batch
+      did not touch).
+- [x] **STALE, corrected 2026-07-26 (warn-ratchet build-time-wiring batch):**
+      "hc32f460 (ARM M4, vendor-exotic — tests contract completeness)" was a
+      leftover queue placeholder never removed when the port actually
+      landed - see "**hc32f460 COMPLETE** (rolling #3, first HDSC/Huada
+      vendor-exotic chip)" above in this same list. Re-verified this session
+      (not just cited): fresh `make BUILD=DEBUG`/`BUILD=RELEASE` both
+      succeed (DEBUG text 41692, RELEASE text 25804 - both include this
+      batch's new `warn_check` step, `warn_ratchet: OK` both flavors), and
+      `artifacts/hc32f460/` is populated and verified fresh by
+      `tools/build_artifacts.py check`.
 - [ ] **sg2002** DESIGN-COMPLETE / IMPLEMENTATION-DEFERRED (2026-07-26 runtime-core
       design batch; owner's scope ruling below, executor's recommendation to defer
       actual coding, owner may overrule in one line):
@@ -1164,6 +1239,52 @@ identity to integration time.
   only.
 
 ## Current State (update each session)
+
+- **[x] `ci/warn_ratchet.py` WIRED INTO BUILD-TIME, EVERY REAL PORT
+  (2026-07-26, ratchet-coverage audit batch).** Measured (grep every port
+  Makefile + `common/stm32/common.mk`), not assumed: three of the four
+  ratchets (`assert_no_double.sh`, `init_check.sh`, `boot_check.sh`-or-
+  equivalent) already fired from local `make`; `warn_ratchet.py` fired from
+  NOWHERE but `.github/workflows/ci.yml` - a developer's plain `make` was
+  blind to warning regressions the whole time, even though this project's
+  own baseline files have twice hidden real defects behind "known debt"
+  comments (BUG #25 pin-map, BUG #18 clock-overflow - both closed
+  elsewhere, both cited as the reason this gap mattered here). Closed via a
+  new shared script, `grbl/platform/common/warn_check.sh`: forces a genuine
+  from-scratch rebuild in a directory it clears itself (a private scratch
+  dir per port, or - for the golden-gated `atmega328p` shim, which has no
+  scratch knob - the root build dir, cleared the same way its own `clean`
+  target already does), then proves that rebuild actually happened by
+  counting the resulting `*.o` files against a declared expectation before
+  trusting the log at all. Full design rationale (why `>file 2>&1` not
+  `| tee`, why this is safe under `make -j`, why a wrong object count fails
+  loudly instead of silently ratcheting a partial log) and the corrected
+  ratchet-coverage table: [CONTRACTS.md
+  #warn-ratchet-build-time-wiring](CONTRACTS.md#warn-ratchet-build-time-wiring)
+  (new section, ledger entry above in Phase 0 has the short version).
+  **Corrected finding along the way**: `boot_check.sh` coverage was
+  previously miscounted as "ch570 and dspic33ak128mc102 both missing it" -
+  `ch32v006`/`ch570` both already carry a documented RISC-V-shaped
+  equivalent inline check (the script's own header says "Not applicable to
+  RISC-V"); the port genuinely missing any boot-integrity ratchet is
+  `dspic33ak128mc102`, established exempt this batch for a different reason
+  (no `-flto` on that toolchain at all, no hand-rolled vector table to lose
+  to it, and `init_check.sh` already covers the one thing a boot check
+  would be a proxy for on this crt0-owned boot model). All 9 wired ports
+  (everything but `sg2002`, out of scope this batch - owned by a concurrent
+  session and has no functional platform code to ratchet yet) rebuilt clean
+  both flavors where applicable; `tools/build_artifacts.py check` passed
+  unchanged (`OK - 56 file(s) verified fresh across 10 unit(s)`) - byte-
+  neutral. Every wired guard proven to fire, not just inspected: a known
+  baseline entry removed -> FAIL with the ratchet's own message and
+  nonzero exit -> restored -> PASS -> `git status` clean, per port; the two
+  distinct object-count soundness paths (scratch-dir generic mechanism,
+  atmega328p shim's literal-count mechanism) each separately proven with a
+  deliberately-wrong count. Two stale ledger checkboxes found in the same
+  sweep and corrected in place (Phase 6 list): a duplicate, never-ticked
+  samd21 warn-baseline item (the actual fix had already landed elsewhere in
+  this file) and a leftover hc32f460 queue placeholder (the port landed
+  many ledger-lines ago).
 
 - **[x] BUG #18 CLASS CLOSED FOR REAL: F_CPU needs ULL, not UL (2026-07-26,
   toolchain-probe follow-up).** The probe that opened this batch reported
