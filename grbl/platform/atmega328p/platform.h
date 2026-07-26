@@ -131,10 +131,17 @@ static inline uint32_t hal_micros(void) {
 #define HAL_GPIO_INTERRUPT_DISABLE(pcmsk, pcie, mask)  ((pcmsk) &= ~(mask), PCICR &= ~(1 << (pcie)))
 #define HAL_GPIO_IRQ_HANDLER(int_name)                 ISR(int_name##_vect)
 
-// New short names (for future use - not yet in base code)
-#define GPIO_INT_ENA(name)  ((name##_PCMSK) |=  (name##_MASK), PCICR |=  (1 << (name##_INT)))
-#define GPIO_INT_DIS(name)  ((name##_PCMSK) &= ~(name##_MASK), PCICR &= ~(1 << (name##_INT)))
-#define IRQ_HANDLER(name)   ISR(name##_INT_vect)
+// PLAN.md Phase 1 naming-migration closure (2026-07-26): an alternate
+// "new short names" trio (GPIO_INT_ENA/GPIO_INT_DIS/IRQ_HANDLER) used to
+// live here as a proposed future alias set. Grepped across grbl/ and every
+// platform/ dir: zero call sites, anywhere, ever - "not yet in base code"
+// never became "in base code". HAL_GPIO_INTERRUPT_ENABLE/DISABLE and
+// HAL_GPIO_IRQ_HANDLER above are THE canon (CONTRACTS.md #2; hal_gpio.h's
+// #ifndef-guarded single owner for every non-AVR platform expands to the
+// same names). Removed as dead naming debt rather than kept "for future
+// use" - macro-only, AVR-only file, so this cannot touch golden bytes
+// (verified: make -C grbl/platform/atmega328p validate still PASSED,
+// MD5 unchanged). Reintroduce only with a real caller.
 
 
 

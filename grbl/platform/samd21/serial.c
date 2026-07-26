@@ -18,6 +18,15 @@
 #define RX_RING_BUFFER (RX_BUFFER_SIZE+1)
 #define TX_RING_BUFFER (TX_BUFFER_SIZE+1)
 
+// PLAN.md Phase 2 static-assert sweep (2026-07-26), BUG #12 class: head/tail
+// below are uint8_t and wrap via plain `+1` (no explicit mod) - the ring
+// arithmetic is only correct if RX/TX_RING_BUFFER (SIZE+1) fits in that
+// index type, i.e. SIZE <= 255. grbl/config.h's own commented-out override
+// already says "(1-254)"; this makes the same limit a build-time fact
+// instead of only a comment a board's config.h could silently violate.
+_Static_assert(RX_BUFFER_SIZE <= 255 && TX_BUFFER_SIZE <= 255,
+               "RX_BUFFER_SIZE/TX_BUFFER_SIZE must fit the uint8_t ring index (BUG #12 class)");
+
 // Ring buffers for RX and TX
 static uint8_t rx_buffer[RX_RING_BUFFER];
 static uint8_t tx_buffer[TX_RING_BUFFER];

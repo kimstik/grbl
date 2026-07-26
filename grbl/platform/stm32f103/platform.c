@@ -13,6 +13,7 @@
 #include "../hal.h"
 #include "platform.h"
 #include "config.h"
+#include "../common/stm32/stm32_nvmem.h"
 
 // ============================================================================
 // SYSTEM TIMING (SysTick-based millisecond counter)
@@ -569,3 +570,13 @@ const stm32_platform_config_t stm32_config = {
   .has_32bit_timers       = STM32F103_HAS_32BIT_TIMERS,
   .gpio_model             = STM32F103_GPIO_MODEL,
 };
+
+// Ratchet for BUG #20 (PLAN.md Phase 2 static-assert sweep, 2026-07-26):
+// stm32_nvmem.c's static cache buffer is sized from NVMEM_WINDOW_SIZE
+// (Makefile define, defaults to 4096 - stm32_nvmem.h). f103 is the sibling
+// of stm32h523/stm32f411, which already carry this guard (BUG #20 was found
+// on h523 first); f103 itself never violated it (1024*2=2048 <= the 4096
+// default it never overrides) but had no guard against a future change
+// silently growing past the cache and dropping every EEPROM write.
+_Static_assert(STM32F103_FLASH_PAGE_SIZE * STM32F103_FLASH_NUM_PAGES <= NVMEM_WINDOW_SIZE,
+               "STM32F103 NVMEM window exceeds stm32_nvmem.c cache buffer (NVMEM_WINDOW_SIZE) - BUG #20 class");

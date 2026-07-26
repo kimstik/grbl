@@ -109,7 +109,16 @@ Non-AVR platform Makefiles inject ONE header into every translation unit via
 GCC's `-include` flag, before any of the file's own code:
 
 - samd21: `-include $(BOARD)/prelude.h` (board-selectable: `megarm/`, `generic/`)
-- stm32f103, stm32h523, sg2002: `-include prelude.h`
+- ch32v006, dspic33ak128mc102, `_template`: `-include $(BOARD_DIR)/prelude.h`
+  (board-selectable, same shape as samd21)
+- stm32f103, stm32h523, stm32f411, sg2002: `-include prelude.h` (one prelude
+  per port, no `boards/` subdir on any of the three STM32 ports)
+
+(Updated 2026-07-26 — PLAN.md Phase 1 "roll prelude pattern" item: this list
+was stale, missing stm32f411/ch32v006/dspic33ak128mc102/`_template`, which
+had already landed the identical single-`-include` shape. Verified live: every
+non-AVR platform Makefile has exactly one `-include .../prelude.h` and no
+other `-include` flag — `grep -rn -- '-include' grbl/platform/*/Makefile`.)
 
 The prelude defines `GRBL_PRELUDE` and, where the platform needs it (samd21),
 chains the platform's GPIO register accessors, `common/gpio.h` helpers, the
@@ -117,10 +126,20 @@ board pin map and `platform.h` in a load-bearing order. `hal.h` fails with a
 `#error` on any non-AVR compile that did not inject a prelude — building by
 invoking the compiler manually (without the platform Makefile) is unsupported.
 New `-include` needs go INTO the platform's prelude.h, never as additional
-Makefile flags.
+Makefile flags. Proven, not just asserted: temporarily dropping stm32f103's
+`-include prelude.h` reproduces
+`hal.h:50:4: error: "No build prelude injected - build via the platform
+Makefile..."` on the very first TU; restoring the flag builds clean again
+(PLAN.md Phase 1 ledger entry).
 
-The AVR reference build is exempt: the root Makefile is golden-frozen and its
-single `-include grbl/platform/common/gpio.h` stays as-is.
+The AVR reference build is exempt, deliberately and permanently: the root
+Makefile is golden-frozen (byte-for-byte MD5 gate) and its single
+`-include grbl/platform/common/gpio.h` stays as-is — atmega328p's own
+`platform.h` never gained a `prelude.h` and never will. This is not an
+oversight; see the Decision Log entry "AVR prelude-canon exemption" in
+PLAN.md for the full reasoning (single already-`-include`d header, zero
+redefinition hazard on that port, and the golden-MD5 gate makes any
+speculative refactor there strictly a liability with no payoff).
 
 ## Platform Selection
 

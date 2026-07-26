@@ -1421,3 +1421,69 @@ actually emitted before trusting any vendor interrupt macro on a
 toolchain the vendor didn't ship. A warning is not a failure signal here,
 and the build succeeding either way is exactly what makes this trap
 silent.
+## 21. `_Static_assert` sweep — four more contracts made compile-time facts
+(PLAN.md Phase 2, 2026-07-26)
+
+Beyond the CPU_FREQ example (samd21/platform.h:50), four more contract
+classes from this document are now enforced at compile time instead of
+living only in prose or a code comment:
+
+1. **§6.2 duty domain, "duty-cap-twins" class**:
+   `_Static_assert(SPINDLE_PWM_MAX_VALUE <= 255, ...)` — added to
+   stm32f103/platform.h, stm32h523/platform.h, stm32f411/platform.h,
+   ch32v006/boards/generic/config.h, dspic33ak128mc102/boards/generic/
+   config.h, `_template`/boards/generic/config.h. This is the exact
+   contract h523 and f103 both violated (`SPINDLE_PWM_MAX_VALUE=1000`
+   against a `uint8_t` core duty, capping actual duty at 25.5%) before
+   REVIEW #3 caught it by inspection — a build-time assert would have
+   caught both instances the moment the wrong value was typed.
+   **samd21 (megarm + generic) deliberately does NOT get this assert**:
+   both boards still declare `SPINDLE_PWM_MAX_VALUE 65535` (§6 item 2,
+   "Known gap" above) — a live, tracked violation, not a stale doc. Adding
+   the assert there today would turn a runtime bug into an unrelated build
+   break inside a static-assert-sweep batch that does not own fixing PWM
+   range (that needs its own `PER`/`CC[0]` rework and a Renode re-verify).
+   Each samd21 board's config.h carries a comment saying so, with an
+   instruction to add the assert in the SAME commit that fixes the range.
+2. **§10 NVMEM window vs cache buffer, BUG #20 class**: stm32h523 and
+   stm32f411 already had `_Static_assert(FLASH_PAGE_SIZE * FLASH_NUM_PAGES
+   <= NVMEM_WINDOW_SIZE, ...)`; stm32f103 (sharing the same
+   `common/stm32/stm32_nvmem.c` cache-buffer pattern) was missing the
+   sibling assert — added, identical wording. samd21/ch32v006/
+   dspic33ak128mc102 do not need the equivalent: their RMW staging buffers
+   (`page_buffer[FLASH_PAGE_SIZE]`, `page_buffer[NVMEM_PAGE_SIZE]`) are
+   sized directly from the same macro that defines the erase unit, so there
+   is no independent Makefile-supplied size to drift against — checked in
+   each file, not assumed.
+3. **§1/§17(BUG #17) STEP/DIR logical bits, "port-image" class**: core
+   packs `step_outbits`/`dir_outbits`/`axislock` into a `uint8_t`
+   (stepper.c) — every `X/Y/Z_STEP_BIT` and `X/Y/Z_DIRECTION_BIT` must
+   resolve to <= 7. `_Static_assert(X_STEP_BIT <= 7 && ... , ...)` added to
+   all 7 non-AVR ports (stm32f103/h523/f411, ch32v006, dspic33ak128mc102,
+   samd21 megarm+generic, `_template`) at the point each board's config
+   finishes defining these bits. This is exactly the invariant BUG #17's
+   fix (§3 of this doc's Phase-3 history, PLAN.md) established for samd21
+   by hand; the assert makes sure a future re-pin on any port can't
+   silently regress into the same truncation. atmega328p/`grbl/cpu_map.h`
+   intentionally NOT touched — core file, golden-MD5 gate, outside port-code
+   review scope.
+4. **§7 serial ring buffer vs index type, BUG #12 class**: the three
+   TU-replacement `serial.c` files (samd21, ch32v006, dspic33ak128mc102)
+   use `uint8_t rx/tx_buffer_head/tail` that wrap via plain `+1` (no
+   explicit modulo) — correct only if `RX_RING_BUFFER`/`TX_RING_BUFFER`
+   (`SIZE+1`) fit that index type, i.e. `RX_BUFFER_SIZE`/`TX_BUFFER_SIZE`
+   <= 255. `grbl/config.h`'s own commented-out override already documents
+   this as "(1-254)" in prose; `_Static_assert(RX_BUFFER_SIZE <= 255 &&
+   TX_BUFFER_SIZE <= 255, ...)` added to all three files makes it a build
+   fact. The macro-route ports (atmega328p, stm32f103/h523/f411) use core
+   `grbl/serial.c` directly with its own `RX_BUFFER_SIZE`/`TX_BUFFER_SIZE`
+   defaults (128 / 104-or-112, comfortably under the limit) — the core file
+   itself is out of this sweep's scope (core is presumed clean per owner
+   directive; the three ports above are the ones that reimplement the ring
+   buffer and therefore own the invariant independently).
+
+All four are one-line `_Static_assert`s placed exactly where their inputs
+become fully known (after the relevant `#define`s, before first use) — no
+new validation machinery, no runtime cost, zero bytes in any built image
+(verified: every port's RELEASE size is byte-identical to the CANONICAL
+RELEASE SIZE TABLE before and after this batch).

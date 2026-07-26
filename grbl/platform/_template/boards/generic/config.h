@@ -69,6 +69,17 @@
 #define DIRECTION_PORT       TEMPLATE_PORT_OUTPUTS
 #define DIRECTION_MASK       ((1UL<<X_DIRECTION_BIT)|(1UL<<Y_DIRECTION_BIT)|(1UL<<Z_DIRECTION_BIT))
 
+// PLAN.md Phase 2 static-assert sweep (2026-07-26): core packs
+// step_outbits/dir_outbits/axislock into a uint8_t (BUG #17, CONTRACTS.md
+// #1) - every *_STEP_BIT/*_DIRECTION_BIT must fit that byte. A new port
+// copying this template gets the check for free; if your board's physical
+// pins don't already sit at bits 0..7, follow the samd21/gpio.h
+// logical-vs-physical dispatch pattern (STEP_L2P/STEP_P2L) instead of
+// widening this assert.
+_Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
+               X_DIRECTION_BIT <= 7 && Y_DIRECTION_BIT <= 7 && Z_DIRECTION_BIT <= 7,
+               "STEP/DIRECTION logical bits must fit core's uint8_t port image (BUG #17 class, CONTRACTS.md #1)");
+
 #define STEPPERS_DISABLE_PORT   TEMPLATE_PORT_OUTPUTS
 #define STEPPERS_DISABLE_PIN     6
 #define STEPPERS_DISABLE_BIT     6
@@ -136,6 +147,14 @@
 #define SPINDLE_PWM_MIN_VALUE   1     // must be > 0 to avoid floating at "off"
 #define SPINDLE_PWM_OFF_VALUE   0
 #define SPINDLE_PWM_RANGE       (SPINDLE_PWM_MAX_VALUE - SPINDLE_PWM_MIN_VALUE)
+
+// PLAN.md Phase 2 static-assert sweep (2026-07-26): codify the CONTRACTS.md
+// #6.2 duty-domain contract in code, so a new port copying this template
+// gets the check for free - the STM32 "duty-cap-twins" bug
+// (SPINDLE_PWM_MAX_VALUE=1000 against a uint8_t core duty) showed a comment
+// alone does not stop the regression.
+_Static_assert(SPINDLE_PWM_MAX_VALUE <= 255,
+               "SPINDLE_PWM_MAX_VALUE must fit core's uint8_t duty domain (CONTRACTS.md #6.2, duty-cap-twins class)");
 
 // ============================================================================
 // COOLANT
