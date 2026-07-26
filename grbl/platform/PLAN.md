@@ -2151,3 +2151,97 @@ identity to integration time.
     `artifacts/{ch32v006,ch570}/*`, `artifacts/MANIFEST.sha256`,
     `CONTRACTS.md`, `PLAN.md`. No other platform's source, Makefile, or CI
     config touched.
+
+- **[x] `grbl_<port>.elf.dump` added: full objdump disassembly, tracked
+  CONTINUOUSLY, never hash-gated (2026-07-26)** — owner directive: put a
+  readable disassembly next to each ELF ("рядом с эльфом положить
+  файл.elf.dump — лог objdump ... дифф будет наглядный"), so a size/behavior
+  drift is diffable at the instruction level, not just the symbol-size
+  level `.syms` already covers.
+  - **Flags chosen** (`tools/build_artifacts.py`'s `ELF_DUMP_FLAGS =
+    ["-d", "-S", "-h", "-t", "--no-show-raw-insn"]`, run through each
+    port's own `objdump` — `arm-none-eabi-objdump` /
+    `riscv64-unknown-elf-objdump` / `avr-objdump` / `xc-dsc-objdump`):
+    `-d` (CODE sections only, not `-D`/`--disassemble-all` which decodes
+    `.data`/`.rodata`/`.debug_*` as bogus instructions), `-S` (source
+    interleave where DWARF line info exists — verified a byte-for-byte
+    no-op today since RELEASE is `-g0` on every port, kept free for a
+    future `-g`-enabled flavor), `-h`/`-t` (section headers, full symbol
+    table), `--no-show-raw-insn` (drops the raw hex encoding column —
+    measured 24% smaller on stm32f103: 455,508 → 345,950 bytes, diff reads
+    as instructions not bytes). `--no-addresses` was considered and
+    rejected: unsupported by `avr-objdump` 2.26 and `xc-dsc-objdump` 2.32
+    (binutils 2.36+ only) — would break disassembly outright on two of the
+    four toolchains. `-r` was considered and rejected: verified empty
+    (relocations don't exist in a final linked executable) so it would
+    only add a header for zero content.
+  - **Tracking policy: CONTINUOUS, not tag-time-only, despite the shared
+    name with `.elf`** — argued from purpose, not from the file's name:
+    the owner wants a readable diff of what changed *between builds*; a
+    tag-gated dump would only ever be diffable release-to-release, the
+    exact "now vs now" gap `.bin`/`.hex`/`.syms` already exist to close for
+    every other class. Generated from the same scratch-built RELEASE
+    `.elf` `.syms` already reads (`build/`, never persisted itself between
+    tags) — same lifecycle as `.syms`, decoupled from `.elf`'s own
+    tag-time-only policy.
+  - **Size cost, measured per unit and total (this batch)**: `.elf.dump`
+    ranges 293 KB (hc32f460) – 649 KB (dsPIC33AK), 2.5-3.9x each unit's
+    `.elf` size (atmega328p is a 9.6x outlier — AVR disassembly density,
+    not a flag-choice bug). **Total across all ten units: 3,942,120 bytes
+    (~3.76 MiB)**, added to EVERY refresh that touches every port. Against
+    the tree as it stood immediately before this batch (32 tracked files,
+    1,403,154 bytes), continuous `.elf.dump` tracking brings a full
+    refresh to 42 files / 5,345,274 bytes (~5.10 MiB) — a ~281% increase,
+    stated plainly per the existing "Growth cost" posture in
+    `artifacts/README.md`, not discovered later as a repo-size surprise.
+  - **Hash gating: explicitly NOT gated, proven why rather than asserted**.
+    `objdump` prints the exact path it was invoked with as line 1 of its
+    own output, on every toolchain, regardless of compiler flags — proven
+    this batch: two RELEASE rebuilds of stm32f103 from different absolute
+    paths produced a byte-identical `.elf` (`cmp`: no difference) but a
+    1-line-different `.elf.dump` (only the echoed path). This repo's
+    actual workflow (a fresh worktree per task) hits that path difference
+    on effectively every `check` run, so hash-gating would false-positive
+    constantly for zero real drift. `dspic33ak128mc102`'s dump is
+    additionally non-reproducible even from the SAME path (compiler-
+    tempfile section names / pointer-derived symbol names verbatim in
+    `-h`/`-t` output, same root cause as its existing `nondeterministic_elf`
+    `.elf` exemption — reconfirmed this batch across two same-path
+    rebuilds). `tools/build_artifacts.py check` therefore verifies
+    `.elf.dump` PRESENCE only (a silently-deleted dump is still a real
+    regression) and explicitly prints why it skips the content comparison,
+    per unit, every run — it does not silently pass. The pre-existing
+    56-file hash-gated set is unaffected: confirmed `check` still reports
+    **"56 file(s) verified fresh across 10 unit(s)"**, identical to the
+    pre-batch baseline.
+  - **`.gitignore` verified NOT to swallow it** (this repo's blanket-ignore
+    trap has bitten three times before: `tools/README.md`,
+    `ch570/vendor/ISP572.o`, and `artifacts/*.elf|hex` under the old
+    always-track-`.elf` policy) — `*.elf` matches paths ending in `.elf`,
+    not `.elf.dump`, and no `*.dump` rule exists; `git check-ignore -v` on
+    every committed `.elf.dump` path prints nothing / exits 1 (confirmed,
+    all ten units), and a post-commit `git archive HEAD` extraction was
+    checked to include all ten paths.
+  - **`-ffile-prefix-map=$(CURDIR)=/grbl-src` reviewed, KEPT (not
+    removed)**: the owner's "ELF variation is storage, not a diffing
+    target" ruling is about not chasing `.elf` byte-stability for a clean
+    binary diff — correct, and exactly why `.elf.dump` exists now instead.
+    The prefix-map flag solves a different, still-live problem: without it,
+    `check`'s DEBUG-hash comparison is path-dependent (`DW_AT_comp_dir`)
+    for a reason unrelated to real drift, and this project's actual
+    workflow (fresh worktree per task) hits a different absolute path on
+    nearly every `build`/`check` pair — dropping the flag would reintroduce
+    spurious DEBUG-hash "drift" reports for zero storage saved (it's a
+    compiler flag, not a tracked byte). Left unchanged in every port's
+    `Makefile`.
+  - **Gates**: golden AVR `make validate` PASSED; all ten units rebuilt
+    (`tools/build_artifacts.py build`, RELEASE+DEBUG); `--selftest` PASS
+    (43 checks, up from 30 — new coverage for `objdump_bin_for_unit()`,
+    `elf_dump_extra_args()`, and `ELF_DUMP_FLAGS`'s deliberate omissions);
+    `check` OK, 56 file(s) verified fresh across 10 unit(s), unchanged
+    count; `tools/check_contracts_numbering.py` OK.
+  - **Files touched**: `tools/build_artifacts.py`,
+    `artifacts/*/grbl_*.elf.dump` (10 new files, one per unit),
+    `artifacts/README.md`, `PLAN.md`, `CONTRACTS.md`. No port `Makefile`,
+    source file, or CI config touched — `-ffile-prefix-map` reviewed and
+    left as-is, not edited.

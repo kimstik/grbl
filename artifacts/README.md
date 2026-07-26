@@ -18,12 +18,15 @@ module docstring, or run `python3 tools/build_artifacts.py --help`).
 
 ```
 artifacts/<port>/
-  grbl_<port>.bin    RELEASE raw binary image               (every refresh)
-  grbl_<port>.hex    RELEASE Intel HEX image                (every refresh)
-  grbl_<port>.syms   `nm --print-size --size-sort --demangle`
-                     on the RELEASE .elf                     (every refresh)
-  grbl_<port>.elf    RELEASE ELF (debug symbols stripped
-                     only by -g0)                       (TAG TIME ONLY - see below)
+  grbl_<port>.bin       RELEASE raw binary image               (every refresh)
+  grbl_<port>.hex       RELEASE Intel HEX image                (every refresh)
+  grbl_<port>.syms      `nm --print-size --size-sort --demangle`
+                        on the RELEASE .elf                     (every refresh)
+  grbl_<port>.elf.dump  `objdump -d -S -h -t --no-show-raw-insn`
+                        on the RELEASE .elf - full disassembly +
+                        section headers + symbol table          (every refresh)
+  grbl_<port>.elf       RELEASE ELF (debug symbols stripped
+                        only by -g0)                       (TAG TIME ONLY - see below)
 ```
 
 **"Эльф на тегах" (owner directive): `.elf` is tracked ONLY at release-tag
@@ -88,6 +91,95 @@ changed and by how many bytes — it cannot tell you *which function* moved.
 grew or shrank, in seconds, with no rebuild. It costs a few KB per port
 because it's text, not another binary copy.
 
+## `grbl_<port>.elf.dump` — a readable diff one level deeper than `.syms`
+
+`.syms` answers "which function grew or shrank." It cannot answer "what
+*inside* that function changed" — that needs a disassembly, and a raw
+`.elf` diff is useless for that (binary, not delta-compressible, and git
+can't show you two overlapping instruction streams as a text diff anyway).
+`grbl_<port>.elf.dump` is that disassembly, generated fresh every refresh
+from the same RELEASE `.elf` `.syms` already reads, and it's plain text —
+`git diff` on it reads as an actual instruction-level change list.
+
+**Flags chosen, and why** (`tools/build_artifacts.py`'s `ELF_DUMP_FLAGS`,
+each toolchain's own `objdump` — `arm-none-eabi-objdump` /
+`riscv64-unknown-elf-objdump` / `avr-objdump` / `xc-dsc-objdump`):
+
+| flag | why |
+|---|---|
+| `-d` | disassemble CODE sections only. Deliberately not `-D`/`--disassemble-all`, which also decodes `.data`/`.rodata`/`.debug_*` bytes as if they were instructions — pure noise, and it would drown the real disassembly in garbage. |
+| `-S` | intermix source where DWARF line info exists. RELEASE is `-g0` on every port today (see each `Makefile`), so this is a **verified no-op**: `arm-none-eabi-objdump -d` and `-d -S` produce byte-identical output on a RELEASE `.elf` (checked this batch, stm32f103). Kept anyway — free today, and a future `-g`-enabled RELEASE flavor gets source interleave automatically instead of someone having to remember to add the flag later. |
+| `-h` | section headers (sizes/addresses/flags) — the same table `.syms` generation already parses internally for the dsPIC nm-fallback, exposed here for humans too. |
+| `-t` | full symbol table. |
+| `--no-show-raw-insn` | drop the raw hex encoding column. Measured effect on stm32f103 RELEASE: 455,508 → 345,950 bytes (**−24%**) for the exact same instructions — the diff reads as mnemonics/operands, not an opcode-byte dump next to them. |
+
+Two flags considered and rejected, stated rather than silently omitted:
+- **`--no-addresses`** (drop the leading address column too, which would
+  additionally suppress the "every line after an edited function shifts"
+  noise a relink causes) — **not used**: unsupported by `avr-objdump` 2.26
+  and `xc-dsc-objdump` 2.32 (added in binutils 2.36); using it would break
+  disassembly outright on two of the four toolchains this covers. Uniform
+  behavior across all four toolchains was judged more valuable than a
+  quieter diff on only two of them.
+- **`-r`** (relocation entries) — **not used**: verified empty (`cmp`-empty
+  output beyond the file-format banner) on a real linked executable here;
+  relocations only exist in relocatable `.o` files, not a final linked
+  image, so the flag would add a section header for zero content.
+
+**Tracking policy: continuous, NOT tag-time-only, despite the name**
+`.elf` itself is tracked only at release tags ("Эльф на тегах", see below).
+`.elf.dump` is tracked on **every** refresh, same cadence as `.syms`, even
+though no `.elf` sits next to it between tags — it's generated straight
+from the scratch-built RELEASE `.elf` in `build/`, the same way `.syms`
+already is, and never needs the binary itself to persist. This is argued
+from what the owner wants the file **for**: a readable diff of what
+changed *between builds*. A tag-gated dump would only ever be diffable
+release-to-release — the exact sparse, "now vs now" gap `.bin`/`.hex`/
+`.syms` already exist to close for every other artifact class. Gating
+`.elf.dump` to tag time would reintroduce that same gap one layer deeper,
+for the one artifact whose entire purpose is closing it. (The directory
+placement still satisfies "put it next to the elf" literally: at tag time
+both files sit in the same `artifacts/<port>/` directory; between tags,
+only `.elf.dump` does — exactly how `.syms` already behaves today.)
+
+**Size cost of continuous tracking** (measured this batch, RELEASE,
+`--no-show-raw-insn` applied): see the "Growth cost" table below for the
+per-port numbers and the total added to a full-tree refresh.
+
+**NOT hash-gated — `check` verifies presence, not content** (see
+`tools/build_artifacts.py`'s `elf_dump_header()`/`do_check()`): `objdump`
+prints the exact path it was invoked with as the **first line** of its own
+output, on every toolchain, regardless of any compiler flag. Two RELEASE
+rebuilds of stm32f103 from different absolute paths produced a
+byte-identical `.elf` (`cmp`: no difference) but a `.elf.dump` differing in
+exactly that one echoed-path line — proven this batch, not assumed. This
+project's actual workflow (a fresh git worktree per task) hits that path
+difference on effectively every `check` run, so hash-gating this file
+would false-positive constantly for zero real drift. `dsPIC33ak128mc102`'s
+dump is additionally non-reproducible **even from the same path**, for the
+same root cause as its `.elf`'s existing `nondeterministic_elf` exemption:
+`xc-dsc-gcc`'s per-invocation `/tmp/ccXXXXXX.s.scnN` compiler-tempfile
+section names, plus a pointer-derived internal symbol name
+(`_0x<hexptr>_at_address_...`), both show up verbatim in `-h`/`-t` output
+and were confirmed (this batch) to differ across two back-to-back
+`make clean && make` runs from the identical path. `check` therefore
+verifies `grbl_<port>.elf.dump` **exists** (a silently-deleted dump is
+still a real regression, caught the same as a missing `.syms`) but does
+not diff its content against a fresh rebuild — doing so unconditionally
+would either mask the deliberate exemption in a comment nobody reads or
+make the ratchet fail constantly for a property nobody asked it to hold.
+This does not weaken the existing gate: `.elf.dump` was never part of the
+56-file hash-gated set and still isn't; it is checked in its own,
+presence-only branch, printed explicitly (not silently skipped) each run.
+
+`dsPIC33ak128mc102`'s `.elf.dump` also needs `-mdfp=<DFP>/xc16` to
+disassemble at all — verified this batch: `xc-dsc-objdump -d` with no
+`-mdfp` exits 255, `"can't disassemble for architecture UNKNOWN"` (`-h`/
+`-t` alone tolerate its absence, just print a resource-file warning and
+fall back to a generic `elf32-little` bfd name). This is the same DFP
+device pack every other toolchain invocation on this unit already needs,
+supplied via `tools/build_artifacts.py`'s existing `DFP_PATH` unit field.
+
 ## Why DEBUG isn't committed
 
 DEBUG builds are 3-10x larger than RELEASE (no `-Os`/no LTO, full `-g3`
@@ -109,6 +201,48 @@ Measured on this tree (RELEASE, all ten port/board units):
 | `.hex` | 72 KB - 116 KB | every refresh |
 | `.elf` | 48 KB (atmega328p, no debug info at `-g0`) - 166 KB | **release tags only** (`build --with-elf`) |
 | `.syms` | a few KB - ~10 KB (plain text) | every refresh |
+| `.elf.dump` | **293 KB (hc32f460) - 649 KB (dsPIC33AK)** (plain text, `--no-show-raw-insn` applied) | every refresh |
+
+**`.elf.dump`'s size cost, measured per port, this batch** (bytes, the flags
+above applied):
+
+| port/board | `.elf` | `.elf.dump` | ratio |
+|---|---:|---:|---:|
+| atmega328p | 48,080 | 463,668 | 9.6x |
+| stm32f103 | 113,164 | 348,801 | 3.1x |
+| stm32h523 | 93,576 | 297,259 | 3.2x |
+| stm32f411 | 98,404 | 302,474 | 3.1x |
+| samd21-megarm | 151,164 | 443,079 | 2.9x |
+| samd21-generic | 151,164 | 442,937 | 2.9x |
+| ch32v006 | 138,600 | 350,302 | 2.5x |
+| ch570 | 140,312 | 351,860 | 2.5x |
+| hc32f460 | 98,612 | 292,969 | 3.0x |
+| dspic33ak128mc102 | 166,096 | 648,771 | 3.9x |
+| **total (10 units)** | 1,199,172 | **3,942,120** | **3.3x avg** |
+
+`.elf.dump` is text (plain disassembly, not another binary copy) but it is
+**substantially bigger than `.elf` itself** — a full symbol table plus
+per-instruction disassembly lines simply takes more bytes than the packed
+binary encoding it's derived from. atmega328p's outlier 9.6x ratio is
+AVR's own disassembly density (16-bit instruction words, comparatively
+verbose `avr-objdump` symbol/section output relative to its small 48 KB
+`.elf`), not a bug in the flag choice — the other nine units cluster at
+2.5-3.9x.
+
+**Tracked continuously** (every refresh, not tag-time-only — see the
+policy argument above), this adds **3,942,120 bytes (~3.76 MiB) across all
+ten units to EVERY refresh that touches every port**, and a proportional
+share for the common case of one or two ports changing. Measured against
+the tree as it stood immediately before this batch (32 tracked files,
+1,403,154 bytes): adding `.elf.dump` continuously brings the full-refresh
+tracked tree to **42 files, 5,345,274 bytes (~5.10 MiB)** — a **~281%**
+increase over the pre-`.elf.dump` size, and larger than a full tag-time
+`--with-elf` snapshot would have added on its own. This is a real,
+substantial, `git`-non-delta-compressible cost every refresh going
+forward, stated plainly rather than discovered later — the same posture
+this document already takes for `.bin`/`.hex`/`.elf`/`.syms` above. It is
+accepted as the price of a human-readable instruction-level diff existing
+at all for every port, on every refresh, not just at tags.
 
 **Before the "Эльф на тегах" policy** (elf tracked continuously, every
 refresh): one full snapshot (all ten units) was **2,612,919 bytes (~2.6MB,
@@ -165,6 +299,35 @@ unlike `-A`. Verify the policy holds with `git check-ignore -v
 artifacts/<port>/grbl_<port>.elf` in both states: it should print
 `.gitignore:3:*.elf ...` (matched, ignored) whether or not the file is
 currently committed — negation exceptions don't apply to it, by design.
+
+## `.gitignore` does NOT swallow `.elf.dump` — proven, not assumed
+
+This repo's blanket ignore rules have silently dropped an intentionally-
+tracked file from `git add -A` **three times before** this batch
+(`tools/README.md`, `ch570/vendor/ISP572.o`, and this same
+`artifacts/*.elf|hex` pair under the old always-track-`.elf` policy) — a
+fourth silent surprise, this time for `.elf.dump`, is not acceptable. Two
+facts make it a non-issue by construction, both verified this batch rather
+than assumed:
+
+1. **No existing rule matches the new suffix.** `.gitignore`'s blanket
+   `*.elf` rule (line 3) matches a path ending in exactly `.elf` — `foo.elf`
+   — not `foo.elf.dump`, which ends in `.dump`. There is no `*.dump` rule
+   anywhere in `.gitignore` either. `git check-ignore -v` on every
+   committed `.elf.dump` path prints nothing and exits 1 (no matching
+   rule) — confirmed for all ten units this batch.
+2. **`git status --porcelain`** lists every freshly-generated `.elf.dump`
+   as `??` (untracked, not ignored) — `git status` omits ignored paths
+   entirely unless `--ignored` is passed, so their appearance here is
+   itself part of the proof.
+
+**Full-loop proof, run this batch**: after committing the new
+`.elf.dump` files, `git archive HEAD | tar -tf -` (equivalently, extracting
+a `git archive` output into a clean directory) was checked to include all
+ten `artifacts/<port>/grbl_<port>.elf.dump` paths — the same "does a fresh
+checkout actually contain the file" proof `tools/README.md`'s original fix
+was validated with, applied here before this becomes the fourth surprise
+instead of a documented non-issue.
 
 ## dsPIC33AK128MC102: the `.elf` (only the `.elf`) is tracked but NOT hash-gated
 
@@ -242,22 +405,48 @@ gate — dsPIC33AK's `.elf` is already exempt from hash comparison for the
 unrelated tempfile-section-name reason above, so its DEBUG `.elf` hash was
 never compared either way.
 
+**Is `-ffile-prefix-map` still worth keeping, now that the owner has ruled
+per-compile `.elf` variation a non-issue (storage, not a diffing target)?
+KEEP — recommended, not removed.** The owner's ruling is about NOT chasing
+byte-stability in the *committed* `.elf` for the sake of a clean `git diff`
+on the binary itself — correct, and this is exactly why `.elf.dump` exists
+now instead (a human-readable diff of the *disassembly*, not the raw
+bytes). `-ffile-prefix-map` was never solving that problem. It solves a
+different one: `tools/build_artifacts.py check` recomputes and compares a
+DEBUG **hash** against `MANIFEST.sha256`, and without the flag that
+comparison is path-dependent for a reason that has nothing to do with real
+drift (`DW_AT_comp_dir`/absolute source paths embedded by `-g3`). This
+project's actual workflow — a fresh git worktree per task, confirmed
+repeatedly this batch (e.g. `.elf.dump`'s own line-1 path-echo, and the
+dsPIC/stm32f103 rebuild-from-different-paths experiments above) — hits a
+different absolute checkout path on nearly every `build`/`check` pair, so
+without the flag the DEBUG-hash half of the ratchet would spuriously
+report drift almost every time it runs, for zero actual content change.
+That is a live correctness bug in an automated gate, not a "should this be
+diffable" question, and the flag already costs nothing (verified zero-byte
+change to RELEASE `bin`/`hex` when it was added). Dropping it would
+reintroduce that spurious-failure risk for no storage saved — a compiler
+flag has no repo-size cost either way. Recommendation: leave it in every
+port's `Makefile` exactly as-is.
+
 ## Refresh policy
 
 See ["Refresh policy" in `grbl/platform/PORTING-CHECKLIST.md`](../grbl/platform/PORTING-CHECKLIST.md#refresh-policy-when-to-re-run-toolsbuild_artifactspy-build)
 for the full rule contributors are expected to follow. Short version:
-refresh and commit `bin`/`hex`/`syms` whenever a port's *content* changes
-(part of finishing that change, not a separate chore); do not refresh on
-every push (most pushes are docs and don't move a single byte);
+refresh and commit `bin`/`hex`/`syms`/`elf.dump` whenever a port's *content*
+changes (part of finishing that change, not a separate chore); do not
+refresh on every push (most pushes are docs and don't move a single byte);
 `tools/build_artifacts.py check` is the enforcement mechanism, not an honor
 system. `.elf` is NOT part of this cadence — it's tag-time only, see
-"Tagging a release" above.
+"Tagging a release" above; `.elf.dump` IS part of this cadence (continuous,
+same as `bin`/`hex`/`syms`) despite sharing a name with the tag-gated file.
 
 ## Regenerating
 
 ```sh
 # Everything (~10 units, several minutes: real cross-compiles, not cached).
-# Ordinary refresh - does NOT copy .elf (see "Эльф на тегах" above):
+# Ordinary refresh - copies bin/hex/syms/elf.dump, NOT .elf itself
+# (see "Эльф на тегах" above):
 python3 tools/build_artifacts.py build
 
 # Just the port(s) you touched:
