@@ -46,8 +46,16 @@ GRBL_DIR   = ../..
 # flavors without `make clean` can't silently relink stale objects under the
 # wrong name (bit samd21 twice - see PLAN.md/CONTRACTS.md). Shared here so
 # both stm32f103 and stm32h523 get the fix from one place.
-BUILD_DIR  = ../../../build/$(PLATFORM_NAME)/$(BUILD)
 OUTPUT_DIR = ../../../build
+# Whole-platform object root (both BUILD flavors live under here) - `clean`
+# below removes THIS, not just $(BUILD_DIR), so it can't leave the OTHER
+# flavor's stale objects behind for a knob change (FP=, or any -D) to
+# silently relink under the wrong label (CONTRACTS.md gap log: "make clean
+# cleans only the invoked BUILD flavor's object dir"). Shared here so
+# every STM32 family Makefile including this file gets the fix from one
+# place, same as the BUILD_DIR keying above.
+PLATFORM_BUILD_ROOT = $(OUTPUT_DIR)/$(PLATFORM_NAME)
+BUILD_DIR  = $(PLATFORM_BUILD_ROOT)/$(BUILD)
 PLATFORM_DIR = .
 
 # GRBL core sources (from grbl directory)
@@ -268,7 +276,7 @@ clean:
 	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.bin \
 	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.dump \
 	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.map
-	rm -rf $(BUILD_DIR)
+	rm -rf $(PLATFORM_BUILD_ROOT)
 
 # Clean all build artifacts
 clean-all:

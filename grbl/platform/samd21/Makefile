@@ -55,8 +55,14 @@ GRBL_DIR   = ../..
 # dir since BOARD wasn't keyed): a no-clean `make BOARD=megarm` after a
 # `BOARD=generic` build must rebuild, not silently relink/ship the other
 # board's stale objects under this board's output name.
-BUILD_DIR  = ../../../build/$(PLATFORM_NAME)/$(BOARD)/$(BUILD)
 OUTPUT_DIR = ../../../build
+# Whole-platform object root (every BOARD and BUILD flavor lives under
+# here) - `clean` below removes THIS, not just $(BUILD_DIR), so it can't
+# leave a stale board/flavor combo behind for a knob change (FP=, BOARD=,
+# or any -D) to silently relink under the wrong label (CONTRACTS.md gap
+# log: "make clean cleans only the invoked BUILD flavor's object dir").
+PLATFORM_BUILD_ROOT = $(OUTPUT_DIR)/$(PLATFORM_NAME)
+BUILD_DIR  = $(PLATFORM_BUILD_ROOT)/$(BOARD)/$(BUILD)
 PLATFORM_DIR = .
 
 # GRBL core sources (from grbl directory)
@@ -315,7 +321,7 @@ clean:
 	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.bin \
 	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.dump \
 	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.map
-	rm -rf $(BUILD_DIR)
+	rm -rf $(PLATFORM_BUILD_ROOT)
 
 # Clean all build artifacts
 clean-all:

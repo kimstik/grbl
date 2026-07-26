@@ -73,14 +73,20 @@ void hal_timer_pulse_reset_init(void);
 #define STP_PULSE_RESET_START()         (STK->CTLR |= STK_CTLR_STE)
 #define STP_PULSE_RESET_STOP()          (STK->CTLR &= ~STK_CTLR_STE)
 
-#ifdef STEP_PULSE_DELAY
-  // The STK has a single compare channel: the delayed-step scheme (AVR
-  // Timer0 OCR0A compare + overflow on one counter) needs two interrupt
-  // sources on the pulse timer and this chip has no second interrupt-
-  // capable timer left (TIM3 has no IRQ). Fail loudly per CONTRACTS.md
-  // #4 "conditional" rule rather than mis-time pulses silently.
-  #error "STEP_PULSE_DELAY is not supported on CH32V006 (single-compare STK pulse timer; TIM3 has no interrupt - see timer.h)"
-#endif
+// The STK has a single compare channel: the delayed-step scheme (AVR
+// Timer0 OCR0A compare + overflow on one counter) needs two interrupt
+// sources on the pulse timer and this chip has no second interrupt-
+// capable timer left (TIM3 has no IRQ). This is meant to fail loudly per
+// CONTRACTS.md #4 "conditional" rule rather than mis-time pulses silently.
+// The `#ifdef STEP_PULSE_DELAY / #error` used to live right here, but
+// this file is reached through the build prelude (-include, CONTRACTS.md
+// #0), which runs before grbl.h's own #include "config.h" ever defines
+// STEP_PULSE_DELAY - the guard could never see it and the #error could
+// never fire (CONTRACTS.md #19 "guard that certifies instead of
+// checking", wrong-phase variant; see grbl/CONTRACTS.md gap log). Moved
+// to serial.c (already includes grbl.h for other reasons, so it runs
+// after core config.h has actually been processed) where it now
+// genuinely fires.
 
 // ============================================================================
 // SPINDLE PWM TIMER (TIM1 CH1 on PA3 via TIM1_RM=0100 - CONTRACTS.md #6)

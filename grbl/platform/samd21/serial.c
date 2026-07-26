@@ -15,6 +15,22 @@
 #include "../../grbl.h"   // realtime CMD_* bytes, sys, mc_reset(), exec-flag setters (BUG #19)
 #include "../../serial.h"
 
+// CONTRACTS.md #19 "guard that certifies instead of checking" (wrong-phase
+// variant - grbl/CONTRACTS.md gap log): ../../timer.h's STP_PULSE_DELAY_INIT()
+// references TC5, which this port's samd21.h never declares (only the
+// GCLK_CLKCTRL_ID_TC4_TC5 shared-clock ID exists) - the intended
+// implementation was never verified against real hardware and does not
+// compile if invoked. The natural place to say so - an `#ifdef`/`#error`
+// in timer.h - is reached through the build prelude, BEFORE grbl.h's own
+// #include "config.h" ever defines STEP_PULSE_DELAY, so a guard there
+// could never fire (and, worse, the user would hit a confusing "TC5
+// undeclared" error instead of an explanation). This file's #include
+// "../../grbl.h" above is the first REAL processing of core config.h in
+// this translation unit, so the check is placed here instead.
+#ifdef STEP_PULSE_DELAY
+#error "STEP_PULSE_DELAY is not supported on SAMD21 (TC5 register block referenced by timer.h's STP_PULSE_DELAY_INIT() is not declared/verified in samd21.h - see timer.h)"
+#endif
+
 #define RX_RING_BUFFER (RX_BUFFER_SIZE+1)
 #define TX_RING_BUFFER (TX_BUFFER_SIZE+1)
 

@@ -221,10 +221,17 @@ _Static_assert(SPINDLE_PWM_MAX_VALUE <= 255,
 #define COOLANT_FLOOD_PORT     PORT_GROUPA
 #define COOLANT_FLOOD_BIT      17   // PA17 (C3)
 
-#ifdef ENABLE_M7
-  #define COOLANT_MIST_PORT    PORT_GROUPA
-  #define COOLANT_MIST_BIT     18   // PA18 (C4)
-#endif
+// NOT gated on `#ifdef ENABLE_M7`: this file arrives via the build prelude
+// (-include $(BOARD)/prelude.h), processed before grbl.h's own #include
+// "config.h" ever defines ENABLE_M7 - a guard here can never observe it,
+// silently dropping this pin even when the user enables the feature
+// (CONTRACTS.md #19 "guard that certifies instead of checking", wrong-
+// phase variant - see grbl/CONTRACTS.md gap log and samd21/generic/
+// config.h's identical fix). Defining it unconditionally costs nothing;
+// core's own (correctly-timed) `#ifdef ENABLE_M7` in coolant_control.c is
+// the only place that ever reads it.
+#define COOLANT_MIST_PORT    PORT_GROUPA
+#define COOLANT_MIST_BIT     18   // PA18 (C4)
 
 // ============================================================================
 // UART PINS (D0, D1)
