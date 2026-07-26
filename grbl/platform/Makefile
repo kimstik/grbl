@@ -45,6 +45,31 @@ sg2002:
 check:	#TODO: compile base AVR port and check hash of generated images by /common/chk.py
 	@echo "integrity check"
 
+# ============================================================================
+# TRACKED BUILD ARTIFACTS (PLAN.md "build artifacts tracked in git for
+# observability" batch; CONTRACTS.md #build-artifacts-tracked)
+#
+# Placed HERE (not a subdirectory Makefile, not the AVR root Makefile) on
+# purpose: this file is already the one place that knows about every
+# non-AVR platform as a unit (the $(READY_PLATFORMS)/all dispatch above),
+# and the artifact tooling needs to drive ALL platforms including AVR from
+# one entry point - a per-platform target would just mean ten near-
+# identical copy-pasted stanzas, and the root (AVR) Makefile is golden-MD5
+# gated, so it stays untouched rather than gaining unrelated targets.
+# tools/build_artifacts.py is the actual orchestrator (build truth still
+# lives in each platform's own Makefile - this is a thin invoker, same
+# division of labor as .github/actions/build-platform).
+# ============================================================================
+
+artifacts:
+	python3 ../../tools/build_artifacts.py build
+
+artifacts-check:
+	python3 ../../tools/build_artifacts.py check
+
+artifacts-selftest:
+	python3 ../../tools/build_artifacts.py --selftest
+
 # Clean all platforms
 clean:
 	@echo "Cleaning all platforms..."
@@ -79,12 +104,20 @@ help:
 	@echo "  make clean     - Clean all platform builds"
 	@echo "  make clean-all - Remove entire build directory"
 	@echo ""
-	@echo "Build artifacts:"
+	@echo "Build artifacts (scratch, ../../build/ - not tracked in git):"
 	@echo "  All .elf, .hex, .bin, .dump files go to ../../build/"
 	@echo "  Object files (.o) go to ../../build/<platform>/"
 	@echo ""
 	@echo "File naming convention:"
 	@echo "  Release: grbl_<platform>.bin"
 	@echo "  Debug:   grbl_<platform>_dbg.bin"
+	@echo ""
+	@echo "Tracked artifacts (../../artifacts/ - committed to git, see"
+	@echo "../../artifacts/README.md):"
+	@echo "  make artifacts          - Rebuild every port RELEASE, commit"
+	@echo "                            elf/bin/hex + symbol map + MANIFEST.sha256"
+	@echo "  make artifacts-check    - Fail if committed artifacts are stale"
+	@echo "                            relative to a fresh build (the 6th ratchet)"
+	@echo "  make artifacts-selftest - Pure-logic unit tests, no compiler invoked"
 
-.PHONY: all $(READY_PLATFORMS) clean clean-all help
+.PHONY: all $(READY_PLATFORMS) clean clean-all help artifacts artifacts-check artifacts-selftest

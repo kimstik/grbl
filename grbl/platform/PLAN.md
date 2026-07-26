@@ -1165,6 +1165,93 @@ identity to integration time.
 
 ## Current State (update each session)
 
+- **[x] BUILD ARTIFACTS TRACKED IN GIT FOR OBSERVABILITY (2026-07-26,
+  owner directive)** — new `artifacts/<port>/` tree (RELEASE
+  elf/bin/hex + a `nm --print-size --size-sort --demangle` symbol map per
+  port) plus `artifacts/MANIFEST.sha256` (sha256 of every artifact of
+  every port AND flavor, DEBUG included though DEBUG binaries are never
+  committed) so every port's CURRENT byte-level state is diffable over
+  time, closing the gap where only atmega328p's golden MD5 had any build
+  history and the other 8-9 ports could only be compared now-vs-now.
+  Ten units tracked (nine ports; samd21 counted per board -
+  `samd21-megarm`/`samd21-generic`, distinct directories since the
+  toolchain names both boards' ELF identically): atmega328p, stm32f103,
+  stm32h523, stm32f411, samd21×2, ch32v006, ch570, hc32f460,
+  dspic33ak128mc102 (xc-dsc toolchain WAS present in this environment, so
+  built for real rather than only wiring plumbing). sg2002 correctly
+  absent (§23 scope ruling: design-complete/implementation-deferred, no
+  binary exists). New sixth ratchet: `tools/build_artifacts.py check`
+  rebuilds every port fresh into the ordinary scratch `build/` dir (never
+  touching `artifacts/`) and fails, naming every drifted/missing file, if
+  a commit landed without refreshing its artifacts - `--selftest` (pure
+  manifest-format/hash-compare logic, no compiler) matches the style of
+  the other four ratchet scripts. `make artifacts`/`make
+  artifacts-check`/`make artifacts-selftest` added to
+  `grbl/platform/Makefile` (chosen over per-platform targets or the
+  golden-gated AVR root Makefile - see CONTRACTS.md
+  [§build-artifacts-tracked](CONTRACTS.md#build-artifacts-tracked) for the
+  full "why here" reasoning). `.gitignore` gained THREE more
+  negation exceptions for the SAME recurring trap first caught on
+  `tools/README.md` and again on `grbl/platform/ch570/vendor/ISP572.o`:
+  blanket `*.elf`/`*.hex`/`README.md` rules were silently swallowing
+  `artifacts/**/*.elf`, `artifacts/**/*.hex`, and `artifacts/README.md` -
+  caught via `git check-ignore -v` BEFORE it could bite a future `git add
+  -A`, not after. Growth cost stated plainly (not discovered later as a
+  repo-size surprise): ~2.7MB for this one full snapshot, git does not
+  delta binaries usefully across recompiles, every subsequent *content*
+  refresh costs roughly that much again - full table in
+  `artifacts/README.md`.
+  **Real bug found and fixed building the tool itself** (kept as a
+  documented lesson, not just squashed into a clean commit): the two
+  samd21 boards' DEBUG artifacts share one toolchain-chosen path
+  (`build/grbl_samd21_dbg.elf` - `BINARY_NAME` doesn't encode `BOARD`),
+  so an unnamespaced manifest label let one board's hash silently
+  overwrite the other's under one dict key, and `check` false-positived
+  on the surviving board. Fixed by namespacing DEBUG labels with each
+  unit's `artifact_dir`; regression-guarded in `--selftest`, not just a
+  one-off manual repro.
+  **A second, independent finding surfaced only by actually running two
+  back-to-back builds** (not something the brief anticipated): dsPIC33AK's
+  `xc-dsc-gcc` restricted/Free license tier is NOT byte-reproducible -
+  measured ~15% of an identical-source RELEASE ELF's bytes differing
+  between two consecutive clean builds (almost certainly deliberate
+  anti-tamper/watermarking, not a flag or ordering bug here). Its symbol
+  map IS stable across the same two builds (diff empty), so this port's
+  elf/bin/hex are tracked for archival value but excluded from the
+  hash-based staleness gate (`nondeterministic_binary=True` in the
+  `UNITS` table), while its `.syms` stays fully gated - documented in
+  CONTRACTS.md, `artifacts/README.md`, and inline in the script.
+  Refresh policy written where a contributor will see it:
+  `PORTING-CHECKLIST.md` gained Definition-of-Done item 8 plus a
+  standalone "Refresh policy" section (refresh-and-commit on port
+  *content* change, not on every push - most pushes are docs and move
+  zero binary bytes); `artifacts/README.md` restates it and cross-links
+  back.
+  GATES (all re-run, not inspected): golden AVR `make validate` PASSED
+  (MD5 `79af184e67b27defd27a39309ac53563`) via the SAME `build_avr_unit()`
+  path the tool uses (reuses ratchet #1 as a side effect of `build`/
+  `check`, doesn't duplicate it); all 10 units built clean both flavors
+  where applicable; `python3 tools/build_artifacts.py check` clean (61
+  files verified) after a full rebuild; negative test performed twice
+  (before AND after the samd21-label-collision fix) - injected a one-`nop`
+  asm mutation into `ch32v006/platform.c`'s delay loop, `check
+  --platforms ch32v006` FAILED naming all 7 drifted files (RELEASE
+  elf/hex/bin/syms + all 3 DEBUG hashes), reverted, `check` clean again,
+  `git diff` on that file empty; `tools/check_contracts_numbering.py` OK
+  (26 sections/slugs now, 9 cross-file links, new §25 placeholder -
+  slugged `build-artifacts-tracked`, integrator assigns the final number);
+  every pre-existing ratchet's own `--selftest` still PASSED
+  (`ci/warn_ratchet.py`, `tools/assert_no_double.sh`,
+  `tools/check_contracts_numbering.py`) - none of this batch's edits
+  touched their logic, only added a sixth alongside them. Also fixed
+  along the way (needed for the "hex+bin, not just elf" requirement to be
+  achievable at all on this port): `dspic33ak128mc102/Makefile`'s
+  `bin2hex` recipe was missing the `-mdfp=` flag it needs on this
+  toolchain layout (failed outright, not silently), and had no `.bin`
+  target whatsoever - both added (`xc-dsc-objcopy` needs an explicit
+  `-I elf32-pic30` since this toolchain's ELF variant isn't one plain
+  objcopy autodetects); zero other port's Makefile touched.
+
 - **[x] RELEASE-READINESS TRUTH AUDIT (2026-07-26)** — Phase 5's last item prep (tag v0.x).
   Fresh clean builds of every buildable port re-verified against this file's own canonical size
   table: all match exactly (atmega328p golden MD5 unchanged; stm32f103/h523/f411, samd21

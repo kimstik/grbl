@@ -215,6 +215,7 @@ endif
 # Output files - artifacts go to /build, object files to /build/$(PLATFORM_NAME)/$(BUILD)
 ELF_FILE  = $(OUTPUT_DIR)/$(BINARY_NAME).elf
 HEX_FILE  = $(OUTPUT_DIR)/$(BINARY_NAME).hex
+BIN_FILE  = $(OUTPUT_DIR)/$(BINARY_NAME).bin
 DUMP_FILE = $(OUTPUT_DIR)/$(BINARY_NAME).dump
 MAP_FILE  = $(OUTPUT_DIR)/$(BINARY_NAME).map
 
@@ -224,9 +225,12 @@ MAP_FILE  = $(OUTPUT_DIR)/$(BINARY_NAME).map
 
 # Steps 3-6 complete, zero PORT_TODO_* remain (per the M1-M3-era comment's
 # own instruction: "flip `all` to the full ELF+hex once zero remain") -
-# default target now builds the full ELF+hex, matching every other
-# completed port's Makefile shape.
-all: $(BUILD_DIR) $(OUTPUT_DIR) $(HEX_FILE)
+# default target now builds the full ELF+hex+bin, matching every other
+# completed port's Makefile shape (bin added: tools/build_artifacts.py /
+# PLAN.md "build artifacts tracked in git" batch - this toolchain's ELF is
+# a Microchip `elf32-pic30` variant, so plain objcopy needs an explicit
+# -I to recognise it; see the $(BIN_FILE) recipe below).
+all: $(BUILD_DIR) $(OUTPUT_DIR) $(HEX_FILE) $(BIN_FILE)
 
 objects: $(BUILD_DIR) $(OUTPUT_DIR) $(OBJECTS)
 
@@ -270,6 +274,18 @@ $(ELF_FILE): objects
 $(HEX_FILE): $(ELF_FILE)
 	$(BIN2HEX) -mdfp=$(DFP_XC16) $<
 
+# Create raw binary. This toolchain's ELF is tagged `elf32-pic30` (`file`
+# reports "ELF 32-bit LSB executable, Microchip dsPIC30F"), NOT one of
+# plain objcopy's autodetected bfd targets - an unqualified `-O binary`
+# fails with "Unable to recognise the format of the input file". The
+# explicit `-I elf32-pic30` (confirmed via `xc-dsc-objcopy --info`, which
+# lists elf32-pic30 as a real bfd target on this toolchain) fixes that;
+# every other port's Makefile in this tree needs no such input-format hint
+# because their arm-none-eabi-/riscv64-unknown-elf- objcopy builds
+# autodetect a plain ELF32 just fine.
+$(BIN_FILE): $(ELF_FILE)
+	$(OBJCOPY) -I elf32-pic30 -O binary $< $@
+
 # Create disassembly dump (objdump needs the DFP for SFR symbolization)
 $(DUMP_FILE): $(ELF_FILE)
 	$(OBJDUMP) -mdfp=$(DFP_XC16) -Sxdstr $< >$@
@@ -282,6 +298,7 @@ compdb:
 clean:
 	rm -f $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.elf \
 	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.hex \
+	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.bin \
 	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.dump \
 	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.map
 	rm -rf $(BUILD_DIR)

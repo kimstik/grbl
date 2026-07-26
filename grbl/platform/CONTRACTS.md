@@ -2132,3 +2132,114 @@ every UNVERIFIED fact (the 60MHz PLL clock path end-to-end, the busy-wait
 delay cycle-count assumption, the GPIO any-edge technique's real-silicon
 behavior) is flagged at its own definition site, not asserted as
 hardware-proven.
+
+<a id="build-artifacts-tracked"></a>
+## 25. Build artifacts are TRACKED IN GIT for observability, not reported once (placeholder number — integrator assigns the final one; cite this slug, not "§25", from elsewhere)
+
+**Owner directive** (verbatim intent): commit RELEASE `elf`/`bin`/`hex` per
+buildable port, not as an end-of-project deliverable but so the *current*
+state of every port is inspectable and diffable over time. Before this
+batch, `atmega328p` was the only port with any byte-level build history —
+the golden MD5 in `grbl/platform/Makefile`'s `validate` target. Every other
+port could only be compared "now vs now" inside a single session (rebuild
+twice, diff the two local files); a size drift discovered a week later had
+nothing upstream to diff against. That gap is closed by `artifacts/` (repo
+root) + `tools/build_artifacts.py`.
+
+**What's committed** — per port, `artifacts/<port>/grbl_<port>.{elf,bin,hex}`
+(RELEASE only) plus `grbl_<port>.syms` (`nm --print-size --size-sort
+--demangle` on that same `.elf`, plain sorted text). `samd21` gets two
+directories (`samd21-megarm/`, `samd21-generic/`) because the toolchain
+names both boards' ELF identically — `BINARY_NAME` in
+`grbl/platform/samd21/Makefile` does not encode `BOARD`, only the directory
+does. `artifacts/MANIFEST.sha256` covers every artifact of every port **and
+flavor**, including DEBUG (never committed as a binary — 3-10x larger for
+no diffing value; dsPIC33AK's DEBUG `.elf` alone is ~14MB uncompressed) —
+DEBUG lines are `#`-prefixed so `sha256sum -c` skips them but
+`tools/build_artifacts.py check` still parses and compares them, so a
+DEBUG-only regression stays observable without paying for a second full
+binary set per port. `sg2002` is absent by design — §23's own scope ruling
+left it design-complete/implementation-deferred, nothing to build yet.
+
+**Why the symbol map matters more than the binaries for THIS specific
+purpose**: a binary diff proves a port's size moved and by how much; it
+cannot say which function moved. `.syms` is the artifact that answers that,
+in seconds, via plain `git diff` — no rebuild, no disassembler. It costs a
+few KB per port because it's sorted text, not another binary copy — this is
+the cheap half of the tracking cost, deliberately kept cheap because the
+expensive half (the binaries) can't be.
+
+**Growth cost, stated where a committer will see it before they're
+surprised by repo size**: measured on this tree, `.bin` 25-95KB (dsPIC's
+`.bin` is disproportionately large — `elf32-pic30`'s packed-instruction-word
+layout expands under a raw `objcopy -O binary`, not a bug in this tooling),
+`.hex` 72-116KB, `.elf` 48-166KB, per port/board. Ten units, one full
+snapshot: ~2.7MB. **Git does not delta binaries usefully across
+recompiles** — a source edit that moves one function by 40 bytes typically
+re-links every address after it, so the *entire* blob differs and git
+stores a new, separately-compressed copy; nothing tracks "99% identical to
+the last commit's blob" for binary content the way it does for text. Every
+subsequent *content* refresh (see the refresh policy below) costs roughly
+this much again, for whichever ports changed. This is the accepted price of
+the observability the owner asked for, not a defect — see
+`artifacts/README.md`'s "Growth cost" section for the full table.
+
+**dsPIC33AK128MC102 is tracked but not hash-gated** (new fact this batch
+surfaced, not previously documented anywhere in this tree): `xc-dsc-gcc`'s
+restricted/Free license tier is **not byte-reproducible** — two consecutive
+`make clean && make BUILD=RELEASE` runs of the *unmodified* source tree
+were measured, while building this tooling, to differ in ~15% of the
+resulting ELF's bytes (`cmp -l`: 25361 of 166096 bytes), most plausibly a
+deliberate anti-tamper/watermarking behavior of the restricted tier and not
+anything this Makefile or `tools/build_artifacts.py` controls. Critically,
+the **symbol map is stable** across those same two builds (`diff` empty —
+function addresses/sizes don't move, only some padding/layout bytes do), so
+the staleness checker still hash-gates `grbl_dspic33ak128mc102.syms` for
+real drift and simply skips the elf/hex/bin comparison for this one unit
+(flagged via `nondeterministic_binary=True` in `tools/build_artifacts.py`'s
+`UNITS` table) rather than producing a permanent false positive. The
+binaries are still committed for archival/manual inspection.
+
+**The mechanism**: `tools/build_artifacts.py` (subcommands `build`/`check`,
+plus a bare `--selftest` matching `ci/warn_ratchet.py`/
+`tools/assert_no_double.sh`/`tools/check_contracts_numbering.py`'s style —
+pure manifest-format/hash-compare logic, no compiler invoked) is the sole
+orchestrator; it shells out to each port's own Makefile for the actual
+compile (thin invoker, same division of labor as
+`.github/actions/build-platform` — build truth stays in the Makefiles).
+`grbl/platform/Makefile` gains `make artifacts` / `make artifacts-check` /
+`make artifacts-selftest` as the documented entry points (placed there, not
+per-platform or in the golden-gated AVR root Makefile, because it's already
+the one file that knows about every non-AVR platform as a unit, and driving
+AVR from the same script needed one entry point, not ten near-identical
+copies). `check` rebuilds fresh into the ordinary scratch `build/`
+directory — never touching `artifacts/` — and fails, naming every drifted
+or missing file, if a commit landed without refreshing its port's
+artifacts. This is the **sixth ratchet** in this project, after golden MD5,
+warn baseline, boot integrity, no-DP assert, and docs integrity/CONTRACTS
+numbering.
+
+**A real bug this batch found and fixed while building the tool itself**
+(kept here as a lesson, not just in a commit message): the first
+`check` run against a freshly-generated manifest reported samd21-megarm's
+DEBUG binary as "stale" even though nothing had changed. Root cause: both
+samd21 boards' DEBUG artifacts land at the identical toolchain-chosen path
+`build/grbl_samd21_dbg.elf` (same `BINARY_NAME` collision noted above, for
+DEBUG instead of RELEASE), so an unnamespaced manifest label
+(`"build/" + basename`) let `samd21-generic`'s hash silently overwrite
+`samd21-megarm`'s under one dict key — `check` then compared megarm's fresh
+hash against generic's recorded one and false-positived. Fixed by
+namespacing every DEBUG label with the unit's `artifact_dir`
+(`"build/{artifact_dir}/{basename}"`), which cannot collide since
+`artifact_dir` is the very thing that disambiguates the two boards'
+committed RELEASE directories. Regression-guarded in
+`tools/build_artifacts.py --selftest` (asserts the two boards' labels
+differ) rather than only in a one-off manual repro.
+
+**Refresh policy**: refresh-and-commit whenever a port's *content* changes
+(part of finishing that port's change, per `PORTING-CHECKLIST.md`'s
+Definition-of-Done item 8 and its own "Refresh policy" section); do **not**
+refresh on every push (most pushes are docs/ledger and move zero bytes of
+any port's binary). The checker enforces this rather than leaving it to
+memory — see `PORTING-CHECKLIST.md` and `artifacts/README.md` for the
+full contributor-facing statement of the rule.
