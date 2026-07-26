@@ -5,38 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Minimal register definitions for STM32F411CEU6 ("Black Pill"), ARM
-  Cortex-M4F. For production use, recommend using official CMSIS headers.
-
-  F411 is F4-family, NOT F1: GPIO is the MODER/OTYPER/OSPEEDR/PUPDR/AFR model
-  (same shape as stm32h523/regs.h, ported from there), but the peripheral
-  BASE ADDRESSES differ from both F1 and H5 - this is the trap flagged in
-  PORTING-CHECKLIST.md's reuse-first guidance: "same family resemblance" is
-  not "same memory map". Verified against RM0383 citations below (web search
-  this session, since no CMSIS pack is vendored here):
-    - TIM1 is at 0x40010000 on F4 (NOT stm32f103/stm32h523's 0x40012C00 -
-      that address is F1's TIM1 base; blindly reusing it would silently
-      misdirect every TIM1 register access, including BDTR/CCR1, to whatever
-      lives at 0x40012C00 on F4 (SDIO), a "compiles, links, destroys the
-      machine at runtime" class bug the CONTRACTS.md cautionary tale warns
-      against generalizing).
-    - RCC_APB2ENR: TIM1EN=bit0, USART1EN=bit4, SYSCFGEN=bit14 (confirmed via
-      STM32F412 RM cross-reference + community citations - F412/F411 share
-      the APB2ENR layout in this range).
-    - RCC_AHB1ENR: GPIOAEN=bit0, GPIOBEN=bit1, GPIOCEN=bit2 (standard F4).
-    - RCC_PLLCFGR: PLLM[5:0]=bits0-5, PLLN[8:0]=bits6-14, PLLSRC=bit22,
-      PLLP[1:0]=bits16-17, PLLQ[3:0]=bits24-27 (RM0383).
-    - EXTI/SYSCFG: F4 keeps the classic single-PR-register EXTI model
-      (write-1-to-clear on one pending register), UNLIKE stm32h523's
-      RPR1/FPR1 split (that split is H5-specific) - handlers.c below follows
-      the stm32f103 shared-vector dispatch pattern (EXTI9_5/EXTI15_10), not
-      h523's per-line vectors.
-    - IRQn positions (EXTI9_5=23, EXTI15_10=40, TIM2=28, TIM3=29, USART1=37,
-      USART2=38) verified via search this session against the published
-      STM32F411 CMSIS vector table - identical numbering to stm32f103/h523
-      for these entries (coincidental overlap in the low IRQ range across
-      F1/F4 families; NOT to be assumed for peripherals not cited here).
 */
 
 #ifndef STM32F411_REGS_H
@@ -45,9 +13,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// ============================================================================
 // CORE ARM CORTEX-M4F DEFINITIONS
-// ============================================================================
 
 #define __enable_irq()    __asm__ volatile ("cpsie i" : : : "memory")
 #define __disable_irq()   __asm__ volatile ("cpsid i" : : : "memory")
@@ -67,9 +33,7 @@
 #define __DMB()  __asm__ volatile ("dmb" ::: "memory")
 #define __ISB()  __asm__ volatile ("isb" ::: "memory")
 
-// ============================================================================
 // GPIO (F4 model: MODER/OTYPER/OSPEEDR/PUPDR/IDR/ODR/BSRR/LCKR/AFR[2])
-// ============================================================================
 
 typedef struct {
   volatile uint32_t MODER;    // Mode register
@@ -91,9 +55,7 @@ typedef struct {
 #define GPIOB  ((GPIO_TypeDef*)GPIOB_BASE)
 #define GPIOC  ((GPIO_TypeDef*)GPIOC_BASE)
 
-// ============================================================================
 // RCC (Reset and Clock Control) - F4 layout, distinct from F1/H5
-// ============================================================================
 
 typedef struct {
   volatile uint32_t CR;         // 0x00 Clock control register
@@ -157,9 +119,7 @@ typedef struct {
 #define RCC_APB2ENR_USART1EN (1UL << 4)
 #define RCC_APB2ENR_SYSCFGEN (1UL << 14)
 
-// ============================================================================
 // FLASH interface (F4: sector erase, distinct register layout from F1/H5)
-// ============================================================================
 
 typedef struct {
   volatile uint32_t ACR;      // 0x00 Access control register
@@ -199,10 +159,8 @@ typedef struct {
 #define FLASH_CR_STRT      (1UL << 16)
 #define FLASH_CR_LOCK      (1UL << 31)
 
-// ============================================================================
 // SYSCFG (GPIO-to-EXTI line mapping; F4 keeps this on APB2, same idea as H5's
 // SYSCFG but a different base address / enable bit)
-// ============================================================================
 
 typedef struct {
   uint32_t RESERVED0;           // 0x00 MEMRMP
@@ -217,9 +175,7 @@ typedef struct {
 #define SYSCFG_EXTICR_PB  0x1UL
 #define SYSCFG_EXTICR_PC  0x2UL
 
-// ============================================================================
 // EXTI (classic single-pending-register model, same shape as stm32f103)
-// ============================================================================
 
 typedef struct {
   volatile uint32_t IMR;    // Interrupt mask register
@@ -233,11 +189,9 @@ typedef struct {
 #define EXTI_BASE  0x40013C00UL
 #define EXTI  ((EXTI_TypeDef*)EXTI_BASE)
 
-// ============================================================================
 // TIM (Timers) - TIM1 is APB2 advanced-control, TIM2/TIM3 are APB1
 // general-purpose. Register shape identical to stm32f103/h523's TIM_TypeDef;
 // only base addresses differ per family.
-// ============================================================================
 
 typedef struct {
   volatile uint32_t CR1;      // Control register 1
@@ -297,9 +251,7 @@ typedef struct {
 // stm32f103/stm32h523 - CONTRACTS.md porting-checklist Step 3 BDTR.MOE note)
 #define TIM_BDTR_MOE     (1UL << 15)
 
-// ============================================================================
 // USART - F4 uses the classic SR/DR model (like F1), NOT H5's ISR/RDR/TDR.
-// ============================================================================
 
 typedef struct {
   volatile uint32_t SR;       // Status register
@@ -325,9 +277,7 @@ typedef struct {
 #define USART_CR1_TXEIE  (1UL << 7)
 #define USART_CR1_UE     (1UL << 13)
 
-// ============================================================================
 // SCB (System Control Block) - only the registers startup.c needs
-// ============================================================================
 // VTOR is what makes the vector table a *referenced* object: without a real
 // code reference GCC's LTO deletes vector_table[] before codegen and the
 // linker's KEEP(*(.isr_vector)) then matches nothing (see CONTRACTS.md S18).
@@ -341,9 +291,7 @@ typedef struct {
 #define SCB_BASE  (0xE000ED00UL)
 #define SCB       ((SCB_Type*)SCB_BASE)
 
-// ============================================================================
 // SYSTICK
-// ============================================================================
 
 typedef struct {
   volatile uint32_t CTRL;
@@ -354,10 +302,8 @@ typedef struct {
 
 #define SysTick  ((SysTick_Type*)0xE000E010UL)
 
-// ============================================================================
 // DWT (cycle counter) + CoreDebug (DWT enable) - standard on every Cortex-M
 // with a debug unit (M3/M4/M33)
-// ============================================================================
 
 typedef struct {
   volatile uint32_t CTRL;
@@ -377,9 +323,7 @@ typedef struct {
 #define CoreDebug  ((CoreDebug_Type*)0xE000EDF0UL)
 #define CoreDebug_DEMCR_TRCENA_Msk  (1UL << 24)
 
-// ============================================================================
 // NVIC
-// ============================================================================
 
 typedef struct {
   volatile uint32_t ISER[8];
@@ -430,10 +374,8 @@ static inline void NVIC_SetPriority(IRQn_Type IRQn, uint32_t priority) {
   NVIC->IP[(uint32_t)IRQn] = (uint8_t)(priority << 4);
 }
 
-// ============================================================================
 // IWDG - Independent Watchdog (identical register layout across STM32
 // families - common/stm32/stm32_watchdog.c owns the implementation)
-// ============================================================================
 
 typedef struct {
   volatile uint32_t KR;

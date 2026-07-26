@@ -5,21 +5,13 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Startup code for SAMD21G18A
-  - Reset handler
-  - Vector table
-  - BSS/Data initialization
-  - Clock initialization (48 MHz from DFLL48M)
 */
 
 #include <stdint.h>
 #include "samd21.h"
 #include "core_cm0plus.h"
 
-// ============================================================================
 // EXTERNAL SYMBOLS (from linker script)
-// ============================================================================
 
 extern uint32_t _estack;      // End of stack (initial SP value)
 extern uint32_t _sdata;       // Start of .data in RAM
@@ -28,9 +20,7 @@ extern uint32_t _sidata;      // Start of .data in ROM
 extern uint32_t _sbss;        // Start of .bss
 extern uint32_t _ebss;        // End of .bss
 
-// ============================================================================
 // FUNCTION PROTOTYPES
-// ============================================================================
 
 extern int main(void);
 
@@ -74,9 +64,7 @@ void DAC_Handler(void)                __attribute__((weak, alias("Default_Handle
 void PTC_Handler(void)                __attribute__((weak, alias("Default_Handler")));
 void I2S_Handler(void)                __attribute__((weak, alias("Default_Handler")));
 
-// ============================================================================
 // VECTOR TABLE
-// ============================================================================
 
 __attribute__((section(".isr_vector")))
 void (* const vector_table[])(void) = {
@@ -129,9 +117,7 @@ void (* const vector_table[])(void) = {
   I2S_Handler,                          // 43 Inter-IC Sound Interface
 };
 
-// ============================================================================
 // SYSTEM INITIALIZATION (Clock configuration)
-// ============================================================================
 
 // GRBL_BOOT_INIT (== noinline) - with a single call site (Reset_Handler
 // below) LTO used to inline this whole function away, leaving no symbol in
@@ -174,9 +160,7 @@ GRBL_BOOT_INIT void SystemInit(void) {
   // Now running at 48 MHz!
 }
 
-// ============================================================================
 // RESET HANDLER
-// ============================================================================
 
 void Reset_Handler(void) {
   uint32_t *src, *dst;
@@ -234,9 +218,7 @@ void Reset_Handler(void) {
   }
 }
 
-// ============================================================================
 // DEFAULT HANDLER
-// ============================================================================
 
 void Default_Handler(void) {
   // Infinite loop on unhandled interrupt

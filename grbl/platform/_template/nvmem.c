@@ -1,26 +1,6 @@
 /*
   nvmem.c - _template EEPROM emulation (copy-me starting point)
   Part of Grbl
-
-  TU-replacement route (CONTRACTS.md §0/§10): provides the four-function
-  NVMEM API core settings.c needs; this platform's Makefile excludes core
-  nvmem.c/eeprom.c. Bounds-checking, the wear guard (skip a write if the
-  byte already matches) and the bulk checksum loops are genuinely
-  chip-agnostic and are real, working code below - only the two innermost
-  primitives (read one byte, write one byte with whatever
-  erase-before-write dance your flash controller needs) are PORT_TODO.
-
-  Context (§10.1): mainline only, interrupts enabled, never called from
-  ISR. Blocking here is fine - grbl only calls these from `$` commands
-  (IDLE/ALARM) - but do NOT add background/deferred writes; settings_read
-  may follow a write immediately.
-
-  Checksum fidelity (§10.4): this file uses bitwise `|` in the checksum
-  rotate, NOT the AVR core's logical `||` quirk (nvmem.c:127,149 upstream -
-  preserved there only for byte-golden AVR output). Never import the `||`
-  quirk into new code, and never "fix" it on AVR - cross-platform NVMEM
-  image portability is a non-goal; each platform only needs to be
-  self-consistent between its own write and read paths.
 */
 
 #include <stdint.h>

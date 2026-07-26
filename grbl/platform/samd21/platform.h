@@ -3,10 +3,6 @@
   Part of Grbl HAL
 
   Copyright (c) 2025 GRBL HAL Contributors
-
-  This file provides platform-specific definitions for SAMD21G18A / ATSAMC21E18A-MZ.
-  ARM Cortex-M0+, 48 MHz, 32KB RAM, 256KB Flash
-  Target: MegARM board - https://github.com/kimstik/MegARM
 */
 
 #ifndef PLATFORM_SAMD21_H
@@ -15,9 +11,7 @@
 #include <stdint.h>
 #include "timer.h"
 
-// ============================================================================
 // PLATFORM IDENTIFICATION
-// ============================================================================
 
 // PLATFORM_NAME is defined in hal.h as "SAMD21"
 // Board-specific name for reference
@@ -25,9 +19,7 @@
 #define PLATFORM_CPU      "ARM Cortex-M0+"
 #define PLATFORM_ARCH     "ARM"
 
-// ============================================================================
 // PLATFORM CAPABILITIES
-// ============================================================================
 // TODO: HAL_HAS_* -> PLATFORM_HAS_*
 // TODO: HAL_*     -> PLATFORM_*
 
@@ -39,9 +31,7 @@
 #define PLATFORM_HAS_HW_DIVIDE     1   // DIVAS - Division and Square Root Accelerator
 #define PLATFORM_HAS_DIVAS         1   // Hardware 32-bit division, sqrt, modulo (1-3 cycles)
 
-// ============================================================================
 // PLATFORM SPECIFICATIONS
-// ============================================================================
 
 #ifndef CPU_FREQ
   #define CPU_FREQ        48000000UL  // 48 MHz
@@ -59,18 +49,14 @@ _Static_assert(CPU_FREQ % 3000000UL == 0, "DELAY_LOOP_ITERS_PER_US truncates: CP
 // Timer resolution
 #define HAL_TIMER_RESOLUTION_NS   20      // 20.8 ns @ 48 MHz
 
-// ============================================================================
 // TYPE DEFINITIONS (must be before hal_gpio.h include)
-// ============================================================================
 
 // Define hal_gpio_port_t before hal_gpio.h includes it
 // For SAMD21: port ID is an integer (0 = PORT_GROUPA, 1 = PORT_GROUPB)
 typedef uint32_t hal_gpio_port_t;
 #define HAL_GPIO_PORT_T_DEFINED
 
-// ============================================================================
 // SAMD21 INCLUDES
-// ============================================================================
 
 #include "samd21.h"
 #include "core_cm0plus.h"
@@ -78,9 +64,7 @@ typedef uint32_t hal_gpio_port_t;
 // GRBL_BOOT_INIT - the anchor attribute on the pre-main init chain (BUG #23)
 #include "common/boot_init.h"
 
-// ============================================================================
 // BOARD CONFIGURATION
-// ============================================================================
 
 /*
   Board-specific pin mappings are now in:
@@ -95,27 +79,21 @@ typedef uint32_t hal_gpio_port_t;
 */
 
 
-// ============================================================================
 // CHIP-SPECIFIC PERIPHERAL CONFIGURATION
-// ============================================================================
 
 // Note: All pin mapping definitions moved to boards/*/config.h
 // Board-specific: X_STEP_PIN, Y_DIRECTION_PIN, LIMIT_MASK_A, etc.
 
 // Chip-specific peripheral IDs and IRQ handlers defined below
 
-// ============================================================================
 // FLASH EMULATION FOR EEPROM
-// ============================================================================
 
 // Use last 4KB of flash for EEPROM emulation
 #define HAL_NVMEM_FLASH_START   (0x00000000 + FLASH_SIZE - 4096)
 #define HAL_NVMEM_FLASH_SIZE    4096
 #define HAL_NVMEM_FLASH_PAGE_SIZE 64  // SAMD21 has 64-byte pages
 
-// ============================================================================
 // USB SUPPORT
-// ============================================================================
 
 #ifdef HAL_USE_USB
   #define HAL_USB_ENABLED       1
@@ -124,14 +102,10 @@ typedef uint32_t hal_gpio_port_t;
   #define USB_PID               0x804D
 #endif
 
-// ============================================================================
 // TIMER MACROS - moved to timer.h
-// ============================================================================
 // Timer macros (STP_TMR_*, STP_PULSE_RESET_*, PWM_*, ISR_*) now in timer.h
 
-// ============================================================================
 // GPIO INTERRUPT MACROS - EIC (External Interrupt Controller)
-// ============================================================================
 
 // EIC initialization - must be called before enabling any GPIO interrupts
 #define EIC_INIT() \
@@ -186,9 +160,7 @@ typedef uint32_t hal_gpio_port_t;
 // hal_gpio.h in every core TU and would only break the link if it ever won.
 
 
-// ============================================================================
 // PLATFORM-SPECIFIC FUNCTIONS
-// ============================================================================
 
 // BOOT INIT (BUG #23). This port's 48MHz DFLL bring-up lives in
 // startup.c::SystemInit() and is called from Reset_Handler before main() -
@@ -217,9 +189,7 @@ void hal_gpio_interrupt_init(void);
 uint32_t hal_millis(void);
 uint64_t hal_micros(void);
 
-// ============================================================================
 // AVR COMPATIBILITY LAYER
-// ============================================================================
 
 // SAMD21 ARM Cortex-M0+ interrupt control
 // Use inline assembly for direct CPSIE/CPSID instructions

@@ -5,26 +5,20 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Uses platform configuration to support different flash geometries.
 */
 
 #include "stm32_nvmem.h"
 #include "stm32_flash.h"  // Platform-specific flash operations
 #include <string.h>
 
-// ============================================================================
 // NVMEM STATE
-// ============================================================================
 
 static uint8_t* nvmem_cache = NULL;
 static bool nvmem_initialized = false;
 static bool nvmem_dirty = false;
 static uint32_t nvmem_size = 0;
 
-// ============================================================================
 // PUBLIC FUNCTIONS
-// ============================================================================
 
 stm32_status_t stm32_nvmem_init(void) {
   // Calculate NVMEM size from platform config

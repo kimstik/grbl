@@ -1,30 +1,6 @@
 /*
   startup.c - _template reset/vector code (copy-me starting point)
   Part of Grbl
-
-  PORTING-CHECKLIST.md Step 0/Step 1: vector table, .data copy, .bss zero,
-  system clock bring-up. The data/bss copy loop below is genuinely
-  chip-agnostic (every Cortex-M works the same way) and ships real,
-  working code. The vector table only has room filled in for the handful
-  of exception slots every Cortex-M core defines identically (Reset, NMI,
-  HardFault, SVC, PendSV, SysTick) - your chip's peripheral IRQs (the
-  stepper timer, pulse-reset timer, PWM timer, UART, GPIO/EXTI, ...) go in
-  the PORT-TODO gap below vector_table[15], in whatever order your
-  datasheet's vector table assigns them, aliased to the *_irq_dispatch()
-  functions in handlers.c.
-
-  ARM-ONLY WARNING (added after the ch32v006/RISC-V port, Phase 4 M1-M3 -
-  CONTRACTS.md #14): everything in this file assumes ARM Cortex-M
-  hardware vector fetch - `vector_table[0]` = initial SP and
-  `vector_table[1]` = Reset_Handler, loaded into the core automatically
-  on reset, no software involved. RISC-V (including this repo's
-  ch32v006) has NO equivalent mechanism at all: there is no hardware SP
-  autoload, and a data-pointer array is not a valid `mtvec` target in
-  standard direct mode. If you are porting to a non-ARM core, do NOT
-  start from this file - read `ch32v006/startup.c` instead for a worked
-  RISC-V alternative (naked `_start` that sets `sp` itself, an
-  `__attribute__((interrupt))` C trap entry, `mtvec` written via `csrw`)
-  and CONTRACTS.md #14 for the full list of what else does not transfer.
 */
 
 #include <stdint.h>
@@ -32,9 +8,7 @@
 
 #warning "PORT-TODO: startup.c"
 
-// ============================================================================
 // EXTERNAL SYMBOLS (from script.ld)
-// ============================================================================
 
 extern uint32_t _estack;
 extern uint32_t _sdata;
@@ -55,9 +29,7 @@ void SVC_Handler(void)       __attribute__((weak, alias("Default_Handler")));
 void PendSV_Handler(void)    __attribute__((weak, alias("Default_Handler")));
 void SysTick_Handler(void)   __attribute__((weak, alias("Default_Handler")));
 
-// ============================================================================
 // VECTOR TABLE
-// ============================================================================
 // PORT-TODO: everything after SysTick_Handler. Your chip's reference manual
 // lists the peripheral IRQ order - it is NOT portable between chips, unlike
 // the 6 slots above. Wire in, at minimum: the stepper timer IRQ ->
@@ -82,9 +54,7 @@ void (* const vector_table[])(void) = {
   // PORT-TODO: peripheral IRQ vectors start here (position 16 = IRQn 0).
 };
 
-// ============================================================================
 // SYSTEM CLOCK BRING-UP (PORTING-CHECKLIST Step 1)
-// ============================================================================
 /*
   Must bring the system clock up to exactly F_CPU (Makefile CLOCK variable)
   and set flash wait states appropriately BEFORE raising the clock past
@@ -115,9 +85,7 @@ GRBL_BOOT_INIT void SystemInit(void) {
   PORT_TODO_SYSTEM_CLOCK_INIT();
 }
 
-// ============================================================================
 // RESET HANDLER
-// ============================================================================
 
 void Reset_Handler(void) {
   uint32_t *src, *dst;
@@ -172,9 +140,7 @@ void Reset_Handler(void) {
   }
 }
 
-// ============================================================================
 // DEFAULT HANDLER
-// ============================================================================
 
 void Default_Handler(void) {
   while (1) {

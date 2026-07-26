@@ -5,25 +5,12 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Platform-specific HAL interface for STM32F411CEU6 ("Black Pill").
-  ARM Cortex-M4F, 96 MHz (25 MHz HSE via PLL), 128KB RAM, 512KB Flash.
-
-  NOTE (Phase 6 rolling port #1): the file this replaces was a documentation
-  skeleton only - marketing-comment blocks, a 65535 SPINDLE_PWM_MAX_VALUE
-  (one of the "duty-cap twins" this port fixes to the CONTRACTS.md-canonical
-  255), no Makefile/gpio.h/timer.h/startup.c/platform.c/handlers.c/script.ld,
-  and F1-vintage EXTI_LineN symbolic names that don't exist on this MCU
-  family. It never built. Per PORTING-CHECKLIST.md's "trust only builds"
-  rule, none of its claims were carried forward without re-verification.
 */
 
 #ifndef PLATFORM_STM32F411_H
 #define PLATFORM_STM32F411_H
 
-// ============================================================================
 // PLATFORM IDENTIFICATION
-// ============================================================================
 
 // hal.h pre-defines PLATFORM_NAME "STM32F411" before including this file;
 // the board-specific name below is the intended final value.
@@ -32,9 +19,7 @@
 #define PLATFORM_CPU      "ARM Cortex-M4F"
 #define PLATFORM_ARCH     "ARM"
 
-// ============================================================================
 // PLATFORM CAPABILITIES
-// ============================================================================
 
 #define HAL_HAS_FPU           1   // Cortex-M4F: single-precision FPU (fpv4-sp-d16)
 #define HAL_HAS_DMA           1   // 2x DMA controllers, 16 streams total
@@ -43,9 +28,7 @@
 #define HAL_HAS_HW_MULTIPLY   1   // 32-bit hardware multiplier
 #define HAL_HAS_HW_DIVIDE     1   // Hardware divider
 
-// ============================================================================
 // PLATFORM SPECIFICATIONS
-// ============================================================================
 
 #ifndef HAL_CPU_FREQ
   #define HAL_CPU_FREQ        96000000UL  // 96 MHz (Makefile CLOCK must match - Step 1 F_CPU lie trap)
@@ -58,9 +41,7 @@
 // Timer resolution
 #define HAL_TIMER_RESOLUTION_NS   10      // ~10.4 ns @ 96 MHz
 
-// ============================================================================
 // STM32 REGISTER DEFINITIONS
-// ============================================================================
 
 // Minimal register definitions (no CMSIS dependency) - see regs.h header
 // comment for the F1-vs-F4 base-address traps this file avoids.
@@ -81,9 +62,7 @@
 typedef GPIO_TypeDef* hal_gpio_port_t;
 #define HAL_GPIO_PORT_T_DEFINED
 
-// ============================================================================
 // PIN MAPPING - GPIO DEFINITIONS
-// ============================================================================
 
 /*
   STM32F411CEU6 ("Black Pill") Pin Mapping for GRBL (same pin layout as the
@@ -102,9 +81,7 @@ typedef GPIO_TypeDef* hal_gpio_port_t;
   UART: TX PA9 / RX PA10 (USART1, AF7)
 */
 
-// --------------------------------------------------------------------------
 // STEP PINS (GPIOA: PA0, PA1, PA2)
-// --------------------------------------------------------------------------
 
 #define STEP_PORT           GPIOA
 #define STEP_PORT_ID        ((hal_gpio_port_t)GPIOA)
@@ -116,9 +93,7 @@ typedef GPIO_TypeDef* hal_gpio_port_t;
 #define Z_STEP_BIT          2
 #define STEP_MASK           ((1<<X_STEP_PIN)|(1<<Y_STEP_PIN)|(1<<Z_STEP_PIN))
 
-// --------------------------------------------------------------------------
 // DIRECTION PINS (GPIOA: PA3, PA4, PA5)
-// --------------------------------------------------------------------------
 
 #define DIRECTION_PORT      GPIOA
 #define DIRECTION_PORT_ID   ((hal_gpio_port_t)GPIOA)
@@ -137,9 +112,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
                X_DIRECTION_BIT <= 7 && Y_DIRECTION_BIT <= 7 && Z_DIRECTION_BIT <= 7,
                "STEP/DIRECTION logical bits must fit core's uint8_t port image (BUG #17 class, CONTRACTS.md #1)");
 
-// --------------------------------------------------------------------------
 // STEPPER ENABLE PIN (GPIOA: PA6)
-// --------------------------------------------------------------------------
 
 #define STEPPERS_DISABLE_PORT   GPIOA
 #define STEPPERS_DISABLE_PORT_ID ((hal_gpio_port_t)GPIOA)
@@ -147,7 +120,6 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define STEPPERS_DISABLE_BIT    6
 #define STEPPERS_DISABLE_MASK   (1<<STEPPERS_DISABLE_PIN)
 
-// --------------------------------------------------------------------------
 // LIMIT SWITCH PINS (GPIOB: PB0, PB1, PB10) - all bits 0-7 land in the
 // low byte except Z (bit10); core truncates GPIO_MRD reads to uint8_t
 // (CONTRACTS.md section 1.3) - Z_LIMIT_BIT=10 would be silently invisible
@@ -164,7 +136,6 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 // pattern already proven correct on stm32f103/h523 (BUG#17 was a SAMD21-
 // specific hazard from a *different* physical/logical pin split, not
 // present in this direct-wiring board.md).
-// --------------------------------------------------------------------------
 
 #define LIMIT_PORT          GPIOB
 #define LIMIT_PORT_ID       ((hal_gpio_port_t)GPIOB)
@@ -182,9 +153,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define LIMIT_PCMSK         LIMIT_PORT
 #define LIMIT_INT           0
 
-// --------------------------------------------------------------------------
 // CONTROL PINS (GPIOB: PB3, PB4, PB5, PB6)
-// --------------------------------------------------------------------------
 
 #define CONTROL_PORT              GPIOB
 #define CONTROL_PORT_ID           ((hal_gpio_port_t)GPIOB)
@@ -203,9 +172,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define CONTROL_PCMSK             CONTROL_PORT
 #define CONTROL_INT               0
 
-// --------------------------------------------------------------------------
 // PROBE PIN (GPIOC: PC15)
-// --------------------------------------------------------------------------
 
 #define PROBE_PORT          GPIOC
 #define PROBE_PORT_ID       ((hal_gpio_port_t)GPIOC)
@@ -213,9 +180,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define PROBE_BIT           15
 #define PROBE_MASK          (1<<PROBE_PIN)
 
-// --------------------------------------------------------------------------
 // SPINDLE PINS
-// --------------------------------------------------------------------------
 
 // Spindle PWM (PA8, TIM1_CH1, AF1)
 #define SPINDLE_PWM_PORT        GPIOA
@@ -252,9 +217,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 _Static_assert(SPINDLE_PWM_MAX_VALUE <= 255,
                "SPINDLE_PWM_MAX_VALUE must fit core's uint8_t duty domain (CONTRACTS.md #6.2, duty-cap-twins class)");
 
-// --------------------------------------------------------------------------
 // COOLANT PINS (GPIOC: PC13, PC14)
-// --------------------------------------------------------------------------
 
 #define COOLANT_FLOOD_PORT      GPIOC
 #define COOLANT_FLOOD_PIN       13
@@ -266,9 +229,7 @@ _Static_assert(SPINDLE_PWM_MAX_VALUE <= 255,
   #define COOLANT_MIST_BIT      14
 #endif
 
-// ============================================================================
 // TIMER MAPPING
-// ============================================================================
 
 // Stepper timer: TIM2 (32-bit general purpose timer)
 #define STEPPER_TIMER           TIM2
@@ -282,17 +243,13 @@ _Static_assert(SPINDLE_PWM_MAX_VALUE <= 255,
 
 // Spindle PWM timer: TIM1 (16-bit advanced timer) - already defined above
 
-// ============================================================================
 // SERIAL/UART MAPPING
-// ============================================================================
 
 #define GRBL_USART              USART1
 #define GRBL_USART_IRQn         USART1_IRQn
 #define GRBL_USART_IRQHandler   USART1_IRQHandler
 
-// ============================================================================
 // FLASH EMULATION FOR EEPROM
-// ============================================================================
 
 // F411CE (512KB) sector map: sectors 0-3 = 16KB, sector 4 = 64KB, sectors
 // 5-7 = 128KB each (total 4*16+64+3*128 = 512KB). Sector 7 (last 128KB
@@ -319,9 +276,7 @@ _Static_assert(SPINDLE_PWM_MAX_VALUE <= 255,
 #define HAL_NVMEM_FLASH_SIZE    4096
 #define HAL_NVMEM_FLASH_PAGE_SIZE 4096
 
-// ============================================================================
 // HAL GPIO MACROS
-// ============================================================================
 
 // Basic GPIO operations (optimized for STM32 BSRR register)
 #define HAL_GPIO_SET_BITS(port, mask)           ((port)->BSRR = (mask))
@@ -352,16 +307,12 @@ void hal_gpio_interrupt_disable(GPIO_TypeDef* port, uint32_t mask);
 #define HAL_GPIO_INTERRUPT_ENABLE(port, pcie, mask)   hal_gpio_interrupt_enable((port), (mask))
 #define HAL_GPIO_INTERRUPT_DISABLE(port, pcie, mask)  hal_gpio_interrupt_disable((port), (mask))
 
-// ============================================================================
 // HAL TIMER MACROS
-// ============================================================================
 // Stepper (TIM2), pulse reset (TIM3) and spindle PWM (TIM1) primitives live
 // in timer.h under the contract names STP_TMR_*/STP_PULSE_RESET_*/PWM_*
 // (included above). Vector wrappers with flag-clear-first are in handlers.c.
 
-// ============================================================================
 // HAL SERIAL/UART MACROS
-// ============================================================================
 
 #define HAL_SERIAL_RX_BUFFER_SIZE               128
 #define HAL_SERIAL_TX_BUFFER_SIZE               64
@@ -391,9 +342,7 @@ void hal_serial_init(uint32_t baud_rate);
 // a ready flag. Dead since the macros were written. Reintroduce with a
 // real caller if a future polling-mode serial path ever needs it.
 
-// ============================================================================
 // HAL SYSTEM MACROS
-// ============================================================================
 
 // Interrupt control + critical sections (CONTRACTS.md #8.2/#11) live in
 // common/cortexm/cortexm_critical.h, shared verbatim with stm32f103,
@@ -417,9 +366,7 @@ uint64_t hal_micros(void);
 void hal_watchdog_refresh(void);
 #define HAL_WATCHDOG_REFRESH()                  hal_watchdog_refresh()
 
-// ============================================================================
 // HAL NVMEM MACROS (Flash emulation)
-// ============================================================================
 
 unsigned char hal_nvmem_read_byte(unsigned int addr);
 void hal_nvmem_write_byte(unsigned int addr, unsigned char data);
@@ -428,9 +375,7 @@ void hal_nvmem_write_byte(unsigned int addr, unsigned char data);
 #define eeprom_get_char(addr)                   hal_nvmem_read_byte(addr)
 #define eeprom_put_char(addr, data)              hal_nvmem_write_byte(addr, data)
 
-// ============================================================================
 // PLATFORM-SPECIFIC FUNCTIONS
-// ============================================================================
 
 // BOOT INIT CHAIN (BUG #23). Called from Reset_Handler in startup.c before
 // main() - core grbl/main.c is the golden gate and never calls platform

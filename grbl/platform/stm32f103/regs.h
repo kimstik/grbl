@@ -5,9 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Minimal register definitions for STM32F103C8T6 to avoid CMSIS dependency.
-  Includes only registers needed for GRBL operation.
 */
 
 #ifndef STM32F103_REGS_H
@@ -16,9 +13,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// ============================================================================
 // CORE ARM CORTEX-M3 DEFINITIONS
-// ============================================================================
 
 // CMSIS-compatible intrinsics
 #define __enable_irq()    __asm__ volatile ("cpsie i" : : : "memory")
@@ -27,9 +22,7 @@
 #define __get_PRIMASK()   ({ uint32_t primask; __asm__ volatile ("mrs %0, primask" : "=r" (primask)); primask; })
 #define __set_PRIMASK(x)  __asm__ volatile ("msr primask, %0" : : "r" (x) : "memory")
 
-// ============================================================================
 // GPIO REGISTER STRUCTURES
-// ============================================================================
 
 typedef struct {
   volatile uint32_t CRL;      // Port configuration register low
@@ -46,9 +39,7 @@ typedef struct {
 #define GPIOC  ((GPIO_TypeDef*)0x40011000)
 #define GPIOD  ((GPIO_TypeDef*)0x40011400)
 
-// ============================================================================
 // RCC (Reset and Clock Control) REGISTERS
-// ============================================================================
 
 typedef struct {
   volatile uint32_t CR;       // Clock control register
@@ -94,9 +85,7 @@ typedef struct {
 #define RCC_APB1ENR_TIM3EN   (1 << 1)
 #define RCC_APB1ENR_TIM4EN   (1 << 2)
 
-// ============================================================================
 // TIMER REGISTER STRUCTURES
-// ============================================================================
 
 typedef struct {
   volatile uint32_t CR1;      // Control register 1
@@ -150,9 +139,7 @@ typedef struct {
 // TIM_BDTR bits (TIM1 only)
 #define TIM_BDTR_MOE     (1 << 15)
 
-// ============================================================================
 // USART REGISTER STRUCTURES
-// ============================================================================
 
 typedef struct {
   volatile uint32_t SR;       // Status register
@@ -177,9 +164,7 @@ typedef struct {
 #define USART_CR1_RXNEIE (1 << 5)
 #define USART_CR1_TXEIE  (1 << 7)
 
-// ============================================================================
 // FLASH REGISTER STRUCTURES
-// ============================================================================
 
 typedef struct {
   volatile uint32_t ACR;      // Access control register
@@ -211,9 +196,7 @@ typedef struct {
 #define FLASH_CR_STRT        (1 << 6)
 #define FLASH_CR_LOCK        (1 << 7)
 
-// ============================================================================
 // AFIO (Alternate Function I/O) REGISTERS
-// ============================================================================
 
 typedef struct {
   volatile uint32_t EVCR;     // Event control register
@@ -225,9 +208,7 @@ typedef struct {
 
 #define AFIO  ((AFIO_TypeDef*)0x40010000)
 
-// ============================================================================
 // EXTI (External Interrupt) REGISTERS
-// ============================================================================
 
 typedef struct {
   volatile uint32_t IMR;      // Interrupt mask register
@@ -245,9 +226,7 @@ typedef struct {
 #define EXTI_PR_PR1      (1 << 1)
 #define EXTI_PR_PR10     (1 << 10)
 
-// ============================================================================
 // SYSTICK REGISTER STRUCTURES
-// ============================================================================
 
 typedef struct {
   volatile uint32_t CTRL;     // Control and status register
@@ -266,9 +245,7 @@ typedef struct {
     0; \
   })
 
-// ============================================================================
 // DWT (Data Watchpoint and Trace) FOR CYCLE COUNTING
-// ============================================================================
 
 typedef struct {
   volatile uint32_t CTRL;     // Control register
@@ -285,9 +262,7 @@ typedef struct {
 
 #define DWT_CTRL_CYCCNTENA_Msk  (1 << 0)
 
-// ============================================================================
 // COREDEBUG FOR DWT ENABLE
-// ============================================================================
 
 typedef struct {
   volatile uint32_t DHCSR;    // Debug halting control and status register
@@ -300,9 +275,7 @@ typedef struct {
 
 #define CoreDebug_DEMCR_TRCENA_Msk  (1 << 24)
 
-// ============================================================================
 // SCB (System Control Block) - only the registers startup.c needs
-// ============================================================================
 // VTOR is what makes the vector table a *referenced* object: without a real
 // code reference GCC's LTO deletes vector_table[] before codegen and the
 // linker's KEEP(*(.isr_vector)) then matches nothing (see CONTRACTS.md S18).
@@ -316,9 +289,7 @@ typedef struct {
 #define SCB_BASE  (0xE000ED00UL)
 #define SCB       ((SCB_Type*)SCB_BASE)
 
-// ============================================================================
 // NVIC (Nested Vectored Interrupt Controller)
-// ============================================================================
 
 typedef struct {
   volatile uint32_t ISER[8];  // Interrupt set-enable registers
@@ -370,9 +341,7 @@ static inline void NVIC_SetPriority(IRQn_Type IRQn, uint32_t priority) {
   NVIC->IP[IRQn] = (priority << 4);
 }
 
-// ============================================================================
 // IWDG - Independent Watchdog
-// ============================================================================
 
 typedef struct {
   volatile uint32_t KR;   // Key register

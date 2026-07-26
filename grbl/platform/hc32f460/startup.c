@@ -5,16 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Interrupt vector table and reset handler for HC32F460JETA. ARM Cortex-M
-  hardware-vector-fetch model (PORTING-CHECKLIST.md's non-ARM warning does
-  not apply here - this port is ARM, not RISC-V/dsPIC). The peripheral
-  region of the table is NOT a fixed per-peripheral layout like every
-  STM32/SAMD21 donor in this tree: this chip routes every peripheral
-  interrupt source through the INTC event router (regs.h) onto a pool of
-  32 identically-named "Int000_IRQn..Int031_IRQn" shared vectors - CONFIRMED
-  shape via Klipper3d/klipper's real hc32f460 port (see regs.h file header),
-  UNVERIFIED numeric base addresses for the router itself.
 */
 
 #include <stdint.h>

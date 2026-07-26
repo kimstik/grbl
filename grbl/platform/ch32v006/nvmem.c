@@ -1,39 +1,6 @@
 /*
   nvmem.c - CH32V006 EEPROM emulation in main flash (TU-replacement route)
   Part of Grbl
-
-  PORTING-CHECKLIST Step 5, CONTRACTS.md #10. samd21/nvmem.c is the
-  structural reference; the flash controller here is WCH's fast-page
-  model (RM 18.4, TRM-verified this session):
-
-  - 256-byte pages, program AND erase are whole-page only - there is no
-    F1-style halfword PG mode on V00X main flash.
-  - Two lock layers: LOCK (FLASH_KEYR) gates the FPEC, FLOCK
-    (FLASH_MODEKEYR) gates fast page mode. Keys 0x45670123/0xCDEF89AB.
-  - Program sequence (RM 18.4.5): FTPG -> BUFRST (+BSY wait) -> 64 x
-    { 32-bit store to the page address, BUFLOAD, BSY wait } -> ADDR ->
-    STRT -> BSY wait. Erase (RM 18.4.6): FTER -> ADDR -> STRT -> BSY wait.
-  - Programming addresses are PHYSICAL (0x08xxxxxx); reads below use the
-    same alias for symmetry.
-
-  Region: last 1 KB of the 62 KB flash (pages 244-247, 0x0800F400+),
-  reserved out of script.ld's FLASH region so code can never collide.
-
-  Wear model: writes are page-granular read-modify-write, batched per
-  page by nvmem_write_range() - a bulk settings write touches each
-  affected 256-byte page ONCE (erase+program), not once per byte. This is
-  still a synchronous, blocking path (#10.1: no deferred/background
-  writes - settings_read may follow immediately).
-
-  BUG #13 fence discipline (#10.5 / #12.4): __DSB() (fence rw,rw) between
-  buffer-fill stores and every commit-command MMIO write; BSY polled to
-  completion after every command. RM note: HSI must be running during
-  program/erase - it is never turned off by this port.
-
-  Context contract (#10.1): mainline only, interrupts enabled, blocking
-  allowed. While an erase/program is in progress the flash stalls - ISRs
-  (whose code lives in flash) stall with it; tolerated because settings
-  writes only happen during `$` commands in IDLE/ALARM.
 */
 
 #include <stdint.h>
@@ -44,9 +11,7 @@
 #define NVMEM_BASE        HAL_NVMEM_FLASH_START         // 0x0800F400 (physical)
 #define NVMEM_PAGE_SIZE   HAL_NVMEM_FLASH_PAGE_SIZE     // 256
 
-// ----------------------------------------------------------------------------
 // Flash controller primitives
-// ----------------------------------------------------------------------------
 
 static void flash_wait_busy(void) {
   while (FLASH->STATR & FLASH_STATR_BSY) { /* spin - bounded by hardware op time */ }
@@ -151,9 +116,7 @@ static void nvmem_write_range(unsigned int addr, const uint8_t *src, unsigned in
   }
 }
 
-// ----------------------------------------------------------------------------
 // Four-function NVMEM API (CONTRACTS.md #10)
-// ----------------------------------------------------------------------------
 
 unsigned char eeprom_get_char(unsigned int addr) {
   if (addr >= EEPROM_SIZE) { return 0xFF; }   // erased-flash semantics (#10.6)

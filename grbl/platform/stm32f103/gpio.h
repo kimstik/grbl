@@ -5,15 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Injected by prelude.h BEFORE platform/common/gpio.h: that file only
-  supplies AVR-style defaults for accessors/macros that are not already
-  defined (all of its definitions are #ifndef-guarded), so everything
-  here wins by coming first.
-
-  Composition contract (platform/CONTRACTS.md section 1): core code calls
-  GPIO_*(NAME) macros; NAME##_PORT / NAME##_BIT / NAME##_MASK come from the
-  pin map in platform.h (NAME##_PORT is a GPIO_TypeDef*).
 */
 
 #ifndef STM32F103_GPIO_H
@@ -21,10 +12,8 @@
 
 #include "regs.h"
 
-// ----------------------------------------------------------------------------
 // Register accessors consumed by common/gpio.h compositions
 // (GPIO_MWO/GPIO_MRD/GPIO_BGET/GPIO_BGETOUT/...)
-// ----------------------------------------------------------------------------
 
 #define GPIO_OREG(name)   ((name##_PORT)->ODR)   // output data register
 #define GPIO_IREG(name)   ((name##_PORT)->IDR)   // input data register
@@ -38,18 +27,14 @@ void hal_gpio_set_input(GPIO_TypeDef* port, uint32_t mask);
 void hal_gpio_pullup_enable(GPIO_TypeDef* port, uint32_t mask);
 void hal_gpio_pullup_disable(GPIO_TypeDef* port, uint32_t mask);
 
-// ----------------------------------------------------------------------------
 // Single-bit data writes: BSRR is hardware-atomic set/reset, satisfying the
 // mixed mainline/ISR writer contract (CONTRACTS.md section 1.2) without a
 // read-modify-write critical section.
-// ----------------------------------------------------------------------------
 
 #define GPIO_BSET(name)   ((name##_PORT)->BSRR = (1u << (name##_BIT)))
 #define GPIO_BCLR(name)   ((name##_PORT)->BSRR = ((uint32_t)1u << (name##_BIT)) << 16)
 
-// ----------------------------------------------------------------------------
 // Direction / pull-up configuration (init context only)
-// ----------------------------------------------------------------------------
 
 #define GPIO_DIR_OUT(name)      hal_gpio_set_output(name##_PORT, (1u << (name##_BIT)))
 #define GPIO_DIR_INP(name)      hal_gpio_set_input(name##_PORT, (1u << (name##_BIT)))

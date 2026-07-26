@@ -1,24 +1,6 @@
 /*
   platform.c - _template stateful chip glue (copy-me starting point)
   Part of Grbl
-
-  PORT-TODO: this whole file. Every landed port in this tree (samd21,
-  ch32v006, ch570, hc32f460, dspic33ak128mc102, stm32f103/f411/h523) needed
-  a platform.c to hold the STATEFUL chip glue that platform.h's macros
-  cannot be - things that need a static/local variable, a calibration
-  constant, or a one-time boot-sequence call, as opposed to platform.h's
-  pure inline-asm macros (HAL_CRITICAL_SECTION_*, sei/cli - genuinely
-  stateless PRIMASK sequences, correctly NOT here). This file is that home
-  for this template. Two things intentionally still live elsewhere:
-    - PORT_TODO_SYSTEM_CLOCK_INIT() stays a direct call inside startup.c's
-      SystemInit() (not wrapped here) - it must run before this file's own
-      globals (delay calibration, millisecond counters) are printed or
-      timed, and keeping it in the one file that already owns boot
-      sequencing avoids a false "which file runs first" question.
-    - ISR *vector* dispatch wrappers (stepper_timer_irq_dispatch() etc.)
-      stay in handlers.c, matching every landed port's own file boundary
-      (that file's job is naming/clearing/forwarding to core; this file's
-      job is chip bring-up state).
 */
 
 #warning "PORT-TODO: platform.c"
@@ -26,9 +8,7 @@
 #include <stdint.h>
 #include "platform.h"
 
-// ============================================================================
 // GPIO INTERRUPT CONTROLLER ARM-UP (CONTRACTS.md §2)
-// ============================================================================
 /*
   CONTEXT: init, called once from Reset_Handler (startup.c) before main()/
   sei() - see the call site there. This is DIFFERENT from
@@ -53,9 +33,7 @@ void hal_gpio_interrupt_init(void) {
   PORT_TODO_GPIO_IRQ_GLOBAL_ENABLE();
 }
 
-// ============================================================================
 // DELAY PRIMITIVES (PORTING-CHECKLIST Step 6; CONTRACTS.md §13)
-// ============================================================================
 /*
   Declared by common/dummy/util/delay.h (AVR <util/delay.h> compatibility -
   core calls delay_ms()/delay_us() in nuts_bolts.c, which call these with

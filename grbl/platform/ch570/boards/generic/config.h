@@ -1,56 +1,18 @@
 /*
   config.h - Generic CH570 board configuration
   Part of Grbl
-
-  PLACEHOLDER PIN MAP - PORT-TODO before hardware bring-up, same posture
-  as every other "generic" board in this tree (ch32v006/stm32f103/...):
-  peripheral FUNCTION facts below (PWM1-5 fixed pins, UART default remap,
-  GPIO register shape) are datasheet-confirmed; the choice of which
-  signal gets which pin is a paper exercise.
-
-  REAL PIN BUDGET CAVEAT (this chip specifically, PLAN.md Phase 6 rolling
-  #4 Part B gap-log item): the CH572/CH570 Datasheet V1.1 states plainly
-  "The chip provides a group of GPIO ports PA with 12 general input and
-  output pins" - i.e. ONLY PA0-PA11 physically exist on real silicon. The
-  vendor SDK's own GPIO_Pin_0..GPIO_Pin_23 defines are shared boilerplate
-  across the whole CH5xx family tree (bigger siblings bond out more pins)
-  and do NOT mean this chip has 24 pins. This board's map below
-  deliberately uses PA0-PA21 anyway, for the same reason ch32v006's
-  generic board and dsPIC33AK128MC102's generic board both shipped
-  placeholder maps exceeding a real per-package pin budget: it is a
-  compile/link target, not a hardware-fit claim, and is explicitly NOT
-  marked ready for hardware validation. A real board MUST consolidate
-  signals before bring-up (candidates: share STEPPERS_DISABLE across all
-  axes as already done here rather than per-axis; drop CONTROL_SAFETY_DOOR
-  onto CONTROL_FEED_HOLD as already done here; drop COOLANT_MIST under
-  ENABLE_M7; consider a single shared LIMIT line). Two real, fixed
-  hardware facts ARE respected regardless: PWM1's dedicated pin is PA7 (no
-  remap exists for PWM1-5 on this chip), and UART1's default remap is
-  TX=PA3/RX=PA2 - both used below.
-
-  LOGICAL PORT-IMAGE CONTRACT (BUG #17, CONTRACTS.md #1): X/Y/Z STEP and
-  DIRECTION _BIT values are LOGICAL bits 0,1,2 (core's native uint8_t port
-  image); the real silicon pin lives in *_PIN. Deliberately placed PAST
-  bit 7 (STEP=PA8-10, DIRECTION=PA11-13) per the task brief's explicit
-  request to exercise the L2P/P2L machinery on this port, not just carry
-  it unused - gpio.h's GPIO_MWO/GPIO_MRD/GPIO_MDIR_OUT dispatch through
-  the MASK_PHYS / L2P / P2L definitions below (samd21/ch32v006 pattern).
 */
 
 #ifndef BOARD_GENERIC_CH570_CONFIG_H
 #define BOARD_GENERIC_CH570_CONFIG_H
 
-// ============================================================================
 // BOARD IDENTIFICATION
-// ============================================================================
 
 #define BOARD_NAME "Generic CH570 (PLACEHOLDER pinout, exceeds real 12-pin PA budget - see file header)"
 #define BOARD_MCU  "CH570"
 #define BOARD_URL  ""
 
-// ============================================================================
 // STEP PINS (PA8, PA9, PA10) - logical bits 0,1,2, physical 8,9,10
-// ============================================================================
 
 #define X_STEP_PIN          8
 #define X_STEP_BIT          0   // logical
@@ -64,9 +26,7 @@
 #define STEP_L2P(v)         ((uint32_t)(v) << X_STEP_PIN)   // shift by 8
 #define STEP_P2L(v)         ((uint32_t)(v) >> X_STEP_PIN)
 
-// ============================================================================
 // DIRECTION PINS (PA11, PA12, PA13) - logical bits 0,1,2, physical 11,12,13
-// ============================================================================
 
 #define X_DIRECTION_PIN     11
 #define X_DIRECTION_BIT     0   // logical
@@ -87,18 +47,14 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
                X_DIRECTION_BIT <= 7 && Y_DIRECTION_BIT <= 7 && Z_DIRECTION_BIT <= 7,
                "STEP/DIRECTION logical bits must fit core's uint8_t port image (BUG #17 class, CONTRACTS.md #1)");
 
-// ============================================================================
 // STEPPER ENABLE (PA14) - single shared line (12-pin-budget consolidation
 // already applied, see file header)
-// ============================================================================
 
 #define STEPPERS_DISABLE_PIN    14
 #define STEPPERS_DISABLE_BIT    14
 #define STEPPERS_DISABLE_MASK   (1UL<<STEPPERS_DISABLE_BIT)
 
-// ============================================================================
 // COOLANT (flood PA18; mist PA19 under ENABLE_M7)
-// ============================================================================
 
 #define COOLANT_FLOOD_PIN       18
 #define COOLANT_FLOOD_BIT       18
@@ -108,11 +64,9 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
   #define COOLANT_MIST_BIT      19
 #endif
 
-// ============================================================================
 // LIMIT SWITCHES (PA0, PA1, PA5) - inputs, physical==logical (CONTRACTS.md
 // #1.3), GPIOA interrupt-capable (ch570.h - single-port chip, no EXTI
 // line/port collision class exists here, unlike F1/CH32-style parts).
-// ============================================================================
 
 #define X_LIMIT_PIN         0
 #define X_LIMIT_BIT         0
@@ -131,11 +85,9 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define LIMIT_PCMSK         0
 #define LIMIT_INT           0
 
-// ============================================================================
 // CONTROL PINS (PA15, PA16, PA17) - safety door shares feed-hold (no
 // dedicated input in this pin-starved placeholder - same convention as
 // every other generic board in this tree).
-// ============================================================================
 
 #define CONTROL_RESET_PIN         15
 #define CONTROL_RESET_BIT         15
@@ -152,30 +104,24 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define CONTROL_PCMSK        0
 #define CONTROL_INT          0
 
-// ============================================================================
 // UART1 (PA2=RX, PA3=TX) - REAL hardware fact: this is the chip's DEFAULT
 // pin-alternate remap (remap code 0), not a placeholder choice.
-// ============================================================================
 
 #define SERIAL_TX_PIN       3
 #define SERIAL_RX_PIN       2
 
-// ============================================================================
 // PROBE (PA6) - polled input, no GPIO interrupt use
-// ============================================================================
 
 #define PROBE_PIN            6
 #define PROBE_BIT             6
 #define PROBE_MASK           (1UL<<PROBE_BIT)
 
-// ============================================================================
 // SPINDLE - PWM1 is a FIXED-function pin on this chip: PA7. NOT a
 // placeholder choice (datasheet pin table, ch570.h). Enable/direction are
 // plain GPIO (PA20/PA21, placeholder).
 // SPINDLE_PWM_MAX_VALUE must be <= 255 - core plumbs duty as uint8_t
 // end-to-end (CONTRACTS.md #6.2). This chip's PWM1 IS an 8-bit/256-step
 // counter (ch570.h RB_PWM_CYC_256) - 255 is a perfect, non-rescaled fit.
-// ============================================================================
 
 #define SPINDLE_ENABLE_PIN      20
 #define SPINDLE_ENABLE_BIT      20
@@ -194,9 +140,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 _Static_assert(SPINDLE_PWM_MAX_VALUE <= 255,
                "SPINDLE_PWM_MAX_VALUE must fit core's uint8_t duty domain (CONTRACTS.md #6.2, duty-cap-twins class)");
 
-// ============================================================================
 // PERIPHERAL ASSIGNMENTS
-// ============================================================================
 // Stepper timer: TMR0 (IRQ 24, the ONE FIFO/DMA-capable general timer on
 // this chip). Pulse-reset timer: the QingKe STK ("SysTick", IRQ 12) at
 // HCLK/8 - same role ch32v006 gives it, and for the same reason: no

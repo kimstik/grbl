@@ -1,65 +1,6 @@
 /*
   nvmem.c - dsPIC33AK128MC102 EEPROM emulation in main program flash
   Part of Grbl
-
-  PORTING-CHECKLIST Step 5, CONTRACTS.md #10. TU-replacement route: this
-  file provides the whole four-function NVMEM API; the Makefile excludes
-  core nvmem.c/eeprom.c.
-
-  FLASH CONTROLLER FACTS (dsPIC33AK128MC102.atdf "nvm" module, atdf-verified
-  - NOT RM-only, unlike most of this port's peripheral facts):
-    FLASH_WORD_WRITE_SIZE_IN_INSTRUCTIONS = 4    (word-program op)
-    FLASH_WRITE_ROW_SIZE_IN_INSTRUCTIONS  = 128  (row-program op)
-    FLASH_ERASE_PAGE_SIZE_IN_INSTRUCTIONS = 1024 (page-erase op)
-  On this ISA one "instruction" = 2 bytes of address space (classic
-  dsPIC/PIC24 24-bit-instruction-over-a-16-bit-wide-address convention -
-  cross-checked against the .gld's byte-addressed program region size,
-  0x1FFFC bytes for a 128KB part). So: erase page = 2048 bytes, program
-  row = 256 bytes (8 rows/page). NVMCON.NVMOP values (atdf value-group
-  NVMCON_CON__NVMOP, also atdf-verified, not RM-only): 0x3 = page erase,
-  0x2 = row program (source = NVMSRCADR, a RAM pointer - hardware copies),
-  0x1 = word program (source = NVMDATA0-3 SFRs directly). Row program is
-  used here: it lets an entire modified page be staged in a RAM buffer
-  (this file) and copied into flash 256 bytes at a time by the
-  controller, matching the "page-batched RMW" shape of samd21/stm32_nvmem
-  exactly, just with the controller doing the byte-copy instead of a
-  manual staging-register loop.
-
-  NO NVMKEY / unlock-sequence register exists on this device (grepped the
-  full DFP header and the atdf "nvm" module - confirmed absent, unlike
-  classic PIC24/dsPIC33F/E's 0x55/0xAA NVMKEY dance). WREN
-  ("Enable Flash program/erase operations", atdf-verified) is the gate
-  used here. NVMCON.LOCK's exact write protocol is UNVERIFIED (RM not
-  vendored) and deliberately NOT touched - left at its reset default.
-
-  READS are plain pointer dereferences: this device has no PSVPAG/PSV
-  windowing at all (grepped - the DFP has no PSVPAG anywhere, unlike
-  classic Harvard-with-PSV dsPIC33F/E) - `no_auto_psv` on the ISRs
-  (handlers.c) is a compatibility attribute for a feature this core does
-  not have, confirmed by a real link-tested reservation this session:
-  `__attribute__((address(HAL_NVMEM_FLASH_START)))` places a static
-  object at a fixed flash address and links CLEAN against the unmodified
-  vendor .gld (verified: object placed exactly at the requested address,
-  zero link errors/overlaps) - no port-authored linker script needed, and
-  any FUTURE code-size growth that collides with this window fails the
-  link LOUDLY (ld error), never silently corrupts, which is exactly the
-  contract's preferred failure mode.
-
-  Page-batched RMW (this file's nvmem_write_range()) reproduces the
-  samd21/stm32_nvmem.c shape: each affected 2048-byte erase page is
-  erased+reprogrammed AT MOST ONCE per settings write, using a wear guard
-  (#10.3) so an unchanged page is never touched at all.
-
-  BUG #13 fence discipline (#10.5/#12.4): __DSB() (a compiler barrier on
-  this barrier-free ISA, platform.h) between staging NVMADR/NVMSRCADR and
-  issuing WR=1; WR is polled to completion (bounded, hardware-timed) after
-  every erase/row-program command; WRERR checked after (best-effort - no
-  RM-specified recovery action exists to take beyond what the wear guard
-  already prevents).
-
-  Context contract (#10.1): mainline only, interrupts enabled, blocking
-  allowed - writes happen during `$` commands (IDLE/ALARM); no deferred/
-  background writes.
 */
 
 #include <stdint.h>
@@ -89,9 +30,7 @@ static volatile const uint8_t * const nvmem_flash = (volatile const uint8_t *)NV
 // infrequent operation).
 static uint8_t page_buffer[NVMEM_PAGE_SIZE];
 
-// ----------------------------------------------------------------------------
 // Flash controller primitives
-// ----------------------------------------------------------------------------
 
 static void flash_wait_wr(void) {
   while (NVMCONbits.WR) { /* bounded - hardware-timed erase/program op */ }
@@ -153,9 +92,7 @@ static void nvmem_write_range(unsigned int addr, const uint8_t *src, unsigned in
   }
 }
 
-// ----------------------------------------------------------------------------
 // Four-function NVMEM API (CONTRACTS.md #10)
-// ----------------------------------------------------------------------------
 
 unsigned char eeprom_get_char(unsigned int addr) {
   if (addr >= EEPROM_SIZE) { return 0xFF; }   // erased-flash semantics (#10.6)

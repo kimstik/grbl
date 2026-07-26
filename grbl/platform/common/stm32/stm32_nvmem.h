@@ -5,8 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Platform-independent flash emulation using configuration from stm32_platform.h
 */
 
 #ifndef STM32_NVMEM_H
@@ -14,9 +12,7 @@
 
 #include "stm32_platform.h"
 
-// ============================================================================
 // NVMEM CACHE WINDOW SIZE
-// ============================================================================
 //
 // BUG #20: this used to be a hardcoded 4096-byte buffer inside stm32_nvmem.c
 // ("Max 4KB for now (covers F103, H523)" - wrong: H523's window is 8KB).
@@ -36,9 +32,7 @@
 #define NVMEM_WINDOW_SIZE 4096
 #endif
 
-// ============================================================================
 // NVMEM PUBLIC API
-// ============================================================================
 
 /**
  * Initialize NVMEM system - loads flash into cache

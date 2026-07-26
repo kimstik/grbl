@@ -5,8 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Interrupt vector table and reset handler for STM32F103C8T6.
 */
 
 #include <stdint.h>

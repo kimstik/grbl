@@ -5,9 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  STM32F103 (Blue Pill) implementation of HAL functions.
-  ARM Cortex-M3, 72 MHz, 20KB RAM, 64-128KB Flash
 */
 
 #include "../hal.h"
@@ -17,12 +14,10 @@
 #include "../common/stm32/stm32_nvmem.h"
 #include "../common/stm32/stm32_watchdog.h"
 
-// ============================================================================
 // SYSTEM TIMING (thin wrappers over common/stm32/stm32_timing.c - same
 // pattern as stm32f411/stm32h523 platform.c. Previously hand-rolled here
 // with literal 71999/72 constants derived from 72MHz; now derived from
 // stm32_config.cpu_freq like every other STM32 sibling.)
-// ============================================================================
 
 void SysTick_Handler(void) {
   stm32_systick_handler();
@@ -36,9 +31,7 @@ uint64_t hal_micros(void) {
   return stm32_micros();
 }
 
-// ============================================================================
 // CLOCK CONFIGURATION
-// ============================================================================
 
 GRBL_BOOT_INIT void hal_clock_config(void) {
   // Enable HSE (8 MHz external crystal on Blue Pill)
@@ -65,9 +58,7 @@ GRBL_BOOT_INIT void hal_clock_config(void) {
   // hal_system_init() after hal_clock_config() - same order as f411/h523.
 }
 
-// ============================================================================
 // GPIO FUNCTIONS
-// ============================================================================
 
 // Helper: Get pin position in CRL/CRH register (0-7 for CRL, 8-15 for CRH)
 static inline uint32_t get_pin_config_shift(uint8_t pin) {
@@ -204,9 +195,7 @@ GRBL_BOOT_INIT void hal_gpio_init(void) {
   gpio_config_pin(GPIOA, 8, 0xB);  // 50MHz alternate function push-pull
 }
 
-// ============================================================================
 // TIMER FUNCTIONS
-// ============================================================================
 
 void hal_timer_stepper_init(void) {
   // Enable TIM2 clock
@@ -263,9 +252,7 @@ void hal_timer_spindle_pwm_init(void) {
   TIM1->CR1 = TIM_CR1_CEN;          // Enable counter
 }
 
-// ============================================================================
 // SERIAL/UART FUNCTIONS
-// ============================================================================
 
 void hal_serial_init(uint32_t baud_rate) {
   // Enable USART1 clock
@@ -309,9 +296,7 @@ void USART1_IRQHandler(void) {
   }
 }
 
-// ============================================================================
 // INTERRUPT CONTROL
-// ============================================================================
 
 void hal_interrupts_enable(void) {
   __enable_irq();
@@ -334,9 +319,7 @@ void hal_critical_exit(uint32_t state) {
   __set_PRIMASK(state);
 }
 
-// ============================================================================
 // DELAY FUNCTIONS (thin wrappers over common/stm32/stm32_timing.c)
-// ============================================================================
 
 void hal_delay_ms(uint32_t ms) {
   stm32_delay_ms(ms);
@@ -351,9 +334,7 @@ void _delay_ms(double ms) {
   hal_delay_ms((uint32_t)ms);
 }
 
-// ============================================================================
 // NVMEM (Flash Emulation) FUNCTIONS
-// ============================================================================
 
 // REVIEW: HIGH #4 - Implemented proper flash write with persistence
 // Flash emulation using last 2KB of flash (pages at 0x0800F800-0x0800FFFF)
@@ -464,10 +445,8 @@ void hal_nvmem_flush(void) {
   nvmem_dirty = false;
 }
 
-// ============================================================================
 // WATCHDOG (thin wrapper - stm32_watchdog.c is 100% shared across F1/F4/H5,
 // CONTRACTS.md; opt-in via -DENABLE_WATCHDOG, same as f411/h523)
-// ============================================================================
 // NOTE: Watchdog is DISABLED by default for debugging convenience.
 // To enable in production: add -DENABLE_WATCHDOG to CFLAGS in Makefile.
 
@@ -475,9 +454,7 @@ void hal_watchdog_refresh(void) {
   stm32_watchdog_refresh();
 }
 
-// ============================================================================
 // SYSTEM INITIALIZATION
-// ============================================================================
 
 GRBL_BOOT_INIT void hal_system_init(void) {
   // Configure system clock
@@ -500,9 +477,7 @@ GRBL_BOOT_INIT void hal_system_init(void) {
   // Timers and UART are initialized when needed
 }
 
-// ============================================================================
 // PLATFORM CONFIGURATION INSTANCE
-// ============================================================================
 
 const stm32_platform_config_t stm32_config = {
   // Clock configuration

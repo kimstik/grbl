@@ -5,9 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Platform-independent configuration interface for STM32 MCUs.
-  Each platform (F103/F411/H5) provides its own configuration.
 */
 
 #ifndef STM32_PLATFORM_H
@@ -16,9 +13,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// ============================================================================
 // PLATFORM CONFIGURATION STRUCTURE
-// ============================================================================
 //
 // Each platform must define a `stm32_platform_config` struct with these fields.
 // This allows common code to work with any STM32 variant.
@@ -51,9 +46,7 @@ typedef struct {
 // External reference - defined by each platform (stm32f103/platform.c, etc)
 extern const stm32_platform_config_t stm32_config;
 
-// ============================================================================
 // COMMON REGISTER ACCESS MACROS
-// ============================================================================
 
 // These work across all STM32 families (defined in CMSIS)
 #ifndef __IO
@@ -68,9 +61,7 @@ extern const stm32_platform_config_t stm32_config;
 #define __O volatile
 #endif
 
-// ============================================================================
 // COMMON ERROR CODES
-// ============================================================================
 
 typedef enum {
   STM32_OK = 0,
@@ -83,9 +74,7 @@ typedef enum {
   STM32_ERROR_OUT_OF_RANGE
 } stm32_status_t;
 
-// ============================================================================
 // COMMON INLINE UTILITIES
-// ============================================================================
 
 // Compiler barriers and intrinsics (work on all ARM)
 #define __DSB()  __asm__ volatile ("dsb" ::: "memory")
@@ -106,9 +95,7 @@ static inline void __enable_irq(void) {
 }
 #endif
 
-// ============================================================================
 // VALIDATION HELPERS (for 98% reliability)
-// ============================================================================
 
 #define STM32_VALIDATE_PARAM(cond, ret) \
   do { if (!(cond)) return (ret); } while(0)

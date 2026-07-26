@@ -5,9 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Minimal stub header for SAMD21G18A
-  TODO: Replace with official CMSIS headers from Microchip/Atmel
 */
 
 #ifndef SAMD21_H
@@ -15,9 +12,7 @@
 
 #include <stdint.h>
 
-// ============================================================================
 // PERIPHERAL BASE ADDRESSES
-// ============================================================================
 
 #define PERIPH_BASE           0x40000000UL
 
@@ -66,9 +61,7 @@
 #define PORT_GROUPA           0
 #define PORT_GROUPB           1
 
-// ============================================================================
 // INTERRUPT NUMBERS
-// ============================================================================
 
 typedef enum {
   Reset_IRQn              = -15,
@@ -109,9 +102,7 @@ typedef enum {
   I2S_IRQn                = 27
 } IRQn_Type;
 
-// ============================================================================
 // PERIPHERAL REGISTER STRUCTURES
-// ============================================================================
 
 // PORT - I/O Pin Controller
 typedef struct {

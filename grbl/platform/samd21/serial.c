@@ -4,9 +4,6 @@
 
   Copyright (c) 2025 kimstik
   Intelligence assisted
-
-  SERCOM3 UART at 115200 baud (PA23=RX/PAD1, PA24=TX/PAD2)
-  Interrupt-driven RX/TX with ring buffers
 */
 
 #include <stdint.h>

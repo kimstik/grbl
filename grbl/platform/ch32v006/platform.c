@@ -1,21 +1,13 @@
 /*
   platform.c - CH32V006 chip bring-up + peripheral init functions
   Part of Grbl
-
-  Steps 1-2 (clock, GPIO config) plus the Step 3/6 function-shaped
-  primitives (timer inits, EXTI arm/disarm, delays). Chip facts verified
-  against CH32V00X RM V1.5 (see ch32v006.h header). stm32f103/platform.c
-  is the structural precedent for the CRL/CRH-shaped (here: CFGLR)
-  function-call GPIO config.
 */
 
 #include <stdint.h>
 #include "ch32v006.h"
 #include "platform.h"
 
-// ============================================================================
 // GPIO PIN CONFIG (Step 2)
-// ============================================================================
 /*
   CFGLR only - V00X ports are 8 pins wide, there is no CFGHR (RM 7.3.1).
   Per-pin nibble: CNF[3:2] | reserved[1] | MODE[0]; MODE is a SINGLE bit
@@ -62,9 +54,7 @@ void hal_gpio_pullup_disable(GPIO_TypeDef* port, uint32_t mask) {
   }
 }
 
-// ============================================================================
 // GPIO EXTERNAL INTERRUPTS (Step 6, CONTRACTS.md #2)
-// ============================================================================
 /*
   EXTI line N serves pin N of ONE port, selected by AFIO_EXTICR's 2-bit
   field per line (RM 7.3.2.1: 00=PA 01=PB 10=PC 11=PD). Both edges armed -
@@ -108,9 +98,7 @@ void hal_gpio_interrupt_disable(GPIO_TypeDef* port, uint32_t mask) {
   EXTI->INTENR &= ~(mask & 0xFFu);
 }
 
-// ============================================================================
 // SYSTEM CLOCK BRING-UP (Step 1) - HSI 24 MHz -> PLL x2 -> 48 MHz
-// ============================================================================
 /*
   All register facts TRM-verified this session (RM 3.3/3.4):
   - HSI = 24 MHz internal RC, on and selected at reset.
@@ -143,9 +131,7 @@ GRBL_BOOT_INIT void SystemClock_Config(void) {
   while ((RCC->CFGR0 & RCC_CFGR0_SWS_Msk) != RCC_CFGR0_SWS_PLL) { /* spin */ }
 }
 
-// ============================================================================
 // STEPPER TIMER INIT (Step 3, CONTRACTS.md #3) - TIM2
-// ============================================================================
 /*
   Post-INIT state contract: running, /1, compare interrupt masked (AVR
   Timer1 CTC semantics; INIT+STP_TMR_PRESCALER_RESET together). UIE stays
@@ -167,9 +153,7 @@ void hal_timer_stepper_init(void) {
   PFIC_EnableIRQ(TIM2_IRQn);
 }
 
-// ============================================================================
 // PULSE-RESET TIMER INIT (Step 4 of the timer trio, CONTRACTS.md #4) - STK
-// ============================================================================
 /*
   AVR Timer0 semantics: interrupt source enabled, timer STOPPED. STK
   configured for HCLK/8 (STCLK=0) = the AVR F_CPU/8 tick exactly; STRE=0
@@ -186,9 +170,7 @@ void hal_timer_pulse_reset_init(void) {
   PFIC_EnableIRQ(SysTick_IRQn);
 }
 
-// ============================================================================
 // SPINDLE PWM INIT (CONTRACTS.md #6) - TIM1 CH1 on PA3 (TIM1_RM=0100)
-// ============================================================================
 /*
   ATRLR = SPINDLE_PWM_MAX_VALUE (255, fits core's uint8_t duty domain,
   #6.2); PSC = 191 -> 48MHz/192/256 = 976.6 Hz PWM - the AVR Timer2
@@ -218,10 +200,8 @@ void hal_timer_spindle_pwm_init(void) {
   TIM1->CTLR1 = TIM_CTLR1_CEN;
 }
 
-// ============================================================================
 // DELAYS (Step 6; CONTRACTS.md #13 "closed" note - empty stubs are the
 // canonical silent killer of homing debounce / spindle ramp)
-// ============================================================================
 /*
   Calibrated busy-wait, samd21/platform.c pattern (counted inline-asm
   loop: correct from reset onward, no peripheral state, times identically

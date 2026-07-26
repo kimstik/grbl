@@ -1,19 +1,6 @@
 /*
   timer.h - _template stepper/pulse/PWM timer primitives (copy-me starting point)
   Part of Grbl
-
-  Every macro below is either (a) a pure naming convention with no chip
-  content (ISR_STEP/ISR_STEP_RESET/ISR_STEP_DELAY - just tell the core what
-  to call the ISR body function) or (b) a call to an undeclared
-  PORT_TODO_<name>() function. (b) compiles today (implicit-declaration
-  warning) and only fails at LINK time, once and only for the macros this
-  build path actually reaches - CONTRACTS.md's linker-as-checklist.
-
-  Do NOT "temporarily" make any of (b) an empty statement to get further.
-  That is exactly the STP_TMR_PRESCALER_SET trap CONTRACTS.md opens with:
-  SAMD21's empty prescaler macro compiles, links, and silently runs slow
-  segments 8-64x too fast. An undefined symbol is loud; an empty macro is
-  not - that is the entire point of this design.
 */
 
 #ifndef TIMER_TEMPLATE_H
@@ -21,9 +8,7 @@
 
 #warning "PORT-TODO: timer.h"
 
-// ============================================================================
 // ISR DEFINITION MACROS (CONTRACTS.md §5) - naming only, no chip content.
-// ============================================================================
 // Core supplies the ISR bodies (stepper.c:326,496,511) as plain named
 // functions; handlers.c declares them `extern` and calls them from vector
 // wrappers that clear the peripheral INTFLAG FIRST, then call the body
@@ -32,9 +17,7 @@
 #define ISR_STEP_RESET()    void __isr_step_reset_impl(void)
 #define ISR_STEP_DELAY()    void __isr_step_delay_impl(void)
 
-// ============================================================================
 // STEPPER TIMER (CONTRACTS.md §3) - semantic origin: AVR Timer1 CTC.
-// ============================================================================
 /*
   STP_TMR_INIT()          periodic compare timer, CTC-class mode, compare
                           interrupt masked, no PWM output routing. Context: init.
@@ -59,9 +42,7 @@
 #define STP_TMR_PRESCALER_SET(prescaler)  PORT_TODO_STP_TMR_PRESCALER_SET(prescaler)
 #define STP_TMR_PRESCALER_RESET()         PORT_TODO_STP_TMR_PRESCALER_RESET()
 
-// ============================================================================
 // PULSE-RESET TIMER (CONTRACTS.md §4) - semantic origin: AVR Timer0, 8-bit.
-// ============================================================================
 /*
   The 8-bit horizon contract: core computes step_pulse_time into a uint8_t
   (stepper.c:245) and expects the pulse width to equal
@@ -84,9 +65,7 @@
   #define STP_PULSE_DELAY_INIT()           PORT_TODO_STP_PULSE_DELAY_INIT()
 #endif
 
-// ============================================================================
 // SPINDLE PWM (CONTRACTS.md §6) - only compiled under VARIABLE_SPINDLE.
-// ============================================================================
 /*
   ISR-hot is not optional: spindle_set_speed() runs from ISR_STEP
   (stepper.c:396,404) - SET/ENABLE/DISABLE must be bounded-time.

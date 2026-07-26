@@ -78,7 +78,6 @@
  #define GPIO_MRD(name, reg     )		( GPIO_##reg(name) & name##_MASK )				//	read by mask
 #endif
 
-//---------------------------------------------------------------------
 //-- finally usefull part - have to be used in GRBL base core mostly --
 // platforms may redefine them also in very flexible way by cherry-picking
 
