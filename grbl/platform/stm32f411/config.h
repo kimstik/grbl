@@ -46,63 +46,43 @@
 #define STM32F411_GPIO_MODEL        2       // F4 uses MODER/OTYPER (like H5)
 
 // ============================================================================
-// PIN MAPPING (mirrors platform.h - see that file's dual-canon note; do NOT
-// redefine SPINDLE_PWM_MAX_VALUE here, it is canonical in platform.h only)
+// PIN MAPPING
 // ============================================================================
+//
+// BUG #25 (CONTRACTS.md #gpio-pin-map-single-owner): this file used to carry
+// a second copy of every GPIO pin number (X_STEP_PIN, SPINDLE_ENABLE_PIN,
+// ...) alongside platform.h's copy of the same names. Unlike stm32f103/h523,
+// every value here happened to numerically match platform.h's (this file's
+// own previous header comment called it out: "mirrors platform.h"), so this
+// port never shipped the live split-pin defect - but the duplication itself
+// was the hazard: a hand-mirrored copy is exactly one unreviewed edit away
+// from drifting out of sync the way f103/h523 already did, and the compiler
+// silently accepts a redefinition whose value matches (no warning), so nothing
+// would have caught it splitting again either. platform.h is now the SOLE
+// owner of every GPIO pin/port/bit/mask this single-board port has - do not
+// add a pin-number define here. If this board ever needs a user-selectable
+// pin map, that is a per-board config.h under boards/<name>/ selected via its
+// own prelude.h (the samd21/ch32v006 pattern, CONTRACTS.md
+// #boundary-wiring), not a second copy living beside platform.h's.
 
-#define X_STEP_PIN          0   // PA0
-#define Y_STEP_PIN          1   // PA1
-#define Z_STEP_PIN          2   // PA2
-#define X_DIRECTION_PIN     3   // PA3
-#define Y_DIRECTION_PIN     4   // PA4
-#define Z_DIRECTION_PIN     5   // PA5
-#define STEPPERS_DISABLE_PIN 6  // PA6 (active LOW)
-
-#define X_LIMIT_PIN         0   // PB0
-#define Y_LIMIT_PIN         1   // PB1
-#define Z_LIMIT_PIN         10  // PB10
-
-#define RESET_PIN           3   // PB3
-#define FEED_HOLD_PIN       4   // PB4
-#define CYCLE_START_PIN     5   // PB5
-#define SAFETY_DOOR_PIN     6   // PB6
-
-#define SPINDLE_ENABLE_PIN      12  // PB12
-#define SPINDLE_PWM_PIN         8   // PA8 (TIM1 CH1)
-#define SPINDLE_DIRECTION_PIN   13  // PB13
-
-#define COOLANT_FLOOD_PIN   13  // PC13
-#define COOLANT_MIST_PIN    14  // PC14 (optional, ENABLE_M7)
-
+// Serial pins are documentation only here (the USART1 pin assignment is
+// fixed by platform.h's HAL_SERIAL_* wiring, not read back from these
+// macros) - no .c file in this port references either.
 #define SERIAL_TX_PIN       9   // PA9
 #define SERIAL_RX_PIN       10  // PA10
-
-#define PROBE_PIN           15  // PC15
-
-// ============================================================================
-// BITMASKS FOR GPIO OPERATIONS
-// ============================================================================
-
-#define STEP_MASK           ((1 << X_STEP_PIN) | (1 << Y_STEP_PIN) | (1 << Z_STEP_PIN))
-#define DIRECTION_MASK      ((1 << X_DIRECTION_PIN) | (1 << Y_DIRECTION_PIN) | (1 << Z_DIRECTION_PIN))
-#define STEPPERS_DISABLE_MASK (1 << STEPPERS_DISABLE_PIN)
-#define LIMIT_MASK          ((1 << X_LIMIT_PIN) | (1 << Y_LIMIT_PIN) | (1 << Z_LIMIT_PIN))
-#define CONTROL_MASK        ((1 << RESET_PIN) | (1 << FEED_HOLD_PIN) | (1 << CYCLE_START_PIN) | (1 << SAFETY_DOOR_PIN))
-#define PROBE_MASK          (1 << PROBE_PIN)
 
 // ============================================================================
 // TIMER CONFIGURATION
 // ============================================================================
-
-#define STEPPER_TIMER_IRQn  TIM2_IRQn
-#define PULSE_TIMER_IRQn    TIM3_IRQn
-
-// Spindle PWM: TIM1 CH1. SPINDLE_PWM_MAX_VALUE is NOT redefined here - it is
-// canonically defined in platform.h (255, CONTRACTS.md section 6.2: core
+//
+// STEPPER_TIMER_IRQn / PULSE_TIMER_IRQn / SPINDLE_PWM_MAX_VALUE are NOT
+// redefined here - they are canonically defined in platform.h (BUG #25;
+// SPINDLE_PWM_MAX_VALUE specifically per CONTRACTS.md section 6.2: core
 // plumbs duty as uint8_t end-to-end). A value here would shadow platform.h's
-// 255 (config.h is included after platform.h in platform.c) exactly the way
-// the stm32f103/stm32h523 "duty-cap twins" bug happened (PLAN.md commits
-// 6e75218/5a56a5a) - do not reintroduce this definition here.
+// inside platform.c ONLY (config.h is included after platform.h there)
+// without touching any core .c file - exactly the stm32f103/stm32h523
+// "duty-cap twins" mechanism (PLAN.md commits 6e75218/5a56a5a) and BUG #25's
+// pin-map mechanism. Do not reintroduce any of these definitions here.
 
 // ============================================================================
 // SERIAL CONFIGURATION

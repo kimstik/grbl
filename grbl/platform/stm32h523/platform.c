@@ -304,6 +304,17 @@ void hal_gpio_interrupt_disable(GPIO_TypeDef* port, uint32_t mask) {
   }
 }
 
+// BUG #25 (CONTRACTS.md #gpio-pin-map-single-owner): this function used to
+// hardcode every pin as a raw literal ("(1 << 7)  // PB7: Spindle enable")
+// instead of consuming platform.h's *_PIN/*_MASK macros at all - so its pin
+// map was decorative: it happened to numerically agree with config.h's
+// (now-deleted) SPINDLE_ENABLE_PIN=7/SPINDLE_DIRECTION_PIN=9 rather than
+// with platform.h's SPINDLE_ENABLE_PIN=12/SPINDLE_DIRECTION_PIN=13 (the
+// values GPIO_BSET/GPIO_BCLR actually drive, via the *_BIT macros, which
+// were never split). The direction pin was hardcoded onto GPIOA too, while
+// platform.h's SPINDLE_DIRECTION_PORT is GPIOB - a port mismatch, not just a
+// bit mismatch. Every mask below is now derived from platform.h's macros so
+// there is exactly one place left to update this port's pin map.
 GRBL_BOOT_INIT void hal_gpio_init(void) {
   // Enable GPIO clocks for ports A, B, C
   RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN | RCC_AHB2ENR_GPIOBEN | RCC_AHB2ENR_GPIOCEN;
@@ -311,41 +322,42 @@ GRBL_BOOT_INIT void hal_gpio_init(void) {
   // Small delay after clock enable
   __NOP(); __NOP(); __NOP();
 
-  // Configure stepper pins (PA0-6) as outputs
-  // PA0-2: Step pins (X, Y, Z)
-  // PA3-5: Direction pins (X, Y, Z)
-  // PA6: Steppers disable pin
-  hal_gpio_set_output(GPIOA, (1 << 0) | (1 << 1) | (1 << 2) |  // Step pins
-                              (1 << 3) | (1 << 4) | (1 << 5) |  // Direction pins
-                              (1 << 6));                         // Disable pin
+  // Configure stepper pins (PA0-6) as outputs: step/direction/disable
+  hal_gpio_set_output(GPIOA, STEP_MASK | DIRECTION_MASK | STEPPERS_DISABLE_MASK);
 
   // Configure limit switches (PB0, PB1, PB10) as inputs with pull-up
-  hal_gpio_pullup_enable(GPIOB, (1 << 0) | (1 << 1) | (1 << 10));
+  hal_gpio_pullup_enable(GPIOB, LIMIT_MASK);
 
   // Configure control pins (PB3-6) as inputs with pull-up
-  // PB3: Reset, PB4: Feed hold, PB5: Cycle start, PB6: Safety door
-  hal_gpio_pullup_enable(GPIOB, (1 << 3) | (1 << 4) | (1 << 5) | (1 << 6));
+  hal_gpio_pullup_enable(GPIOB, CONTROL_MASK);
 
-  // Configure spindle pins
-  hal_gpio_set_output(GPIOB, (1 << 7));  // PB7: Spindle enable
-  hal_gpio_set_output(GPIOA, (1 << 9));  // PA9: Spindle direction
+  // Configure spindle enable/direction pins as outputs (both on GPIOB per
+  // platform.h's SPINDLE_ENABLE_PORT/SPINDLE_DIRECTION_PORT)
+  hal_gpio_set_output(SPINDLE_ENABLE_PORT,
+                       (1u << SPINDLE_ENABLE_BIT) | (1u << SPINDLE_DIRECTION_BIT));
 
   // PA8 (spindle PWM, TIM1_CH1): route to TIM1 alternate function AF1
   // (RM0481 GPIO AF table - AF1 is TIM1 on every general-purpose/advanced
   // timer STM32 family, F1 through H5). hal_timer_spindle_pwm_init() does
   // not touch GPIO mode - see timer.h note.
-  hal_gpio_set_af(GPIOA, 8, 1);
+  hal_gpio_set_af(SPINDLE_PWM_PORT, SPINDLE_PWM_PIN, 1);
 
-  // Configure coolant pins (PC0, PC1) as outputs
-  hal_gpio_set_output(GPIOC, (1 << 0) | (1 << 1));
+  // Configure coolant pins as outputs
+  hal_gpio_set_output(COOLANT_FLOOD_PORT, (1u << COOLANT_FLOOD_BIT));
+#ifdef ENABLE_M7
+  hal_gpio_set_output(COOLANT_MIST_PORT, (1u << COOLANT_MIST_BIT));
+#endif
 
   // Configure probe pin (PC15) as input with pull-up
-  hal_gpio_pullup_enable(GPIOC, (1 << 15));
+  hal_gpio_pullup_enable(PROBE_PORT, PROBE_MASK);
 
   // Initialize outputs to safe state
-  GPIOA->BSRR = (1 << 6);        // Disable steppers (active LOW, so set HIGH)
-  GPIOB->BSRR = (1 << (7 + 16)); // Spindle off (active HIGH, so set LOW)
-  GPIOC->BSRR = (1 << (0 + 16)) | (1 << (1 + 16)); // Coolant off
+  GPIOA->BSRR = STEPPERS_DISABLE_MASK;  // Disable steppers (active LOW, so set HIGH)
+  SPINDLE_ENABLE_PORT->BSRR = (1u << (SPINDLE_ENABLE_BIT + 16)); // Spindle off (active HIGH, so set LOW)
+  COOLANT_FLOOD_PORT->BSRR = (1u << (COOLANT_FLOOD_BIT + 16));   // Coolant off
+#ifdef ENABLE_M7
+  COOLANT_FLOOD_PORT->BSRR |= (1u << (COOLANT_MIST_BIT + 16));
+#endif
 }
 
 // ============================================================================

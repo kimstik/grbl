@@ -9,16 +9,22 @@
 #   make -C grbl/platform/stm32f411 BUILD=<DEBUG|RELEASE> > build.log 2>&1
 #   python3 ci/warn_ratchet.py --log build.log --emit
 #
-# Known debt (config.h vs platform.h dual pin-map canon, PLAN.md Phase 1/2 -
-# same accepted pattern already carried by stm32f103/stm32h523; the
-# SPINDLE_PWM_MAX_VALUE duty-cap twin is NOT among these because config.h
-# deliberately does not redefine it here - see config.h comment):
-config.h: warning: "CONTROL_MASK" redefined
-config.h: warning: "DIRECTION_MASK" redefined
-config.h: warning: "LIMIT_MASK" redefined
-config.h: warning: "PROBE_MASK" redefined
-config.h: warning: "STEPPERS_DISABLE_MASK" redefined
-config.h: warning: "STEP_MASK" redefined
+# The "config.h vs platform.h dual pin-map canon" entries that used to sit
+# here (CONTROL_MASK/DIRECTION_MASK/LIMIT_MASK/PROBE_MASK/
+# STEPPERS_DISABLE_MASK/STEP_MASK, all "redefined") were the numerically-
+# benign half of BUG #25: every value here happened to match platform.h's
+# (this port's config.h was hand-mirrored to platform.h, unlike f103/h523
+# where SPINDLE_ENABLE_PIN/SPINDLE_DIRECTION_PIN/COOLANT_FLOOD_PIN actually
+# disagreed and drove a real wiring defect). "Numerically benign today"
+# is not "safe to baseline forever": a hand-mirrored duplicate is one
+# unreviewed edit away from splitting exactly like its siblings did, and
+# the compiler would not have warned about a *matching* redefinition drifting
+# apart in a future edit that touched only one file's copy - the warning
+# above only ever caught the fact of duplication, not a future divergence.
+# Fixed by making platform.h the sole owner of every pin/port/bit/mask (see
+# CONTRACTS.md #gpio-pin-map-single-owner) instead of relying on two files
+# being kept in sync by hand. Do NOT re-add any of these lines - if this
+# class of warning reappears, a duplicate pin-map definition has come back.
 #
 # common/stm32 shared code (regs.h vs CMSIS-style headers, all stm32 ports):
 stm32_platform.h: warning: comparison of unsigned expression in '< 0' is always false [-Wtype-limits]
