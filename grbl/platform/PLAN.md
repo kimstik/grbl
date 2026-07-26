@@ -1165,6 +1165,158 @@ identity to integration time.
 
 ## Current State (update each session)
 
+- **[x] BUG #18 CLASS CLOSED FOR REAL: F_CPU needs ULL, not UL (2026-07-26,
+  toolchain-probe follow-up).** The probe that opened this batch reported
+  "pre-existing, already-baselined -Woverflow in stepper.c:1015 (missing UL
+  on common/stm32/common.mk's F_CPU)" for f103/f411/h523/hc32f460/sg2002/
+  `_template`. Narrower than reality in one direction, and the "just add UL"
+  fix already applied elsewhere was wrong in another: full contract now at
+  CONTRACTS.md [§clock-constant-width](CONTRACTS.md#clock-constant-width).
+  - **Ground truth, verified per unit** (arm-none-eabi-gcc 13.2.1,
+    xc-dsc-gcc 8.3.1, riscv64-unknown-elf-gcc 13.2.0 - real `-S`/`-c`
+    codegen, not `-fsyntax-only`): `TICKS_PER_MICROSECOND*1000000*60`
+    (stepper.c:1015, a compile-time constant since every operand is a
+    macro literal) needs `TICKS_PER_MICROSECOND*60,000,000 <=
+    UINT32_MAX` to survive 32-bit `unsigned long` - i.e. clock <= ~71 MHz.
+    atmega328p 16 MHz / samd21+ch32v006 48 MHz / ch570 60 MHz: safe, `UL`
+    (where present) is genuinely correct, untouched. stm32f103 72 MHz,
+    stm32f411 96 MHz, stm32h523 250 MHz, hc32f460 200 MHz, sg2002 700 MHz:
+    all exceed it. **dspic33ak128mc102 (200 MHz) is the finding the probe
+    missed**: it already carries `UL` under a "BUG #18 FIXED" banner and
+    is NOT fixed - xc-dsc-gcc confirmed (`-S`, real object) it bakes in a
+    silent 4-byte (32-bit) wrapped constant, `3410065408` where the true
+    value is `12000000000`, with ZERO warning, because unsigned wraparound
+    isn't diagnosed the way signed overflow is. Machine consequence table
+    (wrapped-vs-true ratio = how much faster than commanded the stepper
+    timer would run): f103 **172.6x** (25032704 vs 4320000000 - the
+    wrapped remainder happens to fall under 2^31, so even the "signed"
+    build shows this exact small number, not a negative one), f411 3.93x
+    (1465032704 vs 5760000000, the number the probe itself quoted),
+    h523 7.09x (2115098112 vs 15000000000), hc32f460 3.52x (wraps negative
+    as signed: -884901888; 3410065408 unsigned; true 12000000000),
+    dspic33ak128mc102 3.52x (identical wrap to hc32f460, same clock),
+    sg2002 12.55x (true 42000000000 - not reachable today, see below).
+    In practice this caps `cycles_per_tick`/prescaler selection far below
+    the commanded value, so the machine would attempt each step far
+    faster than the planner intended - not "feed rate off by a few
+    percent" but a multi-x-to-170x-too-fast timer program, i.e. the
+    stepper ISR would fire at (bogus period), overrunning any real
+    feed/rate limit the moment `TICKS_PER_MICROSECOND` exceeds ~71.
+  - **Root cause of the "why did UL work at all" confusion**: `unsigned
+    long` is 32-bit on every ILP32 target this tree ships for
+    (ARM/AVR/RISC-V32) but 64-bit on sg2002's own `lp64d` ABI (confirmed:
+    riscv64-unknown-elf-gcc emits a `.dword` for it, correct value, zero
+    warning even with plain `UL`) - relying on that ABI accident is
+    exactly the fragility [§clock-constant-width](CONTRACTS.md#clock-constant-width)
+    now names. `HAL_CPU_FREQ`/`CPU_FREQ`-style port-owned capability
+    macros are a SEPARATE, correctly-sized-per-port contract, not this
+    Makefile define - audited independently (see the CONTRACTS section);
+    one dead/stale copy found (stm32h523/platform.h's own `HAL_CPU_FREQ`
+    says "72000000UL // 72 MHz", copy-pasted from stm32f103 and never
+    updated for h523's real 250 MHz clock, but confirmed UNUSED anywhere
+    in that port's sources - numerically inert, left alone: fixing it
+    risks the concurrent pin-width batch's territory in the same file
+    for a dead macro with no behavior).
+  - **Fix**: `common/stm32/common.mk` (4-port... no, 3-port blast radius,
+    verified: only stm32f103/f411/h523 `include` it, NOT hc32f460 - its
+    own header comment says so and its Makefile is standalone; the
+    probe's "four ports" framing for this file was one port too many),
+    `hc32f460/Makefile`, `sg2002/Makefile`, `_template/Makefile` all
+    `-DF_CPU=$(CLOCK)` -> `$(CLOCK)ULL`; `dspic33ak128mc102/Makefile`
+    `$(CLOCK)UL` -> `$(CLOCK)ULL` (the actual fix, since its prior one
+    silently didn't work). `samd21/ch32v006/ch570` untouched (genuinely
+    safe already) but samd21/Makefile's own comment corrected - it
+    previously claimed the UL fix was general; it is not.
+  - **Per-port byte deltas, both flavors, measured by reverting each
+    Makefile to its pre-fix content and rebuilding clean (not from stale
+    prose)** - RELEASE deltas are small because `-Os -flto` optimizes away
+    most of the now-64-bit arithmetic at the three RUNTIME-variable pulse-
+    time call sites (stepper.c:240,242,245, `settings.pulse_microseconds`
+    x `TICKS_PER_MICROSECOND`) that only grew because `TICKS_PER_MICROSECOND`'s
+    type follows `F_CPU`'s and core is frozen (no way to widen only
+    stepper.c:1015's use); DEBUG (`-O0`, no LTO) keeps the naive widened
+    ops and shows the real cost:
+    | port | DEBUG before -> after | RELEASE before -> after |
+    |---|---|---|
+    | stm32f103 | 43644 -> 43712 (+68) | 29036 -> 29040 (+4) |
+    | stm32f411 | 42132 -> 42188 (+56) | 26132 -> 26136 (+4) |
+    | stm32h523 | 41976 -> 42072 (+96) | 25464 -> 25468 (+4) |
+    | hc32f460 | 41596 -> 41692 (+96) | 25796 -> 25804 (+8) |
+    | dspic33ak128mc102 (text, xc-dsc has no `size`; objdump-summed) | 53184 -> 53216 (+32) | 41780 -> 41788 (+8) |
+    `_template` (48 MHz default, not gated): DEBUG stepper.c:1015 warning
+    confirmed present before (`-1414967296`) and gone after; not
+    byte-tracked (no artifacts entry). `sg2002`: Makefile fixed the same
+    way for correctness/consistency, but **could not be built at all**,
+    before or after this fix - `arm... ` no, `riscv64-unknown-elf-gcc`
+    fails at `math.h: No such file or directory` compiling core
+    `main.c`, a pre-existing gap unrelated to F_CPU (confirmed: the only
+    Makefile diff is the `ULL` suffix itself); verified instead via an
+    isolated compile with matching `-march=rv64gc -mabi=lp64d` flags.
+  - **All ratchets green**: `ci/warn_ratchet.py` against every rebuilt
+    port's baseline, both flavors - the stepper.c:1015 entry is gone from
+    the four baselines that had it (f103/f411/h523/hc32f460) and was
+    never present in dspic33ak128mc102's (confirming it was invisible,
+    not merely unremarked). Golden AVR `make validate` PASSED
+    (`79af184e67b27defd27a39309ac53563`) throughout - untouched, F_CPU=16
+    MHz is not in scope for a `UL`-vs-`ULL` distinction either way.
+    `tools/check_contracts_numbering.py`: OK, 35 sections. Artifacts
+    refreshed full-tree (`tools/build_artifacts.py build`, both flavors):
+    77-line manifest, 30 RELEASE files, 26 DEBUG hashes, 10 units,
+    unchanged shape; the five fixed ports show real `.bin`/`.hex`/`.syms`
+    content changes (expected - the arithmetic actually changed), the
+    five untouched ports' `.elf.dump` shows only the known
+    objdump-invocation-path line (this worktree's absolute path), not a
+    content change (`build_artifacts.py check`: 56 files fresh, 10 units).
+  - **Full baseline audit** (every `ci/warn_baseline_*.txt` entry, not
+    just the ones this fix touched): every remaining entry across all 9
+    files is either the already-catalogued core-file class
+    (`-Wimplicit-fallthrough` gcode.c/report.c/system.c,
+    `motion_control.c` unused `cycle_mask`, `nvmem.c`/`eeprom.c`
+    `-Wint-in-bool-context` checksum quirk - all match
+    `docs/TOOLCHAIN-VERSIONS.md` §2's existing judgement) or a
+    platform-specific entry re-verified this session by reading the
+    flagged code, not by assumption: `stm32_platform.h` `-Wtype-limits`
+    (generic macro, both signed/unsigned call sites by design, harmless);
+    f103's `stm32_timing.c`/`stm32_watchdog.c` "redefined" trio
+    (`CoreDebug_DEMCR_TRCENA_Msk`/`DWT_CTRL_CYCCNTENA_Msk`/`IWDG_BASE`) -
+    checked against every definition site: same numeric value everywhere,
+    differs only in an `1`-vs-`1UL`/`0x...`-vs-`0x...UL` literal suffix
+    (why f411's identical-text copy doesn't warn at all); f103/h523's
+    `platform.c` unused `port` parameter in `hal_gpio_interrupt_disable`
+    - verified against its `hal_gpio_interrupt_enable` sibling, which DOES
+    use `port` (AFIO_EXTICR routing); disable only clears the shared IMR
+    bit, which is not port-specific, so the asymmetry is real and correct,
+    not an oversight. **One entry got a sharper, not-fully-resolved
+    verdict**: hc32f460's `flash.c` unused `addr` in `efm_erase_page` -
+    its sibling `efm_program_word` DOES use its own `addr` (an
+    address-triggered store, `*(volatile uint32_t*)addr = value`,
+    the standard mechanism this MCU family's erase commands typically
+    also need); `efm_erase_page` never touches `addr` at all, which is
+    at minimum suspicious for an "erase THIS page" operation and worth a
+    real look at hardware bring-up time - not fixed here (this port's own
+    `platform.md` already carries a blanket "EFM register layout
+    UNVERIFIED, hardware bring-up must confirm" disclaimer, no emulator
+    exists to test against, and it is unrelated to F_CPU). No baseline
+    entries were mass-removed or mass-kept without this per-entry look.
+  - **CONTRACTS.md correction**: this ledger's own prior BUG #18 entry
+    said "see CONTRACTS.md #18" - #18 is "KEEP() does not survive LTO"
+    (vector tables), unrelated; no section documented the F_CPU class at
+    all. Added [§clock-constant-width](CONTRACTS.md#clock-constant-width)
+    (the missing contract) and
+    [§baseline-entry-discipline](CONTRACTS.md#baseline-entry-discipline)
+    (the requested "what may enter a baseline" rule, generalizing from
+    BUG #25's own "same pattern already accepted" precedent AND from this
+    session's near-miss of trusting the UL fix's generalization instead
+    of re-deriving it per port) as new `§NEW` sections, both slug-anchored
+    per the file's own numbering convention; fixed five stale
+    "CONTRACTS.md #18" citations (four baselines + `_template/Makefile`)
+    that pointed at the wrong section to cite by slug instead.
+  - **Scope discipline**: no `grbl/` core file touched (the fix is
+    entirely at the platform Makefile layer, per the hard constraint);
+    no `platform.h` on any STM32 port touched (the concurrent pin-width
+    batch's territory) - every edit here is a `Makefile`/`common.mk`/
+    `CONTRACTS.md`/`ci/warn_baseline_*.txt` change.
+
 - **[x] CROSS-ARCHITECTURE DE-DUPLICATION BATCH, BYTE-IDENTITY GATED
   (2026-07-26)** — four duplication clusters extracted into `common/`,
   each proven by rebuilding every consumer and comparing the RELEASE
