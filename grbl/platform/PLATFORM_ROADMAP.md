@@ -137,11 +137,18 @@ that fails the build if the vector table or reset SP look wrong.
   an ARCH/ABI with no picolibc multilib; and, fatally, a private `HAL_*` macro
   namespace core `stepper.c` stopped calling in the Nov-2025 HAL_-strip
   refactor, so that layer never reached `stepper.c` at all).
-- **Architecture**: XuanTie C906L runtime core — built **rv64imac / lp64
-  (soft float)**, deliberately not rv64gc: `rv64imafdc/lp64d` has no picolibc
-  multilib on the stock toolchain, and whether the cut-down "L" core keeps
-  F/D is undocumented, so an `lp64f` binary could trap on its first `FLW`.
-  See `sg2002/Makefile`'s ARCH/ABI note.
+- **Architecture**: XuanTie C906L runtime core — built **rv64imafc / lp64f
+  (hardware single-precision float)**, deliberately not rv64gc: `rv64imafdc/
+  lp64d` has no picolibc multilib on the stock toolchain. This was `rv64imac/
+  lp64` (soft float) until 2026-07-26, on the reasoning that whether F/D
+  survive the cut-down "L" core was undocumented; that uncertainty is now
+  resolved by Milk-V/Sophgo's own shipped FreeRTOS SDK for this exact core
+  (`milkv-duo/milkv-duo-smallcore-freertos`), which builds with `-march=
+  rv64imafdc -mabi=lp64d` — the vendor running real firmware on this silicon
+  with hardware DOUBLE precision, so single-precision-only is a safe subset.
+  This project keeps FP=SINGLE as its own tree-wide default regardless (see
+  `sg2002/Makefile`'s ARCH/ABI note and PLAN.md's hardware-float entry for
+  the full evidence and the before/after size table).
 - **Vendor**: Sophgo
 - **Memory**: 256MB DDR3
 - **Target board**: LicheeRV Nano / Milk-V Duo class (any SG2002 or CV1800B
@@ -157,11 +164,17 @@ that fails the build if the vector table or reset SP look wrong.
     bare-metal
   - PLIC interrupt controller
   - High performance for complex G-code
-- **Current status**: built. RELEASE 37156 / DEBUG 41180 bytes text; FP=SINGLE
-  post-link assert PASSED; boot-integrity PASSED (`_start` at the carve-out
-  base `0x8fe00000`); `ci/warn_baseline_sg2002.txt` committed from real logs;
-  two CI matrix rows added (DEBUG + RELEASE, board `generic`, **not**
-  `continue-on-error` — same two apt packages as the other RISC-V ports).
+- **Current status**: built. RELEASE 29244 / DEBUG 35748 bytes text (RELEASE
+  now builds with `-flto`, matching every sibling RISC-V/ARM port); FP=SINGLE
+  post-link assert PASSED (zero soft-float AND zero hard-double machinery —
+  `nm`-verified, real `fmul.s`/`fadd.s`/`fdiv.s`/etc. hardware instructions
+  in the disassembly); boot-integrity PASSED (`_start` at the carve-out
+  base `0x8fe00000`, present in the LTO'd image); boot-init reachability
+  PASSED WITH LTO on (`GRBL_BOOT_INIT`/`used` keep `Reset_Handler`/
+  `SystemClock_Config`/`sg2002_plic_init` alive under whole-program IPA);
+  `ci/warn_baseline_sg2002.txt` committed from real logs; two CI matrix rows
+  added (DEBUG + RELEASE, board `generic`, **not** `continue-on-error` — same
+  two apt packages as the other RISC-V ports).
   The design pass's channel design was implemented as specified: CONTRACTS §7
   over a shared-memory ring with the mailbox doorbell as the RX ISR and a
   DRAIN LOOP, BUG #19 interception inherited verbatim, one carve-out for both
