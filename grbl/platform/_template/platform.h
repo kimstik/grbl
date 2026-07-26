@@ -88,6 +88,11 @@ typedef uint32_t hal_gpio_port_t;
 #define HAL_GPIO_INTERRUPT_ENABLE(pcmsk, interrupt, mask)   PORT_TODO_GPIO_INT_ON(pcmsk, interrupt, mask)
 #define HAL_GPIO_INTERRUPT_DISABLE(pcmsk, interrupt, mask)  PORT_TODO_GPIO_INT_OFF(pcmsk, interrupt, mask)
 
+// One-time boot-level GPIO-IRQ controller arm-up (platform.c) - separate
+// from the pair above, which arm/disarm individual channels at runtime.
+// Called once from startup.c's Reset_Handler; see platform.c's docstring.
+void hal_gpio_interrupt_init(void);
+
 // HAL_GPIO_IRQ_HANDLER is deliberately NOT defined here. hal_gpio.h is its
 // single owner (`void <name>_IRQHandler(void)`) - a platform-local
 // redefinition is shadowed in every core TU and only breaks the link if it
