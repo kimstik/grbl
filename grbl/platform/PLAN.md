@@ -2599,3 +2599,162 @@ mechanism and deserve their own work items.
     `artifacts/README.md`, `PLAN.md`, `CONTRACTS.md`. No port `Makefile`,
     source file, or CI config touched — `-ffile-prefix-map` reviewed and
     left as-is, not edited.
+
+- **[x] THREE DEFECTS FOUND PORTING sg2002 (separate branch), FIXED HERE
+  because all three affect this branch too (2026-07-26)**
+
+  - **Defect 1 — dead compile-time guards, wrong translation phase.**
+    Full findings, proof, and the port-by-port audit table: CONTRACTS.md
+    [§prelude-phase-dead-guard](CONTRACTS.md#prelude-phase-dead-guard) —
+    §19 lesson 1's "a guard certifies falsely" in a new dimension (WHEN
+    the preprocessor sees the macro, not WHICH symbol it names). Summary:
+    `ch32v006`/`ch570`/`samd21`/`dspic33ak128mc102`/`_template` all inject
+    `platform.h` (hence `timer.h`) via the build prelude, which runs
+    before grbl.h's own `#include "config.h"` ever defines
+    `STEP_PULSE_DELAY`/`ENABLE_M7` — any `#ifdef` on those macros inside
+    `timer.h` or a board `config.h` is permanently dead (the file's own
+    `#ifndef` guard blocks the later, correctly-timed re-inclusion
+    attempt). Proved with `-E -dD`: `timer.h`'s guard macro is defined at
+    ch32v006 preprocessed-output line 2616, core `config.h` is not reached
+    until line 4947. Proved live: enabling `STEP_PULSE_DELAY` built clean
+    (exit 0) on ch32v006/ch570 pre-fix; enabling `ENABLE_M7` built "clean"
+    on samd21 pre-fix while silently driving the wrong physical pin
+    (`common/dummy/cpu_map.h`'s `#ifndef COOLANT_MIST_PORT` fallback
+    supplied `0`, and samd21's `GPIO_OREG` is an array index, so the
+    bogus value is syntactically valid — no compile error at all, just
+    wrong hardware behavior).
+    - **Fix, two shapes.** Genuine hardware-unsupported `#error`s
+      (ch32v006, ch570, dspic33ak128mc102 x2, samd21) moved to each
+      port's `serial.c`, which already carries its own
+      `#include "../../grbl.h"` (BUG #19 realtime-byte interception) and
+      is therefore the first REAL processing of core `config.h` in that
+      translation unit — proven to fire by re-enabling each macro and
+      confirming the intended `#error` message now stops the build,
+      reverted after. Plain constant pin-map macros with no downstream
+      cost when unused (`COOLANT_MIST_*` on ch32v006/ch570/samd21 x2/
+      `_template`) had their dead `#ifdef ENABLE_M7` gate deleted and are
+      now defined unconditionally — core's own correctly-timed
+      `#ifdef ENABLE_M7` (in `coolant_control.c`) is the only place that
+      ever reads them.
+    - **A second, independent latent bug surfaced making the fix**:
+      samd21's `STP_PULSE_DELAY_INIT()` (previously dead-gated) references
+      `TC5`, which is never declared anywhere in this port's `samd21.h` —
+      an unrelated, pre-existing incompleteness the dead guard had been
+      hiding end-to-end. Not fixed here (needs a verified TC5 register
+      block, out of scope); `timer.h` documents it, and the `serial.c`
+      `#error` gives a clear diagnostic instead of a confusing
+      "TC5 undeclared" one.
+    - Byte-identical canonical builds re-verified, both flavors, every
+      touched port (ch32v006, ch570, samd21 x2 boards,
+      dspic33ak128mc102), against `artifacts/`. Golden AVR
+      `make validate` PASSED (atmega328p has no prelude, unaffected).
+    - `_template` fixed too (propagates the correct pattern to future
+      ports) — not build-gated (this template's `make link` is expected
+      to fail until filled in), verified with `-fsyntax-only` instead.
+    - `sg2002` NOT touched here — it is mid-flight on its own branch;
+      touching its Makefile risked a merge conflict with concurrent work
+      there for no benefit (it is not part of the 9-port build gate and
+      its own prelude currently includes nothing, so it isn't exposed to
+      this class at all yet).
+
+  - **Defect 2 — `tools/build_artifacts.py build --platforms X` data
+    loss.** `build --platforms X` used to rewrite
+    `artifacts/MANIFEST.sha256` FROM SCRATCH containing only X's freshly
+    computed entries, silently deleting every other unit's tracked
+    hashes — anyone using the documented per-platform flag corrupted the
+    manifest for the rest of the tree. Reproduced independently
+    mid-session (`build --skip-debug --platforms
+    stm32f103,ch32v006,ch570`: 51 lines / 10 units collapsed to 30 lines
+    / 3 units, 7 units silently dropped) and repaired with a full-tree
+    rebuild (base branch commit `6c3e830`).
+    - **Fix**: `load_manifest_sections()` reads whatever manifest is
+      already committed before writing; `merge_manifest_entries()`
+      supersedes ONLY the entries belonging to units this run actually
+      rebuilds (toolchain-available AND selected), carrying every other
+      unit's RELEASE/DEBUG entries forward untouched. Verified on the
+      real tree: `build --skip-debug --platforms ch32v006` produced a
+      manifest with the SAME 27 other-unit entries plus ch32v006's own 3
+      refreshed ones — `diff` against the pre-run manifest empty except
+      for ch32v006's own lines.
+    - **Coverage assertion (the "silent scope reduction" failure mode is
+      the dangerous one, not a wrong hash)**: `check` now runs
+      `check_manifest_coverage()` against the FULL module-level `UNITS`
+      table on every invocation, regardless of this run's `--platforms`
+      filter — so a `check --platforms X` scoped away from a
+      silently-shrunk manifest can no longer print "OK" having verified
+      only part of the tree. Reproduced the exact historical bug shape
+      (manifest truncated to 2 of 10 units) against the real tree and
+      confirmed 8 named "MANIFEST COVERAGE" problems, one per missing
+      unit, zero false positives on the 2 units that were present.
+      **Deliberately RELEASE-only, not DEBUG** — stated plainly rather
+      than shipping a check that cannot fail cleanly: `build --skip-debug`
+      is an existing, legitimate flag that intentionally omits DEBUG
+      entries for every unit on a full rebuild (true since before this
+      fix), so a DEBUG-coverage assertion could not distinguish that
+      normal workflow from the actual data-loss defect and would
+      false-positive on ordinary use. (This was not hypothetical: the
+      base branch's OWN committed manifest had a fully empty DEBUG
+      section at the time this fix rebased onto it — an artifact of a
+      prior legitimate `--skip-debug` run, not a regression — repaired
+      here with a full `build`, no flags, restoring all 26 DEBUG hashes.)
+    - `--selftest` extended: `load_manifest_sections` round-trip,
+      `merge_manifest_entries` regression guard (two-unit manifest,
+      regenerate one, assert the other survives byte-for-byte), an
+      end-to-end `select_units` -> `merge_manifest_entries` wiring test
+      (not just the merge helper in isolation), and
+      `check_manifest_coverage` (full manifest: no problems; manifest
+      missing one of two units: exactly one problem, naming the missing
+      unit, no false positive on the present one). 62 checks total, up
+      from 55 pre-fix.
+
+  - **Defect 3 — `make clean` incomplete.** `make clean` removed only
+    `$(BUILD_DIR)` — the CURRENTLY INVOKED `$(BUILD)` (and, since the
+    concurrent BOARD-keying fix landed underneath this one mid-session,
+    `$(BOARD)`) flavor's object directory — so switching a knob (`FP=`,
+    `BOARD=`, or any `-D`) without an exactly-matching `clean` invocation
+    could relink stale objects from a DIFFERENT flavor/board under the
+    new label. Reproduced live on samd21: built `BOARD=megarm`, ran plain
+    `make clean` (default `BUILD`, doesn't match `RELEASE`), then built
+    `BOARD=generic BUILD=RELEASE` — the megarm RELEASE objects were still
+    on disk (untouched by that `clean`) and got relinked wholesale under
+    the generic binary's name (`sha256sum` matched megarm's committed
+    hash, not generic's).
+    - **Fix**: every affected Makefile (`ch32v006`, `ch570`, `hc32f460`,
+      `dspic33ak128mc102`, `samd21`, `common/stm32/common.mk` — covering
+      `stm32f103`/`stm32f411`/`stm32h523` from one place — and
+      `_template`) now defines `PLATFORM_BUILD_ROOT =
+      $(OUTPUT_DIR)/$(PLATFORM_NAME)` and `clean` removes THAT (every
+      `$(BOARD)`/`$(BUILD)` combination under it), not just
+      `$(BUILD_DIR)`. Kept deliberately minimal — no change to
+      `BUILD_DIR`'s own keying, which the concurrent sibling fix already
+      owns.
+    - Re-reproduced the exact samd21 scenario above post-fix: `make clean`
+      (no matching `BUILD=`/`BOARD=`) now removes the whole
+      `build/samd21/` subtree; the subsequent `BOARD=generic` build
+      produces the correct generic hash, not the stale megarm one.
+    - `sg2002` NOT touched (same reasoning as Defect 1 — mid-flight on
+      its own branch, not part of the 9-port gate, avoided for merge-risk
+      reasons).
+
+  - **Gates**: golden AVR `make -C grbl/platform/atmega328p validate`
+    PASSED; all 9 gated ports rebuilt both flavors
+    (`tools/build_artifacts.py build`) — every RELEASE `.bin`/`.hex`/
+    `.syms` byte-identical to the pre-existing committed `artifacts/`
+    baseline (only `.elf.dump` differs, expected — embeds the absolute
+    checkout path, not hash-gated, see the entry above); `check` OK, 56
+    file(s) verified fresh across 10 unit(s); `tools/build_artifacts.py
+    --selftest` PASS (62 checks); `tools/check_contracts_numbering.py`
+    OK (also fixed a pre-existing duplicate `## 26.` section number found
+    on this branch's rebased-onto tip — two concurrent placeholder-numbered
+    CONTRACTS.md sections had collided; renumbered the second to `## 27.`
+    before adding this batch's own entry as `## 28.`).
+  - **Files touched**: `grbl/platform/{ch32v006,ch570,samd21,
+    dspic33ak128mc102,_template}/{Makefile,timer.h,serial.c}`,
+    `grbl/platform/{ch32v006,ch570,samd21/generic,samd21/megarm,
+    dspic33ak128mc102,_template}/**/config.h`,
+    `grbl/platform/common/stm32/common.mk`, `grbl/platform/hc32f460/
+    Makefile`, `tools/build_artifacts.py`, `artifacts/MANIFEST.sha256`
+    (DEBUG section restored), `artifacts/*/*.elf.dump` (path-only refresh,
+    see the entry above), `PLAN.md`, `CONTRACTS.md`. No file outside
+    `grbl/platform/` and `tools/` touched; nothing under `grbl/` other
+    than `grbl/platform/` edited.

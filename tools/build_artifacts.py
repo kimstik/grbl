@@ -690,6 +690,59 @@ def _entry_artifact_dir(label):
     return parts[1] if len(parts) > 1 else None
 
 
+def check_manifest_coverage(all_units, manifest_path=MANIFEST_PATH):
+    """Assert MANIFEST.sha256 has at least one RELEASE entry for every unit
+    in the FULL unit table - independent of whichever units THIS `check`
+    invocation's --platforms filter selected to rebuild/verify.
+
+    WHY THIS EXISTS (adversarial review, this batch): the `--platforms X`
+    data-loss defect's most dangerous failure mode was never "a wrong
+    hash" - it was silent SCOPE REDUCTION. `check --platforms X` only
+    ever inspects the units named in X; if some OTHER unit's entries had
+    already been silently dropped from the manifest (by the very bug this
+    fixes, or by hand-editing, or by a future regression), a scoped check
+    run has no way to notice, because it never looks at that unit at all,
+    and would print "OK" while only a fraction of the tree was actually
+    verified. This function is the fix: it always walks the GLOBAL
+    `UNITS` table (module-level, not the possibly-filtered `units` param
+    do_check() otherwise uses) and fails loudly if any unit's RELEASE
+    section has vanished, no matter what --platforms said this run.
+
+    DELIBERATELY RELEASE-ONLY, not DEBUG (this is the "say so, don't add
+    a guard that cannot fail" case): every unit's RELEASE entries are
+    written unconditionally on every rebuild of that unit (see do_build -
+    `release_extensions()` never depends on --skip-debug), so a missing
+    RELEASE entry is ALWAYS a genuine coverage hole. DEBUG entries are
+    NOT: `build --skip-debug` is an existing, legitimate flag that
+    intentionally omits DEBUG entries for every unit in a full rebuild
+    (has been true since before this fix - see the `not skip_debug` guard
+    around DEBUG recording in do_build). A DEBUG-coverage assertion here
+    could not tell "the platforms bug silently dropped this unit" apart
+    from "someone legitimately ran a full `build --skip-debug`", and
+    would false-positive on the latter, entirely normal workflow every
+    time. Rather than ship a check that can be triggered by ordinary use,
+    DEBUG coverage is left unchecked here; this asymmetry is intentional,
+    not an oversight - RELEASE coverage still catches the actual data-loss
+    defect class, since --platforms is what dropped whole units, and
+    RELEASE entries are the part of the manifest that can never
+    legitimately go missing for a tracked unit."""
+    release_entries, _debug_entries = load_manifest_sections(manifest_path)
+    release_dirs = {_entry_artifact_dir(p) for p, _h in release_entries}
+    problems = []
+    for unit in all_units:
+        d = unit["artifact_dir"]
+        if d not in release_dirs:
+            problems.append(
+                "MANIFEST COVERAGE: unit '{}' (artifact_dir '{}') has ZERO "
+                "RELEASE entries in {} - this unit's tracked hashes appear "
+                "to have been silently dropped (the --platforms data-loss "
+                "defect class, CONTRACTS.md gap log, or a manual edit). "
+                "Run a full 'build' (no --platforms) to restore coverage."
+                .format(unit["key"], d,
+                        os.path.relpath(manifest_path, REPO_ROOT)))
+    return problems
+
+
 # ---------------------------------------------------------------------------
 # build / check orchestration
 # ---------------------------------------------------------------------------
@@ -913,7 +966,12 @@ def do_check(units, skip_debug):
         manifest = parse_manifest(f.read())
 
     os.makedirs(BUILD_DIR, exist_ok=True)
-    problems = []
+    # Global RELEASE coverage assertion - runs against the FULL unit table
+    # regardless of this run's --platforms filter, so a `check` scoped
+    # away from a silently-dropped unit still fails instead of printing
+    # OK having verified only part of the tree. See check_manifest_coverage()
+    # for the full rationale (and why it is RELEASE-only, not DEBUG).
+    problems = check_manifest_coverage(UNITS)
     checked = 0
     skipped = []
 
@@ -1163,6 +1221,79 @@ def selftest():
               == ([], []),
               "load_manifest_sections on a missing file returns empty, "
               "does not raise (first-ever `build` has no prior manifest)")
+
+        # --- select_units + merge_manifest_entries, wired exactly like
+        # do_build's real call sequence (no compiler invoked - select_units
+        # is pure, and the manifest above is the same synthetic 2-unit
+        # fixture): a --platforms filter naming ONLY unitA must produce a
+        # rebuilt_dirs set of exactly {"unitA"}, and feeding that through
+        # merge_manifest_entries must reproduce the same "unitB survives"
+        # result as the direct test above - proving the actual code path
+        # `do_build` runs (select_units -> iterate -> rebuilt_dirs.add(...)
+        # -> merge_manifest_entries) is what is covered here, not just the
+        # merge helper in isolation.
+        saved_units = list(UNITS)
+        try:
+            UNITS[:] = [
+                dict(key="unitA", artifact_dir="unitA", has_debug=True),
+                dict(key="unitB", artifact_dir="unitB", has_debug=True),
+            ]
+            selected = select_units("unitA")
+            check([u["key"] for u in selected] == ["unitA"],
+                  "select_units('unitA') selects only unitA from the "
+                  "2-unit fixture table")
+            rebuilt_dirs_sim = {u["artifact_dir"] for u in selected}
+            check(rebuilt_dirs_sim == {"unitA"},
+                  "rebuilt_dirs derived from select_units matches do_build's "
+                  "own construction (unit['artifact_dir'] per selected unit)")
+            merged_release_sim = merge_manifest_entries(
+                loaded_release, fresh_release_unitA, rebuilt_dirs_sim)
+            check(("artifacts/unitB/grbl_unitB.bin", "b" * 64) in merged_release_sim,
+                  "end-to-end (select_units -> merge_manifest_entries): "
+                  "unitB survives a `--platforms unitA` run")
+
+            # --- check_manifest_coverage: the coverage-assertion fix -----
+            # A manifest missing a whole unit's RELEASE entries (the exact
+            # shape the --platforms defect produced) must be flagged by
+            # name, even though nothing here scopes the check to that
+            # unit - this is what makes a scoped `check --platforms X` run
+            # unable to print OK over a silently-shrunk manifest.
+            full_release = [
+                ("artifacts/unitA/grbl_unitA.bin", "a" * 64),
+                ("artifacts/unitB/grbl_unitB.bin", "b" * 64),
+            ]
+            full_text = format_manifest(full_release, [])
+            shrunk_release = [("artifacts/unitA/grbl_unitA.bin", "a" * 64)]
+            shrunk_text = format_manifest(shrunk_release, [])
+
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".sha256", delete=False) as tf2:
+                tf2.write(full_text)
+                full_manifest_path = tf2.name
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".sha256", delete=False) as tf3:
+                tf3.write(shrunk_text)
+                shrunk_manifest_path = tf3.name
+            try:
+                full_problems = check_manifest_coverage(UNITS, full_manifest_path)
+                check(full_problems == [],
+                      "check_manifest_coverage: full 2-unit manifest has "
+                      "no coverage problems")
+
+                shrunk_problems = check_manifest_coverage(UNITS, shrunk_manifest_path)
+                check(len(shrunk_problems) == 1,
+                      "check_manifest_coverage: manifest missing unitB's "
+                      "RELEASE entries reports exactly one problem")
+                check(shrunk_problems and "unitB" in shrunk_problems[0],
+                      "check_manifest_coverage: the reported problem names "
+                      "the missing unit (unitB), not a generic message")
+                check(shrunk_problems and "unitA" not in "".join(shrunk_problems),
+                      "check_manifest_coverage: unitA (present, not "
+                      "dropped) is NOT flagged - no false positive on the "
+                      "unit that IS covered")
+            finally:
+                os.unlink(full_manifest_path)
+                os.unlink(shrunk_manifest_path)
+        finally:
+            UNITS[:] = saved_units
     finally:
         os.unlink(tmp_manifest_path)
 
