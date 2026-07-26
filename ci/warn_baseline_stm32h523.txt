@@ -31,7 +31,8 @@
 # now supposed to fail on it.
 #
 # Removed 2026-07-26: `stepper.c: ... integer overflow ... '2115098112'
-# [-Woverflow]` (BUG #18 class, CONTRACTS.md #18). Root cause:
+# [-Woverflow]` (BUG #18 class, CONTRACTS.md's clock-constant-width
+# section). Root cause:
 # common/stm32/common.mk's F_CPU lacked a suffix wide enough for 250 MHz -
 # the true compile-time constant is 15000000000, not 2115098112 (a real
 # ~7.09x-too-fast stepper timing bug). Fixed at the source (common.mk now

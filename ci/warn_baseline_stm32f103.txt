@@ -10,7 +10,8 @@
 #   python3 ci/warn_ratchet.py --log build.log --emit
 #
 # Removed 2026-07-26: `stepper.c: ... integer overflow ... '25032704' [-Woverflow]`
-# (BUG #18 class, CONTRACTS.md #18). Root cause: common/stm32/common.mk's
+# (BUG #18 class, CONTRACTS.md's clock-constant-width section). Root cause:
+# common/stm32/common.mk's
 # F_CPU lacked a suffix wide enough for 72 MHz - the true compile-time
 # constant is 4320000000, not 25032704. Fixed at the source (common.mk now
 # uses ULL, not the UL that would still have silently wrapped at this

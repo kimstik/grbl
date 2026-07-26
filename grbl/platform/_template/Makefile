@@ -157,8 +157,9 @@ CFLAGS  = -mcpu=$(CPU) -mthumb $(FPU)
 # ch570/dspic33ak128mc102/hc32f460 Makefiles, common/stm32/common.mk); the
 # old hardcoded `-DPLATFORM_TEMPLATE` here was the one line the "edit every
 # PORT-TODO" convention didn't cover.
-# BUG #18 class (CONTRACTS.md #18): F_CPU must carry ULL, not UL - UL is
-# only 32-bit on ILP32 targets and silently wraps stepper.c:1015's
+# BUG #18 class (see CONTRACTS.md's clock-constant-width section): F_CPU
+# must carry ULL, not UL - UL is only 32-bit on ILP32 targets and
+# silently wraps stepper.c:1015's
 # `TICKS_PER_MICROSECOND*1000000*60` above ~71 MHz with no warning
 # (unsigned overflow isn't diagnosed). ULL is >=64-bit on every target;
 # a future porter changing CLOCK to a real chip's frequency inherits the
