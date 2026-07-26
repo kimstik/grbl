@@ -166,28 +166,81 @@ artifacts/<port>/grbl_<port>.elf` in both states: it should print
 `.gitignore:3:*.elf ...` (matched, ignored) whether or not the file is
 currently committed — negation exceptions don't apply to it, by design.
 
-## dsPIC33AK128MC102: one port's binaries are tracked but NOT hash-gated
+## dsPIC33AK128MC102: the `.elf` (only the `.elf`) is tracked but NOT hash-gated
 
-`xc-dsc-gcc`'s restricted/Free license tier does not produce byte-reproducible
-output — two consecutive `make clean && make BUILD=RELEASE` runs of the
-*identical, unmodified* source tree were measured (while building this
-tooling) to differ in ~15% of the resulting ELF's bytes (`cmp -l`: 25361 of
-166096 bytes), almost certainly a deliberate anti-tamper/watermarking
-behavior of the restricted tier rather than anything under this project's
-control. The **symbol map is stable** across those same two builds (`diff`
-empty — function addresses and sizes don't move, only some padding/layout
-bytes do), so `tools/build_artifacts.py check` still hash-gates
-`grbl_dspic33ak128mc102.syms` for real drift, but skips the elf/hex/bin hash
-comparison for this one unit (an unconditional compare would always
-false-positive). bin/hex are still committed every refresh like every other
-port; `.elf` follows the same tag-time-only policy as every other port (see
-"Эльф на тегах" above) — when it IS present (post-tag), it's still useful
-for archival/manual inspection, just not part of the automated freshness
-gate for this one unit specifically.
-If Microchip's paid tier (or a future toolchain) becomes reproducible, drop
-`nondeterministic_binary=True` from this unit's entry in
+`xc-dsc-gcc` does not produce a byte-reproducible **`.elf`** — two
+consecutive `make clean && make BUILD=RELEASE` runs of the *identical,
+unmodified* source tree were measured to differ in ~12-13% of the
+resulting `.elf`'s bytes (re-measured, adversarial review: 20829-22185 of
+~166000 bytes; the exact count wobbles run to run). Root cause (identified
+by that review, not previously explained here): the differing bytes are
+embedded `/tmp/ccXXXXXX.s.scnN` compiler-tempfile **section names** — `as`'s
+per-invocation randomly-named scratch assembly file, echoed into a handful
+of the ELF's section-name strings — not code, not a watermark, nothing
+this project's Makefile controls. Critically, **`.bin` and `.hex` are
+BYTE-IDENTICAL** across the same two builds (`cmp -l`: empty) — they are
+produced by `xc-dsc-objcopy`/`xc-dsc-bin2hex` from the *linked image's
+actual code/data bytes*, which never see those compiler-scratch strings.
+The **symbol map is also stable** (`diff` empty — function addresses/sizes
+don't move).
+
+**GAP FIX (adversarial review)**: this section used to say "one port's
+*binaries* are tracked but NOT hash-gated" and the tool used one
+all-or-nothing `nondeterministic_binary` flag that skipped `.elf` **and**
+`.hex` **and** `.bin`'s hash comparison — silently weakening the gate for
+two files that were never actually nondeterministic (proof above: their
+sha256 is IDENTICAL across two clean rebuilds). Fixed: the flag is now
+`nondeterministic_elf`, scoped to `.elf` only
+(`tools/build_artifacts.py`'s `hash_gated_extensions()` helper, covered by
+`--selftest`). `tools/build_artifacts.py check` hash-gates
+`grbl_dspic33ak128mc102.bin`/`.hex`/`.syms` for **both RELEASE and DEBUG**
+exactly like every other unit (DEBUG previously wasn't even built for this
+unit — the old flag skipped the whole DEBUG stage, not just its `.elf`
+hash) and skips ONLY the `.elf` comparison, because that one file is
+genuinely, provenly not byte-reproducible. `.elf` follows the same
+tag-time-only policy as every other port (see "Эльф на тегах" above) — when
+it IS present (post-tag), it's still useful for archival/manual inspection,
+just not part of the automated freshness gate for this one unit
+specifically.
+If Microchip's paid tier (or a future toolchain) becomes reproducible for
+`.elf` too, drop `nondeterministic_elf=True` from this unit's entry in
 `tools/build_artifacts.py`'s `UNITS` table and re-run `build` once to prove
 it, then remove this section.
+
+## DEBUG `.elf` manifest hashes are build-path dependent; RELEASE is not
+
+Adversarial-review finding: `-g3` (every port's DEBUG flavor) embeds the
+compiler's absolute working directory (DWARF `DW_AT_comp_dir`) — and, on at
+least the dsPIC33AK toolchain, some translation units' absolute source path
+too — so a DEBUG `.elf` built from the *identical* source tree checked out
+at a *different absolute path* is a *different file*, purely from path
+length, unrelated to any real drift. Measured (stm32f103, two checkouts at
+deliberately different-length paths): DEBUG `.elf` differed by exactly 20
+bytes — the two paths' length delta — everywhere else identical. **RELEASE
+(`-g0`, no debug info) is path-INDEPENDENT: 0-byte diff** between the same
+two checkouts, so the gate that matters for the actually-committed tree
+(RELEASE bin/hex/syms, `.elf` at tag time) is unaffected; only DEBUG's
+manifest-recorded hashes are at risk, and only across a `build`/`check` run
+from two different absolute paths (e.g. a contributor's machine vs. a CI
+runner using a different checkout directory).
+
+**Fix applied this batch**: every port's `Makefile` gained
+`CFLAGS += -ffile-prefix-map=$(CURDIR)=/grbl-src`, remapping the embedded
+path to a fixed, checkout-independent string. Verified cheap: RELEASE
+`.bin`/`.hex` sha256 is UNCHANGED with the flag added (checked against
+stm32f103, ch32v006, and dsPIC33AK's already-committed hashes) — RELEASE
+has no debug info to remap, so there is nothing for the flag to change.
+Verified effective: stm32f103's DEBUG `.elf` becomes fully byte-identical
+(0-byte diff, was 20) across the two differently-pathed checkouts once the
+flag is applied. **One caveat, stated rather than hidden**: on
+`xc-dsc-gcc`, four locally-invoked translation units
+(`platform.c`/`handlers.c`/`serial.c`/`nvmem.c`) still embed an absolute
+path untouched by the flag (a toolchain quirk — the other ~16 translation
+units in the same build ARE fully remapped), so dsPIC33AK's DEBUG `.elf` is
+*improved* but not *fully* path-independent. This doesn't affect the actual
+gate — dsPIC33AK's `.elf` is already exempt from hash comparison for the
+unrelated tempfile-section-name reason above, so its DEBUG `.elf` hash was
+never compared either way.
 
 ## Refresh policy
 

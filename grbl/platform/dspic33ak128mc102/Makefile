@@ -134,6 +134,25 @@ CFLAGS  = $(ARCHFLAGS) -std=gnu11
 CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)UL
 CFLAGS += -Wall -Wextra
 
+# Build-path independence for DEBUG's DWARF info (CONTRACTS.md
+# #build-artifacts-tracked "DEBUG .elf manifest hashes are build-path
+# dependent" - adversarial review finding). RELEASE (-g0) verified
+# unaffected (re-checked against this port's own committed
+# artifacts/dspic33ak128mc102 bin/hex hashes - unchanged). DEBUG is
+# IMPROVED but not fully fixed on this toolchain specifically: four
+# locally-invoked translation units (platform.c/handlers.c/serial.c/
+# nvmem.c) still embed an absolute path xc-dsc-gcc doesn't remap (~16
+# other TUs in the same build ARE fully remapped) - see artifacts/README.md
+# "DEBUG .elf manifest hashes are build-path dependent" for the measured
+# detail. Immaterial to the actual gate: this unit's .elf is already
+# nondeterministic_elf-exempt from hash comparison for an unrelated reason
+# (embedded compiler-tempfile section names, see UNITS table comment in
+# tools/build_artifacts.py), so its DEBUG .elf hash was never gated either
+# way. Applied anyway for consistency with every other port and because it
+# still measurably improves this toolchain's output (16/20 translation
+# units' comp_dir fixed).
+CFLAGS += -ffile-prefix-map=$(CURDIR)=/grbl-src
+
 # ----------------------------------------------------------------------------
 # FP PRECISION KNOB (CONTRACTS.md #17) - THIS PORT'S DECLARED DEFAULT IS
 # DOUBLE, the opposite default of every prior port (samd21/ch32v006 both

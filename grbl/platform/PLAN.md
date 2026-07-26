@@ -1325,6 +1325,70 @@ identity to integration time.
   cross-file links, unchanged count — no new section added, only prose
   inside the existing §25).
 
+- **[x] ARTIFACTS RATCHET: TWO ADVERSARIAL-REVIEW GAPS CLOSED, ONE
+  DOCUMENTATION GAP RECORDED (2026-07-26)** — same-day follow-up to the two
+  batches above; an adversarial review of the artifacts ratchet found the
+  over-broad dsPIC exemption had never been narrowed and the ratchet itself
+  had never been wired into CI.
+  **GAP 1 (over-broad exemption)**: `nondeterministic_binary=True` dropped
+  `.elf` AND `.hex` AND `.bin` from dsPIC33AK's hash gate. Re-measured: two
+  clean rebuilds differ in `.elf` by 20829/166096 bytes (this run's exact
+  count; wobbles run to run) — root cause identified this batch: embedded
+  `/tmp/ccXXXXXX.s.scnN` compiler-tempfile SECTION NAMES, not code — while
+  `.bin`/`.hex` are BYTE-IDENTICAL (`cmp -l` empty) across the same two
+  builds. Fixed: flag renamed `nondeterministic_elf`, scoped to `.elf` only
+  via a new `hash_gated_extensions()` helper (covered by 4 new `--selftest`
+  checks); dsPIC's DEBUG flavor is now actually built and its `hex`/`bin`
+  hash-gated too (previously skipped entirely — the old flag disabled the
+  whole DEBUG stage for this unit, not just its `.elf` hash).
+  **GAP 2 (ratchet never ran in CI)**: `grep -n build_artifacts
+  .github/workflows/ci.yml` returned nothing — the sixth ratchet existed,
+  was documented as landed, and was never once exercised in CI, the same
+  "certifies but never checks" class this project has hit twice before.
+  Fixed via option (a) from the review's own menu — per-platform partial
+  `check --platforms <unit>` appended to each existing `build` matrix row
+  (gated to the RELEASE row only, so each platform pays the extra rebuild
+  once, not twice) and to `build-dspic33ak128mc102` (same gating) — chosen
+  over a dedicated all-toolchains job because `check` needs ARM+AVR+
+  RISC-V+xc-dsc simultaneously, which no single job has, and a dedicated
+  job would either re-install every toolchain already installed elsewhere
+  in this matrix or need `actions/download-artifact` (outside this
+  workflow's allowed action set). `docs-integrity` (no toolchain) gained
+  `--selftest`. One latent inconsistency this surfaced and fixed in
+  passing: `build-dspic33ak128mc102`'s `DFP_PATH` env
+  (`/opt/dspic33ak-mc-dfp`) didn't match `tools/build_artifacts.py`'s
+  UNITS-table-hardcoded DFP path (`/opt/Microchip.dsPIC33AK-MC_DFP.1.5.263`)
+  — harmless before this batch (nothing in that job ever ran the script),
+  but would have made the new `check` step fail there; renamed the env
+  value to match (verified via repo-wide grep that nothing else referenced
+  the old string first).
+  **GAP 3 (documentation)**: DEBUG `.elf` manifest hashes are BUILD-PATH
+  DEPENDENT (`-g3` embeds the absolute checkout path in DWARF) while
+  RELEASE (`-g0`) is not — measured on stm32f103 at two differently-pathed
+  checkouts: DEBUG differed by exactly the paths' length delta (20 bytes),
+  RELEASE was byte-identical (0 diff). Documented in
+  `artifacts/README.md` and `CONTRACTS.md`
+  [§build-artifacts-tracked](CONTRACTS.md#build-artifacts-tracked).
+  Fix (`-ffile-prefix-map=$(CURDIR)=/grbl-src`) was cheap enough to apply,
+  not just describe: added to every port's `CFLAGS` (`common/stm32/
+  common.mk`, `samd21`, `ch32v006`, `ch570`, `hc32f460`,
+  `dspic33ak128mc102`, `_template`, `sg2002`); proved RELEASE bytes
+  unchanged (stm32f103, ch32v006, dsPIC33AK `.bin`/`.hex` sha256 identical
+  to their already-committed hashes with the flag added) and DEBUG fully
+  path-independent on stm32f103 (0-byte diff, was 20). One caveat recorded
+  rather than hidden: xc-dsc-gcc leaves 4 of its ~20 translation units'
+  absolute paths un-remapped (a toolchain quirk, not a flag-application
+  bug) — immaterial to the actual gate, since dsPIC's `.elf` was already
+  hash-exempt for the unrelated GAP-1 reason.
+  **GATES** (all re-run, not inspected): golden AVR `make validate` PASSED
+  (MD5 `79af184e67b27defd27a39309ac53563`, unchanged); all 10 units rebuilt
+  clean via a full `build` (0 skipped — every toolchain present this
+  session); `check` clean (56 files verified across 10 units, up from 52 —
+  the 4 new dsPIC DEBUG hex/bin entries); `--selftest` PASS (30 checks, up
+  from 26); `check_contracts_numbering.py` OK (26 sections/slugs, 11
+  cross-file links); `ci.yml` parses (`python3 -c "import yaml; ..."` — 3
+  jobs, matrix shape unchanged, only new steps added).
+
 - **[x] RELEASE-READINESS TRUTH AUDIT (2026-07-26)** — Phase 5's last item prep (tag v0.x).
   Fresh clean builds of every buildable port re-verified against this file's own canonical size
   table: all match exactly (atmega328p golden MD5 unchanged; stm32f103/h523/f411, samd21
