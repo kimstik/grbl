@@ -11,17 +11,24 @@
 #   make -C grbl/platform/stm32h523 BUILD=<DEBUG|RELEASE> > build.log 2>&1
 #   python3 ci/warn_ratchet.py --log build.log --emit
 #
-# Known debt (config.h vs platform.h dual pin-map canon, PLAN.md Phase 1/2 -
-# same pattern already accepted for stm32f103):
-config.h: warning: "CONTROL_MASK" redefined
-config.h: warning: "COOLANT_FLOOD_PIN" redefined
-config.h: warning: "DIRECTION_MASK" redefined
-config.h: warning: "LIMIT_MASK" redefined
-config.h: warning: "PROBE_MASK" redefined
-config.h: warning: "SPINDLE_DIRECTION_PIN" redefined
-config.h: warning: "SPINDLE_ENABLE_PIN" redefined
-config.h: warning: "STEPPERS_DISABLE_MASK" redefined
-config.h: warning: "STEP_MASK" redefined
+# The "config.h vs platform.h dual pin-map canon" entries that used to sit
+# here (same 9 lines as stm32f103's baseline) were BUG #25, not harmless
+# debt: SPINDLE_ENABLE_PIN/SPINDLE_DIRECTION_PIN/COOLANT_FLOOD_PIN genuinely
+# disagreed in value between the two files, and hal_gpio_init() didn't even
+# consume the pin macro for the affected pins here - it hardcoded raw
+# literals that happened to match config.h's (now-deleted) values instead of
+# platform.h's, with the direction pin additionally hardcoded onto the wrong
+# GPIO port. The spindle enable relay's pin was configured as an output on
+# one physical pin and driven (GPIO_BSET/GPIO_BCLR) on a different one.
+# Baselining the warning instead of reading it hid a live wiring defect
+# behind a green ratchet for as long as the entry sat here (and it sat here
+# BECAUSE stm32f103's baseline already carried it - "same pattern already
+# accepted" should have been the signal to fix the class, not repeat it) -
+# see CONTRACTS.md #gpio-pin-map-single-owner. Fixed by making platform.h
+# the sole owner of every pin/port/bit/mask and deriving hal_gpio_init()'s
+# masks from it. Do NOT re-add any of these lines - if this class of warning
+# reappears, a duplicate pin-map definition has come back and the ratchet is
+# now supposed to fail on it.
 #
 # common/stm32 shared code (regs.h vs CMSIS-style headers, both stm32 ports):
 stm32_platform.h: warning: comparison of unsigned expression in '< 0' is always false [-Wtype-limits]

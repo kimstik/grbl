@@ -33,71 +33,48 @@
 #define STM32H523_HAS_32BIT_TIMERS  true    // TIM2/TIM3/TIM4/TIM5 are 32-bit
 #define STM32H523_GPIO_MODEL        2       // H5 uses MODER/OTYPER (like F4)
 
-// PIN MAPPING (Black Pill H5 compatible)
+// PIN MAPPING
+//
+// BUG #25 (CONTRACTS.md #gpio-pin-map-single-owner): this file used to carry
+// its own copy of every GPIO pin number (X_STEP_PIN, SPINDLE_ENABLE_PIN, ...)
+// alongside platform.h's copy of the same names. The two disagreed for
+// SPINDLE_ENABLE_PIN (7 here vs platform.h's 12), SPINDLE_DIRECTION_PIN (9
+// vs 13) and COOLANT_FLOOD_PIN (0 vs 13) - and which one won depended on
+// per-translation-unit include order: platform.c includes this file last, so
+// it used to win there, except this port's hal_gpio_init() never actually
+// consumed either macro (it hardcoded raw literals, e.g. `(1 << 7)` for
+// SPINDLE_ENABLE) - see the fix in platform.c, now derived from platform.h's
+// macros instead. Every core .c file (spindle_control.c, coolant_control.c,
+// ...) reaches platform.h last through grbl.h, so platform.h's PB12/PB13/
+// PC13 won there (the pins GPIO_BSET/GPIO_BCLR actually drive, via the
+// *_BIT macros which were never split). Net effect: the spindle enable
+// relay's pin was hardcoded as an output on PB7, which nothing ever wrote
+// again, while the pin actually toggled (PB12) was never configured as an
+// output at all. platform.h is now the SOLE owner of every GPIO pin/port/
+// bit/mask this single-board port has - do not add a pin-number #define
+// here. If this board ever needs a user-selectable pin map, that is a
+// per-board config.h under boards/<name>/ selected via its own prelude.h
+// (the samd21/ch32v006 pattern, CONTRACTS.md #boundary-wiring), not a second
+// copy living beside platform.h's.
 
-// Stepper motors (GPIOA)
-#define X_STEP_PIN          0   // PA0
-#define Y_STEP_PIN          1   // PA1
-#define Z_STEP_PIN          2   // PA2
-#define X_DIRECTION_PIN     3   // PA3
-#define Y_DIRECTION_PIN     4   // PA4
-#define Z_DIRECTION_PIN     5   // PA5
-#define STEPPERS_DISABLE_PIN 6  // PA6 (active LOW)
-
-// Limit switches (GPIOB)
-#define X_LIMIT_PIN         0   // PB0
-#define Y_LIMIT_PIN         1   // PB1
-#define Z_LIMIT_PIN         2   // PB2 (BUG #26: moved off PB10 - see platform.h)
-
-// Control pins (GPIOB)
-#define RESET_PIN           3   // PB3
-#define FEED_HOLD_PIN       4   // PB4
-#define CYCLE_START_PIN     5   // PB5
-#define SAFETY_DOOR_PIN     6   // PB6
-
-// Spindle control
-#define SPINDLE_ENABLE_PIN      7   // PB7
-#define SPINDLE_PWM_PIN         8   // PA8 (TIM1 CH1)
-#define SPINDLE_DIRECTION_PIN   9   // PA9
-
-// Coolant (GPIOC)
-#define COOLANT_FLOOD_PIN   0   // PC0
-#define COOLANT_MIST_PIN    1   // PC1
-
-// Serial (USART1)
+// Serial pins are documentation only here (the USART1 pin assignment is
+// fixed by platform.h's HAL_SERIAL_* wiring, not read back from these
+// macros) and LED_PIN is unused - no .c file in this port references either.
 #define SERIAL_TX_PIN       9   // PA9 (or PB6 alternate)
 #define SERIAL_RX_PIN       10  // PA10 (or PB7 alternate)
-
-// LED (built-in on board)
 #define LED_PIN             7   // PB7 (green LED on Black Pill H5)
 
-// Probe
-#define PROBE_PIN           15  // PC15
-
-// BITMASKS FOR GPIO OPERATIONS
-
-#define STEP_MASK           ((1 << X_STEP_PIN) | (1 << Y_STEP_PIN) | (1 << Z_STEP_PIN))
-#define DIRECTION_MASK      ((1 << X_DIRECTION_PIN) | (1 << Y_DIRECTION_PIN) | (1 << Z_DIRECTION_PIN))
-#define STEPPERS_DISABLE_MASK (1 << STEPPERS_DISABLE_PIN)
-#define LIMIT_MASK          ((1 << X_LIMIT_PIN) | (1 << Y_LIMIT_PIN) | (1 << Z_LIMIT_PIN))
-#define CONTROL_MASK        ((1 << RESET_PIN) | (1 << FEED_HOLD_PIN) | (1 << CYCLE_START_PIN) | (1 << SAFETY_DOOR_PIN))
-#define PROBE_MASK          (1 << PROBE_PIN)
-
 // TIMER CONFIGURATION
-
-// Stepper timer: TIM2 (32-bit on H5)
-#define STEPPER_TIMER_IRQn  TIM2_IRQn
-
-// Pulse reset timer: TIM3 (32-bit)
-#define PULSE_TIMER_IRQn    TIM3_IRQn
-
-// Spindle PWM: TIM1 CH1
-// SPINDLE_PWM_MAX_VALUE is NOT redefined here - it is canonically defined in
-// platform.h (255, CONTRACTS.md section 6.2: core plumbs duty as uint8_t
-// end-to-end). A value here previously shadowed platform.h's 255 with 1000
-// (config.h is included after platform.h in platform.c), so TIM1's ARR ran
-// to 1000 while CCR1 was only ever driven up to 255 - capping real spindle
-// duty at 25.5% of commanded. Do not reintroduce this definition here.
+//
+// STEPPER_TIMER_IRQn / PULSE_TIMER_IRQn / SPINDLE_PWM_MAX_VALUE are NOT
+// redefined here - they are canonically defined in platform.h (BUG #25;
+// SPINDLE_PWM_MAX_VALUE specifically per CONTRACTS.md section 6.2: core
+// plumbs duty as uint8_t end-to-end). A value here would shadow platform.h's
+// inside platform.c ONLY (config.h is included after platform.h there)
+// without touching any core .c file - the exact split-brain mechanism BUG
+// #25 fixed for the pin map. SPINDLE_PWM_MAX_VALUE was hit by precisely this
+// once already (1000 here vs platform.h's 255, capping real spindle duty at
+// 25.5% of commanded). Do not reintroduce any of these definitions here.
 
 // SERIAL CONFIGURATION
 

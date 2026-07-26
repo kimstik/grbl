@@ -71,6 +71,32 @@ toggle, or emulator cycle count).
       LIMIT, CONTROL, PROBE, SPINDLE_*, COOLANT_* (megarm/config.h as model).
       **Input groups (LIMIT/CONTROL/PROBE) must land in bits 0-7** or be
       remapped in accessors — core truncates reads to uint8_t (§1.3).
+- [ ] **Exactly one file owns each pin's `_PORT`/`_PIN`/`_BIT`/`_MASK`
+      number** (BUG #25 — CONTRACTS.md anchor `gpio-pin-map-single-owner`;
+      not linked here as a real markdown link for the same `§NEW`-pending-
+      renumbering reason as the BUG #24 item below). If your chip has
+      exactly one board (the stm32f103/f411/h523 shape, CONTRACTS.md
+      [§boundary-wiring](CONTRACTS.md#boundary-wiring)), that owner is
+      `platform.h` — do not also give `config.h` a copy of the same pin
+      numbers "for reference" or "to customize per project": an unguarded
+      second `#define` of the same macro name compiles silently (C allows
+      redefinition; GCC only warns when the two token sequences actually
+      differ), and if the two ever disagree, **which one wins depends on
+      per-translation-unit `#include` order**, not on which file a human
+      reads last. This shipped for real: `stm32f103`/`stm32h523` had
+      `SPINDLE_ENABLE_PIN` defined 7 in `config.h`, 12 in `platform.h` —
+      `platform.c` (which includes `platform.h` then `config.h`) configured
+      pin 7 as an output; every core `.c` file (which reaches `platform.h`
+      last through `grbl.h`) drove pin 12 via `GPIO_BSET`/`GPIO_BCLR` —
+      neither pin ever worked. If your chip genuinely has more than one
+      board (or will), the correct shape is a per-board `boards/<name>/
+      config.h` selected via that board's own `prelude.h`, chained
+      `gpio.h -> common/gpio.h -> config.h -> platform.h`
+      (samd21/ch32v006/ch570 are the reference) — not a second file living
+      beside a single-board `platform.h`. Verify with the real preprocessor,
+      not by reading the `#include` order and reasoning about it:
+      `<cc> -E -dM <file>.c | grep <PIN_MACRO>` on both `platform.c` and one
+      core `.c` file (e.g. `spindle_control.c`) must print the SAME value.
 - [ ] Register accessors `GPIO_OREG/IREG/DREG/PREG` if platform layout differs
       from AVR naming (samd21/gpio.h:15-18). Pull-up accessor must actually
       enable pull-ups (§1.4 — SAMD21 got this wrong).
