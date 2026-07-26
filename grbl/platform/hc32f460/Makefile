@@ -77,6 +77,13 @@ CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)
 CFLAGS += -Wall -Wextra
 CFLAGS += -ffunction-sections -fdata-sections
 
+# Build-path independence for DEBUG's DWARF info (CONTRACTS.md
+# #build-artifacts-tracked "DEBUG .elf manifest hashes are build-path
+# dependent" - adversarial review finding). See common/stm32/common.mk's
+# matching comment for the full rationale/measurement; RELEASE (-g0) is
+# verified unaffected, DEBUG becomes checkout-path-independent.
+CFLAGS += -ffile-prefix-map=$(CURDIR)=/grbl-src
+
 # FP PRECISION KNOB (CONTRACTS.md section 17: "FP precision is a declared
 # port property"). Landed pattern from samd21/ch32v006/stm32*, applied here
 # identically - this port's whole reason to exist is an FPU-bearing chip,

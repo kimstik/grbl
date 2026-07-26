@@ -106,6 +106,14 @@ CFLAGS += -D__$(DEVICE)__
 CFLAGS += -Wall -Wextra
 CFLAGS += -ffunction-sections -fdata-sections
 
+# Build-path independence for DEBUG's DWARF info (CONTRACTS.md
+# #build-artifacts-tracked "DEBUG .elf manifest hashes are build-path
+# dependent" - adversarial review finding). See common/stm32/common.mk's
+# matching comment for the full rationale/measurement; RELEASE (-g0) is
+# verified unaffected (re-checked against this port's own committed
+# artifacts/ch32v006 hashes), DEBUG becomes checkout-path-independent.
+CFLAGS += -ffile-prefix-map=$(CURDIR)=/grbl-src
+
 # FP PRECISION KNOB (CONTRACTS.md #17: "FP precision is a declared port
 # property"). Landed pattern from samd21/Makefile - see that file for the
 # full rationale (avr-gcc double==float template semantics; unsuffixed

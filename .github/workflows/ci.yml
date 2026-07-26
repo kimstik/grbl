@@ -21,6 +21,15 @@ jobs:
       - uses: actions/checkout@v4
       - name: CONTRACTS.md numbering/cross-reference check
         run: python3 tools/check_contracts_numbering.py
+      # Pure-logic unit tests for the sixth ratchet's manifest-format/hash-
+      # compare machinery (no compiler invoked - same "no toolchain needed"
+      # shape as the numbering check above, so it lives in this job rather
+      # than idling a toolchain-having job on it). Wired in per adversarial
+      # review: `tools/build_artifacts.py check` existed but was never
+      # invoked anywhere in this file before this batch - see
+      # CONTRACTS.md #build-artifacts-tracked "GAP 2 FIX".
+      - name: Build-artifacts manifest/hash-compare selftest
+        run: python3 tools/build_artifacts.py --selftest
 
   # One matrix row per platform/board/flavor; adding a port = one new row
   # (plus its ci/warn_baseline_<platform>.txt, which may start empty).
@@ -121,6 +130,43 @@ jobs:
         if: matrix.platform == 'atmega328p'
         run: make -C grbl/platform/atmega328p validate
 
+      # Sixth ratchet (build-artifacts freshness), wired in per adversarial
+      # review - `tools/build_artifacts.py check` existed and was documented
+      # as "the sixth ratchet" but no job in this file ever ran it
+      # (`grep -n build_artifacts .github/workflows/ci.yml` returned
+      # nothing before this). `check` needs every toolchain (ARM/AVR/
+      # RISC-V/xc-dsc) to rebuild everything, which no single job here has -
+      # a dedicated all-toolchains job would either re-install every
+      # toolchain already installed by this matrix (duplicated install
+      # cost, zero new coverage) or need actions/download-artifact to move
+      # binaries between jobs (outside this workflow's allowed action set -
+      # see the build-dspic33ak128mc102 job's own comment on why IT isn't
+      # folded into build-platform for the identical reason in reverse).
+      # Instead: each row runs `check --platforms <its own unit(s)>` using
+      # the ONE toolchain it already has on PATH, right after already
+      # building that unit once this run - partial-but-full-matrix
+      # coverage at zero extra toolchain-install cost. Gated to the RELEASE
+      # row only: `check` always rebuilds BOTH DEBUG and RELEASE fresh
+      # regardless of which matrix row triggers it (see
+      # tools/build_artifacts.py's do_check), so running it from both rows
+      # of the same platform would just double-compile for no extra
+      # coverage; atmega328p has only one row (RELEASE, no DEBUG flavor on
+      # this port) so the same condition covers it too.
+      - name: Artifacts freshness ratchet (tools/build_artifacts.py check)
+        if: matrix.build == 'RELEASE'
+        run: |
+          unit="${{ matrix.platform }}"
+          # samd21 is the one platform where the CI matrix's platform+board
+          # pair maps to TWO distinct build_artifacts.py unit keys
+          # (samd21-megarm / samd21-generic - see that script's UNITS table
+          # comment: the toolchain names both boards' ELF identically, so
+          # the unit key/artifact_dir is what disambiguates them). Every
+          # other platform's unit key is just its own name.
+          if [ "${{ matrix.platform }}" = "samd21" ]; then
+            unit="samd21-${{ matrix.board }}"
+          fi
+          python3 tools/build_artifacts.py check --platforms "$unit"
+
   # dspic33ak128mc102: deliberately NOT a row in the `build` matrix above.
   # Every other platform's toolchain is `apt-get install <packages>` (see
   # build-platform/action.yml "Install toolchain" step) - a single stateless
@@ -174,7 +220,18 @@ jobs:
       # 811360fb86d92e3d4519dab3948bf895e8468b37ab7203a7d5ca2bfac2b07bbb.
       DFP_SHA256: 811360fb86d92e3d4519dab3948bf895e8468b37ab7203a7d5ca2bfac2b07bbb
       XC_DSC_PREFIX: /opt/xc-dsc
-      DFP_PATH: /opt/dspic33ak-mc-dfp
+      # Must match tools/build_artifacts.py's UNITS table DFP_PATH exactly
+      # (that table hard-codes the make variable it passes for this unit,
+      # it does not read this env var) - so that the "Artifacts freshness
+      # ratchet" step below, which shells out to that same script, finds
+      # the DFP where the script expects it instead of failing on a path
+      # this job unzipped to but the script never looks at. Renamed from
+      # the previous `/opt/dspic33ak-mc-dfp` (harmless - a fresh unzip
+      # target directory name, nothing else in this job or repo referenced
+      # the old string; verified via repo-wide grep before renaming) when
+      # the ratchet was wired in (adversarial review, see
+      # CONTRACTS.md #build-artifacts-tracked "GAP 2 FIX").
+      DFP_PATH: /opt/Microchip.dsPIC33AK-MC_DFP.1.5.263
       DL_DIR: ${{ github.workspace }}/.dl-cache
     steps:
       - uses: actions/checkout@v4
@@ -307,6 +364,19 @@ jobs:
         run: |
           echo "::notice::dsPIC33AK128MC102 RELEASE built with XC-DSC FreeMode: -Os is silently substituted with -O2-equivalent codegen ('Options have been disabled due to restricted license'). The build's size is exact and reproducible, but it is -O2, not true -Os."
           grep -c "Options have been disabled due to restricted license" "${{ steps.build.outputs.log }}" || true
+
+      # Sixth ratchet, wired in per adversarial review - see the `build`
+      # job's matching step for the full "why here, why RELEASE-gated"
+      # rationale (identical reasoning: check rebuilds BOTH flavors fresh
+      # regardless of which row triggers it, so one row per platform is
+      # correct, not redundant). This unit's .elf is exempt from the hash
+      # comparison (nondeterministic_elf - see tools/build_artifacts.py's
+      # UNITS table comment: embedded compiler-tempfile section names, not
+      # code); hex/bin/syms ARE hash-gated here exactly like every other
+      # unit, for both DEBUG and RELEASE.
+      - name: Artifacts freshness ratchet (tools/build_artifacts.py check)
+        if: matrix.build == 'RELEASE'
+        run: python3 tools/build_artifacts.py check --platforms dspic33ak128mc102
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
