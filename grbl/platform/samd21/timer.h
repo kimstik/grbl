@@ -83,9 +83,30 @@ STP_TMR_PRESCALER_RESET();
 #define STP_PULSE_RESET_COUNT_SET(val)  do { TC4->COUNT = (val); while (TC4->STATUS & (1 << 7)); } while(0)
 #define STP_PULSE_RESET_COMPARE_SET(val) do { TC4->CC[0] = (val); while (TC4->STATUS & (1 << 7)); } while(0)
 
-#ifdef STEP_PULSE_DELAY
-  #define STP_PULSE_DELAY_INIT()        (TC5->INTENSET = TC_INTFLAG_MC0)
-#endif
+// STP_PULSE_DELAY_INIT() used to be defined right here as
+// `(TC5->INTENSET = TC_INTFLAG_MC0)`, gated behind `#ifdef STEP_PULSE_DELAY`.
+// That guard was dead: this file is reached through the build prelude
+// (-include $(BOARD)/prelude.h, CONTRACTS.md #0), which runs before
+// grbl.h's own #include "config.h" ever defines STEP_PULSE_DELAY, so the
+// guard could never observe it (CONTRACTS.md #19 "guard that certifies
+// instead of checking", wrong-phase variant; see grbl/CONTRACTS.md gap
+// log). Making the definition unconditional (the fix used for this same
+// class elsewhere in this tree) surfaced a SEPARATE, pre-existing bug the
+// dead guard had been hiding: TC5 is never declared anywhere in this
+// port's samd21.h (only the GCLK_CLKCTRL_ID_TC4_TC5 shared-clock-selector
+// ID exists; the peripheral base/struct pointer TC4 gets has no TC5
+// counterpart), so the macro does not compile if ever invoked - and
+// because stepper.c (which calls it) builds before serial.c in this
+// Makefile's object list, that broken compile would win the race against
+// serial.c's informative `#error` and show the user a confusing "TC5
+// undeclared" instead. Left OMITTED (matching ch32v006/ch570's already-
+// established pattern for a genuinely unimplemented pulse-delay timer)
+// rather than defined-but-broken: serial.c's `#ifdef STEP_PULSE_DELAY`
+// `#error` is now the one and only diagnostic a user seeing, with a clear
+// explanation instead of an undeclared-identifier compile error.
+// Re-enabling this for real needs a verified TC5 register block added to
+// samd21.h first - out of scope for the phase-ordering fix this comment
+// documents.
 
 // PWM TIMER (TCC0 - Timer/Counter for Control)
 

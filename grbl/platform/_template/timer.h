@@ -58,12 +58,21 @@
 #define STP_PULSE_RESET_START()           PORT_TODO_STP_PULSE_RESET_START()
 #define STP_PULSE_RESET_STOP()            PORT_TODO_STP_PULSE_RESET_STOP()
 
-// Only compiled when STEP_PULSE_DELAY is on (default off, config.h:425) -
-// absent entirely otherwise is the contract-correct "conditional" no-op.
-#ifdef STEP_PULSE_DELAY
-  #define STP_PULSE_RESET_COMPARE_SET(val) PORT_TODO_STP_PULSE_RESET_COMPARE_SET(val)
-  #define STP_PULSE_DELAY_INIT()           PORT_TODO_STP_PULSE_DELAY_INIT()
-#endif
+// PORT-TODO NOTE (do not re-add `#ifdef STEP_PULSE_DELAY` around this):
+// this file is reached through the build prelude (-include
+// boards/$(BOARD)/prelude.h, CONTRACTS.md #0), which runs before grbl.h's
+// own #include "config.h" ever defines STEP_PULSE_DELAY - a guard here
+// can never observe it, silently dropping these macros even when a port
+// copied from this template enables the feature (CONTRACTS.md #19 "guard
+// that certifies instead of checking", wrong-phase variant - every landed
+// port hit this and had it removed here, see grbl/CONTRACTS.md gap log).
+// Defining them unconditionally costs nothing: the PORT_TODO_* stubs are
+// only ever referenced from core's own (correctly-timed)
+// `#ifdef STEP_PULSE_DELAY` in stepper.c, and the linker-as-checklist
+// mechanism (CONTRACTS.md #14.3) still catches an unimplemented stub the
+// moment a real port turns the feature on.
+#define STP_PULSE_RESET_COMPARE_SET(val) PORT_TODO_STP_PULSE_RESET_COMPARE_SET(val)
+#define STP_PULSE_DELAY_INIT()           PORT_TODO_STP_PULSE_DELAY_INIT()
 
 // SPINDLE PWM (CONTRACTS.md §6) - only compiled under VARIABLE_SPINDLE.
 /*

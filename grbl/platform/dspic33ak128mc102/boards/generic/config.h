@@ -66,9 +66,15 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define COOLANT_FLOOD_PIN       4
 #define COOLANT_FLOOD_BIT       4
 
-#ifdef ENABLE_M7
-  #error "ENABLE_M7 (mist coolant) does not fit the 28-pin dsPIC33AK128MC102 pin budget (19 GPIO, all allocated - see file header)"
-#endif
+// The `#ifdef ENABLE_M7 / #error` unsupported-feature check used to live
+// right here, but this file arrives via the build prelude (-include
+// boards/$(BOARD)/prelude.h, CONTRACTS.md #0), processed before grbl.h's
+// own #include "config.h" ever defines ENABLE_M7 - the guard could never
+// see it and the #error could never fire (CONTRACTS.md #19 "guard that
+// certifies instead of checking", wrong-phase variant; see grbl/
+// CONTRACTS.md gap log). Moved to serial.c (already includes grbl.h for
+// other reasons, so it runs after core config.h has actually been
+// processed) where it now genuinely fires.
 
 // LIMIT SWITCHES (RD0, RD1, RD2) - inputs in bits 0-2 (CONTRACTS.md #1.3),
 // Change Notification port D -> _CNDInterrupt (own vector, no sharing)

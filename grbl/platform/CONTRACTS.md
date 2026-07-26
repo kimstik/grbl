@@ -3005,7 +3005,7 @@ Recorded so they are not rediscovered as novel:
    map is decorative regardless.
 
 <a id="gpio-port-clock-gating"></a>
-## §NEW. A configured, wired GPIO pin still does nothing if its PORT's bus clock was never gated on (BUG #24)
+## 28. A configured, wired GPIO pin still does nothing if its PORT's bus clock was never gated on (BUG #24)
 
 Distinct from [§boot-init-unreachable](#boot-init-unreachable) (BUG #23,
 code that exists but nothing calls) and from [§1](#gpio-data) (pins wired
@@ -3104,3 +3104,121 @@ register for GPIO on this chip at all (confirmed by reading `ch570.h`'s
 register map: the only gated peripherals behind `R8_SLP_POWER_CTRL`/
 `R8_CLK_SYS_CFG` are clock-tree and sleep-mode related, never GPIO). No
 change was made to ch570 — there is nothing to gate.
+
+<a id="prelude-phase-dead-guard"></a>
+## 29. A guard in the wrong TRANSLATION PHASE certifies just as falsely as one checking the wrong symbol family — §19's lesson 1, in a new shape (cite the slug, #prelude-phase-dead-guard, not "§29", from elsewhere)
+
+Found auditing the sg2002 port's build prelude against every other port's,
+for the pattern `#ifdef STEP_PULSE_DELAY` / `#error` in `timer.h`.
+[§19](#guard-hardening) lesson 1 established that a guard checking the
+*wrong symbol family* certifies the exact thing it exists to catch. This is
+the same certification failure, but the wrong dimension is *when the
+preprocessor sees it*, not *what it's named*.
+
+**The mechanism.** Every non-AVR port's Makefile injects one board prelude
+into EVERY translation unit via `-include boards/$(BOARD)/prelude.h`
+(CONTRACTS.md §0) — this happens before the compiler even opens the `.c`
+file being compiled, i.e. before that file's own `#include "grbl.h"` and
+therefore before grbl.h's `#include "config.h"` (grbl.h line ~42) has ever
+run. `STEP_PULSE_DELAY`, `ENABLE_M7`, and every other user-facing feature
+toggle are `#define`d **only** inside core `grbl/config.h`. On
+`ch32v006`, `ch570`, `samd21`, and `dspic33ak128mc102`, the prelude itself
+`#include`s the chip's `platform.h` (needed for `sei`/`cli` before grbl.h's
+`common/dummy/avr/io.h` stub demands them — a real, load-bearing reason),
+and `platform.h` pulls in `timer.h`. Any `#ifdef STEP_PULSE_DELAY` or
+`#ifdef ENABLE_M7` written inside `timer.h` or a board's `config.h` (pin
+map) is therefore evaluated during the PRELUDE pass, while the macro it
+tests is provably still undefined — and because `timer.h`/`config.h` carry
+the usual `#ifndef FOO_H` double-inclusion guard, that is the ONLY time
+the file's body is ever processed in that translation unit. grbl.h's own,
+correctly-timed `#include "config.h"` later in the SAME file reopens
+`timer.h`, finds the guard already set, and skips the body entirely — the
+guard never gets a second chance to see the macro defined.
+
+**Proof of the phase ordering** (`-E -dD` on ch32v006, compiling from
+`grbl/platform/ch32v006/`, prelude flags exactly as the Makefile passes
+them): the FIRST (and only) processing of `timer.h` happens at output line
+2614, inside the prelude's `platform.h` include, closing at line 2651 —
+`#define TIMER_CH32V006_H` (the guard) appears exactly once, at line 2616.
+Core `grbl/config.h` is not reached until line 4947, deep inside grbl.h's
+own chain (`grbl.h` -> `config.h`), **2300+ preprocessor lines after**
+`timer.h`'s guard was already set. The second attempt to pull in
+`platform.h` later (hal.h -> `ch32v006/platform.h`, line 5558) opens the
+file and immediately closes it — guard hit, body skipped, `timer.h` never
+re-entered.
+
+**Proof it was live and silent, not theoretical.** Uncommenting
+`grbl/config.h`'s `STEP_PULSE_DELAY` line and building `ch32v006`/`ch570`
+(`#error` guards) exits 0 — no error, no warning, feature silently
+unsupported. Uncommenting `ENABLE_M7` and building `ch32v006` fails, but
+with `./boards/generic/../../gpio.h:39:41: error: invalid type argument of
+'->' (have 'int')` — not the intended diagnostic. Root cause: the board
+`config.h` pin map's `#ifdef ENABLE_M7` (same wrong-phase bug) never
+defines `COOLANT_MIST_PORT`/`_BIT`, so `common/dummy/cpu_map.h`'s
+`#ifndef COOLANT_MIST_PORT` fallback silently supplies literal `0`, and
+`GPIO_OREG` then dereferences `(0)->OUTDR`. On `samd21` the SAME missing
+pin macros resolve differently and *far more dangerously*: that port's
+`GPIO_OREG` is `PORT->Group[name##_PORT].OUT`, an array index rather than
+a struct-pointer dereference, so the bogus fallback `0` is a **syntactically
+valid** `Group[0]` — the build succeeds and silently drives the wrong
+physical pin. Same dead guard, three different failure shapes (silent
+pass, confusing compile error, silent wrong-pin) depending on the
+consuming macro's shape — the guard itself never discriminates any of
+them, which is exactly §19 lesson 1's "certifies the exact thing it exists
+to catch," just reached via phase instead of naming.
+
+**Audit, all prelude-injecting ports** (only a port whose prelude chain
+`#include`s `platform.h`/board `config.h` before grbl.h is exposed —
+`stm32f103`/`stm32f411`/`stm32h523`/`hc32f460` deliberately keep
+`platform.h` out of their prelude and reach it only through grbl.h's
+ordinary chain, documented in their own prelude.h headers, so their
+`#ifdef ENABLE_M7` in `platform.h` is correctly timed and NOT part of this
+class; `sg2002`'s prelude includes nothing; `atmega328p` has no prelude at
+all):
+
+| Port | File | Guard | Shape | Fix |
+|---|---|---|---|---|
+| ch32v006 | timer.h | `#ifdef STEP_PULSE_DELAY` / `#error` | dead — hardware genuinely lacks a 2nd interrupt timer | moved to serial.c (already `#include`s grbl.h post-prelude) |
+| ch570 | timer.h | `#ifdef STEP_PULSE_DELAY` / `#error` | dead — same hardware limit | moved to serial.c |
+| dspic33ak128mc102 | timer.h | `#ifdef STEP_PULSE_DELAY` / `#error` | dead — CCP1RB dual-compare unverified | moved to serial.c |
+| dspic33ak128mc102 | boards/generic/config.h | `#ifdef ENABLE_M7` / `#error` | dead — genuine 19-GPIO pin-budget exhaustion | moved to serial.c |
+| samd21 | timer.h | `#ifdef STEP_PULSE_DELAY` gating `STP_PULSE_DELAY_INIT()` | dead — and the guarded body itself references an undeclared `TC5` (a second, independent latent bug the dead guard had been hiding end-to-end) | omitted the broken macro (matches ch32v006/ch570's "genuinely unsupported" precedent); `#error` moved to serial.c |
+| ch32v006 | boards/generic/config.h | `#ifdef ENABLE_M7` gating `COOLANT_MIST_*` | dead — pin is real, gate was pointless | made unconditional |
+| ch570 | boards/generic/config.h | `#ifdef ENABLE_M7` gating `COOLANT_MIST_*` | dead — pin is real | made unconditional |
+| samd21 (generic + megarm) | \*/config.h | `#ifdef ENABLE_M7` gating `COOLANT_MIST_*` | dead — pin is real | made unconditional |
+| _template | timer.h, boards/generic/config.h | both of the above, PORT_TODO-stub shaped | dead — propagates to every port copied from this file | made unconditional (matches the working ports' fix) |
+
+**The fix, and why two different shapes.** Two genuinely different repair
+strategies were needed, and conflating them would have been wrong:
+
+1. *A guard that certifies "unsupported" for a real hardware limitation*
+   (an `#error`) cannot be evaluated inside the prelude chain at all — it
+   was relocated to each port's `serial.c`, which already carries its own
+   `#include "../../grbl.h"` for unrelated reasons (BUG #19 realtime-byte
+   interception) and is therefore the first REAL processing of core
+   `config.h` in that translation unit. `#ifdef FEATURE / #error "..."`
+   placed immediately after that include fires correctly, proven by
+   re-enabling each macro and confirming the build now fails with the
+   intended message (verified DEBUG+RELEASE, reverted after).
+2. *A guard gating a plain constant `#define` that has no downstream cost
+   when unused* (pin-map macros, an unconditionally-safe timer macro) does
+   not need to be conditional AT ALL — core's own copy of the same
+   `#ifdef FEATURE` test, reached correctly through grbl.h's ordinary
+   chain, is the only place that ever consumes the macro. Deleting the
+   dead prelude-phase gate and defining the constant unconditionally is
+   strictly safer than trying to relocate a non-boolean definition to a
+   different translation unit (which would make it invisible to whichever
+   TU actually needs it — `serial.c` is not where `COOLANT_MIST_PORT` gets
+   used).
+
+Byte-identical canonical builds (both flavors, every affected port)
+re-verified after the fix; see PLAN.md for the full build log.
+
+**General takeaway:** before trusting an `#ifdef`/`#error` guard inside any
+header a Makefile injects via `-include`, ask not just "does this test the
+right macro" (§19 lesson 1) but "has this macro's OWNING file been
+processed yet, on THIS specific inclusion path, in THIS translation
+unit" — a prelude is, by construction, code that runs before the file
+being compiled has said anything at all; a macro defined by that later
+file's own include chain is invisible to it, permanently, once an
+`#ifndef` guard has already made its one pass.
