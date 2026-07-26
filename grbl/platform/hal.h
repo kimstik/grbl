@@ -64,9 +64,10 @@
   #include <inttypes.h>
 
   // Define AVR compatibility macros (to avoid modifying original code).
-  // Guarded: the platform's own avr/io.h stub (pulled in by grbl.h BEFORE
-  // this header) already defines sei()/cli() as CPSIE/CPSID inline asm and
-  // owns those names. The fallbacks below only apply to a TU that includes
+  // Guarded: the platform's injected prelude.h (via
+  // common/cortexm/cortexm_critical.h, which runs BEFORE grbl.h, itself
+  // before this header) already defines sei()/cli() as CPSIE/CPSID inline
+  // asm and owns those names. The fallbacks below only apply to a TU that includes
   // hal.h without grbl.h. (Note: HAL_INTERRUPTS_ENABLE/DISABLE currently
   // exist only in atmega328p/platform.h, so the fallback expansion is a
   // compile error if ever reached on ARM - better loud than silent.)

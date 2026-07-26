@@ -15,6 +15,15 @@
                             AVR-style defaults for names not already defined.
     2. ../common/gpio.h     Generic GPIO bit-op helpers (GPIO_MWO, GPIO_MRD,
                             GPIO_BGETOUT, ...) built on the accessors above.
+    3. ../common/cortexm/cortexm_critical.h
+                            sei/cli plus the HAL critical-section and
+                            interrupt-control macros, shared verbatim by every
+                            Cortex-M port here. MUST be injected before grbl.h:
+                            grbl.h pulls <avr/io.h> (the shared common/dummy
+                            stub) at its line 29, and that stub errors out
+                            unless sei/cli already exist. This port used to
+                            satisfy that with a LOCAL avr/io.h shadowing the
+                            shared stub; see that header for the full argument.
 
   The pin map and chip HAL (platform.h, which includes timer.h) arrive through
   grbl.h's ordinary include chain (grbl.h -> platform/hal.h -> platform.h).
@@ -30,6 +39,7 @@
 
 #include "gpio.h"
 #include "../common/gpio.h"
+#include "../common/cortexm/cortexm_critical.h"
 
 /*
   SINGLE-PRECISION LIBM PIN - armed only when the Makefile's FP knob is

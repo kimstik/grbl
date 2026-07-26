@@ -2551,3 +2551,131 @@ batch's `-flto` change is confirmed scoped to exactly the two ports it
 targets. `tools/build_artifacts.py --selftest`,
 `tools/assert_no_double.sh --selftest`, `ci/warn_ratchet.py --selftest`,
 and `tools/check_contracts_numbering.py` all still PASS unchanged.
+<a id="cross-arch-dedup-byte-invariance"></a>
+## 26. Cross-architecture de-duplication under a byte-identity gate — four extractions, and the one that had to stop at three ports (placeholder number — integrator assigns the final one; cite this slug, not "§26", from elsewhere)
+
+Follow-on to the WCH extraction in
+[§24](#wch-common-extraction-ch570), which proved the method on one vendor
+family. This batch applied the same hard gate — *rebuild every consumer,
+compare RELEASE `.bin` MD5 against the committed
+[`artifacts/`](#build-artifacts-tracked) baseline, identical or the
+extraction is rejected* — to four duplication clusters that span **different
+architectures** (Cortex-M3/M4/M4F/M33, RISC-V, and dsPIC33A), not one
+vendor's cores. Every claim below is a real build in this session.
+
+1. **The gate scales across ISAs, and it is cheap.** All four extractions
+   came out byte-identical on every consumer, first try, with no tuning:
+   `common/cortexm/cortexm_critical.h` (stm32f103/f411/h523 + hc32f460),
+   `common/serial_ring_accessors.h` (ch32v006, ch570, dspic33ak128mc102,
+   samd21 ×2 boards), `common/nvmem_checksum.h` (same four), and
+   `common/stm32/stm32_timer.h` (stm32f103/f411/h523). The rule §24
+   established holds unchanged off the vendor axis: **copy the extracted
+   text verbatim; parameterize only what is genuinely fixed per port.**
+   What made all four safe is that the only per-port things were *names
+   resolved at the include site* — buffer symbols, `RX_RING_BUFFER`/
+   `TX_RING_BUFFER` sizing, `EEPROM_SIZE`, and (for the timer header) the
+   TIM base addresses, which stay in each port's own `regs.h` and are
+   reached through the plain `#include "regs.h"` the shared file does under
+   each port directory's own `-I.`.
+
+2. **`-Os` erases formatting differences; `-O0` does not — say which
+   flavor your gate covers.** samd21's serial accessors and NVMEM read
+   wrapper were the same logic written with `if/else` where the other three
+   ports used early return / a conditional expression. Normalizing to the
+   3-of-4 majority form was **byte-identical in RELEASE on both samd21
+   boards** and changed the **DEBUG** image by 4 bytes (48408 → 48404,
+   megarm). That is expected and is the correct trade: RELEASE is what
+   ships and what `artifacts/` commits; DEBUG exists to be single-stepped.
+   But it means `MANIFEST.sha256`'s (uncommitted, `#`-prefixed) DEBUG hash
+   lines for the two samd21 boards move, and a reviewer who only knows
+   "byte-identical" will read that as a contradiction unless the batch says
+   *which flavor* the identity claim covers. Unifying two formattings can
+   only ever be `-O0`-invariant for one of them; picking the majority form
+   at least minimizes how many ports' DEBUG images move.
+
+3. **A shared header that defines FUNCTIONS is the right shape for the
+   TU-replacement route — and must announce that it is not an ordinary
+   header.** `serial_ring_accessors.h` and `nvmem_checksum.h` both contain
+   function *definitions* and are `#include`d exactly once, from inside a
+   port's `serial.c`/`nvmem.c`, **after** that file has declared the
+   objects they operate on. This looks wrong until you notice that
+   TU-replacement ports ([§7](#serial)) do not link core
+   `grbl/serial.c`/`grbl/nvmem.c` at all: there is no translation unit
+   these functions could otherwise live in without every port growing an
+   extra object file and an extra Makefile line, for five functions of pure
+   ring arithmetic. Both files state the requirement, and the include-site
+   ordering constraint, in their own banner — the failure mode otherwise is
+   an "undeclared identifier" storm at a confusing line.
+
+4. **THE ONE THAT STOPPED AT THREE PORTS: an NVMEM write wrapper is not
+   shareable just because it reads identically.** `memcpy_to_nvmem_with_
+   checksum` is character-identical in ch32v006/ch570/dspic33ak128mc102 —
+   compute the checksum, then issue exactly **two** `nvmem_write_range`
+   calls (data, then checksum byte). samd21 has **no**
+   `nvmem_write_range` at all: its `eeprom_put_char` performs a full page
+   read-modify-write per byte, and its wrapper interleaves checksum
+   accumulation with those per-byte puts. Adopting the block form there
+   would change what the chip physically does to its flash — a different
+   erase/program pattern, i.e. a **behavior and wear-profile change**, not
+   a formatting cleanup — and would not have been byte-invariant either.
+   So the write half is **opt-in** (`GRBL_NVMEM_HAS_WRITE_RANGE`), samd21
+   takes only the read half, and the header says why in-line so the next
+   reader does not "finish the job". **Generalizable rule: two functions
+   with the same name, signature and observable result are still not the
+   same function if they drive the hardware differently. Diff what they DO
+   to the peripheral, not just what they return.**
+
+5. **`-I` shadowing is invisible duplication — go looking for it.** The
+   four Cortex-M ports each carried a `<port>/avr/io.h` whose only purpose
+   was to **shadow** the shared `common/dummy/avr/io.h` via `-I.` preceding
+   `-I../common/dummy`. Nothing in any Makefile, header or doc said "this
+   file exists to win an include race"; the four copies differed only in a
+   chip name inside two comments. This class of duplicate does not show up
+   in a grep for repeated *code* — the file name is the giveaway, not the
+   contents. The fix also exposed the real constraint that had forced them:
+   `grbl.h` includes `<avr/io.h>` at its line 29, long before
+   `platform/hal.h` → `platform.h` at line 49, and the shared stub
+   deliberately `#error`s when `sei`/`cli` are not yet defined — so those
+   two macros must exist **before `grbl.h` is parsed**. There are exactly
+   two legitimate ways to arrange that, and this tree now uses both
+   explicitly: inject the port's own `platform.h` from `prelude.h` (samd21,
+   dspic33ak128mc102), or inject a shared per-architecture critical-section
+   header from `prelude.h` (`common/cortexm/cortexm_critical.h` for the
+   four Cortex-M ports; `common/wch/wch_critical.h` for the two WCH ports).
+   `common/dummy/avr/io.h`'s banner now names both routes instead of
+   pointing at per-port stubs that no longer exist.
+
+6. **The `||`-vs-`|` NVMEM checksum boundary survived contact with an
+   extraction, and the shared file now enforces it mechanically.** Core
+   `grbl/nvmem.c` computes `checksum = (checksum << 1) || (checksum >> 7)`
+   — upstream GRBL's logical-OR typo, which
+   [§10.4](#nvmem-eeprom) says must NEVER be "fixed" because the golden
+   AVR binary and every settings blob already written by an atmega328p in
+   the field depend on that exact arithmetic. Every non-AVR port has always
+   used the bitwise `|` rotate instead (different storage, different sizes,
+   no shared media — they were never bug-compatible with AVR's EEPROM
+   contents to begin with). Extracting the non-AVR form is therefore safe,
+   but it puts the two forms one careless include away from each other for
+   the first time. `common/nvmem_checksum.h` carries the boundary in its
+   banner **and** `#error`s outright under `__AVR__`, so the dangerous
+   direction fails at compile time rather than relying on a reader
+   noticing. Core `grbl/nvmem.c` and `atmega328p/` are untouched by this
+   batch; `make -C grbl/platform/atmega328p validate` still reports the
+   golden MD5 `79af184e67b27defd27a39309ac53563`.
+
+7. **Timer contract macros are the highest-blast-radius thing in this
+   tree; extract them last and say so in the file.** `stm32f103/timer.h`,
+   `stm32f411/timer.h` and `stm32h523/timer.h` were 100% code-identical
+   (comments and include-guard names were the entire difference), so
+   `common/stm32/stm32_timer.h` is a pure dedup. But these are the
+   `STP_TMR_*`/`STP_PULSE_RESET_*`/`PWM_*` macros that
+   [§3](#stepper-timer)-[§6](#spindle-pwm) mark **ISR-hot**:
+   one edit there now lands inside three step ISRs at once. The shared
+   header opens with that fact and with the single-register-access
+   constraint, because the next editor will otherwise see three ports' worth
+   of blast radius as three ports' worth of convenience. The per-family
+   notes the three copies carried (F411's APB1 timer-clock doubling to
+   96 MHz, the 32-bit TIM2/TIM3 remarks, TIM1's `BDTR.MOE` gating with all
+   three reference-manual citations) were merged into the shared file, not
+   dropped — a dedup that loses the per-chip *why* is a net loss even when
+   the code is identical.
