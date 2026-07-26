@@ -299,3 +299,98 @@ fixed and absent from the current baselines (confirmed: `grep -rn "SPINDLE_ENABL
 ci/warn_baseline_*.txt` → zero hits).
 
 ---
+
+## Claim C — "No other port is affected" (three sub-claims)
+
+### C1. BUG #25 (two headers both defining a pin) — claimed confined to f103/h523 live, f411
+latent, "no other port... has a config.h/platform.h pair that both claim the same pin-shaped
+macro name at all" outside those three, with samd21 named as having exactly two deliberate,
+`#undef`-announced exceptions (`PROBE_PIN`, `PROBE_MASK`).
+
+**Verdict: REFUTED (undercounted, not a live bug).** Wrote an independent sweep
+(`/tmp/.../scratchpad/pinmap_sweep.py`) that parses every `#define`/`#undef` in every port's
+`config.h`/`boards/*/config.h` and its paired `platform.h`, across all 11 config.h files
+(`_template`, ch32v006, ch570, dspic33ak128mc102, samd21×3 (shared+2 boards), sg2002,
+stm32f103/f411/h523) and every `platform.h` (adding `atmega328p`/`hc32f460` — confirmed neither
+has a `config.h` at all, matching the claim). Result: `_template`, ch32v006, ch570,
+dspic33ak128mc102, sg2002, and all three STM32 ports have **zero** common macro names between the
+two files (clean, matches claim). **samd21 (both boards) has FOUR common names, not two**:
+`PROBE_PIN`, `PROBE_MASK`, `CONTROL_MASK`, `LIMIT_MASK`. Of these, `PROBE_PIN`/`PROBE_MASK`/
+`CONTROL_MASK` are each preceded by their own `#undef` in `platform.h` (confirmed by reading
+`grbl/platform/samd21/platform.h:231-241` directly) — the deliberate, announced-override pattern
+the doc describes. **`LIMIT_MASK` (platform.h:225) has no preceding `#undef LIMIT_MASK` anywhere
+in either file** — read directly: `config.h:263` `#define LIMIT_MASK LIMIT_MASK_A`, then
+`platform.h:225` `#define LIMIT_MASK LIMIT_MASK_A // Combined mask for all limit pins` with only
+an unrelated `#undef LIMIT_PIN` one line above it, not `#undef LIMIT_MASK`. This is the exact
+silent-shadow mechanism §33 says exists nowhere outside the three STM32 ports, present on a
+fourth port. Not a live bug today — both sides expand to the literal token `LIMIT_MASK_A`
+(textually identical, which is also why GCC's redefinition warning never fires and it was never
+in any baseline) — same "latent, not live" class §33 itself uses for stm32f411's benign
+duplicates, and the same "one unreviewed edit away" risk it warns about there. **Consequence**:
+the "no other port... at all" / "always preceded by an explicit `#undef`" framing in
+CONTRACTS.md §33 is factually wrong on both the count (4, not 2) and the mechanism (3 of 4
+guarded, not 4 of 4) for samd21 specifically. Low-severity (no runtime effect today, and the
+project's own §33 already establishes exactly the right diagnostic frame for this class — it just
+didn't apply its own sweep to samd21 the same way it did to the STM32 trio).
+
+### C2. BUG #24 (GPIO port bus clock never gated) — claimed ch32v006-only fix, ch570 verified
+immune, no completeness claim made about any other port.
+
+**Verdict: SURVIVES for what is actually claimed; UNVERIFIED beyond it — a real, unaudited gap
+exists and should be flagged.** CONTRACTS.md §28 only asserts two things: ch32v006 had the bug and
+it's fixed, and ch570 was independently checked and doesn't have the register class to have the
+bug at all. Neither claim over-reaches to "and every other port in the tree is clean" — but the
+review brief asks for exactly that broader sweep, so I ran it:
+
+- **ch570**: read `grbl/platform/ch570/ch570.h` directly. Confirmed a single GPIO port ("PA",
+  base `0x400010A0`, comment: "discrete registers, AVR-style"). The only clock/power-gate register
+  in the file, `R8_SLP_POWER_CTRL` (0x4000100F), is used exactly once in `platform.c:119`, inside
+  `hal_clock_config()`'s system-clock-divider commit — never referenced by any GPIO code. No
+  `IOPxEN`-class bit exists anywhere in this header for GPIO. Claim confirmed independently.
+- **stm32f103/f411/h523**: cross-checked every `*_PORT` macro in each port's `platform.h` against
+  its `hal_gpio_init()`'s `RCC->APB2ENR`/`AHB1ENR`/`AHB2ENR` literal. All three use exactly
+  `{GPIOA, GPIOB, GPIOC}` and all three gate exactly `{GPIOAEN, GPIOBEN, GPIOCEN}` (plus
+  `AFIOEN`/`SYSCFGEN` where applicable) — no port referenced in the pin map is missing from the
+  enable literal, on any of the three. Clean.
+- **hc32f460 — genuine open gap, not addressed by any existing claim.** This port's `hal_gpio_init()`
+  (`platform.c:137-162`) never writes to `PWC` for GPIO at all — no clock-gate call for `GPIOA`/
+  `GPIOB` anywhere in the port. The port's own cross-check source (Klipper3d/klipper's real,
+  shipped HC32F460 firmware, cited in `platform.md:247`) documents this exact chip family using
+  `PWC_FcgxPeriphClockCmd()` "clock-gate calls" for peripherals — meaning an FCG-class gate
+  register demonstrably exists on this chip. Whether GPIO specifically needs gating (some MCU
+  families exempt GPIO from bus gating; others don't) is not stated anywhere in this port's own
+  `platform.md`/`regs.h`, both of which already carry a blanket, honest "EFM/PORT register layout
+  UNVERIFIED, hardware bring-up must confirm" disclaimer for unrelated reasons. I could not resolve
+  this without a real HC32F460 register manual or hardware (neither available in this sandbox), so
+  I am **not** claiming this is a live BUG #24 instance — only that it is a plausible, real,
+  currently-unaudited candidate for the exact same defect class the project already found and fixed
+  once, and no document in this tree currently asks the question for this port. Recommend adding
+  it to the gap log explicitly rather than leaving it implicit inside the general UNVERIFIED
+  disclaimer.
+- **samd21 / dspic33ak128mc102**: no GPIO-port clock-gate code exists in either port either.
+  For samd21, this is consistent with SAMD21's PORT peripheral being on the always-enabled part of
+  the APB bus by default at reset (a real, well-known architectural fact about this chip family) —
+  but I did not confirm this against a primary datasheet source in this session, so it is
+  UNVERIFIED by me, not confirmed. Same for dsPIC33's I/O ports (PIC-family GPIO is conventionally
+  ungated, unlike AHB/APB-bus peripherals) — architecturally plausible, not independently confirmed
+  here. Neither is contradicted by anything found; both are open questions the existing docs don't
+  address, same class as hc32f460's gap above but lower-probability given the architectural priors.
+
+### C3. Pin-width truncation class — claimed SPINDLE_ENABLE/SPINDLE_DIRECTION/COOLANT_FLOOD/
+COOLANT_MIST/STEPPERS_DISABLE are NOT in the `uint8_t`-truncation risk class (unlike STEP/
+DIRECTION/LIMIT/CONTROL/PROBE) because every core use site is a single-bit operation on native
+register width.
+
+**Verdict: SURVIVES.** `grep -n "SPINDLE_ENABLE\|SPINDLE_DIRECTION\|COOLANT_FLOOD\|COOLANT_MIST\|
+STEPPERS_DISABLE" grbl/spindle_control.c grbl/coolant_control.c grbl/stepper.c grbl/system.c
+grbl/limits.c grbl/probe.c grbl/settings.c grbl/report.c` — every call site across all of core
+resolves to `GPIO_DIR_OUT(...)`, `GPIO_BSET(...)`, `GPIO_BCLR(...)`, `GPIO_BGETOUT(...)`, or a
+`bit_isfalse/bit_istrue(SPINDLE_ENABLE_PORT, (1<<SPINDLE_ENABLE_BIT))` register-width comparison —
+never assigned into or returned through a `uint8_t` local/return value the way LIMIT's
+`get_limit_pin_mask()` or PROBE's `GPIO_MRD(...)` truncate. Confirmed the macros themselves
+(`grbl/platform/common/gpio.h:85,89,97,134`) route through `GPIO_BWR`/`GPIO_BRD`, single-bit
+read/write helpers on the port's native register type, not through any `uint8_t`-typed
+intermediate. No exception found; the claim's own parenthetical ("checked, not assumed") is
+accurate — I re-checked and it holds.
+
+---
