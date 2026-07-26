@@ -102,6 +102,30 @@ CFLAGS += -D__$(DEVICE)__
 CFLAGS += -Wall -Wextra
 CFLAGS += -ffunction-sections -fdata-sections
 
+# FP PRECISION KNOB (CONTRACTS.md #17: "FP precision is a declared port
+# property"). Landed pattern from samd21/Makefile - see that file for the
+# full rationale (avr-gcc double==float template semantics; unsuffixed
+# double literals/libm calls in core were always single precision on the
+# origin AVR). This is the chip the original probe measured the leak on:
+# ~13.5KB of DP soft-float/libm text with the knob absent (rv32ec has no
+# FPU at all, so double is fully soft-float here too).
+#   FP=SINGLE (default): -fsingle-precision-constant keeps unsuffixed FP
+#     literals float; GRBL_FP_SINGLE arms the board prelude's SP libm
+#     call-site mapping; post-link tools/assert_no_double.sh FAILS the
+#     build listing offenders if any DP machinery still linked in.
+#   FP=DOUBLE: conscious opt-in deviation, must be declared in port docs.
+# Applied to BOTH build flavors - it is a semantics pin, not an
+# optimization.
+FP ?= SINGLE
+ifeq ($(FP),SINGLE)
+  CFLAGS += -fsingle-precision-constant -DGRBL_FP_SINGLE
+  ASSERT_FP = ../../../tools/assert_no_double.sh $(PREFIX)nm $(ELF_FILE)
+else ifeq ($(FP),DOUBLE)
+  ASSERT_FP = @echo "FP=DOUBLE: declared-double port build, no-DP assert disarmed"
+else
+  $(error FP must be SINGLE or DOUBLE, got "$(FP)")
+endif
+
 # picolibc supplies libc/libm/startfiles for this target (PLAN.md Decision
 # Log toolchain recipe); -nostartfiles because startup.c supplies its own
 # _start/Reset_Handler (PORTING-CHECKLIST Step 0/1) - without it the
@@ -228,6 +252,7 @@ link: $(ELF_FILE)
 $(ELF_FILE): objects
 	$(CC) $(LDFLAGS) -o $(ELF_FILE) $(OBJECTS) $(LIBS)
 	$(SIZE) --format=berkeley $(ELF_FILE)
+	$(ASSERT_FP)
 
 # Create hex file
 $(HEX_FILE): $(ELF_FILE)
@@ -301,6 +326,8 @@ help:
 	@echo "  make              - Full build: ELF + hex + bin (DEBUG, default)"
 	@echo "  make BUILD=RELEASE - Full build, optimized"
 	@echo "  make link         - Link only (must show zero PORT_TODO_*)"
+	@echo "  make FP=SINGLE    - AVR-faithful double==float semantics (default)"
+	@echo "  make FP=DOUBLE    - declared-double deviation, no-DP assert disarmed"
 	@echo "  make compdb       - Generate compile_commands.json for clangd/LSP"
 	@echo "  make clean        - Clean current build"
 	@echo "  make clean-all    - Clean all builds"

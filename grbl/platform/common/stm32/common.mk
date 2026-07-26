@@ -74,8 +74,33 @@ CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)
 CFLAGS += -Wall -Wextra
 CFLAGS += -ffunction-sections -fdata-sections
 
-# Floating point: default is float (single precision)
-# To enable double precision, add -D__USE_DOUBLE__ to CFLAGS_EXTRA in platform Makefile
+# FP PRECISION KNOB (CONTRACTS.md #17: "FP precision is a declared port
+# property"). Landed pattern from samd21/Makefile, rolled out here to every
+# STM32 family sharing this common.mk (f103/h523/f411) in one place - see
+# samd21/Makefile for the full rationale (avr-gcc double==float template
+# semantics; unsuffixed double literals/libm calls in core were always
+# single precision on the origin AVR).
+#   FP=SINGLE (default): -fsingle-precision-constant keeps unsuffixed FP
+#     literals float; GRBL_FP_SINGLE arms the platform prelude's SP libm
+#     call-site mapping; post-link tools/assert_no_double.sh FAILS the
+#     build listing offenders if any DP machinery still linked in. On
+#     f103 (M3, no FPU) this is a pure soft-float size win, same class as
+#     samd21/ch32v006. On h523/f411 (M33/M4F, SP-only hardware FPU) it
+#     ALSO lets SP math hit real FPU instructions (vsqrt.f32 etc.)
+#     instead of soft-float calls - a speed win, not just size.
+#   FP=DOUBLE: conscious opt-in deviation, must be declared in port docs.
+# Applied to BOTH build flavors - it is a semantics pin, not an
+# optimization.
+FP ?= SINGLE
+ifeq ($(FP),SINGLE)
+  CFLAGS += -fsingle-precision-constant -DGRBL_FP_SINGLE
+  ASSERT_FP = ../../../tools/assert_no_double.sh $(PREFIX)nm $(ELF_FILE)
+else ifeq ($(FP),DOUBLE)
+  ASSERT_FP = @echo "FP=DOUBLE: declared-double port build, no-DP assert disarmed"
+else
+  $(error FP must be SINGLE or DOUBLE, got "$(FP)")
+endif
+
 # CFLAGS_EXTRA must be ABSOLUTELY FIRST to override grbl headers (cpu_map.h, etc)
 CFLAGS += $(CFLAGS_EXTRA) -I$(PLATFORM_DIR) -I$(COMMON_DIR) -I$(GRBL_DIR)/platform -I$(GRBL_DIR)
 
@@ -161,6 +186,7 @@ $(BUILD_DIR)/stm32_watchdog.o: $(COMMON_DIR)/stm32_watchdog.c | $(BUILD_DIR)
 $(ELF_FILE): $(OBJECTS)
 	$(CC) $(LDFLAGS) -o $@ $(OBJECTS) $(LIBS)
 	$(SIZE) --format=berkeley $@
+	$(ASSERT_FP)
 
 # Create hex file
 $(HEX_FILE): $(ELF_FILE)
@@ -218,6 +244,8 @@ help:
 	@echo "  make              - Build DEBUG version (default)"
 	@echo "  make BUILD=DEBUG  - Build with debugging symbols"
 	@echo "  make BUILD=RELEASE - Build optimized for production"
+	@echo "  make FP=SINGLE    - AVR-faithful double==float semantics (default)"
+	@echo "  make FP=DOUBLE    - declared-double deviation, no-DP assert disarmed"
 	@echo ""
 	@echo "Other targets:"
 	@echo "  make flash        - Flash using st-link"

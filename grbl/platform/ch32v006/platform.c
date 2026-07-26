@@ -246,16 +246,33 @@ static void delay_busy_loop(uint32_t iterations) {
   );
 }
 
+// Float-typed worker: everything past the ABI boundary is single precision.
+// samd21/platform.c pattern (CONTRACTS.md #17) - narrowing at the entry
+// point is NECESSARY but NOT SUFFICIENT: the sub-ms remainder below was
+// originally computed in double (`__ms - (double)ms`, `rem * 1000.0`)
+// *behind* an already-narrowed `(uint32_t)__us` cast, which relinked
+// __adddf3/__subdf3/__muldf3 and their DP libm neighbors under
+// FP=SINGLE even though every call site "looked" narrowed. Keeping the
+// whole worker in float, with exactly ONE double->float narrowing at
+// each public entry point, is what tools/assert_no_double.sh enforces.
+static void delay_us_f(float us) {
+  uint32_t n = (uint32_t)us;     // truncates, SP->int
+  if (n) { delay_busy_loop(n * DELAY_LOOP_ITERS_PER_US); }
+}
+
 void _delay_us(double __us) {
-  uint32_t us = (uint32_t)__us;   // single soft-float conversion
-  if (us) { delay_busy_loop(us * DELAY_LOOP_ITERS_PER_US); }
+  delay_us_f((float)__us);       // the ONE narrowing
 }
 
 void _delay_ms(double __ms) {
-  uint32_t ms = (uint32_t)__ms;
+  float    ms_f = (float)__ms;   // the ONE narrowing
+  uint32_t ms   = (uint32_t)ms_f;
+
   for (uint32_t i = ms; i != 0; i--) {
     delay_busy_loop(1000u * DELAY_LOOP_ITERS_PER_US);
   }
-  double rem = __ms - (double)ms;
-  if (rem > 0.0) { _delay_us(rem * 1000.0); }
+
+  // Sub-1ms remainder: stays in float - see comment above delay_us_f().
+  float rem = ms_f - (float)ms;
+  if (rem > 0.0f) { delay_us_f(rem * 1000.0f); }
 }

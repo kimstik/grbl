@@ -970,6 +970,71 @@ disassembly. RM-only facts that could not be locally verified are marked.
    doesn't include platform preludes anyway. Re-verified this session:
    text 30640 / grbl.hex MD5 79af184e67b27defd27a39309ac53563, exact
    golden match.
+7. **ROLLOUT COMPLETE, 2026-07-26** — every remaining port now carries the
+   knob: ch32v006, stm32f103, stm32h523, stm32f411 (samd21 was already
+   landed; see point 5). Copied faithfully from the samd21 pattern, zero
+   reinvention: `FP ?= SINGLE` Makefile block (`-fsingle-precision-constant`
+   + `-DGRBL_FP_SINGLE`, both build flavors), the SP libm call-site shim in
+   every board/prelude that can be selected, `tools/assert_no_double.sh`
+   wired post-link on `$(ELF_FILE)`. Measured RELEASE deltas (text, `-Os
+   -flto`): ch32v006 54904 → **41072** (−13832, −25.2%); stm32f103 33924 →
+   **28700** (−5224, −15.4%); stm32h523 32448 → **25132** (−7316, −22.5%);
+   stm32f411 32660 → **25796** (−6864, −21.0%). `assert_no_double.sh`
+   PASSED on every RELEASE and DEBUG image, on the first build, for
+   stm32f103/h523/f411 — those three ports' `_delay_ms(double)` was already
+   a bare `(uint32_t)ms` truncation with no arithmetic behind the boundary,
+   so there was no leak of the delay-remainder class to find. ch32v006 DID
+   have the samd21-class leak: `_delay_ms()`'s sub-ms remainder was computed
+   in `double` (`__ms - (double)ms`, `rem * 1000.0`) behind an
+   already-narrowed entry point — this is the ORIGINAL PROBE CHIP where the
+   ~13.5KB DP figure in point 2 was first measured, and its knob had never
+   actually landed (the probe lived in a throwaway worktree). Fixed with
+   the identical `delay_us_f()` float-worker pattern samd21 used: one
+   `(float)` narrowing per public entry point, arithmetic never widens back
+   to double. Confirms the general lesson from point 4/5 generalizes across
+   both architectures this port family spans (rv32ec soft-float and ARM
+   soft-float alike): narrowing at entry is necessary, not sufficient — the
+   assert is what actually proves it, not the flags or the cast.
+   shared-Makefile note: stm32f103/h523/f411 all include one
+   `common/stm32/common.mk` — the `FP` knob, the `ASSERT_FP` hookup, and the
+   help text were added there ONCE and apply to all three. The SP libm
+   prelude shim is NOT shared the same way: CONTRACTS demands the shim live
+   in every board/prelude the Makefile can inject (point 3), so each port's
+   own `prelude.h` (none of the three has a `boards/` subdir — one prelude
+   per port) got its own copy of the shim block, not a `#include` of a
+   common one, so a future STM32 port added without copying the shim fails
+   loud (assert RED) instead of silently inheriting it by accident.
+   **stm32f411 FPU FINDING — the interesting case.** f411 is Cortex-M4F
+   with a real `fpv4-sp-d16` single-precision-only hardware FPU
+   (`-mfloat-abi=hard`, already the port's existing flag pre-rollout).
+   Disassembly of the RELEASE ELF, before vs. after `FP=SINGLE`: BEFORE —
+   `sqrt()` resolved to `__ieee754_sqrt` (software double-precision path),
+   287 `bl __aeabi_d*` soft-float call sites, 0 `vsqrt.f32` instructions
+   anywhere in the image (42 `vmul.f32`/22 `vadd.f32` already existed, from
+   code that was float-typed on both sides of the operator and so never
+   promoted). AFTER — `sqrtf()` compiles to exactly one instruction,
+   `vsqrt.f32 s0, s0` (confirmed in `objdump -Sxdstr` output); `vmul.f32`
+   count rose to 82 (+40), combined `vadd/vsub/vdiv.f32` rose to 161
+   (+139); `bl __aeabi_d*` / `bl sqrt` call sites: **0**. The entire
+   soft-float call population that fed arc/junction/trig math moved onto
+   real FPU instructions. Verdict: on an FPU-bearing SP-only chip this knob
+   is a genuine SIZE **and** SPEED win simultaneously — the hardware was
+   already present and paid for in the BOM, it was being starved by DP
+   promotion turning every `sqrt`/`atan2`/`sin`/`cos` call into a library
+   call the FPU could not execute. stm32h523 (Cortex-M33, `fpv5-sp-d16`,
+   also single-precision-only hardware) is architecturally the same case;
+   its −22.5% RELEASE delta is consistent with the same mechanism but was
+   not separately disassembled this batch.
+   Gates: AVR golden `make -C grbl/platform/atmega328p validate` **PASSED**
+   (MD5 `79af184e67b27defd27a39309ac53563`, text 30640, unchanged); samd21
+   re-measured on both boards/both flavors, **unchanged** at 31952/296
+   RELEASE (megarm and generic both assert-PASS); all four converted ports
+   build and assert-PASS on both DEBUG and RELEASE (8 images); STM32
+   boot-integrity check (BUG #21 ratchet, §18) PASSED on all 6 STM32
+   images; ch32v006's RISC-V `_start`-at-flash-base boot check PASSED on
+   both flavors. `FP=DOUBLE` re-verified as a true no-op vs. pre-rollout
+   HEAD on all four ports (byte-identical text to the pre-knob baseline)
+   before switching each to the `FP=SINGLE` default.
 ## 18. KEEP() does not survive LTO: vector tables need a real code reference
 
 *(Section number assigned by the BUG #21 work item; §17 is FP precision, landed
