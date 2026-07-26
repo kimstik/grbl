@@ -70,10 +70,13 @@ GDB        = $(PREFIX)gdb
 
 # Paths
 GRBL_DIR   = ../..
-# Keyed by BUILD flavor: DEBUG/RELEASE object dirs never alias, so switching
-# flavors without `make clean` can't silently relink stale objects under the
-# wrong name (bit samd21 twice, ch32v006 once in review - see PLAN.md/CONTRACTS.md).
-BUILD_DIR  = ../../../build/$(PLATFORM_NAME)/$(BUILD)
+# Keyed by BUILD flavor AND BOARD: DEBUG/RELEASE object dirs never alias, so
+# switching flavors without `make clean` can't silently relink stale objects
+# under the wrong name (bit samd21 twice, ch32v006 once in review - see
+# PLAN.md/CONTRACTS.md). BOARD is in the path too (bit samd21 a THIRD time -
+# BOARD wasn't keyed, so a no-clean board switch silently shipped the other
+# board's binary).
+BUILD_DIR  = ../../../build/$(PLATFORM_NAME)/$(BOARD)/$(BUILD)
 OUTPUT_DIR = ../../../build
 PLATFORM_DIR = .
 
