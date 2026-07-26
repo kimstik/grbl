@@ -1726,6 +1726,18 @@ symbols — `nm -u` on both finished ELFs is empty).
    SDK is usable" are different questions, and the second one can come back
    negative — don't assume every future vendor-exotic chip gets a dsPIC-class
    green light.
+
+   **PARTIALLY CORRECTED 2026-07-26 (item 10 below): a permissively-licensed
+   source DOES exist, just not the one this session checked.** Zephyr's
+   `hal_xhsc` mirror (github.com/zephyrproject-rtos/hal_xhsc) carries the
+   same vendor's real CMSIS device header and peripheral drivers under an
+   explicit BSD-3-Clause header ("Copyright (C) 2022-2024, Xiaohua
+   Semiconductor Co., Ltd."), not the unlicensed `Mmatsnev/hc32f4a0` mirror
+   checked here. Sharpens, not reverses, the lesson above: "no permissive
+   license reachable" was true for the ONE mirror checked, not for every
+   possible mirror of the same vendor's SDK — a negative license search
+   should try more than one distribution channel before concluding
+   clean-room is the only option.
 2. **Klipper3d/klipper's real shipped firmware is a legitimate cross-check
    class this file did not have a name for yet**: neither "vendor SDK"
    ([section 14](#ch32v006-riscv-gaps) item 7 precedent) nor "device family pack" ([section 16](#dspic33ak128mc102-gaps) item
@@ -1852,6 +1864,54 @@ symbols — `nm -u` on both finished ELFs is empty).
    port touched only `grbl/platform/hc32f460/`, `grbl/platform/CONTRACTS.md`,
    `grbl/platform/PLAN.md`, `grbl/platform/PLATFORM_ROADMAP.md`,
    `ci/warn_baseline_hc32f460.txt`, and `.github/workflows/ci.yml`.
+10. **GPIO clock-gating audit (2026-07-26), [§28](#gpio-port-clock-gating)
+    (BUG #24) cross-check requested by an adversarial review, which had
+    flagged this port's `hal_gpio_init()` never gating any GPIO clock as a
+    real, unaudited gap — CORRECTS item 1 above.** Ground truth was
+    available after all: a real, permissively-licensed (BSD-3-Clause,
+    Xiaohua Semiconductor / XHSC copyright) vendor CMSIS header and driver
+    source exists, mirrored by Zephyr
+    (github.com/zephyrproject-rtos/hal_xhsc,
+    `hc32_ddl/hc32f460/soc/hc32f460.h` +
+    `hc32_ddl/hc32f460/drivers/src/hc32_ll_{fcg,gpio}.c`) - missed by this
+    port's original porting session, which only found the HDSC DDL mirror
+    with no LICENSE file and stopped there. **Verdict: GPIO/PORT has NO
+    clock-gate bit anywhere on this chip** - a full scan of every bit in
+    the real `PWC_FCG0`/`FCG1`/`FCG2`/`FCG3` registers, the real 713-line
+    GPIO driver source (zero FCG/clock references), and the real FCG
+    driver source (zero GPIO/PORT references) all agree: this chip's GPIO
+    is not FCG-gated at all, the same "not applicable" outcome already
+    established for ch570 in [§28](#gpio-port-clock-gating), confirmed
+    rather than assumed. `hal_gpio_init()` needed no change.
+
+    The same audit DID find a real, previously-undocumented [§28](#gpio-port-clock-gating)
+    (BUG #24) instance on THIS port, on different peripherals: USART1
+    (FCG1 bit 24) and TIMER0 units 1/2 + TIMERA unit 1 (FCG2 bits 0/1/2) -
+    every peripheral this port's own `hal_timer_*_init()`/`hal_serial_init()`
+    already drive - had real FCG gate bits that `hal_clock_config()` never
+    set. Fixed there (2026-07-26): `PWC_FCG1 &= ~PWC_FCG1_USART1;
+    PWC_FCG2 &= ~(PWC_FCG2_TIMER0_1 | PWC_FCG2_TIMER0_2 | PWC_FCG2_TIMERA_1);`,
+    derived from exactly the peripherals this port's own init functions
+    configure (same principle item's fix used for ch32v006), placed inside
+    the already-`GRBL_BOOT_INIT`, already-`INIT_SYMBOLS`-tracked
+    `hal_clock_config()` (no new reachability wiring needed). Polarity
+    CONFIRMED from the real driver (`hc32_ll_fcg.c`'s
+    `FCG_FcgxPeriphClockCmd()`: `ENABLE` clears the bit, `DISABLE` sets it)
+    - the OPPOSITE of the STM32-style "1=enabled" convention every other ARM
+    port in this tree uses; getting this backwards would have gated the
+    clock OFF instead of on, the same defect with reversed sign. Byte
+    impact (real code, not an assert): RELEASE 25596/80 -> **25824/80**
+    (+228 text); DEBUG 41220/80 -> **41724/80** (+504 text) - both flavors
+    still link with zero `PORT_TODO_*`, `BOOT INIT: OK`, `BOOT INTEGRITY:
+    OK`, `FP=SINGLE` assert PASSED, and `ci/warn_ratchet.py` green (6/6
+    baseline, unchanged) against the existing `ci/warn_baseline_hc32f460.txt`.
+    Full-tree `python3 tools/build_artifacts.py build` re-run to refresh
+    `artifacts/hc32f460/*` and `artifacts/MANIFEST.sha256`; every sibling
+    unit's `.bin`/`.hex`/`.syms` confirmed byte-identical (only
+    `.elf.dump`'s own non-reproducible objdump-invocation first line
+    differs anywhere else, as documented in that file's own header). Golden
+    AVR `make -C grbl/platform/atmega328p validate` PASSED
+    (`79af184e67b27defd27a39309ac53563`) throughout, untouched.
 
 <a id="cross-core-cache-coherency"></a>
 ## 23. Cross-core shared memory needs cache maintenance, not just ordering (SG2002 recon — a new class beyond BUG #12)
@@ -3501,19 +3561,49 @@ than f103's.
 
 `hc32f460` has no `config.h` at all - `platform.h` is its only pin-map
 source, structurally immune by construction, not by luck. No other port in
-this tree (samd21, ch32v006, ch570, dspic33ak128mc102, sg2002, `_template`)
-has a config.h/platform.h pair that both claim the same pin-shaped macro
-name at all - a repo-wide sweep (every `config.h`/`boards/*/config.h`
-against its port's `platform.h`, comparing every macro name defined in
-both) found zero hits anywhere outside these three. samd21's `platform.h`
-DOES redefine two of its board `config.h`'s names (`PROBE_PIN`,
-`PROBE_MASK`) - but always preceded by an explicit `#undef`, which is a
-deliberate, visible, warning-free repurposing (the chip layer needs
-`PROBE_PIN` to mean "the port register" for one read-back site, not "a pin
-number"), not this bug's silent-shadow mechanism. `#undef` is the
-line between "an override" and "an accident": one announces itself in the
-diff and in the file, the other only announces itself in a compiler
-warning nobody read.
+this tree (ch32v006, ch570, dspic33ak128mc102, sg2002, `_template`) has a
+config.h/platform.h pair that both claim the same pin-shaped macro name at
+all - a repo-wide sweep (every `config.h`/`boards/*/config.h` against its
+port's `platform.h`, comparing every macro name defined in both) found zero
+hits anywhere outside samd21 and the three STM32 ports discussed above.
+
+**CORRECTED 2026-07-26 (independent re-sweep, own tooling, not re-quoted
+from this section's original count): samd21 has FOUR overlapping names, not
+two - `PROBE_PIN`, `PROBE_MASK`, `CONTROL_MASK`, and `LIMIT_MASK`.** The
+original claim above ("redefine two... always preceded by an explicit
+`#undef`") undercounted by two and overstated "always": `LIMIT_MASK`
+(`platform.h:225`, both board `config.h` files) was defined in both files
+with **no** preceding `#undef` anywhere - the exact silent-shadow mechanism
+this section is about, present on a fourth port, just numerically inert
+(both sides expanded to the identical token `LIMIT_MASK_A`, so no
+redefinition warning ever fired and nothing broke) - the same "latent, one
+edit from splitting" class this section's own stm32f411 discussion already
+warns about. Fixed the same way as every other repurposed name on that page:
+added `#undef LIMIT_MASK` immediately before `platform.h`'s `#define
+LIMIT_MASK LIMIT_MASK_A`, matching `CONTROL_MASK`'s existing, correctly-
+guarded pattern one line below (config.h's value is meant to keep flowing
+through unchanged here, unlike `PROBE_PIN`/`PROBE_MASK`'s genuine chip-level
+repurposing - `LIMIT_MASK`/`CONTROL_MASK` are just redundant restatements of
+the same value, announced rather than silently shadowed). Zero-codegen
+change confirmed: RELEASE `.bin` MD5-identical to the pre-fix build on both
+boards (`3f28eebf53f8a6d0...` generic, `491ffd90f0f9ccbf...` megarm,
+matching the committed `artifacts/samd21-*` exactly); DEBUG `.bin`/`.hex`
+also byte-identical (only the DEBUG `.elf`'s embedded DWARF line-number
+metadata shifts, from the added comment lines - `text`/`data`/`bss` and the
+stripped binary are unaffected). All 8 overlaps in the tree (4 names × 2
+samd21 boards) are now `#undef`-guarded; confirmed by both a fresh, from-
+scratch macro sweep and a new permanent CI ratchet,
+`ci/pinmap_overlap_check.py` (wired into `.github/workflows/ci.yml`'s
+`docs-integrity` job), which fails the build if any future config.h/
+platform.h pair anywhere in the tree defines a common macro name without a
+preceding `#undef` - broken against the real pre-fix `LIMIT_MASK` state and
+confirmed to fail with a clear message before being fixed and re-confirmed
+green, not merely inspected via `--selftest`.
+
+`#undef` is the line between "an override" and "an accident": one announces
+itself in the diff and in the file, the other only announces itself in a
+compiler warning nobody read (or, as `LIMIT_MASK` shows, in no warning at
+all, when the two sides happen to agree).
 
 ### The baseline was hiding it - read literally, not inferred
 
