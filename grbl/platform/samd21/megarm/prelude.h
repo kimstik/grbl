@@ -14,6 +14,7 @@
 
 #include "../gpio.h"
 #include "../../common/gpio.h"
+#include "../../common/clock_width.h" // CONTRACTS.md #36: F_CPU width guard
 #include "config.h"
 #include "../platform.h"
 

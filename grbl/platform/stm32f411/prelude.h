@@ -15,6 +15,7 @@
 #include "gpio.h"
 #include "../common/gpio.h"
 #include "../common/cortexm/cortexm_critical.h"
+#include "../common/clock_width.h" // CONTRACTS.md #36: F_CPU width guard
 
 /*
   SINGLE-PRECISION LIBM PIN - armed only when the Makefile's FP knob is

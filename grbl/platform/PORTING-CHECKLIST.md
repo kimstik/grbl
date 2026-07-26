@@ -60,6 +60,22 @@ strategy below, the GPIO 4-bit-packed-config-register pattern, etc).
 - [ ] System clock to the frequency you pass as `F_CPU` in the Makefile.
       `F_CPU` feeds `TICKS_PER_MICROSECOND` (nuts_bolts.h:47) and all stepper
       timing math — a lie here breaks every later step invisibly.
+- [ ] **`-DF_CPU=$(CLOCK)ULL` — always `ULL`, never `UL` or unsuffixed,
+      regardless of how low your `CLOCK` is today** (CONTRACTS.md
+      [§clock-constant-width](CONTRACTS.md#clock-constant-width), BUG #18
+      class). `stepper.c:1015` folds `TICKS_PER_MICROSECOND*1000000*60` at
+      compile time, in F_CPU's own type; `unsigned long` (`UL`) is 32-bit on
+      every ILP32 target this tree ships for and wraps **silently** above
+      ~71.58 MHz — unsigned overflow is well-defined wraparound, so
+      `-Woverflow` never fires, and there is no other diagnostic. `UL` at a
+      48 MHz launch clock looks correct and stays correct only until the
+      next board revision (a different crystal, a faster silicon variant)
+      raises `CLOCK` past the threshold — do not reason "my clock is low, so
+      UL is fine": that reasoning is exactly what BUG #18 recurred from once
+      already. `grbl/platform/common/clock_width.h`, included from every
+      port's `prelude.h`, `_Static_assert`s the WIDTH of the `F_CPU` token
+      (`sizeof(F_CPU) >= 8`) — it will catch a stray `UL` at compile time,
+      but the rule exists so you never need it to.
 - [ ] Flash wait states before raising the clock (samd21/startup.c:138).
 
 Exit: LED-blink or busy-loop binary runs at verified speed (scope a GPIO

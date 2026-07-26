@@ -91,16 +91,22 @@ CFLAGS  = -mcpu=$(CPU) -mthumb $(FPU)
 # long and stepper.c:1015's `TICKS_PER_MICROSECOND*1000000*60` stays in
 # range. On this platform's 32-bit int, 1000000 fits as plain int, so that
 # same expression (2.88e9 @ 48MHz) overflows signed int32 - UB plus a
-# compiler warning. The UL suffix here makes F_CPU (and therefore
-# TICKS_PER_MICROSECOND's expansion) unsigned long, so the product is
-# computed in uint32 - no core edit, no more overflow AT THIS CLOCK.
-# CORRECTION (found auditing the stm32/hc32/dspic siblings): UL only works
-# because 48 MHz keeps the product under 2^32-1 - it is NOT a general fix.
-# unsigned long is still 32-bit on this ABI, so any clock above ~71 MHz
-# wraps silently even with UL (unsigned overflow isn't warned, unlike
-# signed) - those ports need ULL instead. Do not copy plain UL onto a
-# future samd21 board clocked above ~71 MHz without re-checking this.
-CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)UL
+# compiler warning.
+# WIDENED UL -> ULL (CONTRACTS.md #36 clock-constant-width): this port was
+# left at UL when the stm32/hc32/dspic siblings were widened, because
+# 48 MHz keeps the UL product under 2^32-1 today - but that was true only
+# for TODAY's CLOCK, and unsigned long is still 32-bit on this ABI, so any
+# future board revision clocked above ~71 MHz would have wrapped silently
+# (unsigned overflow isn't warned, unlike signed) with zero diagnostic.
+# Widened uniformly with the other 7 ports so the class has no exception
+# left standing; common/clock_width.h (included via prelude.h) now asserts
+# the WIDTH of this token at every build, so a future accidental revert to
+# UL fails loudly instead of depending on someone re-deriving this comment.
+# Measured before/after both flavors, both boards - see PLAN.md/CONTRACTS.md
+# #36 for the exact byte deltas (48 MHz is far under the overflow
+# threshold, so the folded constant is numerically identical either way;
+# operand width can still perturb codegen at the register-pressure edges).
+CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)ULL
 CFLAGS += -D__$(DEVICE)__
 CFLAGS += -Wall -Wextra
 CFLAGS += -ffunction-sections -fdata-sections
