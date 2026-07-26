@@ -3384,3 +3384,155 @@ mechanism and deserve their own work items.
   fresh warning; the general dual-canon issue is a separate item, not
   claimed closed here. (3) sg2002 has no code yet (design-only, Phase 6
   deferral) — nothing to audit until it lands.
+
+- **[x] BUG #18 CLASS ACTUALLY CLOSED: width guard landed, the three
+  documented `UL` exceptions widened, class has no exception left standing
+  anywhere (2026-07-26, same-day follow-up to the entry above).** The prior
+  entry fixed five ports' VALUE (dspic33ak128mc102's silent wrap) and
+  documented three ports (`samd21`, `ch32v006`, `ch570`) as correctly `UL`
+  "for now" — itself flagged as a latent-regression risk
+  ([§clock-constant-width](CONTRACTS.md#clock-constant-width)'s own text:
+  "if any of their CLOCK values ever rises above ~71 MHz... UL must be
+  revisited"). Nothing enforced that revisit; a porter bumping `CLOCK` on
+  any of those three boards would have silently reintroduced the exact bug
+  with zero diagnostic, same as dspic33ak128mc102 did. This batch closes
+  that gap instead of continuing to document it.
+  - **The guard**: new shared header `grbl/platform/common/clock_width.h`,
+    one line: `_Static_assert(sizeof(F_CPU) >= 8, ...)`. Checks WIDTH, not
+    value — `UL` (`unsigned long`) is `sizeof == 4` on every ILP32 target
+    this tree ships for, `ULL` (`unsigned long long`) is `sizeof == 8`,
+    guaranteed by the C standard regardless of ABI — so it fires
+    identically whether the reverted clock is 16 MHz or 250 MHz, unlike the
+    existing `_Static_assert(F_CPU > 0, ...)` in several `platform.h` files,
+    which only ever checked the value and could never have caught this
+    class. Included from all 11 `prelude.h` files (every board directory:
+    stm32f103, stm32f411, stm32h523, hc32f460, sg2002, samd21/megarm,
+    samd21/generic, ch32v006/boards/generic, ch570/boards/generic,
+    dspic33ak128mc102/boards/generic, `_template`/boards/generic) — one
+    `#include` line added to each, no other prelude content touched.
+  - **Phase-ordering checked, not assumed**: F_CPU arrives as a
+    `-DF_CPU=...` command-line macro, defined for a translation unit before
+    any `#include` is even opened — it is never routed through a header, so
+    the prelude-vs-core-config.h timing trap
+    [§clock-constant-width](CONTRACTS.md#clock-constant-width) itself
+    documents (headers pulled in via `-include prelude.h` preprocessed long
+    before `grbl/config.h`'s own, correctly-timed pass; include guards mean
+    that later pass never re-enters them) cannot bite this assert — there is
+    no header-chain timing to miss. Verified with `arm-none-eabi-gcc -E` on
+    stm32f103's `main.c`: the assert's expansion appears immediately under
+    `-include prelude.h`'s own output, thousands of lines before
+    `grbl/config.h`'s text appears in the same translation unit, and still
+    evaluates against the correct (already-defined) F_CPU value.
+  - **Seen to actually fail, twice, not just inspected** (the project's own
+    stated bar after the `assert_no_double.sh`/`-fanalyzer` near-misses):
+    (a) live, not synthetic — immediately after the header was added to
+    every prelude.h but BEFORE the three Makefiles were widened, rebuilding
+    `ch32v006` (still `UL` at that point in the batch) failed on its very
+    first translation unit with the guard's message, `make` exit 2 — the
+    guard caught a real, then-still-`UL` port in the wild, not a contrived
+    one. (b) the requested negative control, after every port was widened —
+    `ch32v006/Makefile`'s `-DF_CPU=$(CLOCK)ULL` temporarily reverted to
+    `...UL`, rebuilt:
+    ```
+    ./boards/generic/../../../common/clock_width.h:102:1: error: static
+    assertion failed: "F_CPU must be suffixed ULL (>=64-bit unsigned long
+    long), not UL or a plain literal - see CONTRACTS.md #36
+    (clock-constant-width): unsigned long is 32-bit on every ILP32 target
+    this tree ships for and silently wraps grbl/stepper.c:1015's
+    compile-time constant fold above ~71.58 MHz, with zero compiler warning
+    (unsigned overflow is well-defined wraparound, not diagnosed by
+    -Woverflow)."
+    make: *** [Makefile:278: .../main.o] Error 1
+    ```
+    `make` exited 2 on the first object. Makefile restored, `diff` against
+    the pre-revert copy empty, rebuilt clean (exit 0).
+  - **The three ports widened, `UL` → `ULL`**: `samd21/Makefile`,
+    `ch32v006/Makefile`, `ch570/Makefile`. Per-port byte deltas, measured
+    (not predicted), both flavors, before vs after:
+    | port | board | flavor | before | after | delta |
+    |---|---|---|---:|---:|---:|
+    | samd21 | megarm | RELEASE | 32176 | 32280 | +104 |
+    | samd21 | megarm | DEBUG | 48128 | 48232 | +104 |
+    | samd21 | generic | RELEASE | 32132 | 32236 | +104 |
+    | samd21 | generic | DEBUG | 48040 | 48148 | +108 |
+    | ch32v006 | generic | RELEASE | 39044 | 39224 | +180 |
+    | ch32v006 | generic | DEBUG | 47120 | 47156 | +36 |
+    | ch570 | generic | RELEASE | 38586 | 38594 | +8 |
+    | ch570 | generic | DEBUG | 46866 | 46906 | +40 |
+
+    None byte-identical, either flavor — `data`/`bss` unchanged in every
+    row, only `text` moves. Root cause (inspected, not guessed):
+    `TICKS_PER_MICROSECOND` (`F_CPU/1000000`) is now `unsigned long long`-
+    typed, and it is used at RUNTIME, not just in stepper.c:1015's fully
+    compile-time-folded expression — stepper.c:240/242/245 compute
+    `settings.pulse_microseconds * TICKS_PER_MICROSECOND`, where
+    `settings.pulse_microseconds` is a plain variable, so the multiply
+    cannot be constant-folded; the 64-bit-typed constant now forces that
+    whole expression (and the trailing `>> 3`) into genuine 64-bit
+    arithmetic on a 32-bit target at those three call sites. This is
+    exactly the "real (if small) code-size cost at the three runtime-
+    variable pulse-time call sites" the original BUG #18 entry predicted
+    for these three ports before it was known to be true; this batch turns
+    that prediction into a measurement.
+  - **atmega328p: excluded, deliberately, not touched.** No `prelude.h`
+    exists for this port (its sole injection is the repo-root Makefile's
+    `-include grbl/platform/common/gpio.h`, unrelated), so
+    `clock_width.h` is never reached — exclusion by construction, no
+    `#ifdef __AVR__` needed. Its `F_CPU` (`16000000`, no suffix at all)
+    promotes to 32-bit `long` per the C standard's unsuffixed-decimal-
+    constant rule (AVR's `int` is only 16 bits, too small for 16000000);
+    `TICKS_PER_MICROSECOND * 60,000,000` = 960,000,000, comfortably under
+    signed `INT32_MAX` (~2.147e9), and AVR's realistic clock ceiling
+    (~20 MHz crystal, the part's own datasheet limit) never approaches the
+    ~35.8 MHz signed-overflow threshold this class has for an unsuffixed
+    constant. Requiring `ULL` there would mean editing the golden-MD5-gated
+    root Makefile to close a bug class that cannot occur on this port at
+    any real clock — assessed as not worth the risk to the byte-exact gate.
+    Precedent: `grbl/platform/atmega328p/Makefile`'s own BOOT-INIT
+    REACHABILITY RATCHET (BUG #23) already establishes "attach ratchets at
+    the shim layer, never the golden Makefile" for this exact port.
+  - **Gates, all re-run, all green**: golden AVR `make validate` PASSED
+    (`79af184e67b27defd27a39309ac53563`, unchanged — no `grbl/` core file
+    and no root Makefile touched). Every non-AVR port with a warn baseline
+    rebuilt DEBUG and checked: stm32f103 (10 warnings, in baseline),
+    stm32f411 (6), stm32h523 (7), hc32f460 (6), ch32v006 (4), ch570 (4),
+    samd21 megarm+generic (4), dspic33ak128mc102 (4, real `xc-dsc-gcc`
+    toolchain at `/opt/xc-dsc`, not skipped) — all `ci/warn_ratchet.py`
+    clean, zero new warnings anywhere. `_template` rebuilt (not gated, not
+    in CI by design): exit 0, zero errors. `tools/check_contracts_numbering.py`:
+    OK, 38 sections/slugs, 31 cross-file links, all consistent (no new
+    section added — the guard is documented as an extension of the existing
+    [§clock-constant-width](CONTRACTS.md#clock-constant-width), not a new
+    numbered section, per the "never renumber, ask before adding" rule).
+    Artifacts refreshed full-tree (`tools/build_artifacts.py build`, both
+    flavors): 77-line manifest, 30 RELEASE files, 26 DEBUG hashes, 10 units,
+    unchanged shape; `tools/build_artifacts.py check`: "56 file(s) verified
+    fresh across 10 unit(s)". The six ports NOT touched by this batch
+    (stm32f103/f411/h523, hc32f460, dspic33ak128mc102, atmega328p) show
+    zero `.bin`/`.hex`/`.syms` diff — only `.elf.dump` differs on those six
+    (the known, non-hash-gated objdump-invocation-path line), confirming
+    the guard's addition to their prelude.h (already `ULL`) is genuinely a
+    no-op there, not just assumed to be.
+  - **sg2002**: `clock_width.h` include added to its `prelude.h` for
+    uniformity (its Makefile already carries `-DF_CPU=$(CLOCK)ULL`, and at
+    700 MHz it is the port that most needs the guard), but NOT build-
+    verified in this batch — this port has no C-source build wired into
+    `tools/build_artifacts.py` or the CI matrix (Phase 6: "DESIGN-COMPLETE /
+    IMPLEMENTATION-DEFERRED", no toolchain decision made), so there is
+    nothing to rebuild yet. Flagged here rather than silently assumed
+    working.
+  - **Docs**: CONTRACTS.md
+    [§clock-constant-width](CONTRACTS.md#clock-constant-width) extended in
+    place (not renumbered — still §36) with the guard's mechanism, the
+    phase-ordering verification, the negative-control transcript, the
+    per-port byte-delta table, and the corrected/closed samd21/ch32v006/
+    ch570 exception (the section's own prior text is marked as a dated
+    correction, not silently rewritten). PORTING-CHECKLIST.md's clock-
+    setting step now states the ULL rule and points at the guard instead of
+    leaving a porter to rediscover this by reading CONTRACTS.md unprompted.
+  - **Scope discipline**: no `grbl/` core file touched, no root Makefile
+    touched, no `platform.h` edited on any port (this is a `prelude.h` +
+    `Makefile` + one new `common/` header + docs change only). Every edit:
+    `grbl/platform/common/clock_width.h` (new), 11×`prelude.h`,
+    `samd21/Makefile`, `ch32v006/Makefile`, `ch570/Makefile`, CONTRACTS.md,
+    PLAN.md (this entry), PORTING-CHECKLIST.md, `artifacts/` refresh.

@@ -12,4 +12,6 @@
 
 #define GRBL_PRELUDE 1
 
+#include "../common/clock_width.h" // CONTRACTS.md #36: F_CPU width guard
+
 #endif // GRBL_PRELUDE_SG2002_H

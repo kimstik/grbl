@@ -3886,24 +3886,149 @@ equivalent core-consumed timing macro must carry `ULL`, not `UL` -
 regardless of whether the port's CURRENT `CLOCK` value happens to fit
 under 32 bits today. A port's clock is a Makefile variable a future board
 revision changes; a suffix that is "safe" only because of today's value is
-a latent recurrence of this exact bug, one clock bump away. `samd21`
-(48 MHz), `ch32v006` (48 MHz), `ch570` (60 MHz) keep `UL` deliberately -
-their real clocks are under the 32-bit threshold, so widening them is an
-unjustified diff with a real (if small) code-size cost at the three
-runtime-variable pulse-time call sites (stepper.c:240,242,245) and no
-numeric benefit; if any of their `CLOCK` values ever rises above ~71 MHz,
-this section's rule applies to them too and `UL` must be revisited.
-`HAL_CPU_FREQ`/`CPU_FREQ`-style port-owned capability constants (separate
-macros, not derived from this Makefile define) are a different contract
-and must be audited independently - most already carry a correctly-sized
-literal (hc32f460's own `HAL_CPU_FREQ` is real, 200000000UL, and *is*
-consumed directly in a runtime multiply/SysTick-reload, which is exactly
-why 32-bit is fine there: 200000000/1000 fits any width), except
-stm32h523/platform.h's `HAL_CPU_FREQ` (72000000UL, stale copy-paste from
-its stm32f103 sibling, "72 MHz" comment and all - dead code, confirmed
-unused anywhere in that port's own sources, so numerically inert, not
-fixed here because it is outside this section's scope and touching it
-risks the concurrent pin-width batch's territory in the same file).
+a latent recurrence of this exact bug, one clock bump away.
+
+**CORRECTION / CLOSURE (2026-07-26, same day as the paragraph above):** the
+original text here said `samd21` (48 MHz), `ch32v006` (48 MHz), `ch570`
+(60 MHz) would keep `UL` deliberately because their real clocks sit under
+the 32-bit threshold. That reasoning was accurate for TODAY's value and
+exactly the class of latent-regression risk this section itself warns
+about one paragraph up - a documented exception is still an exception a
+future porter can trip over (samd21's DFLL is a real 48 MHz today, but a
+different SAMD2x/SAMx variant or an external-crystal board revision is an
+ordinary edit). All three were widened to `ULL` in the same batch that
+added the enforcement mechanism below, closing the exception rather than
+just re-documenting it. Measured, not assumed - RELEASE/DEBUG, every
+affected board, before (`UL`) vs after (`ULL`):
+
+| Port            | Flavor  | Before | After | Delta |
+|-----------------|---------|-------:|------:|------:|
+| samd21 megarm   | RELEASE |  32176 | 32280 |  +104 |
+| samd21 megarm   | DEBUG   |  48128 | 48232 |  +104 |
+| samd21 generic  | RELEASE |  32132 | 32236 |  +104 |
+| samd21 generic  | DEBUG   |  48040 | 48148 |  +108 |
+| ch32v006        | RELEASE |  39044 | 39224 |  +180 |
+| ch32v006        | DEBUG   |  47120 | 47156 |   +36 |
+| ch570           | RELEASE |  38586 | 38594 |   +8  |
+| ch570           | DEBUG   |  46866 | 46906 |  +40  |
+
+None is byte-identical, on either flavor. `data`/`bss` are unchanged in
+every row - only `text` moves. Root cause, found by inspection, not
+guessed: `TICKS_PER_MICROSECOND` (`F_CPU/1000000`) is itself a
+compile-time constant, but its **type** is now `unsigned long long`, and
+it is used at RUNTIME (not just in the fully-folded stepper.c:1015
+expression) at stepper.c:240/242/245: `settings.pulse_microseconds *
+TICKS_PER_MICROSECOND` - `settings.pulse_microseconds` is a plain
+variable, so this multiply cannot be constant-folded away, and the
+64-bit-typed constant now forces the WHOLE expression (and the
+following `>> 3`) to execute as 64-bit arithmetic on a 32-bit target at
+those three call sites, three times, at stepper init. That is exactly the
+"real (if small) code-size cost at the three runtime-variable pulse-time
+call sites" the original paragraph predicted before it was known to be
+true - the prediction is now a measurement.
+
+**The enforcement mechanism** (new this batch, closing the actual gap:
+a value-based `_Static_assert(F_CPU > 0, ...)` cannot detect a width
+regression, only a sign/zero one): `grbl/platform/common/clock_width.h`,
+a new shared header, `_Static_assert(sizeof(F_CPU) >= 8, ...)`. `UL` on
+every ILP32 target this tree ships for is `unsigned long`, `sizeof == 4`;
+`ULL` is `unsigned long long`, `sizeof == 8`, guaranteed by the C standard
+independent of ABI - so the assert is a pure WIDTH check, blind to the
+numeric value, and fires identically whether the reverted clock is
+16 MHz or 250 MHz. Included from every non-AVR port's `prelude.h` (the
+one `-include`d header injected into every translation unit of that
+port, see ARCHITECTURE.md's "Build Prelude" section) - 11 files (every
+board directory under `stm32f103, stm32f411, stm32h523, hc32f460,
+sg2002, samd21/megarm, samd21/generic, ch32v006/boards/generic,
+ch570/boards/generic, dspic33ak128mc102/boards/generic, _template/boards/
+generic`), one `#include` line added to each.
+
+**Phase-ordering, checked, not assumed**: F_CPU is not routed through any
+header at all - it arrives as a `-DF_CPU=...` command-line macro, defined
+for a translation unit before the first character of any `#include` is
+even opened. So the "prelude preprocessed long before core's own,
+correctly-timed config.h pass, and include guards mean that later pass
+never re-enters" trap this section itself documents (the reason a value
+threaded through a header chain can silently miss its intended check
+point) does not apply here: there is no header-chain timing for this
+assert to miss, because its one input isn't threaded through a header at
+all. Verified empirically: `arm-none-eabi-gcc -E` on stm32f103's `main.c`
+with the new include in place shows the assert's expansion sitting
+immediately under `-include prelude.h`'s output, thousands of lines
+before `grbl/config.h`'s own text appears in the same translation unit -
+and the assert still evaluates correctly there, because F_CPU was already
+fully defined before either header opened.
+
+**Seen to actually fail, not just inspected** (the project's own stated
+bar, after `assert_no_double.sh`'s libgcc-symbol miss and `-fanalyzer`'s
+silent `-fsyntax-only` no-op): with the guard and the `ULL` widening both
+landed, `ch32v006/Makefile`'s `-DF_CPU=$(CLOCK)ULL` was temporarily
+reverted to `...UL` and rebuilt. The very first translation unit failed:
+
+```
+riscv64-unknown-elf-gcc [...] -c ../../main.c -o .../main.o
+In file included from ./boards/generic/prelude.h:13,
+                 from <command-line>:
+./boards/generic/../../../common/clock_width.h:102:1: error: static
+assertion failed: "F_CPU must be suffixed ULL (>=64-bit unsigned long
+long), not UL or a plain literal - see CONTRACTS.md #36
+(clock-constant-width): unsigned long is 32-bit on every ILP32 target
+this tree ships for and silently wraps grbl/stepper.c:1015's compile-time
+constant fold above ~71.58 MHz, with zero compiler warning (unsigned
+overflow is well-defined wraparound, not diagnosed by -Woverflow)."
+  102 | _Static_assert(sizeof(F_CPU) >= 8,
+      | ^~~~~~~~~~~~~~
+make: *** [Makefile:278: .../main.o] Error 1
+```
+
+`make` exited 2. The Makefile was restored (`diff` against the pre-revert
+copy: empty) and rebuilt clean. Before this negative control, the guard
+had *also* already been observed firing for real (not synthetically) on
+`ch32v006` in its own still-`UL` state, immediately after the header was
+added and before the Makefile was widened - the identical error, same
+file:line, at the point in the batch where the gap between "guard exists"
+and "every port satisfies it" was still open.
+
+**`HAL_CPU_FREQ`/`CPU_FREQ`-style port-owned capability constants**
+(separate macros, not derived from this Makefile define) are a different
+contract and must be audited independently - most already carry a
+correctly-sized literal (hc32f460's own `HAL_CPU_FREQ` is real,
+200000000UL, and *is* consumed directly in a runtime multiply/SysTick-
+reload, which is exactly why 32-bit is fine there: 200000000/1000 fits
+any width), except stm32h523/platform.h's `HAL_CPU_FREQ` (72000000UL,
+stale copy-paste from its stm32f103 sibling, "72 MHz" comment and all -
+dead code, confirmed unused anywhere in that port's own sources, so
+numerically inert, not fixed here because it is outside this section's
+scope and touching it risks the concurrent pin-width batch's territory in
+the same file). `clock_width.h` intentionally does NOT assert on these -
+its one input is the `F_CPU` token, by design; a future batch auditing
+`HAL_CPU_FREQ` sites is free to add its own, differently-scoped guard.
+
+**atmega328p is excluded from `clock_width.h`, deliberately**: it has no
+`prelude.h` at all (its own, much smaller injection is the repo-root
+Makefile's single `-include grbl/platform/common/gpio.h`), and that
+Makefile is golden-MD5-gated (`make -C grbl/platform/atmega328p validate`,
+MD5 `79af184e67b27defd27a39309ac53563` - unchanged by this batch, verified
+by re-running it). Its `F_CPU` (`16000000`, no suffix at all - the root
+Makefile's `-DF_CPU=$(CLOCK)` predates every suffix convention this
+section discusses) is a plain decimal literal; the C standard promotes an
+unsuffixed decimal constant too large for `int` to the next type in the
+list, `long` - 32-bit `long` on AVR (where `int` is only 16 bits, so
+16000000 never fits it). `TICKS_PER_MICROSECOND * 60,000,000` = 16 *
+60,000,000 = 960,000,000, comfortably under signed `INT32_MAX`
+(~2.147e9) with more than a factor of two to spare, and AVR's realistic
+clock ceiling (~20 MHz crystal, the practical limit of the part's own
+datasheet) never approaches the ~35.8 MHz signed-overflow threshold this
+same class has for a non-suffixed constant. Requiring `ULL` there would
+mean editing the golden-gated root Makefile to close a class of bug that
+cannot occur on this port at any real clock - assessed as not worth the
+risk to the byte-exact gate, so it is excluded by construction (no
+`prelude.h` to carry the include) rather than by an explicit `#ifdef
+__AVR__` skip that would need maintaining. This mirrors the existing
+precedent at `grbl/platform/atmega328p/Makefile` (the BOOT-INIT
+REACHABILITY RATCHET, BUG #23/CONTRACTS.md #boot-init-unreachable):
+ratchets for this port attach at the shim layer, never at the golden
+Makefile itself.
 
 <a id="baseline-entry-discipline"></a>
 ## 37. A warning-baseline entry requires a recorded judgement, not a resemblance

@@ -89,7 +89,21 @@ vpath %.c $(GRBL_DIR)
 
 ARCHFLAGS = -march=$(ARCH) -mabi=$(ABI)
 CFLAGS  = $(ARCHFLAGS)
-CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)UL
+# WIDENED UL -> ULL (CONTRACTS.md #36 clock-constant-width): this port was
+# deliberately left at UL when the stm32/hc32/dspic siblings were widened,
+# because 60 MHz keeps stepper.c:1015's compile-time constant fold under
+# 2^32-1 today - but unsigned long is still 32-bit on this ABI, so a future
+# board clocked above ~71 MHz would wrap that fold silently (unsigned
+# overflow is well-defined wraparound, not diagnosed by -Woverflow).
+# Widened uniformly with the other 7 ports so the class has no exception
+# left; common/clock_width.h (included via boards/generic/prelude.h) now
+# asserts the WIDTH of this token at every build, so an accidental revert
+# to UL fails loudly instead of relying on this comment being re-read.
+# Measured before/after both flavors - see PLAN.md/CONTRACTS.md #36 for the
+# exact byte deltas (60 MHz is under the overflow threshold, so the folded
+# constant is numerically identical either width; operand width can still
+# perturb codegen at the register-pressure edges).
+CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)ULL
 CFLAGS += -D__$(DEVICE)__
 CFLAGS += -Wall -Wextra
 CFLAGS += -ffunction-sections -fdata-sections
