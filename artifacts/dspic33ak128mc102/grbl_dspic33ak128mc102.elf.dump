@@ -58,7 +58,7 @@
 # this batch) - the same DFP device pack every other toolchain
 # invocation on this unit already needs.
 
-/home/user/grbl/.claude/worktrees/agent-a682ed26b4e1b6004/build/grbl_dspic33ak128mc102.elf:     file format elf32-pic30
+/home/user/grbl/.claude/worktrees/agent-a37f62a264160e292/build/grbl_dspic33ak128mc102.elf:     file format elf32-pic30
 
 Sections:
 Idx Name          Size      VMA       LMA       File off  Algn
@@ -70,7 +70,7 @@ Idx Name          Size      VMA       LMA       File off  Algn
                   CONTENTS, DATA, NEVER_LOAD, ABSOLUTE
   3 __c30_signature 000000c0  00000000  00000000  0000afe0  2**0
                   CONTENTS, DEBUGGING, ABSOLUTE
-  4 _0x7f7790517240_at_address_0x81f800 00000800  0081f800  0081f800  0000a5e8  2**1
+  4 _0x7f3366f17240_at_address_0x81f800 00000800  0081f800  0081f800  0000a5e8  2**1
                   ALLOC, ABSOLUTE
   5 .nbss         00000016  00004000  00004000  00000134  2**1
                   ALLOC, NEAR
@@ -102,37 +102,37 @@ Idx Name          Size      VMA       LMA       File off  Algn
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
  19 .text         00000194  00809de8  00809de8  0000a0ac  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 20 /tmp/cccBSkk0.s.scn3 000000a4  00809f7c  00809f7c  0000a240  2**1
+ 20 /tmp/ccNDnc6Y.s.scn3 000000a4  00809f7c  00809f7c  0000a240  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
  21 .text         00000090  0080a020  0080a020  0000a2e4  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 22 /tmp/ccntIMmF.s.scn1 00000070  0080a0b0  0080a0b0  0000a374  2**1
+ 22 /tmp/ccUVmlhp.s.scn1 00000070  0080a0b0  0080a0b0  0000a374  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 23 /tmp/cccBSkk0.s.scn12 0000006c  0080a120  0080a120  0000a3e4  2**1
+ 23 /tmp/ccNDnc6Y.s.scn12 0000006c  0080a120  0080a120  0000a3e4  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 24 /tmp/ccNCWatS.s.scn1 0000005c  0080a18c  0080a18c  0000a450  2**1
+ 24 /tmp/ccz0y1bl.s.scn1 0000005c  0080a18c  0080a18c  0000a450  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 25 /tmp/cccBSkk0.s.scn5 0000004c  0080a1e8  0080a1e8  0000a4ac  2**1
+ 25 /tmp/ccNDnc6Y.s.scn5 0000004c  0080a1e8  0080a1e8  0000a4ac  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
  26 .text         0000004c  0080a234  0080a234  0000a4f8  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 27 /tmp/cccBSkk0.s.scn4 00000020  0080a280  0080a280  0000a544  2**1
+ 27 /tmp/ccNDnc6Y.s.scn4 00000020  0080a280  0080a280  0000a544  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 28 /tmp/cccBSkk0.s.scn8 00000020  0080a2a0  0080a2a0  0000a564  2**1
+ 28 /tmp/ccNDnc6Y.s.scn8 00000020  0080a2a0  0080a2a0  0000a564  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 29 /tmp/cccBSkk0.s.scn10 0000001c  0080a2c0  0080a2c0  0000a584  2**1
+ 29 /tmp/ccNDnc6Y.s.scn10 0000001c  0080a2c0  0080a2c0  0000a584  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 30 /tmp/cccBSkk0.s.scn7 00000018  0080a2dc  0080a2dc  0000a5a0  2**1
+ 30 /tmp/ccNDnc6Y.s.scn7 00000018  0080a2dc  0080a2dc  0000a5a0  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 31 /tmp/cccBSkk0.s.scn1 00000014  0080a2f4  0080a2f4  0000a5b8  2**1
+ 31 /tmp/ccNDnc6Y.s.scn1 00000014  0080a2f4  0080a2f4  0000a5b8  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 32 /tmp/cccBSkk0.s.scn2 00000008  0080a308  0080a308  0000a5cc  2**1
+ 32 /tmp/ccNDnc6Y.s.scn2 00000008  0080a308  0080a308  0000a5cc  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 33 /tmp/cccBSkk0.s.scn6 00000008  0080a310  0080a310  0000a5d4  2**1
+ 33 /tmp/ccNDnc6Y.s.scn6 00000008  0080a310  0080a310  0000a5d4  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 34 /tmp/cccBSkk0.s.scn11 00000008  0080a318  0080a318  0000a5dc  2**1
+ 34 /tmp/ccNDnc6Y.s.scn11 00000008  0080a318  0080a318  0000a5dc  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 35 /tmp/cccBSkk0.s.scn9 00000004  0080a320  0080a320  0000a5e4  2**1
+ 35 /tmp/ccNDnc6Y.s.scn9 00000004  0080a320  0080a320  0000a5e4  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
 SYMBOL TABLE:
 00000000 l    df *ABS*	00000000 ../../main.c
@@ -838,7 +838,7 @@ SYMBOL TABLE:
 008079d8 l       .text	00000000 .SE65
 00000000 l       *ABS*	00000000 __large_data_scalar
 00000000 l    d  *ABS*	00000000 
-0080a18c l    d  /tmp/ccNCWatS.s.scn1	00000000 /tmp/ccNCWatS.s.scn1
+0080a18c l    d  /tmp/ccz0y1bl.s.scn1	00000000 /tmp/ccz0y1bl.s.scn1
 00000000 l    d  *ABS*	00000000 
 00807664 l       .text	00000000 .L29
 0080769c l       .text	00000000 .L30
@@ -1315,26 +1315,26 @@ SYMBOL TABLE:
 00000000 l       *ABS*	00000000 __large_data_scalar
 00000000 l    d  *ABS*	00000000 
 00000000 l    d  *ABS*	00000000 
-0080a2f4 l    d  /tmp/cccBSkk0.s.scn1	00000000 /tmp/cccBSkk0.s.scn1
-0080a308 l    d  /tmp/cccBSkk0.s.scn2	00000000 /tmp/cccBSkk0.s.scn2
-00809f7c l    d  /tmp/cccBSkk0.s.scn3	00000000 /tmp/cccBSkk0.s.scn3
-0080a280 l    d  /tmp/cccBSkk0.s.scn4	00000000 /tmp/cccBSkk0.s.scn4
-0080a1e8 l    d  /tmp/cccBSkk0.s.scn5	00000000 /tmp/cccBSkk0.s.scn5
-0080a310 l    d  /tmp/cccBSkk0.s.scn6	00000000 /tmp/cccBSkk0.s.scn6
-0080a2dc l    d  /tmp/cccBSkk0.s.scn7	00000000 /tmp/cccBSkk0.s.scn7
-0080a2a0 l    d  /tmp/cccBSkk0.s.scn8	00000000 /tmp/cccBSkk0.s.scn8
-0080a320 l    d  /tmp/cccBSkk0.s.scn9	00000000 /tmp/cccBSkk0.s.scn9
-0080a2c0 l    d  /tmp/cccBSkk0.s.scn10	00000000 /tmp/cccBSkk0.s.scn10
-0080a318 l    d  /tmp/cccBSkk0.s.scn11	00000000 /tmp/cccBSkk0.s.scn11
-0080a120 l    d  /tmp/cccBSkk0.s.scn12	00000000 /tmp/cccBSkk0.s.scn12
+0080a2f4 l    d  /tmp/ccNDnc6Y.s.scn1	00000000 /tmp/ccNDnc6Y.s.scn1
+0080a308 l    d  /tmp/ccNDnc6Y.s.scn2	00000000 /tmp/ccNDnc6Y.s.scn2
+00809f7c l    d  /tmp/ccNDnc6Y.s.scn3	00000000 /tmp/ccNDnc6Y.s.scn3
+0080a280 l    d  /tmp/ccNDnc6Y.s.scn4	00000000 /tmp/ccNDnc6Y.s.scn4
+0080a1e8 l    d  /tmp/ccNDnc6Y.s.scn5	00000000 /tmp/ccNDnc6Y.s.scn5
+0080a310 l    d  /tmp/ccNDnc6Y.s.scn6	00000000 /tmp/ccNDnc6Y.s.scn6
+0080a2dc l    d  /tmp/ccNDnc6Y.s.scn7	00000000 /tmp/ccNDnc6Y.s.scn7
+0080a2a0 l    d  /tmp/ccNDnc6Y.s.scn8	00000000 /tmp/ccNDnc6Y.s.scn8
+0080a320 l    d  /tmp/ccNDnc6Y.s.scn9	00000000 /tmp/ccNDnc6Y.s.scn9
+0080a2c0 l    d  /tmp/ccNDnc6Y.s.scn10	00000000 /tmp/ccNDnc6Y.s.scn10
+0080a318 l    d  /tmp/ccNDnc6Y.s.scn11	00000000 /tmp/ccNDnc6Y.s.scn11
+0080a120 l    d  /tmp/ccNDnc6Y.s.scn12	00000000 /tmp/ccNDnc6Y.s.scn12
 00000000 l    d  *ABS*	00000000 
 00803d74 l       .text	00000000 .L4
-0080a2f4 l       /tmp/cccBSkk0.s.scn1	00000000 .LC0
-0080a2fc l       /tmp/cccBSkk0.s.scn1	00000000 .LC1
-0080a304 l       /tmp/cccBSkk0.s.scn1	00000000 .LC2
+0080a2f4 l       /tmp/ccNDnc6Y.s.scn1	00000000 .LC0
+0080a2fc l       /tmp/ccNDnc6Y.s.scn1	00000000 .LC1
+0080a304 l       /tmp/ccNDnc6Y.s.scn1	00000000 .LC2
 00803d6c l       .text	00000000 .L6
-0080a308 l       /tmp/cccBSkk0.s.scn2	00000000 .LC3
-00809f7c l       /tmp/cccBSkk0.s.scn3	00000000 .LC4
+0080a308 l       /tmp/ccNDnc6Y.s.scn2	00000000 .LC3
+00809f7c l       /tmp/ccNDnc6Y.s.scn3	00000000 .LC4
 00803e14 l       .text	00000000 .L11
 00803e0c l       .text	00000000 .L23
 00803e28 l       .text	00000000 .L22
@@ -1347,20 +1347,20 @@ SYMBOL TABLE:
 00803e60 l       .text	00000000 .L15
 00803e68 l       .text	00000000 .L14
 00803e70 l       .text	00000000 .L12
-00809f82 l       /tmp/cccBSkk0.s.scn3	00000000 .LC5
-00809f94 l       /tmp/cccBSkk0.s.scn3	00000000 .LC6
+00809f82 l       /tmp/ccNDnc6Y.s.scn3	00000000 .LC5
+00809f94 l       /tmp/ccNDnc6Y.s.scn3	00000000 .LC6
 00803e10 l       .text	00000000 .L24
-00809fa8 l       /tmp/cccBSkk0.s.scn3	00000000 .LC7
-00809fba l       /tmp/cccBSkk0.s.scn3	00000000 .LC8
-00809fc2 l       /tmp/cccBSkk0.s.scn3	00000000 .LC9
-00809fcc l       /tmp/cccBSkk0.s.scn3	00000000 .LC10
-00809fd8 l       /tmp/cccBSkk0.s.scn3	00000000 .LC11
-00809fe8 l       /tmp/cccBSkk0.s.scn3	00000000 .LC12
-00809ff0 l       /tmp/cccBSkk0.s.scn3	00000000 .LC13
-0080a004 l       /tmp/cccBSkk0.s.scn3	00000000 .LC14
-0080a016 l       /tmp/cccBSkk0.s.scn3	00000000 .LC15
-0080a280 l       /tmp/cccBSkk0.s.scn4	00000000 .LC16
-0080a1e8 l       /tmp/cccBSkk0.s.scn5	00000000 .LC17
+00809fa8 l       /tmp/ccNDnc6Y.s.scn3	00000000 .LC7
+00809fba l       /tmp/ccNDnc6Y.s.scn3	00000000 .LC8
+00809fc2 l       /tmp/ccNDnc6Y.s.scn3	00000000 .LC9
+00809fcc l       /tmp/ccNDnc6Y.s.scn3	00000000 .LC10
+00809fd8 l       /tmp/ccNDnc6Y.s.scn3	00000000 .LC11
+00809fe8 l       /tmp/ccNDnc6Y.s.scn3	00000000 .LC12
+00809ff0 l       /tmp/ccNDnc6Y.s.scn3	00000000 .LC13
+0080a004 l       /tmp/ccNDnc6Y.s.scn3	00000000 .LC14
+0080a016 l       /tmp/ccNDnc6Y.s.scn3	00000000 .LC15
+0080a280 l       /tmp/ccNDnc6Y.s.scn4	00000000 .LC16
+0080a1e8 l       /tmp/ccNDnc6Y.s.scn5	00000000 .LC17
 008043c0 l       .text	00000000 .L31
 008043b0 l       .text	00000000 .L45
 00804340 l       .text	00000000 .L32
@@ -1370,25 +1370,25 @@ SYMBOL TABLE:
 008042e0 l       .text	00000000 .L42
 00804314 l       .text	00000000 .L38
 008043a0 l       .text	00000000 .L30
-0080a310 l       /tmp/cccBSkk0.s.scn6	00000000 .LC18
+0080a310 l       /tmp/ccNDnc6Y.s.scn6	00000000 .LC18
 008044f4 l       .text	00000000 .L56
 00804634 l       .text	00000000 .L58
-0080a2e0 l       /tmp/cccBSkk0.s.scn7	00000000 .LC20
+0080a2e0 l       /tmp/ccNDnc6Y.s.scn7	00000000 .LC20
 008044f0 l       .text	00000000 .L54
 0080456c l       .text	00000000 .L55
 00804440 l       .text	00000000 .L60
-0080a2dc l       /tmp/cccBSkk0.s.scn7	00000000 .LC19
+0080a2dc l       /tmp/ccNDnc6Y.s.scn7	00000000 .LC19
 00804454 l       .text	00000000 .L51
 008044a0 l       .text	00000000 .L61
-0080a2e4 l       /tmp/cccBSkk0.s.scn7	00000000 .LC21
-0080a2e8 l       /tmp/cccBSkk0.s.scn7	00000000 .LC22
-0080a2ee l       /tmp/cccBSkk0.s.scn7	00000000 .LC23
-0080a2a0 l       /tmp/cccBSkk0.s.scn8	00000000 .LC24
+0080a2e4 l       /tmp/ccNDnc6Y.s.scn7	00000000 .LC21
+0080a2e8 l       /tmp/ccNDnc6Y.s.scn7	00000000 .LC22
+0080a2ee l       /tmp/ccNDnc6Y.s.scn7	00000000 .LC23
+0080a2a0 l       /tmp/ccNDnc6Y.s.scn8	00000000 .LC24
 0080466c l       .text	00000000 .L63
-0080a2a6 l       /tmp/cccBSkk0.s.scn8	00000000 .LC25
-0080a2aa l       /tmp/cccBSkk0.s.scn8	00000000 .LC26
+0080a2a6 l       /tmp/ccNDnc6Y.s.scn8	00000000 .LC25
+0080a2aa l       /tmp/ccNDnc6Y.s.scn8	00000000 .LC26
 00804714 l       .text	00000000 .L86
-0080a2b0 l       /tmp/cccBSkk0.s.scn8	00000000 .LC27
+0080a2b0 l       /tmp/ccNDnc6Y.s.scn8	00000000 .LC27
 0080474c l       .text	00000000 .L68
 008047c4 l       .text	00000000 .L69
 00804754 l       .text	00000000 .L71
@@ -1397,44 +1397,44 @@ SYMBOL TABLE:
 00804738 l       .text	00000000 .L67
 008046e8 l       .text	00000000 .L65
 00804770 l       .text	00000000 .L84
-0080a2b4 l       /tmp/cccBSkk0.s.scn8	00000000 .LC28
-0080a2b8 l       /tmp/cccBSkk0.s.scn8	00000000 .LC29
-0080a2bc l       /tmp/cccBSkk0.s.scn8	00000000 .LC30
-0080a320 l       /tmp/cccBSkk0.s.scn9	00000000 .LC31
+0080a2b4 l       /tmp/ccNDnc6Y.s.scn8	00000000 .LC28
+0080a2b8 l       /tmp/ccNDnc6Y.s.scn8	00000000 .LC29
+0080a2bc l       /tmp/ccNDnc6Y.s.scn8	00000000 .LC30
+0080a320 l       /tmp/ccNDnc6Y.s.scn9	00000000 .LC31
 00804844 l       .text	00000000 .L90
 00804838 l       .text	00000000 .L92
-0080a2c0 l       /tmp/cccBSkk0.s.scn10	00000000 .LC32
-0080a2d4 l       /tmp/cccBSkk0.s.scn10	00000000 .LC33
-0080a318 l       /tmp/cccBSkk0.s.scn11	00000000 .LC34
+0080a2c0 l       /tmp/ccNDnc6Y.s.scn10	00000000 .LC32
+0080a2d4 l       /tmp/ccNDnc6Y.s.scn10	00000000 .LC33
+0080a318 l       /tmp/ccNDnc6Y.s.scn11	00000000 .LC34
 00804ab0 l       .text	00000000 .L99
 00804970 l       .text	00000000 .L198
 008049ac l       .text	00000000 .L106
 00804998 l       .text	00000000 .L199
 00804ae8 l       .text	00000000 .L109
 008049b4 l       .text	00000000 .L105
-0080a14e l       /tmp/cccBSkk0.s.scn12	00000000 .LC43
+0080a14e l       /tmp/ccNDnc6Y.s.scn12	00000000 .LC43
 008049b0 l       .text	00000000 .L194
 00804ad8 l       .text	00000000 .L101
 00804aa8 l       .text	00000000 .L102
 00804ae0 l       .text	00000000 .L103
-0080a136 l       /tmp/cccBSkk0.s.scn12	00000000 .LC39
+0080a136 l       /tmp/ccNDnc6Y.s.scn12	00000000 .LC39
 00804ab8 l       .text	00000000 .L200
-0080a132 l       /tmp/cccBSkk0.s.scn12	00000000 .LC38
+0080a132 l       /tmp/ccNDnc6Y.s.scn12	00000000 .LC38
 00804b34 l       .text	00000000 .L115
-0080a154 l       /tmp/cccBSkk0.s.scn12	00000000 .LC44
+0080a154 l       /tmp/ccNDnc6Y.s.scn12	00000000 .LC44
 00804bdc l       .text	00000000 .L201
-0080a16c l       /tmp/cccBSkk0.s.scn12	00000000 .LC47
+0080a16c l       /tmp/ccNDnc6Y.s.scn12	00000000 .LC47
 00804c00 l       .text	00000000 .L202
 00804cbc l       .text	00000000 .L134
 00804d1c l       .text	00000000 .L138
-0080a120 l       /tmp/cccBSkk0.s.scn12	00000000 .LC35
-0080a128 l       /tmp/cccBSkk0.s.scn12	00000000 .LC36
-0080a12c l       /tmp/cccBSkk0.s.scn12	00000000 .LC37
+0080a120 l       /tmp/ccNDnc6Y.s.scn12	00000000 .LC35
+0080a128 l       /tmp/ccNDnc6Y.s.scn12	00000000 .LC36
+0080a12c l       /tmp/ccNDnc6Y.s.scn12	00000000 .LC37
 00804b18 l       .text	00000000 .L114
 00804b1c l       .text	00000000 .L193
-0080a13c l       /tmp/cccBSkk0.s.scn12	00000000 .LC40
-0080a142 l       /tmp/cccBSkk0.s.scn12	00000000 .LC41
-0080a148 l       /tmp/cccBSkk0.s.scn12	00000000 .LC42
+0080a13c l       /tmp/ccNDnc6Y.s.scn12	00000000 .LC40
+0080a142 l       /tmp/ccNDnc6Y.s.scn12	00000000 .LC41
+0080a148 l       /tmp/ccNDnc6Y.s.scn12	00000000 .LC42
 00804b24 l       .text	00000000 .L203
 00804b2c l       .text	00000000 .L113
 00804ad0 l       .text	00000000 .L111
@@ -1444,11 +1444,11 @@ SYMBOL TABLE:
 00804b68 l       .text	00000000 .L118
 00804b60 l       .text	00000000 .L205
 008049d4 l       .text	00000000 .L121
-0080a15c l       /tmp/cccBSkk0.s.scn12	00000000 .LC45
+0080a15c l       /tmp/ccNDnc6Y.s.scn12	00000000 .LC45
 008049d8 l       .text	00000000 .L195
-0080a164 l       /tmp/cccBSkk0.s.scn12	00000000 .LC46
+0080a164 l       /tmp/ccNDnc6Y.s.scn12	00000000 .LC46
 00804a14 l       .text	00000000 .L122
-0080a174 l       /tmp/cccBSkk0.s.scn12	00000000 .LC48
+0080a174 l       /tmp/ccNDnc6Y.s.scn12	00000000 .LC48
 00804c74 l       .text	00000000 .L206
 00804c3c l       .text	00000000 .L127
 00804c80 l       .text	00000000 .L207
@@ -1463,12 +1463,12 @@ SYMBOL TABLE:
 00804c50 l       .text	00000000 .L132
 00804c5c l       .text	00000000 .L133
 00804ce8 l       .text	00000000 .L137
-0080a17c l       /tmp/cccBSkk0.s.scn12	00000000 .LC49
+0080a17c l       /tmp/ccNDnc6Y.s.scn12	00000000 .LC49
 00804a78 l       .text	00000000 .L135
-0080a182 l       /tmp/cccBSkk0.s.scn12	00000000 .LC50
+0080a182 l       /tmp/ccNDnc6Y.s.scn12	00000000 .LC50
 00804dac l       .text	00000000 .L141
 00804a8c l       .text	00000000 .L139
-0080a188 l       /tmp/cccBSkk0.s.scn12	00000000 .LC51
+0080a188 l       /tmp/ccNDnc6Y.s.scn12	00000000 .LC51
 00804dc0 l       .text	00000000 .L196
 00804da4 l       .text	00000000 .L212
 00804d8c l       .text	00000000 .L143
@@ -1564,7 +1564,7 @@ SYMBOL TABLE:
 00806c78 l       .text	00000000 .L1_966
 00806c90 l       .text	00000000 .L1_980
 00806cc0 l       .text	00000000 .L1_989
-00000000 l    df *ABS*	00000000 /home/user/grbl/.claude/worktrees/agent-a682ed26b4e1b6004/grbl/platform/dspic33ak128mc102/platform.c
+00000000 l    df *ABS*	00000000 /home/user/grbl/.claude/worktrees/agent-a37f62a264160e292/grbl/platform/dspic33ak128mc102/platform.c
 00000001 l       *ABS*	00000000 __33AK128MC102
 00000001 l       *ABS*	00000000 __dsPIC33A
 00000001 l       *ABS*	00000000 __HAS_DSP
@@ -1577,13 +1577,13 @@ SYMBOL TABLE:
 00000040 l       *ABS*	00000000 __ext_attr_.user_init
 00000000 l       *ABS*	00000000 ___PA___
 00000032 l       *ABS*	00000000 ___BP___
-0080a100 l     O /tmp/ccntIMmF.s.scn1	00000010 _gpio_ansel
-0080a110 l     O /tmp/ccntIMmF.s.scn1	00000010 _gpio_tris
-0080a0f0 l     O /tmp/ccntIMmF.s.scn1	00000010 _gpio_cnpu
-0080a0b0 l     O /tmp/ccntIMmF.s.scn1	00000010 _gpio_cnf
-0080a0e0 l     O /tmp/ccntIMmF.s.scn1	00000010 _gpio_cnen0
-0080a0d0 l     O /tmp/ccntIMmF.s.scn1	00000010 _gpio_cnen1
-0080a0c0 l     O /tmp/ccntIMmF.s.scn1	00000010 _gpio_cncon
+0080a100 l     O /tmp/ccUVmlhp.s.scn1	00000010 _gpio_ansel
+0080a110 l     O /tmp/ccUVmlhp.s.scn1	00000010 _gpio_tris
+0080a0f0 l     O /tmp/ccUVmlhp.s.scn1	00000010 _gpio_cnpu
+0080a0b0 l     O /tmp/ccUVmlhp.s.scn1	00000010 _gpio_cnf
+0080a0e0 l     O /tmp/ccUVmlhp.s.scn1	00000010 _gpio_cnen0
+0080a0d0 l     O /tmp/ccUVmlhp.s.scn1	00000010 _gpio_cnen1
+0080a0c0 l     O /tmp/ccUVmlhp.s.scn1	00000010 _gpio_cncon
 00000000 l       *ABS*	00000000 __large_data_scalar
 00000040 l       *ABS*	00000000 __ext_attr_.config_WDTRSTEN
 007f3030 l       .config_WDTRSTEN	00000000 __config_WDTRSTEN
@@ -1698,7 +1698,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00000001 l       *ABS*	00000000 __F_7F3000_FCP_CP
 00000000 l    d  *ABS*	00000000 
 00000000 l    d  *ABS*	00000000 
-0080a0b0 l    d  /tmp/ccntIMmF.s.scn1	00000000 /tmp/ccntIMmF.s.scn1
+0080a0b0 l    d  /tmp/ccUVmlhp.s.scn1	00000000 /tmp/ccUVmlhp.s.scn1
 00000000 l    d  *ABS*	00000000 
 007f3030 l    d  .config_WDTRSTEN	00000000 .config_WDTRSTEN
 007f3830 l    d  .config_BKUP_WDTRSTEN	00000000 .config_BKUP_WDTRSTEN
@@ -1715,7 +1715,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00809908 l       .text	00000000 .L27
 008099b8 l       .text	00000000 .L37
 008099c0 l       .text	00000000 .L38
-00000000 l    df *ABS*	00000000 /home/user/grbl/.claude/worktrees/agent-a682ed26b4e1b6004/grbl/platform/dspic33ak128mc102/handlers.c
+00000000 l    df *ABS*	00000000 /home/user/grbl/.claude/worktrees/agent-a37f62a264160e292/grbl/platform/dspic33ak128mc102/handlers.c
 00000001 l       *ABS*	00000000 __33AK128MC102
 00000001 l       *ABS*	00000000 __dsPIC33A
 00000001 l       *ABS*	00000000 __HAS_DSP
@@ -1732,7 +1732,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00000000 l    d  *ABS*	00000000 
 00000000 l    d  *ABS*	00000000 
 00000000 l    d  *ABS*	00000000 
-00000000 l    df *ABS*	00000000 /home/user/grbl/.claude/worktrees/agent-a682ed26b4e1b6004/grbl/platform/dspic33ak128mc102/serial.c
+00000000 l    df *ABS*	00000000 /home/user/grbl/.claude/worktrees/agent-a37f62a264160e292/grbl/platform/dspic33ak128mc102/serial.c
 00000001 l       *ABS*	00000000 __33AK128MC102
 00000001 l       *ABS*	00000000 __dsPIC33A
 00000001 l       *ABS*	00000000 __HAS_DSP
@@ -1799,7 +1799,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 0080974c l       .text	00000000 .L84
 0080963c l       .text	00000000 .L65
 00809618 l       .text	00000000 .L68
-00000000 l    df *ABS*	00000000 /home/user/grbl/.claude/worktrees/agent-a682ed26b4e1b6004/grbl/platform/dspic33ak128mc102/nvmem.c
+00000000 l    df *ABS*	00000000 /home/user/grbl/.claude/worktrees/agent-a37f62a264160e292/grbl/platform/dspic33ak128mc102/nvmem.c
 00000001 l       *ABS*	00000000 __33AK128MC102
 00000001 l       *ABS*	00000000 __dsPIC33A
 00000001 l       *ABS*	00000000 __HAS_DSP
@@ -1812,11 +1812,11 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00000000 l       *ABS*	00000000 ___PA___
 00000015 l       *ABS*	00000000 ___BP___
 00004024 l     O .bss	00000800 _page_buffer
-0081f800 l     O _0x7f7790517240_at_address_0x81f800	00000800 _nvmem_reservation
+0081f800 l     O _0x7f3366f17240_at_address_0x81f800	00000800 _nvmem_reservation
 00000000 l       *ABS*	00000000 __large_data_scalar
 00000000 l    d  *ABS*	00000000 
 00004024 l    d  .bss	00000000 .bss
-0081f800 l    d  _0x7f7790517240_at_address_0x81f800	00000000 _0x7f7790517240_at_address_0x81f800
+0081f800 l    d  _0x7f3366f17240_at_address_0x81f800	00000000 _0x7f3366f17240_at_address_0x81f800
 00000000 l    d  *ABS*	00000000 
 00808cc4 l       .text	00000000 .L1
 00808cd8 l       .text	00000000 .L19
@@ -2366,7 +2366,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00808ccc  w      .text	00000000 _eeprom_put_char
 00004de4  w    O .bss	0000005c _settings
 0080761c  w    F .text	00000000 _settings_restore
-0080a18c  w    O /tmp/ccNCWatS.s.scn1	0000005c _defaults
+0080a18c  w    O /tmp/ccz0y1bl.s.scn1	0000005c _defaults
 00807724  w    F .text	00000000 _settings_read_startup_line
 00808fd4  w      .text	00000000 _memcpy_from_nvmem_with_checksum
 00807778  w    F .text	00000000 _settings_read_build_info
@@ -2744,6 +2744,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 008007fc  w    F .text	00000000 __DefaultInterrupt
 00000960 g       *ABS*	00000000 _AD1CH13ACC
 00001b70 g       *ABS*	00000000 CCP3TMR
+00000001 g       *ABS*	00000000 __linked__0x7f3366f17240_at_address_0x81f800
 00003988 g       *ABS*	00000000 _RPOR2
 00001ff4 g       *ABS*	00000000 _B1INSTRbits
 00003158 g       *ABS*	00000000 _CLK9CONbits
@@ -2859,6 +2860,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 000000f4 g       *ABS*	00000000 _IPC7
 00000b28 g       *ABS*	00000000 _AD2CH11CMPLO
 00000104 g       *ABS*	00000000 _IPC11
+00000001 g       *ABS*	00000000 __linked_/tmp/ccUVmlhp.s.scn1
 000000f8 g       *ABS*	00000000 _IPC8
 00001054 g       *ABS*	00000000 _PG1STATbits
 0000037c g       *ABS*	00000000 PR7LOCK
@@ -2894,18 +2896,21 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00001d50 g       *ABS*	00000000 _DAC1SLPCON
 00001e84 g       *ABS*	00000000 _PACCON2
 00000a8c g       *ABS*	00000000 AD2CH5CON
+00000001 g       *ABS*	00000000 __linked_/tmp/ccNDnc6Y.s.scn4
 00001048 g       *ABS*	00000000 _PWMEVTEbits
 00000b10 g       *ABS*	00000000 AD2CH10CMPLO
 000000d8 g       *ABS*	00000000 _IPC0
 00003284 g       *ABS*	00000000 CM3LWARN
 00001b6c g       *ABS*	00000000 _CCP3STAT
 000023f4 g       *ABS*	00000000 _DMA5STATbits
+00000001 g       *ABS*	00000000 __linked_/tmp/ccNDnc6Y.s.scn1
 00002318 g       *ABS*	00000000 _DMA0STAT
 000009e4 g       *ABS*	00000000 _AD1CH19CNTbits
 0000087c g       *ABS*	00000000 _AD1CH4CNTbits
 00003174 g       *ABS*	00000000 _CLK12DIVbits
 00000140 g       *ABS*	00000000 _IPC26bits
 000008d4 g       *ABS*	00000000 _AD1CH8CONbits
+00000001 g       *ABS*	00000000 __linked_/tmp/ccNDnc6Y.s.scn2
 0000084c g       *ABS*	00000000 _AD1CH2CNT
 00003a00 g       *ABS*	00000000 _DMTCONbits
 00003248 g       *ABS*	00000000 _CM2HFAIL
@@ -3220,6 +3225,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00000b38 g       *ABS*	00000000 AD2CH12DATA
 000010c0 g       *ABS*	00000000 _PG2DCbits
 00000350 g       *ABS*	00000000 _PR5CTRLbits
+00000001 g       *ABS*	00000000 __linked_/tmp/ccNDnc6Y.s.scn3
 00000a74 g       *ABS*	00000000 _AD2CH4CONbits
 00001880 g       *ABS*	00000000 _I2C1CON1bits
 00000018 g       *ABS*	00000000 _XMODSRT
@@ -3256,6 +3262,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00003104 g       *ABS*	00000000 _OSCCFGbits
 00001fc8 g       *ABS*	00000000 B1CLTCON2
 00000030 g       *ABS*	00000000 FEX
+00000001 g       *ABS*	00000000 __linked_/tmp/ccNDnc6Y.s.scn8
 000035d0 g       *ABS*	00000000 _RAMYECCEADDR
 00003a68 g       *ABS*	00000000 _CLC1GLSbits
 00001fc4 g       *ABS*	00000000 B1CLTCON1
@@ -3279,11 +3286,14 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00003224 g       *ABS*	00000000 _CM1LWARN
 0000095c g       *ABS*	00000000 AD1CH13CMPHI
 000009ec g       *ABS*	00000000 AD1CH19CMPHI
+00000001 g       *ABS*	00000000 __linked_/tmp/ccNDnc6Y.s.scn5
 000010d0 g       *ABS*	00000000 _PG2TRIGB
 000009a8 g       *ABS*	00000000 AD1CH16ACC
 00000bb8 g       *ABS*	00000000 AD2CH17CMPLO
 00001138 g       *ABS*	00000000 PG4FPCI
+00000001 g       *ABS*	00000000 __linked_/tmp/ccNDnc6Y.s.scn9
 00000ad0 g       *ABS*	00000000 AD2CH7ACC
+00000001 g       *ABS*	00000000 __linked_/tmp/ccNDnc6Y.s.scn7
 00001d50 g       *ABS*	00000000 _DAC1SLPCONbits
 00001a20 g       *ABS*	00000000 _INT1HLD
 00001ea0 g       *ABS*	00000000 _IOIM2BCONbits
@@ -3310,6 +3320,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 000010d4 g       *ABS*	00000000 _PG2TRIGC
 00000a64 g       *ABS*	00000000 _AD2CH3CNT
 000035c8 g       *ABS*	00000000 RAMYECCFPTR
+00000001 g       *ABS*	00000000 __linked_/tmp/ccNDnc6Y.s.scn6
 000002cc g       *ABS*	00000000 _CRCXOR
 000039a0 g       *ABS*	00000000 _RPOR8bits
 00003190 g       *ABS*	00000000 PLL2DIV
@@ -3768,6 +3779,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00003520 g       *ABS*	00000000 _PTGADJbits
 0000092c g       *ABS*	00000000 _AD1CH11CMPHI
 00001b74 g       *ABS*	00000000 CCP3PR
+00000001 g       *ABS*	00000000 __linked_/tmp/ccz0y1bl.s.scn1
 00000928 g       *ABS*	00000000 _AD1CH11CMPLO
 00000bac g       *ABS*	00000000 _AD2CH17CON
 00000330 g       *ABS*	00000000 PR3CTRL
@@ -3962,7 +3974,6 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00003200 g       *ABS*	00000000 _CM1CONbits
 00001b0c g       *ABS*	00000000 _CCP1STATbits
 0000174c g       *ABS*	00000000 _U2RXB
-00000001 g       *ABS*	00000000 __linked_/tmp/ccntIMmF.s.scn1
 00001784 g       *ABS*	00000000 U3STAT
 00000a0c g       *ABS*	00000000 _AD2CMPSTAT
 00001078 g       *ABS*	00000000 PG1DC
@@ -4008,7 +4019,6 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00000800 g       *ABS*	00000000 _AD1CONbits
 000000c8 g       *ABS*	00000000 _IEC5bits
 00003164 g       *ABS*	00000000 CLK10DIV
-00000001 g       *ABS*	00000000 __linked_/tmp/cccBSkk0.s.scn6
 000002cc g       *ABS*	00000000 CRCXOR
 00003018 g       *ABS*	00000000 NVMSRCADR
 0000238c g       *ABS*	00000000 _DMA2MSK
@@ -4016,10 +4026,8 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00001ba4 g       *ABS*	00000000 _CCP4PR
 00001ff8 g       *ABS*	00000000 B1CHSTAT
 00000a70 g       *ABS*	00000000 AD2CH3ACC
-00000001 g       *ABS*	00000000 __linked_/tmp/cccBSkk0.s.scn8
 000009d8 g       *ABS*	00000000 _AD1CH18ACC
 00001b38 g       *ABS*	00000000 _CCP2CON3bits
-00000001 g       *ABS*	00000000 __linked_/tmp/cccBSkk0.s.scn7
 00000820 g       *ABS*	00000000 AD1CH0CMPLO
 00001014 g       *ABS*	00000000 _MPER
 00001f18 g       *ABS*	00000000 B1SCDATA3L
@@ -4065,7 +4073,6 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00001a04 g       *ABS*	00000000 _QEI1IOCbits
 00002314 g       *ABS*	00000000 _DMA0SELbits
 00003150 g       *ABS*	00000000 CLK8CON
-00000001 g       *ABS*	00000000 __linked_/tmp/cccBSkk0.s.scn9
 000010f0 g       *ABS*	00000000 _PG3FPCI
 00000010 g       *ABS*	00000000 CORCON
 00003020 g       *ABS*	00000000 NVMECCSTAT
@@ -4150,7 +4157,6 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00003294 g       *ABS*	00000000 _CM4STAT
 00003670 g       *ABS*	00000000 CNPDB
 00001088 g       *ABS*	00000000 PG1TRIGB
-00000001 g       *ABS*	00000000 __linked_/tmp/ccNCWatS.s.scn1
 000009a8 g       *ABS*	00000000 _AD1CH16ACC
 00000b7c g       *ABS*	00000000 _AD2CH15CONbits
 000002d0 g       *ABS*	00000000 _CRCDAT
@@ -4435,6 +4441,8 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00003180 g       *ABS*	00000000 _PLL1CON
 00001b4c g       *ABS*	00000000 CCP2RB
 00001144 g       *ABS*	00000000 _PG4SPCI
+00000001 g       *ABS*	00000000 __linked_/tmp/ccNDnc6Y.s.scn12
+00000001 g       *ABS*	00000000 __linked_/tmp/ccNDnc6Y.s.scn11
 007f4030 g       *ABS*	00000000 __FPR3CTRL
 000000f0 g       *ABS*	00000000 IPC6
 00000338 g       *ABS*	00000000 _PR3END
@@ -4445,7 +4453,6 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00000ac0 g       *ABS*	00000000 _AD2CH7DATA
 00000bcc g       *ABS*	00000000 AD2CH18CNT
 00003130 g       *ABS*	00000000 _CLK4CON
-00000001 g       *ABS*	00000000 __linked_/tmp/cccBSkk0.s.scn1
 00001b48 g       *ABS*	00000000 _CCP2RAbits
 000000ec g       *ABS*	00000000 IPC5
 00000778 g       *ABS*	00000000 BMXIRAMH
@@ -4478,6 +4485,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 0000230c g       *ABS*	00000000 DMAHIGH
 00003038 g       *ABS*	00000000 NVMECCEDATA2
 00001158 g       *ABS*	00000000 PG4PER
+00000001 g       *ABS*	00000000 __linked_/tmp/ccNDnc6Y.s.scn10
 0000303c g       *ABS*	00000000 NVMECCEDATA3
 000010c0 g       *ABS*	00000000 PG2DC
 00000324 g       *ABS*	00000000 _PR2STbits
@@ -4578,7 +4586,6 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00001ff8 g       *ABS*	00000000 _B1CHSTATbits
 00000020 g       *ABS*	00000000 _YMODSRTbits
 00003234 g       *ABS*	00000000 CM2STAT
-00000001 g       *ABS*	00000000 __linked_/tmp/cccBSkk0.s.scn2
 0000011c g       *ABS*	00000000 _IPC17
 000019f0 g       *ABS*	00000000 _SENT2SYNCbits
 000010fc g       *ABS*	00000000 _PG3SPCIbits
@@ -4624,7 +4631,6 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00001f98 g       *ABS*	00000000 B1RDATA6
 00003a04 g       *ABS*	00000000 DMTPRECLR
 00000920 g       *ABS*	00000000 AD1CH11DATA
-00000001 g       *ABS*	00000000 __linked_/tmp/cccBSkk0.s.scn5
 00000010 g       *ABS*	00000000 __MIN_STACK_SIZE
 00000900 g       *ABS*	00000000 AD1CH9ACC
 000010a4 g       *ABS*	00000000 _PG2EVT
@@ -4642,7 +4648,6 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00001ea4 g       *ABS*	00000000 IOIM2STAT
 00003044 g       *ABS*	00000000 _NVMECCSYNDbits
 00000ad0 g       *ABS*	00000000 _AD2CH7ACC
-00000001 g       *ABS*	00000000 __linked_/tmp/cccBSkk0.s.scn3
 000017a0 g       *ABS*	00000000 _U3SCCONbits
 00000b84 g       *ABS*	00000000 AD2CH15CNT
 00001e5c g       *ABS*	00000000 _HPCCNTH7
@@ -4651,7 +4656,6 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00003508 g       *ABS*	00000000 _PTGHOLDbits
 00000328 g       *ABS*	00000000 PR2END
 00000004 g       *ABS*	00000000 _SPLIMbits
-00000001 g       *ABS*	00000000 __linked_/tmp/cccBSkk0.s.scn4
 00000348 g       *ABS*	00000000 PR4END
 00001e54 g       *ABS*	00000000 _HPCCNTH6
 0000175c g       *ABS*	00000000 U2CHK
@@ -5195,13 +5199,11 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 000039b0 g       *ABS*	00000000 _RPOR12
 000039c0 g       *ABS*	00000000 _RPOR16
 00003120 g       *ABS*	00000000 _CLK2CONbits
-00000001 g       *ABS*	00000000 __linked_/tmp/cccBSkk0.s.scn11
 00001790 g       *ABS*	00000000 U3TXB
 00001764 g       *ABS*	00000000 U2UIR
 00001ea8 g       *ABS*	00000000 _IOIM3CON
 007f3000 g       *ABS*	00000000 __FCP
 00000a88 g       *ABS*	00000000 AD2CH4ACC
-00000001 g       *ABS*	00000000 __linked_/tmp/cccBSkk0.s.scn12
 00000b58 g       *ABS*	00000000 AD2CH13CMPLO
 000039bc g       *ABS*	00000000 _RPOR15
 00003a74 g       *ABS*	00000000 CLC2SEL
@@ -5249,7 +5251,6 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00000868 g       *ABS*	00000000 _AD1CH3CMPLO
 000018f8 g       *ABS*	00000000 I2C2STAT2
 00001d4c g       *ABS*	00000000 _DAC1DAT
-00000001 g       *ABS*	00000000 __linked_/tmp/cccBSkk0.s.scn10
 000023f4 g       *ABS*	00000000 DMA5STAT
 0000086c g       *ABS*	00000000 _AD1CH3CMPHI
 00001e54 g       *ABS*	00000000 HPCCNTH6
@@ -5364,7 +5365,6 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00001720 g       *ABS*	00000000 _U1SCCON
 00000a18 g       *ABS*	00000000 _AD2CH0DATA
 0000022c g       *ABS*	00000000 _LATCbits
-00000001 g       *ABS*	00000000 __linked__0x7f7790517240_at_address_0x81f800
 00001100 g       *ABS*	00000000 PG3LEB
 00001b44 g       *ABS*	00000000 _CCP2PRbits
 00000934 g       *ABS*	00000000 _AD1CH12CON
@@ -20106,7 +20106,7 @@ Disassembly of section .text:
 00809f78 <.L13>:
   809f78:	return    
 	...
-Disassembly of section /tmp/cccBSkk0.s.scn3:
+Disassembly of section /tmp/ccNDnc6Y.s.scn3:
 
 00809f7c <.LC4>:
   809f7c:	btst.lz   w11, w5
@@ -20265,7 +20265,7 @@ Disassembly of section .text:
   80a0a4:	rcall     0x8030d4 <_st_prep_buffer>
   80a0a8:	rcall     0x802a60 <_st_wake_up>
   80a0ac:	bra       0x80a070 <.L1>
-Disassembly of section /tmp/ccntIMmF.s.scn1:
+Disassembly of section /tmp/ccUVmlhp.s.scn1:
 
 0080a0b0 <_gpio_cnf>:
   80a0b0:	....$...8...L...
@@ -20287,7 +20287,7 @@ Disassembly of section /tmp/ccntIMmF.s.scn1:
 
 0080a110 <_gpio_tris>:
   80a110:	........0...D...
-Disassembly of section /tmp/cccBSkk0.s.scn12:
+Disassembly of section /tmp/ccNDnc6Y.s.scn12:
 
 0080a120 <.LC35>:
   80a120:	sub.w     w4, w9, w4
@@ -20372,7 +20372,7 @@ Disassembly of section /tmp/cccBSkk0.s.scn12:
 0080a188 <.LC51>:
   80a188:	bclr.l    w12, #0x17
   80a18a:	neop      
-Disassembly of section /tmp/ccNCWatS.s.scn1:
+Disassembly of section /tmp/ccz0y1bl.s.scn1:
 
 0080a18c <_defaults>:
   80a18c:	..zC..zC..zC...C
@@ -20381,7 +20381,7 @@ Disassembly of section /tmp/ccNCWatS.s.scn1:
   80a1bc:	..........#<o..;
   80a1cc:	..zD...........A
   80a1dc:	...C.......?
-Disassembly of section /tmp/cccBSkk0.s.scn5:
+Disassembly of section /tmp/ccNDnc6Y.s.scn5:
 
 0080a1e8 <.LC17>:
   80a1e8:	btsts.bz  w11, #0x5
@@ -20442,7 +20442,7 @@ Disassembly of section .text:
   80a274:	muluu.d   w0, w1, w0
   80a278:	rcall     0x800f68 <___udivdi3>
   80a27c:	bra       0x800804 <___delay32>
-Disassembly of section /tmp/cccBSkk0.s.scn4:
+Disassembly of section /tmp/ccNDnc6Y.s.scn4:
 
 0080a280 <.LC16>:
   80a280:	mov.l     w13, [w14+0]
@@ -20459,7 +20459,7 @@ Disassembly of section /tmp/cccBSkk0.s.scn4:
   80a298:	.pword 0xa0d5d70
   80a29c:	neop      
 	...
-Disassembly of section /tmp/cccBSkk0.s.scn8:
+Disassembly of section /tmp/ccNDnc6Y.s.scn8:
 
 0080a2a0 <.LC24>:
   80a2a0:	btst.lz   w11, #0x15
@@ -20488,7 +20488,7 @@ Disassembly of section /tmp/cccBSkk0.s.scn8:
 
 0080a2bc <.LC30>:
   80a2bc:	.pword 0x005320
-Disassembly of section /tmp/cccBSkk0.s.scn10:
+Disassembly of section /tmp/ccNDnc6Y.s.scn10:
 
 0080a2c0 <.LC32>:
   80a2c0:	.pword 0x5245565b
@@ -20505,7 +20505,7 @@ Disassembly of section /tmp/cccBSkk0.s.scn10:
   80a2d4:	.pword 0x54504f5b
   80a2d8:	neop      
 	...
-Disassembly of section /tmp/cccBSkk0.s.scn7:
+Disassembly of section /tmp/ccNDnc6Y.s.scn7:
 
 0080a2dc <.LC19>:
   80a2dc:	btst.lz   w11, #0x15
@@ -20527,7 +20527,7 @@ Disassembly of section /tmp/cccBSkk0.s.scn7:
 0080a2ee <.LC23>:
   80a2ee:	.pword 0x545b003a
   80a2f2:	neop      
-Disassembly of section /tmp/cccBSkk0.s.scn1:
+Disassembly of section /tmp/ccNDnc6Y.s.scn1:
 
 0080a2f4 <.LC0>:
   80a2f4:	ior.l     w6, w15, w6
@@ -20544,26 +20544,26 @@ Disassembly of section /tmp/cccBSkk0.s.scn1:
 0080a304 <.LC2>:
   80a304:	mov.l     w13, [w14+0]
 	...
-Disassembly of section /tmp/cccBSkk0.s.scn2:
+Disassembly of section /tmp/ccNDnc6Y.s.scn2:
 
 0080a308 <.LC3>:
   80a308:	btst.wz   w1, w4
   80a30a:	.pword 0x52414c41
 	...
-Disassembly of section /tmp/cccBSkk0.s.scn6:
+Disassembly of section /tmp/ccNDnc6Y.s.scn6:
 
 0080a310 <.LC18>:
   80a310:	.pword 0x4252505b
   80a314:	neop      
 	...
-Disassembly of section /tmp/cccBSkk0.s.scn11:
+Disassembly of section /tmp/ccNDnc6Y.s.scn11:
 
 0080a318 <.LC34>:
   80a318:	sub.l     w5, w11, w5
   80a31a:	and.w     w6, w3, w6
   80a31c:	cpb.w     w15, #0x6
   80a31e:	neop      
-Disassembly of section /tmp/cccBSkk0.s.scn9:
+Disassembly of section /tmp/ccNDnc6Y.s.scn9:
 
 0080a320 <.LC31>:
   80a320:	.pword 0x004e24
