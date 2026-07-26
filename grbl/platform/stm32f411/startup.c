@@ -138,14 +138,14 @@ extern void TIM3_IRQHandler(void);   // Pulse reset ISR
 extern void USART1_IRQHandler(void); // Serial ISR
 extern void EXTI0_IRQHandler(void);
 extern void EXTI1_IRQHandler(void);
+extern void EXTI2_IRQHandler(void);  // Z limit switch (BUG #26: moved from PB10/EXTI15_10)
 extern void EXTI3_IRQHandler(void);
 extern void EXTI4_IRQHandler(void);
 extern void EXTI9_5_IRQHandler(void);
-extern void EXTI15_10_IRQHandler(void);
 
-// EXTI2 is not wired to a limit/control pin on this board's pin map -
-// weak-alias it like any other unused vector.
-void EXTI2_IRQHandler(void)          __attribute__((weak, alias("Default_Handler")));
+// EXTI15_10 is not wired to a limit/control pin on this board's pin map
+// (BUG #26 moved Z off PB10) - weak-alias it like any other unused vector.
+void EXTI15_10_IRQHandler(void)      __attribute__((weak, alias("Default_Handler")));
 
 // Peripherals present on F411 silicon but unused by this port
 void DMA1_Stream0_IRQHandler(void)   __attribute__((weak, alias("Default_Handler")));
@@ -204,7 +204,7 @@ const void *vector_table[] = {
   Default_Handler,               // 21: IRQ5  RCC
   EXTI0_IRQHandler,               // 22: IRQ6  EXTI0  (X limit switch)
   EXTI1_IRQHandler,               // 23: IRQ7  EXTI1  (Y limit switch)
-  EXTI2_IRQHandler,               // 24: IRQ8  EXTI2  (unused)
+  EXTI2_IRQHandler,               // 24: IRQ8  EXTI2  (Z limit switch, BUG #26)
   EXTI3_IRQHandler,               // 25: IRQ9  EXTI3  (Reset button)
   EXTI4_IRQHandler,               // 26: IRQ10 EXTI4  (Feed hold button)
   DMA1_Stream0_IRQHandler,        // 27: IRQ11 DMA1 Stream0
@@ -236,7 +236,7 @@ const void *vector_table[] = {
   USART1_IRQHandler,              // 53: IRQ37 USART1 (SERIAL ISR)
   USART2_IRQHandler,              // 54: IRQ38 USART2
   0,                              // 55: IRQ39 (USART3 - absent on F411)
-  EXTI15_10_IRQHandler,           // 56: IRQ40 EXTI15_10 (Z limit switch)
+  EXTI15_10_IRQHandler,           // 56: IRQ40 EXTI15_10 (unused, BUG #26 moved off PB10)
   RTC_Alarm_IRQHandler,           // 57: IRQ41 RTC Alarm
   OTG_FS_WKUP_IRQHandler,         // 58: IRQ42 OTG_FS Wakeup
 };

@@ -38,6 +38,15 @@ import re
 import sys
 
 HEADING_RE = re.compile(r'^## (\d+)\.\s')
+# The file's own top-of-file authoring rule says a NEW section must be headed
+# "## §NEW. Title" (literal placeholder, not a guessed number) until the
+# integrator renumbers it. Such a heading still needs its anchor registered
+# as a valid link target - otherwise every properly-behaving §NEW section
+# (the convention working exactly as documented) trips "no matching anchor"
+# on its own slug the moment anything cites it, which is the opposite of
+# what the convention is for. Excluded from the numeric duplicate/sequential
+# checks below (correctly - it has no number yet).
+NEW_HEADING_RE = re.compile(r'^## §NEW\.\s')
 ANCHOR_RE = re.compile(r'^<a id="([a-z0-9][a-z0-9-]*)"></a>\s*$')
 # Links into this same file: [text](#slug)
 LOCAL_LINK_RE = re.compile(r'\[[^\]]*\]\(#([a-z0-9][a-z0-9-]*)\)')
@@ -73,6 +82,21 @@ def parse_contracts(text):
                 errors.append(
                     "line {}: '## {}.' heading has no <a id=\"...\"> anchor "
                     "on the line directly above it".format(i, num))
+            else:
+                anchors.append((pending_anchor[0], pending_anchor[1]))
+            pending_anchor = None
+            continue
+        if NEW_HEADING_RE.match(line):
+            # Not appended to `headings` - a placeholder section has no
+            # number yet and must not participate in the duplicate/sequential
+            # checks - but its anchor is just as real a link target as any
+            # numbered section's, so it goes through the same anchor
+            # registration (and the same "must have an anchor above it"
+            # requirement) as a numbered heading.
+            if pending_anchor is None:
+                errors.append(
+                    "line {}: '## §NEW.' heading has no <a id=\"...\"> "
+                    "anchor on the line directly above it".format(i))
             else:
                 anchors.append((pending_anchor[0], pending_anchor[1]))
             pending_anchor = None
@@ -280,6 +304,38 @@ DUPLICATE_SLUG_DOC = """# Fixture
 ## 1. Beta (copy-pasted the wrong anchor)
 """
 
+# A §NEW placeholder section, cited by slug from elsewhere in the same file -
+# exactly the documented convention working as intended. Must PASS: the
+# numeric sequence is still 0,1 (§NEW carries no number and must not be
+# counted), and the link to its anchor must resolve.
+NEW_SECTION_DOC = """# Fixture
+
+<a id="alpha"></a>
+## 0. Alpha
+
+See [the new one below](#pending-topic) for details.
+
+<a id="beta"></a>
+## 1. Beta
+
+<a id="pending-topic"></a>
+## §NEW. A brand new topic (placeholder number - integrator assigns the final one)
+"""
+
+# The failure this fixture used to produce before the NEW_HEADING_RE fix: a
+# §NEW section's own anchor was invisible to the checker, so ANY link to it
+# (even from elsewhere in this same file) was reported as dangling - the
+# convention the top-of-file box tells authors to use was, itself, unusable
+# without tripping this script. MISSING_NEW_ANCHOR_DOC below is the sibling
+# "forgot the anchor" case for a §NEW heading, mirroring MISSING_ANCHOR_DOC.
+MISSING_NEW_ANCHOR_DOC = """# Fixture
+
+<a id="alpha"></a>
+## 0. Alpha
+
+## §NEW. Forgot the anchor line above this heading
+"""
+
 
 def _write_and_check(tmpdir, name, content):
     path = os.path.join(tmpdir, name)
@@ -320,6 +376,16 @@ def selftest():
 
         check(_write_and_check(d, "dupslug.md", DUPLICATE_SLUG_DOC) == 1,
               "two sections sharing one slug must FAIL")
+
+        check(_write_and_check(d, "newsection.md", NEW_SECTION_DOC) == 0,
+              "a '## §NEW.' section with its own anchor, cited by slug from "
+              "elsewhere in the file, must PASS (the documented convention "
+              "working as intended - this was the BUG #26-followup fix)")
+
+        check(_write_and_check(d, "newnoanchor.md",
+                                MISSING_NEW_ANCHOR_DOC) == 1,
+              "a '## §NEW.' heading with no anchor above it must FAIL, same "
+              "as a numbered heading would")
 
         # Regression test for the live incident: check_contracts_numbering
         # was scanning .claude/worktrees/<agent-id>/ - a parallel agent's own
