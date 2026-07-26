@@ -24,7 +24,6 @@ jobs:
 
   # One matrix row per platform/board/flavor; adding a port = one new row
   # (plus its ci/warn_baseline_<platform>.txt, which may start empty).
-  # Example future row: platform sg2002 with gcc-riscv64-unknown-elf.
   build:
     name: ${{ matrix.platform }}${{ matrix.board && format(' {0}', matrix.board) || '' }} ${{ matrix.build }}
     runs-on: ubuntu-latest
@@ -89,6 +88,23 @@ jobs:
             build: DEBUG
             toolchain-packages: gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
           - platform: ch570
+            board: generic
+            build: RELEASE
+            toolchain-packages: gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
+          # sg2002 (Sophgo C906L runtime core). SAME two apt packages as the
+          # other two RISC-V ports - no new toolchain story, so these rows are
+          # NOT continue-on-error. The port is rv64imac/lp64, and that multilib
+          # ships in the stock picolibc-riscv64-unknown-elf package (verified:
+          # /usr/lib/picolibc/riscv64-unknown-elf/lib/rv64imac/lp64/libc.a). The
+          # rv64gc/lp64d multilib does NOT ship, which is exactly why this port
+          # does not use it - see grbl/platform/sg2002/Makefile's ARCH/ABI note.
+          # The port's UNVERIFIED register facts are a HARDWARE risk, not a
+          # build risk: nothing about them can make the compile or link flaky.
+          - platform: sg2002
+            board: generic
+            build: DEBUG
+            toolchain-packages: gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
+          - platform: sg2002
             board: generic
             build: RELEASE
             toolchain-packages: gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf

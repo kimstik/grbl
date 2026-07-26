@@ -90,7 +90,12 @@ platform/samd21/
   - `platform/stm32h523/avr/io.h` (ARM Cortex-M33: cpsie/cpsid)
   - `platform/hc32f460/avr/io.h` (ARM Cortex-M4: cpsie/cpsid)
   - `platform/ch32v006/avr/io.h` (RISC-V: csrsi/csrci mstatus)
-  - `platform/sg2002/avr/io.h` (RISC-V: csrsi/csrci mstatus)
+  - ~~`platform/sg2002/avr/io.h`~~ — removed 2026-07-26 with the sg2002
+    rewrite. That port defines `sei`/`cli` in its own `platform.h` (which the
+    board prelude injects before `grbl.h`, so `common/dummy/avr/io.h` sees them
+    already defined) rather than carrying a private `avr/` directory — the same
+    shape ch570 uses. Both routes satisfy `common/dummy/avr/io.h`'s
+    require-or-`#error` contract; the prelude route just needs one file fewer.
 - ✅ Updated `common/dummy/avr/io.h` to require platform-specific definitions
 - ✅ Verified SAMD21 build still works correctly
 
