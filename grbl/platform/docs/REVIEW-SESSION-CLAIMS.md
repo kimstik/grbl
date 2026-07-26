@@ -117,3 +117,92 @@ excuse any unfinished work, doesn't hide a defect), but exactly the kind of unch
 inconsistency this review exists to catch.
 
 ---
+
+## Claim F — "clang has no equivalent to `-fsingle-precision-constant`, so every clang build of an
+## FP=SINGLE port is silently FP=DOUBLE" (this killed the entire clang axis)
+
+**Verdict: REFUTED. Clang has a working equivalent; the whole clang-axis rejection in
+`grbl/platform/docs/TOOLCHAIN-AXIS.md` §2/§8 rests on a false premise.**
+
+Source claim (`docs/TOOLCHAIN-AXIS.md` §2 finding 1, marked "BLOCKING"): checked `clang --help`/
+`clang -cc1 --help` for flags containing "single-precision"/"excess-precision"/"fp-eval";
+found `-cl-single-precision-constant` and dismissed it as "OpenCL-only (rejected for plain C)".
+Concluded there is no way to stop clang promoting unsuffixed floating literals to `double`, so
+`assert_no_double.sh` necessarily fails for any FP=SINGLE port under `TC=clang`, and decided (§8)
+not to pursue the clang axis for FP=SINGLE ports.
+
+### What I actually ran
+
+Reproduced the driver-help search myself — same result, `-cl-single-precision-constant` is the
+only candidate flag (`clang -cc1 --help 2>&1 | grep -i precision`). But instead of accepting the
+help text's "OpenCL only" framing, I tried the flag on ordinary C:
+
+```
+clang -cl-single-precision-constant -c fp_test.c -o fp_test.o    → EXIT 0, no error, no warning
+clang -cl-single-precision-constant -Wall -Wunused-command-line-argument -c fp_test.c -o fp_test.o → EXIT 0, still silent
+clang -cl-single-precision-constant -### -c fp_test.c            → -cc1 line shows the flag passed straight through unmodified, no rewriting/dropping
+```
+
+It is **not rejected** for plain C at all — the driver forwards it to `-cc1` unconditionally
+regardless of `-x c`/`-x cl`, and `-cc1` applies it as a plain LangOpts flag, not gated to OpenCL
+mode.
+
+Direct IR-level proof it changes literal typing (`fp_test.c`: `float f(float x){return x+1.0;}`):
+```
+without flag: %4 = fpext float %3 to double ; %5 = fadd double %4, 1.0 ; %6 = fptrunc double %5 to float
+with flag:    %4 = fadd float %3, 1.000000e+00        (no promotion at all)
+```
+
+Stronger test mimicking real GRBL-style code (mixed unsuffixed literals, `sqrtf`, comparison,
+subtraction), cross-compiled for the actual ARM target used by this project
+(`-target arm-none-eabi -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=hard
+--sysroot=/usr/lib/arm-none-eabi -Os`, then `-flto=thin` too):
+
+```
+without -cl-single-precision-constant, llvm-nm:
+  U __aeabi_d2f
+  U __aeabi_dadd
+  U __aeabi_dcmpgt
+  U __aeabi_dmul
+  U __aeabi_f2d
+  U sqrtf
+  T compute
+
+with -cl-single-precision-constant, llvm-nm:
+  U sqrtf
+  T compute
+```
+
+Every one of the exact `__aeabi_d*` double-precision soft-float symbol classes
+`assert_no_double.sh` greps for (`grep -qE '__aeabi_d|__.*df2|__.*df3'`-style patterns per
+CONTRACTS.md #17) disappears with the flag. Cross-checked against real gcc for parity: same test
+file, `arm-none-eabi-gcc-14.2.1 -fsingle-precision-constant` (the flag the whole doc treats as
+the only correct answer) produces the **identical** symbol table (`compute` + `sqrtf`, zero
+`__aeabi_d*`). Also confirmed under `-flto=thin` (the actual RELEASE build's LTO mode) — same
+zero-double-symbol result, `EXIT 0`, no unused-argument diagnostic even with
+`-Wunused-command-line-argument` explicitly enabled.
+
+### Consequence
+
+The "BLOCKING" verdict, the "silently FP=DOUBLE" claim, the whole recommendation in §8 to not
+pursue `TC=clang` for FP=SINGLE ports, and the row in §7's compatibility table
+("`stm32f103`/`stm32f411`/`stm32h523`/`hc32f460` (ARM Cortex-M, FP=SINGLE) — gcc only, until §2
+finding 1 has an answer") are **all built on a search that stopped one step too early**: it found
+the candidate flag, read its `--help` text ("OpenCL only"), and never tried it. `assert_no_double.sh`
+almost certainly PASSES today under clang for every FP=SINGLE port if `-cl-single-precision-constant`
+is added to the clang family's flag set (not verified end-to-end against a full port build in this
+review — see UNVERIFIED note below — but verified at the exact mechanism level `assert_no_double.sh`
+checks: the double-precision libcalls the assert greps for are the direct, reproducible, IR-confirmed
+effect being eliminated).
+
+**Scope of what I did NOT verify**: I did not rebuild a complete `stm32f411` (or any) port end-to-end
+under clang with this flag added and run the project's actual `assert_no_double.sh` script against
+the resulting real ELF — that would additionally need the project's full clang CFLAGS set,
+`prelude.h` chain, and linking. What I verified is the underlying mechanism the whole "BLOCKING"
+claim rests on, at the same level of rigor the original doc used (isolated compilation +
+`nm`/IR inspection), and it directly contradicts the doc's "rejected for plain C" characterization.
+Recommend: add `-cl-single-precision-constant` to `docs/TOOLCHAIN-AXIS.md`'s proposed clang family
+flags and re-run `assert_no_double.sh` against a real port build before reopening the clang axis
+decision — but the specific factual claim that killed it ("no equivalent exists") is false.
+
+---
