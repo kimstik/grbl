@@ -588,6 +588,65 @@ markers in the tree instead of a silent no-op.
   `--gc-sections` diet that has since landed — re-measured at HEAD for accuracy.
   DEBUG sizes moved +16 bytes on each STM32 (48836->48852 f103, 48472->48488
   f411, 48644->48660 h523) — that is the single VTOR store, nothing else.
+- **CANONICAL RELEASE SIZE TABLE, re-measured 2026-07-26 after the FP=SINGLE
+  rollout to every remaining port** (ch32v006, stm32f103, stm32h523, stm32f411 —
+  samd21 already carried the knob; see the 2026-07-25 entry above). All numbers
+  are `text`/`data` from `arm-none-eabi-size`/`riscv64-unknown-elf-size
+  --format=berkeley` on a clean `make BUILD=RELEASE` (default board where
+  applicable), `tools/assert_no_double.sh` armed and PASSING on every row
+  except AVR (mechanism is a no-op there, no prelude injected):
+
+  | port      | pre-FP=SINGLE text/data | post-FP=SINGLE text/data | Δtext  | Δ%     |
+  |-----------|-------------------------|--------------------------|--------|--------|
+  | AVR (golden) | 30640 / 0            | 30640 / 0 (untouched)    | 0      | 0%     |
+  | samd21    | 31952 / 296 (already landed) | 31952 / 296 (unchanged, sibling check) | 0 | 0% |
+  | ch32v006  | 54904 / 0               | **41072** / 0            | -13832 | -25.2% |
+  | stm32f103 | 33924 / 80              | **28700** / 80           | -5224  | -15.4% |
+  | stm32h523 | 32448 / 388             | **25132** / 388          | -7316  | -22.5% |
+  | stm32f411 | 32660 / 80              | **25796** / 80           | -6864  | -21.0% |
+
+  DEBUG sizes (all assert-PASSING, all boot-integrity-PASSING): ch32v006 60648
+  -> 46988; stm32f103 48852 -> 43120; stm32h523 48660 -> 41508; stm32f411
+  48488 -> 41644.
+  ch32v006 was the ORIGINAL PROBE CHIP (-13712 bytes measured there first) whose
+  knob never landed because the probe lived in a throwaway worktree — this batch
+  re-applies it for real, from the landed samd21 pattern, faithfully (Makefile
+  `FP ?= SINGLE` block, `boards/generic/prelude.h` SP libm shim,
+  `assert_no_double.sh` wired post-link).
+  stm32f103/h523/f411 share one `common/stm32/common.mk` — the knob, the assert
+  hookup, and the help text were added THERE ONCE, not duplicated three times;
+  each port's own `prelude.h` (no `boards/` subdir on any of the three — one
+  prelude per port) got its own copy of the SP libm call-site shim, because
+  CONTRACTS.md #17 requires the shim live in every board/prelude that could be
+  selected, not a shared header the Makefile might bypass.
+  SAME TRAP HIT AGAIN, SAME FIX: ch32v006's `_delay_ms()` had the identical
+  samd21-class leak — sub-ms remainder computed in `double`
+  (`__ms - (double)ms`, `rem * 1000.0`) behind an already-"narrowed" entry
+  point. Fixed with the same `delay_us_f()` float-worker pattern (one
+  `(float)` narrowing at each public entry, arithmetic never widens back).
+  The three STM32 ports did NOT have this leak: their `_delay_ms(double ms)`
+  was already a bare `(uint32_t)ms` truncation with no remainder arithmetic at
+  all, so `assert_no_double.sh` PASSED on the very first build for all three —
+  no platform.c changes needed there, checked and confirmed empirically (not
+  assumed).
+  **stm32f411 FPU FINDING (the interesting case, Cortex-M4F with a real
+  fpv4-sp-d16 single-precision FPU):** disassembly of the RELEASE ELF before
+  vs. after — before: `sqrt()` resolved to `__ieee754_sqrt` (software DP),
+  287 `bl __aeabi_d*` soft-float call sites, 0 `vsqrt.f32`, 42 `vmul.f32`/22
+  `vadd.f32` (from code that was already float-typed); after: `sqrtf()`
+  compiles to ONE instruction, `vsqrt.f32 s0,s0` (verified in the .dump), 82
+  `vmul.f32` (+40) and 161 combined `vadd/vsub/vdiv.f32` (+139), and **0**
+  `bl __aeabi_d*`/`bl sqrt` sites — the entire soft-float call population
+  moved onto real FPU instructions. This is a genuine SIZE+SPEED win, not
+  just size: the FPU was already present and paid for, it was simply being
+  starved by DP promotion. stm32h523 (Cortex-M33, fpv5-sp-d16, also
+  SP-only) gets the identical class of win; not separately disassembled this
+  batch but the size delta (-22.5%) is consistent with the same mechanism.
+  Full build sweep after the rollout: golden AVR MD5 `79af184e67b27defd27a39309ac53563`
+  unchanged; samd21 (both boards, both flavors) unchanged at 31952/296; all
+  four converted ports build both DEBUG and RELEASE, assert PASSES on all 8
+  images, STM32 boot-integrity check (BUG #21 ratchet) PASSES on all 6 STM32
+  images, ch32v006's RISC-V `_start`-at-flash-base check PASSES on both.
 - BUG #21 gates: AVR golden `make -C grbl/platform/atmega328p validate` PASSED
   (MD5 79af184e67b27defd27a39309ac53563). Warning ratchet clean on all of
   stm32f103 (21 warns) / stm32f411 (14) / stm32h523 (18) / samd21 (0) — no new
