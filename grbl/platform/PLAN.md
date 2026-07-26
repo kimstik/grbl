@@ -1165,6 +1165,72 @@ identity to integration time.
 
 ## Current State (update each session)
 
+- **[x] BUILD_DIR MISSED THE BOARD DIMENSION (2026-07-26) — the repo-wide
+  BUILD_DIR/$(BUILD) fix (line ~81 above) keyed object dirs by build
+  flavor but never by BOARD, and samd21 is the only port with a real
+  multi-board BOARD knob today. Reproduced cold: `rm -rf build; make -C
+  grbl/platform/samd21 BUILD=RELEASE BOARD=megarm` -> 31952/296; `rm -rf
+  build; make ... BOARD=generic` -> 31940/296; then, with NO `rm`/`clean`,
+  `make ... BOARD=megarm` again printed NOTHING (make considered the
+  BOARD=generic objects under `build/samd21/RELEASE/` up to date for the
+  BOARD=megarm target) and would have shipped the generic binary under
+  the megarm name. `tools/build_artifacts.py` was NOT actually bitten in
+  production (its `build_std_unit()` already runs `make clean` before
+  every unit, board-switch included - see its own comment at the site),
+  but that's a workaround bolted onto the symptom, not a fix to the root
+  cause, and every OTHER caller (a developer's local `make`, any future
+  script that doesn't happen to clean first) was exposed. Fixed at the
+  root: `BUILD_DIR` now includes `$(BOARD)` (`build/<platform>/<board>/
+  <BUILD>/`) in every port that has a BOARD concept -
+  `grbl/platform/samd21/Makefile` (bare `$(BOARD)`) and the four
+  `boards/<name>/`-style ports that share the pattern -
+  `grbl/platform/_template/Makefile`, `ch32v006/Makefile`,
+  `ch570/Makefile`, `dspic33ak128mc102/Makefile`. OUTPUT_DIR and every
+  final artifact name/path are UNCHANGED (verified by grep BEFORE editing:
+  `.github/actions/build-platform/action.yml` and `ci/renode/smoke.sh`
+  only ever reference `build/*.hex`/`build/*.bin`/`build/*.map`/
+  `build/grbl_samd21_dbg.elf`, i.e. OUTPUT_DIR, never the intermediate
+  per-board/per-flavor object dir) - CI, the smoke test, and
+  `tools/build_artifacts.py` needed zero changes. **Proof, real rebuilds,
+  no `make clean` between the last two**: A (fresh, BOARD=megarm)
+  31952/296/6160; B (fresh, BOARD=generic) 31940/296/6160; A2 (NO rm, NO
+  clean, BOARD=megarm again) 31952/296/6160 - the exact A/B/A the bug
+  report specified, now correct. `build/samd21/{megarm,generic}/RELEASE/`
+  confirmed as separate directories post-fix. Gates re-run this batch:
+  golden AVR `make validate` PASSED (MD5
+  `79af184e67b27defd27a39309ac53563`); `tools/build_artifacts.py check`
+  OK, 56 files verified fresh across all 10 units, no regeneration needed
+  (this batch's fix is purely to the intermediate object-dir path, so
+  every tracked artifact byte was already correct); `ci/warn_ratchet.py`
+  OK against every touched port's baseline (samd21, ch32v006, ch570,
+  dspic33ak128mc102), both flavors, real build logs.
+- **[x] check_contracts_numbering.py SCANNED .claude/ SCRATCH WORKTREES
+  (2026-07-26)** — its cross-repo dangling-link scan (`os.walk(repo_root)`
+  for every `*.md` linking `CONTRACTS.md#slug`) only excluded `.git/`, so
+  it also walked `.claude/worktrees/<agent-id>/` - full, independent,
+  frequently-behind-or-ahead checkouts other agents work in concurrently -
+  and failed once for real on
+  `.claude/worktrees/agent-a95cc0325b1e280b4/grbl/platform/PLAN.md`
+  linking to a `CONTRACTS.md#cross-arch-dedup-byte-invariance` anchor that
+  existed in that agent's own in-progress branch but not yet in the
+  CONTRACTS.md this run parsed - a false failure against content that
+  isn't part of the repo being validated, not a real dangling link.
+  Confirmed the exposure was real and sizable, not hypothetical: the
+  unmodified script run against the live repo root found 84 cross-file
+  links (36 of them living under `.claude/worktrees/`, `grep -rl` count);
+  after the fix, 15 (only the real tracked-repo links). Fix: `os.walk`
+  now prunes both `.git` and `.claude` (new `EXCLUDED_SCAN_DIRS` set,
+  checked repo root for any other non-source scratch directory - none
+  found: no `node_modules`/`__pycache__`/`.venv` at top level).
+  `--selftest` gained the regression case: a temp repo tree with a
+  deliberately dangling `CONTRACTS.md#slug` link inside
+  `.claude/worktrees/<id>/.../PLAN.md` must NOT fail the check, and the
+  SAME class of dangling link inside a normal tracked-looking directory
+  (`doc/REAL.md`) must still FAIL - proving the exclusion doesn't blind
+  the checker to genuine dead links. `--selftest`: PASS (9 checks, up
+  from 6). Real run against this repo: `check_contracts_numbering: OK -
+  26 section(s), 26 slug(s), 12 cross-file link(s) checked, all
+  consistent.`
 - **[x] BUILD ARTIFACTS TRACKED IN GIT FOR OBSERVABILITY (2026-07-26,
   owner directive)** — new `artifacts/<port>/` tree (RELEASE
   elf/bin/hex + a `nm --print-size --size-sort --demangle` symbol map per
