@@ -379,9 +379,13 @@ void hal_serial_init(uint32_t baud_rate);
 #define HAL_SERIAL_TX_INTERRUPT_ENABLE()        (USART1->CR1 |= USART_CR1_TXEIE)
 #define HAL_SERIAL_TX_INTERRUPT_DISABLE()       (USART1->CR1 &= ~USART_CR1_TXEIE)
 
-// Serial status flags (H5 USART: flags live in ISR, not SR)
-#define HAL_SERIAL_RX_READY()                   (USART1->ISR & USART_ISR_RXNE)
-#define HAL_SERIAL_TX_READY()                   (USART1->ISR & USART_ISR_TXE)
+// HAL_SERIAL_RX_READY()/HAL_SERIAL_TX_READY() removed (cross-port
+// consistency audit, 2026-07-26): defined here and in stm32f103/f411/
+// hc32f460/sg2002 but called by nothing in grbl core (grep grbl/*.c) and
+// absent from CONTRACTS.md §7's serial macro table - core drives serial
+// entirely off the RX/TX ISR + INTERRUPT_ENABLE/DISABLE pair, never polls
+// a ready flag. Dead since the macros were written. Reintroduce with a
+// real caller if a future polling-mode serial path ever needs it.
 
 // ============================================================================
 // HAL SYSTEM MACROS

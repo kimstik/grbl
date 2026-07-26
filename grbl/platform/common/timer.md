@@ -7,6 +7,11 @@ context, atomicity and memory-ordering obligations, no-op legality — live in
 macros, §6 spindle PWM). Porting order and definition of done:
 `../PORTING-CHECKLIST.md`.
 
+(There is no sibling `timer.h` in this directory - a stale, contentless
+placeholder of that name was removed as a dead orphan during the
+cross-port consistency audit. This `.md` is the only artifact; nothing
+in the tree ever included the `.h`.)
+
 /* usage map
 spindle_control.c:	HAL_TIMER_SPINDLE_PWM_INIT();
 spindle_control.c:	  if (HAL_TIMER_SPINDLE_PWM_IS_ENABLED()) {

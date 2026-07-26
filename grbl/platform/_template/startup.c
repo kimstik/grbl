@@ -133,8 +133,15 @@ void Reset_Handler(void) {
 
   SystemInit();
 
+  // One-time GPIO-IRQ controller arm-up (NVIC/PFIC/INTC enable for the
+  // EIC/EXTI-class peripheral) - platform.c's hal_gpio_interrupt_init().
+  // Wired here so it is never the orphaned, never-called function
+  // CONTRACTS.md §13 flags on the SAMD21 reference port - see that
+  // function's docstring for the full contract.
+  hal_gpio_interrupt_init();
+
   // PORT-TODO: start whatever 1 kHz-class timebase your _delay_ms()
-  // implementation (handlers.c) needs, if any (samd21/startup.c:207-219 is
+  // implementation (platform.c) needs, if any (samd21/startup.c:207-219 is
   // the reference: SysTick_Config() + a priority demotion so it never
   // preempts motion/serial on simultaneous arrival).
 
