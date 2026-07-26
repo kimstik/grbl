@@ -341,7 +341,7 @@ typedef struct {
 
 #define NVIC  ((NVIC_Type*)0xE000E100UL)
 
-// IRQ numbers for STM32F411 (verified this session against the published
+// IRQ numbers for STM32F411 (verified against the published
 // F411 CMSIS vector table for the entries actually used by this port - see
 // file header note. Numbering matches the general F4-family layout).
 typedef enum {

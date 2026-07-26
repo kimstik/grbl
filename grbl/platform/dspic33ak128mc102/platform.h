@@ -123,7 +123,7 @@ void hal_gpio_cn_disable(uint32_t port_idx, uint32_t mask);
 /*
   __builtin_get_isr_state() / __builtin_set_isr_state() /
   __builtin_disable_interrupts() are the vendor-blessed primitives;
-  DISASSEMBLY-VERIFIED this session: get_isr_state packs SR.IPL[2:0]
+  DISASSEMBLY-VERIFIED: get_isr_state packs SR.IPL[2:0]
   (bits 7:5) + INTCON1.GIE (the dsPIC33A global-interrupt-enable bit -
   this core HAS one, unlike classic 16-bit dsPIC33); disable_interrupts
   is a SINGLE `bclr.b INTCON1+1,#7` (interrupt-atomic); set_isr_state
@@ -166,7 +166,7 @@ void hal_gpio_cn_disable(uint32_t port_idx, uint32_t mask);
       (#12.1) and flash-commit (#12.4) contracts need on this chip;
     - SFR read-after-write pipeline hazards are handled BY THE COMPILER:
       xc-dsc inserts `neop` padding after SFR stores (visible in every
-      disassembly this session) - not a porting obligation.
+      disassembly) - not a porting obligation.
   UNVERIFIED residue (logged in CONTRACTS.md #16): the RM's word on
   write-buffer behavior for NVM controller commands - Step 5 must check
   whether NVMCON command sequencing needs an explicit SFR readback (the

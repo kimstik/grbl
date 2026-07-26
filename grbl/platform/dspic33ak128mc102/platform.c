@@ -1,5 +1,5 @@
 /*
-  platform.c - dsPIC33AK128MC102 platform implementation (M1-M3 batch)
+  platform.c - dsPIC33AK128MC102 platform implementation
   Part of Grbl
 */
 

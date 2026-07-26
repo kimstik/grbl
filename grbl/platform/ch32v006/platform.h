@@ -40,7 +40,7 @@ GRBL_BOOT_INIT void hal_gpio_clock_init(void);
 // PLATFORM SPECIFICATIONS
 
 // F_CPU feeds TICKS_PER_MICROSECOND (nuts_bolts.h) and all stepper timing
-// math (PORTING-CHECKLIST Step 1). Clock path (TRM-verified this session):
+// math (PORTING-CHECKLIST Step 1). Clock path (TRM-verified):
 // HSI 24 MHz (RM 3.3.2) -> fixed x2 PLL (RM clock tree) -> SYSCLK 48 MHz,
 // HPRE cleared to /1 (its RESET value is /3! - see SystemClock_Config).
 // Still not scope/emulator-verified on silicon - hardware validation item.
@@ -85,7 +85,7 @@ typedef GPIO_TypeDef* hal_gpio_port_t;
 
 // CRITICAL SECTIONS / sei() / cli() / MEMORY BARRIERS
 // (CONTRACTS.md #8, #11, #12)
-// EXTRACTED (Phase 6 rolling #4, Part A) to common/wch/wch_critical.h,
+// EXTRACTED to common/wch/wch_critical.h,
 // verbatim - see that file for the full rationale (mstatus.MIE bit 3,
 // Zicsr requirement, fence rw,rw semantics) and for why `mstatus` is the
 // right primitive on every QingKe generation this tree ports, not just
