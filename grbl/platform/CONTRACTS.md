@@ -3222,3 +3222,96 @@ unit" — a prelude is, by construction, code that runs before the file
 being compiled has said anything at all; a macro defined by that later
 file's own include chain is invisible to it, permanently, once an
 `#ifndef` guard has already made its one pass.
+
+<a id="core-purity-diagnostic-response"></a>
+## §NEW. Core-purity rule: a diagnostic on frozen core code is never resolved by editing core
+
+Found running `avr-gcc` 15.2.0/16.1.0 and `arm-none-eabi-gcc` 14.2.1
+(compiler-version axis, see `docs/TOOLCHAIN-VERSIONS.md`) against the real
+build flags (root `Makefile`/`common/stm32/common.mk`) plus `-fanalyzer`,
+`-Wuse-after-free`, `-Wdangling-pointer`, `-Wnull-dereference`,
+`-Warray-bounds=2`, `-Wstringop-overflow`, `-Wshadow` — the exact modern
+diagnostic classes 7.3.0/13.2.1 predate. Every `grbl/*.c` compiles clean of
+`-fanalyzer` findings under both newer AVR compilers and under
+`arm-none-eabi-gcc` 14.2.1; the only non-empty classes are
+`-Wimplicit-fallthrough` (6 sites, `gcode.c`/`report.c`/`system.c`,
+intentional fallthrough documented by an old-style comment GCC's default
+fallthrough-comment matcher doesn't recognize), `-Wint-in-bool-context` on
+the checksum `(checksum<<1)||(checksum>>7)` (`nvmem.c`/`eeprom.c`, the
+documented upstream quirk at [§10.4](#nvmem-eeprom) — never "fix" this),
+and one version-dependent `-Wanalyzer-out-of-bounds` [CWE-787] false
+positive in `settings.c:208` (present under `avr-gcc` 15.2.0 and
+`arm-none-eabi-gcc` 14.2.1, ABSENT under `avr-gcc` 16.1.0 — a loop-carried
+value-range imprecision in the analyzer itself: `parameter` is manually
+traced bounded to `0..N_AXIS-1` before the write via the
+`AXIS_SETTINGS_START_VAL`/`AXIS_SETTINGS_INCREMENT` `while`-loop dispatch
+a few lines above; the analyzer's widening across the loop back-edge loses
+that bound in two of the three compiler builds tested). None of these are
+core defects; all three classes are either already-accepted upstream
+behavior or analyzer noise.
+
+That an every-file, every-modern-diagnostic sweep of the frozen core turned
+up zero real bugs is itself the reportable result — but the rule below does
+not depend on that outcome. It would apply identically the day a real
+`-fanalyzer` finding DOES land in `grbl/*.c`, and this project has no
+mechanism yet stating what happens then. State it now, before the day
+someone is tempted to improvise:
+
+**The rule.** A diagnostic whose reported location is inside frozen core
+(`grbl/*.c`, `grbl/*.h` — anything the golden-MD5 gate covers, [§0](#boundary-wiring))
+is NEVER resolved by editing that core file. Not a style pass, not a
+one-line silence-the-warning tweak, not "it's obviously safe so I'll just
+add a cast." The AVR golden MD5 (`79af184e67b27defd27a39309ac53563`,
+`.text` 30640) is a byte-exact pin on the ROOT MAKEFILE'S compile of these
+exact files; any source edit — however narrowly "just for the warning" —
+changes the token stream the golden compiler sees and is rejected by
+`make validate` by construction. The other nine ports compile the
+identical `grbl/*.c` bytes into their own images; a core edit made to
+placate one toolchain's diagnostic silently reflows every other port's
+codegen too, the opposite of the "breakage surface stays isolated" law
+(PLAN.md, Core philosophy).
+
+A finding against core has exactly two legal resolutions, and the choice
+between them is which side of the boundary the diagnostic's cause sits on:
+
+1. **Flag/prelude-layer suppression**, when the diagnostic is provably a
+   false positive or an accepted, already-documented upstream quirk (the
+   `-Wint-in-bool-context` checksum case above is the reference example —
+   [§10.4](#nvmem-eeprom) already states the quirk is deliberate). Suppress
+   at the compiler-invocation layer a profile owns (a `-Wno-*` in the
+   profile's own flag set, or a targeted `#pragma GCC diagnostic
+   ignored/push/pop` bracket in a NON-core file that wraps the core
+   `#include`, e.g. a prelude or the profile's build glue) — never inside
+   the core `.c`/`.h` file the diagnostic points at.
+2. **An accepted-baseline entry**, when the diagnostic is real noise from
+   an intentional but structurally awkward pattern (the
+   `-Wimplicit-fallthrough` case above: the fallthrough IS intentional,
+   rewriting it as an attribute or a differently-worded comment is a core
+   edit like any other). Record it in the toolchain profile's own baseline
+   file (`ci/warn_baseline_<port>.txt`-class mechanism, or the
+   analyzer-equivalent this file's [§static-assert-sweep](#static-assert-sweep)
+   sibling docs discuss) with the file:line, the diagnostic name, and the
+   one-line justification — exactly the catalogue format
+   `docs/TOOLCHAIN-VERSIONS.md` uses. A baseline entry is a permanent,
+   reviewable admission, not a silent suppression; it must name why the
+   line is safe, not just that it is accepted.
+
+**What is explicitly NOT a legal third option:** disabling the warning
+class project-wide to make one file quiet (collateral-damages every other
+`grbl/*.c` and every other port compiled with that profile); adding a
+core-side `(void)` cast, a defensive bounds recheck, a rewritten loop
+shape, or any other source change whose only purpose is to change what the
+diagnostic sees — even when the change is a no-op for behavior. A change
+that is a no-op for behavior is still a real edit to a byte-gated file, and
+"the diff is harmless" is not a proof the golden hash agrees; only
+`make validate` is.
+
+**Why the distinction is a rule and not a case-by-case judgment call**:
+this project's own history contains a case where "just fix it, it's core
+and obviously fine" was tried before slowing down to check ([§19](#guard-hardening),
+[§29](#prelude-phase-dead-guard) — both times a diagnostic that looked
+straightforwardly right to silence at the flagged site turned out to be
+solvable, correctly, one layer up). A rule that must be reconsidered per
+finding is a rule with a two-strike class already waiting (PLAN.md working
+rule 3); stating it in advance, once, removes the temptation to
+reconsider it under the pressure of a red CI run.
