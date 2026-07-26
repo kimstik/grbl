@@ -13,33 +13,27 @@
 #include "../hal.h"
 #include "platform.h"
 #include "config.h"
+#include "../common/stm32/stm32_timing.h"
 #include "../common/stm32/stm32_nvmem.h"
+#include "../common/stm32/stm32_watchdog.h"
 
 // ============================================================================
-// SYSTEM TIMING (SysTick-based millisecond counter)
+// SYSTEM TIMING (thin wrappers over common/stm32/stm32_timing.c - same
+// pattern as stm32f411/stm32h523 platform.c. Previously hand-rolled here
+// with literal 71999/72 constants derived from 72MHz; now derived from
+// stm32_config.cpu_freq like every other STM32 sibling.)
 // ============================================================================
-
-static volatile uint32_t systick_millis = 0;
 
 void SysTick_Handler(void) {
-  systick_millis++;
+  stm32_systick_handler();
 }
 
 uint32_t hal_millis(void) {
-  return systick_millis;
+  return stm32_millis();
 }
 
 uint64_t hal_micros(void) {
-  uint32_t m, t;
-
-  __disable_irq();
-  m = systick_millis;
-  t = SysTick->VAL;
-  __enable_irq();
-
-  // SysTick counts down from (72000000/1000 - 1) = 71999
-  // Convert to microseconds
-  return ((uint64_t)m * 1000) + ((71999 - t) / 72);
+  return stm32_micros();
 }
 
 // ============================================================================
@@ -67,8 +61,8 @@ void hal_clock_config(void) {
   RCC->CFGR |= RCC_CFGR_SW_PLL;
   while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_PLL);
 
-  // Configure SysTick for 1ms interrupts
-  SysTick_Config(72000000 / 1000);
+  // SysTick (and DWT) are configured by stm32_timing_init(), called from
+  // hal_system_init() after hal_clock_config() - same order as f411/h523.
 }
 
 // ============================================================================
@@ -341,21 +335,15 @@ void hal_critical_exit(uint32_t state) {
 }
 
 // ============================================================================
-// DELAY FUNCTIONS
+// DELAY FUNCTIONS (thin wrappers over common/stm32/stm32_timing.c)
 // ============================================================================
 
 void hal_delay_ms(uint32_t ms) {
-  uint32_t start = systick_millis;
-  while ((systick_millis - start) < ms);
+  stm32_delay_ms(ms);
 }
 
 void hal_delay_us(uint32_t us) {
-  // REVIEW: MEDIUM #8 - Use DWT cycle counter for accurate microsecond delays
-  // DWT->CYCCNT is a free-running 32-bit counter incremented every CPU cycle
-  uint32_t start = DWT->CYCCNT;
-  uint32_t cycles = us * 72;  // 72 MHz = 72 cycles per microsecond
-
-  while ((DWT->CYCCNT - start) < cycles);
+  stm32_delay_us(us);
 }
 
 // AVR compatibility - _delay_ms wrapper
@@ -477,49 +465,15 @@ void hal_nvmem_flush(void) {
 }
 
 // ============================================================================
-// WATCHDOG TIMER (Independent Watchdog - IWDG)
+// WATCHDOG (thin wrapper - stm32_watchdog.c is 100% shared across F1/F4/H5,
+// CONTRACTS.md; opt-in via -DENABLE_WATCHDOG, same as f411/h523)
 // ============================================================================
-
-// REVIEW: ROBUSTNESS - Independent watchdog for system reliability
-// Timeout: ~1.6 seconds (critical for CNC safety)
-// Uses internal 40kHz RC oscillator, independent from main clock
-//
-// NOTE: Watchdog is DISABLED by default for debugging convenience
-// To enable in production: add -DENABLE_WATCHDOG to CFLAGS in Makefile
-
-#ifdef ENABLE_WATCHDOG
-
-void hal_watchdog_init(uint32_t timeout_ms) {
-  (void)timeout_ms;  // Unused - STM32 watchdog timeout is fixed
-  // Start IWDG
-  IWDG->KR = 0xCCCC;  // Start watchdog
-
-  // Wait for register access
-  IWDG->KR = 0x5555;  // Enable register access
-
-  // Configure prescaler and reload value
-  // 40kHz / 64 = 625Hz, reload = 1000 → ~1.6 second timeout
-  IWDG->PR = 0x04;    // Prescaler /64
-  IWDG->RLR = 1000;   // Reload value
-
-  // Wait for registers to update
-  while (IWDG->SR);
-
-  // Refresh to start counting
-  IWDG->KR = 0xAAAA;  // Refresh watchdog
-}
+// NOTE: Watchdog is DISABLED by default for debugging convenience.
+// To enable in production: add -DENABLE_WATCHDOG to CFLAGS in Makefile.
 
 void hal_watchdog_refresh(void) {
-  IWDG->KR = 0xAAAA;  // Refresh watchdog (pet the dog)
+  stm32_watchdog_refresh();
 }
-
-#else
-
-// Watchdog disabled for debugging
-void hal_watchdog_init(uint32_t timeout_ms) { (void)timeout_ms; }
-void hal_watchdog_refresh(void) { }
-
-#endif // ENABLE_WATCHDOG
 
 // ============================================================================
 // SYSTEM INITIALIZATION
@@ -529,13 +483,13 @@ void hal_system_init(void) {
   // Configure system clock
   hal_clock_config();
 
-  // Enable DWT cycle counter for accurate microsecond delays
-  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-  DWT->CYCCNT = 0;
-  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+  // Initialize common timing (SysTick + DWT cycle counter)
+  stm32_timing_init();
 
   // Initialize watchdog (disabled by default, enable with -DENABLE_WATCHDOG)
-  hal_watchdog_init(1000);  // 1000ms timeout (ignored if watchdog disabled)
+#ifdef ENABLE_WATCHDOG
+  stm32_watchdog_init(1000);  // 1000ms timeout
+#endif
 
   // Initialize GPIO
   hal_gpio_init();
