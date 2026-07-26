@@ -93,11 +93,21 @@ void EXTI1_IRQHandler(void) {
   }
 }
 
-// Z limit switch (PB10, EXTI10)
-void EXTI10_IRQHandler(void) {
-  if ((EXTI->FPR1 | EXTI->RPR1) & (1 << 10)) {
-    EXTI->FPR1 = (1 << 10);
-    EXTI->RPR1 = (1 << 10);
+// EXTI10 is unused on this port since BUG #26 moved Z off PB10 - the weak
+// alias to Default_Handler in startup.c covers this vector now.
+
+// Z limit switch (PB2, EXTI2) - BUG #26: moved here from PB10/EXTI10.
+// PB10 put Z_LIMIT_BIT at bit 10, which limits.c's uint8_t group-read (and
+// core get_limit_pin_mask()'s uint8_t return) silently truncates to zero -
+// the Z switch was structurally invisible to limits_get_state(), the ONLY
+// detection path during homing (motion_control.c disables the
+// interrupt-driven hard-limit ISR for the whole homing cycle). PB2 keeps
+// Z_LIMIT_BIT within bits 0-7 (CONTRACTS.md section 1.3). See PLAN.md
+// BUG #26.
+void EXTI2_IRQHandler(void) {
+  if ((EXTI->FPR1 | EXTI->RPR1) & (1UL << Z_LIMIT_PIN)) {
+    EXTI->FPR1 = (1UL << Z_LIMIT_PIN);
+    EXTI->RPR1 = (1UL << Z_LIMIT_PIN);
     LIMIT_INT_IRQHandler();
   }
 }

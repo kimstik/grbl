@@ -223,7 +223,7 @@ const void *vector_table[] = {
   0,                           // 21: RCC
   EXTI0_IRQHandler,            // 22: EXTI0 (X limit switch)
   EXTI1_IRQHandler,            // 23: EXTI1 (Y limit switch)
-  EXTI2_IRQHandler,            // 24: EXTI2
+  EXTI2_IRQHandler,            // 24: EXTI2 (Z limit switch, BUG #26)
   EXTI3_IRQHandler,            // 25: EXTI3 (Reset button)
   EXTI4_IRQHandler,            // 26: EXTI4 (Feed hold button)
   DMA1_Channel1_IRQHandler,    // 27: DMA1 Channel 1
@@ -255,7 +255,7 @@ const void *vector_table[] = {
   USART1_IRQHandler,           // 53: USART1 (SERIAL ISR)
   USART2_IRQHandler,           // 54: USART2
   USART3_IRQHandler,           // 55: USART3
-  EXTI15_10_IRQHandler,        // 56: EXTI15_10 (Z limit switch)
+  EXTI15_10_IRQHandler,        // 56: EXTI15_10 (unused, BUG #26 moved off PB10)
   RTCAlarm_IRQHandler,         // 57: RTC Alarm
   USBWakeUp_IRQHandler,        // 58: USB Wakeup
 };

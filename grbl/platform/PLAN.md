@@ -2602,50 +2602,129 @@ mechanism and deserve their own work items.
 
 ---
 
-- **BUG #26 CANDIDATE (2026-07-26, found via an independent-compiler probe,
-  numbering NOT final — integrator assigns): stm32f411's Z-axis hard-limit
-  switch is invisible to `limits_get_state()`.** `clang -Wconstant-conversion`
-  (`--target=arm-none-eabi`, syntax pass over this port with the real build
+- **BUG #26 FIXED (2026-07-26, found via an independent-compiler probe,
+  numbering NOT final — integrator assigns): stm32f103/f411/h523's Z-axis
+  hard-limit switch was invisible to `limits_get_state()`, and Z-axis homing
+  could drive into the physical hard stop.** `clang -Wconstant-conversion`
+  (`--target=arm-none-eabi`, syntax pass over stm32f411 with the real build
   flags) flagged `grbl/settings.c:339` — core code — with "implicit
-  conversion from 'int' to 'uint8_t' ... changes value from 1024 to 0". avr/
-  gcc-derived toolchains do not warn on this by default; a second compiler
-  caught it on the first real build attempt.
+  conversion from 'int' to 'uint8_t' ... changes value from 1024 to 0".
+  CONTRACTS.md's new [§NEW section](CONTRACTS.md#limit-bit-width-second-consumer)
+  has the full incident writeup; summary here.
 
-  **Root cause, two independent truncations, both land on this port's own
-  choice of `Z_LIMIT_PIN`/`Z_LIMIT_BIT` = 10** (`grbl/platform/stm32f411/
-  platform.h:176`, GPIOB pin 10):
-  1. `grbl/limits.c:76`: `uint8_t pin = GPIO_MRD( LIMIT, IREG );` expands
-     (`stm32f411/gpio.h:35` + `common/gpio.h:78`) to
-     `(uint8_t)(LIMIT_PORT->IDR & LIMIT_MASK)`. `LIMIT_MASK` (`platform.h:176`)
-     is `(1<<0)|(1<<1)|(1<<10)` = `0x401` — the `& LIMIT_MASK` correctly
-     isolates bit 10 in a wide register read, but the **assignment to
-     `uint8_t pin` silently drops it**. `pin` can never carry the Z switch's
-     level, structurally, regardless of hardware state.
+  **Root cause, two independent truncations, both land on the shared
+  `Z_LIMIT_PIN`/`Z_LIMIT_BIT` = 10 choice** (GPIOB pin 10, identical on all
+  three ports — same donor pin map, not three separate mistakes):
+  1. `grbl/limits.c:76`: `uint8_t pin = GPIO_MRD( LIMIT, IREG );` — the
+     group read correctly isolates bit 10 in a wide register access, but the
+     assignment to `uint8_t pin` silently drops it.
   2. `grbl/settings.c:335-339`, core: `get_limit_pin_mask()` does
      `return((1<<Z_LIMIT_BIT));` from a function declared to return
-     `uint8_t` (`grbl/settings.h:150`). `1<<10 = 1024`, truncated to `uint8_t`
-     = **0** — this is the exact line clang flagged. `limits.c:85`:
-     `if (pin & get_limit_pin_mask(idx))` therefore ANDs against a
-     structural zero for `idx==Z_AXIS` even in the counterfactual where (1)
-     didn't already zero `pin` first. Two independent, unconditional zeros.
+     `uint8_t`. `1<<10 = 1024` truncates to **0** — the exact line clang
+     flagged. `limits.c:85`'s `if (pin & get_limit_pin_mask(idx))` is
+     therefore an unconditional zero for Z regardless of (1).
 
-  **Consequence**: `limits_get_state()` — the function behind the `?`
-  status report's `Pn:` field and (pending the interrupt-path check below)
-  possibly the hard-limit alarm and homing-switch confirmation — reports
-  the Z limit switch as never-triggered, always, regardless of the physical
-  switch. This is the same failure *class* as BUG #17 (a port's own pin
-  choice silently defeats a core width contract, CONTRACTS.md
-  [§1.3](CONTRACTS.md#gpio-data)) — the port's own comment block right above
-  the pin `#define`s (`platform.h:151-166`) explicitly reasons through this
-  exact hazard and concludes "It is NOT read that way here" — that
-  conclusion is wrong: it audited the group-mask XOR path but not
-  `get_limit_pin_mask()`, which reintroduces the identical hazard.
+  One port's `platform.h` had a comment tracing consumer (1) and concluding
+  the port was safe — CONTRACTS.md's new section calls this out by name as
+  the generalizable lesson: a traced consumer is not a proof, because
+  consumer (2) sat in a different core file doing a different kind of
+  truncation (a function return, not a variable assignment).
 
-  **NOT yet verified** (next in this entry, before any fix lands):
-  whether X/Y are affected (expected: no — both land in bits 0-7), whether
-  the interrupt-driven hard-limit trip path (EXTI/NVIC arm for PB10, a
-  *different* code path from the polling read above) independently fails
-  for the same or a different reason, whether stm32f103/h523/hc32f460 share
-  this exposure, and the on-bench behavior (hang vs. drive-into-stop).
-  Fix and ratchet follow once that is nailed down — recorded now,
-  incomplete, rather than risk losing it.
+  **Scope, fully verified, not guessed**:
+  - **X/Y unaffected** (bits 0/1, confirmed by grepping every affected
+    port's `*_LIMIT_BIT`) — Z-only, on all three ports.
+  - **Interrupt-driven hard-limit path was, itself, already CORRECT** for Z
+    on all three ports: `hal_gpio_interrupt_enable(GPIO_TypeDef*, uint32_t)`
+    is `uint32_t`-typed throughout (`platform.c`), correctly routes pin 10
+    to `EXTI15_10_IRQn`/`NVIC_EnableIRQ`, and each port's `handlers.c` had a
+    real (non-weak) `EXTI15_10_IRQHandler` (f103/f411) or `EXTI10_IRQHandler`
+    (h523, per-line EXTI) dispatching to the core body — verified by
+    disassembly-level trace of the arming call chain, not by inspection
+    alone. **This does not save the machine**: `grbl/motion_control.c:219`
+    calls `limits_disable()` (disarming that exact interrupt) for the ENTIRE
+    duration of every homing cycle, matching upstream's own documented
+    design (`limits.c`'s ISR comment: "this interrupt is disabled during
+    homing cycles") — `limits_get_state()`'s polling read in
+    `limits_go_home()`'s approach loop (`limits.c:269`) is the ONLY
+    detection mechanism while homing, and it is the truncated one. Bench
+    consequence: **Z-axis homing cannot detect its switch and drives the
+    axis into the physical hard stop** (or as far as the configured search
+    distance allows before "Limit switch not found during approach" fires).
+    Outside of homing, the interrupt path being correct means an
+    *unexpected* Z overtravel during normal operation WOULD still trip the
+    hard-limit alarm correctly — the defect is homing-specific, not
+    "Z limits never work at all."
+  - **stm32f103 and stm32h523 share the identical defect** (grep across all
+    landed ports for `Z_LIMIT_BIT`: both declare `10`, same as f411).
+    `hc32f460` (`Z_LIMIT_BIT=2`) and every other port are unaffected —
+    checked, not assumed.
+  - **gcc itself had already flagged this** — `-Woverflow` (part of
+    `-Wall`), same line, all three ports — sitting in each port's
+    `ci/warn_baseline_stm32{f103,f411,h523}.txt` as an accepted, never
+    re-examined baseline entry since whichever session first built these
+    ports. The value the independent compiler added was not detection gcc
+    lacked; it was `-Wconstant-conversion`'s sharper framing (a specific
+    value-identity claim, not a generic "conversion changes a value" note)
+    prompting a fresh look at an already-visible, already-dismissed
+    warning.
+
+  **Fix landed** (all three ports, this session): Z moved from PB10 to
+  PB2 — a free, previously-unused GPIOB bit ≤7 on this donor pin map,
+  confirmed empty on all three ports before choosing it — not a
+  logical/physical gather/scatter remap (BUG #17's shape), because no
+  hardware had ever been wired to PB10 for any of the three (each port's
+  own `platform.md`/status line: "not yet run on real hardware"), making a
+  pin-map correction strictly simpler and lower-risk here. Touched per
+  port: `platform.h` (`Z_LIMIT_PIN`/`Z_LIMIT_BIT` 10→2, comment rewritten,
+  new `_Static_assert(*_LIMIT_BIT <= 7, ...)` mirroring the existing
+  STEP/DIRECTION assert), `config.h` (its independent, previously-stale
+  copy of `Z_LIMIT_PIN` — the already-documented dual-pin-map-canon debt —
+  updated to match, closing the same "which header wins depends on include
+  order" hazard already flagged for `SPINDLE_ENABLE_PIN` above), `startup.c`
+  (EXTI2 promoted from a weak `Default_Handler` alias to a real vector;
+  the old Z line — EXTI15_10 on f103/f411, EXTI10 on h523 — demoted to
+  weak, now genuinely unused), `handlers.c` (real `EXTI2_IRQHandler` added,
+  deriving its bit test from `Z_LIMIT_PIN` rather than a literal; the old
+  handler removed). No `grbl/` core file touched.
+
+  **Gates, all re-run after the fix, all green**: golden AVR `make
+  validate` PASSED (`79af184e67b27defd27a39309ac53563`, untouched); all
+  three ports rebuilt both flavors clean; `boot_check.sh`/`init_check.sh`/
+  `assert_no_double.sh` OK on all six builds; warning ratchet green on all
+  three ports (`ci/warn_ratchet.py`) — the now-dead `settings.c`
+  1024→0 baseline line removed from all three `ci/warn_baseline_*.txt`
+  files per the ratchet's own "remove only after verified gone" rule (the
+  sibling `stepper.c` `-Woverflow` line, a DIFFERENT pre-existing accepted
+  warning — BUG #18's F_CPU-needs-a-UL-suffix class, never rolled out to
+  the STM32 family's shared `common/stm32/common.mk` — is untouched and
+  still an open, separate, not-yet-fixed item, flagged for whoever next
+  picks up the toolchain-axis or a dedicated bugfix pass). RELEASE `.bin`
+  sizes changed (as expected — this is a real behavior fix, not a no-op):
+  f411 stayed byte-for-byte size-identical (26132/80/129968, only the
+  embedded pin constant changed — confirmed via MD5, no longer matching
+  the pre-fix committed artifact, exactly as a real fix should); f103/h523
+  changed by single-digit-to-low-hundreds bytes from the *committed*
+  artifact (not from the stale prose figures elsewhere in this file, which
+  were already stale for unrelated reasons — checked by rebuilding the
+  pre-fix tree fresh and comparing against the actual committed
+  `artifacts/*/grbl_*.bin`, not against old prose). `artifacts/` refreshed
+  via a FULL-TREE `tools/build_artifacts.py build` (not `--platforms`,
+  per the known manifest-collapse defect) — `check` now reports "56
+  file(s) verified fresh across 10 unit(s)" clean.
+
+  **Tooling fix landed alongside** (`tools/check_contracts_numbering.py`,
+  not under `grbl/`): the checker did not recognize an anchor above a
+  `## §NEW.` placeholder heading as a valid link target — meaning the
+  file's own documented convention ("head new sections `## §NEW.`, not a
+  guessed number") was, itself, unusable without tripping the checker the
+  moment anything cited the new section's slug. Fixed (new
+  `NEW_HEADING_RE`, registers the anchor for link-validation while
+  correctly excluding it from the numeric duplicate/sequential checks,
+  since it has no number yet); two new selftest fixtures added
+  (`NEW_SECTION_DOC` / `MISSING_NEW_ANCHOR_DOC`); `--selftest` now 11
+  checks (was fewer), all passing. Separately, and NOT touched by this
+  fix: `CONTRACTS.md` already had a **pre-existing duplicate `## 26.`**
+  (two different sections, both using a guessed literal number instead of
+  `§NEW`, landed by other work before this session's rebase) — left alone,
+  per the file's own policy that renumbering is the integrator's job, not
+  a contributor's.
