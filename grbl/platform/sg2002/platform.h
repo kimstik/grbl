@@ -1,251 +1,251 @@
 /*
-  platform.h - SG2002 platform HAL definitions
+  platform.h - Sophgo SG2002 (C906L runtime core) chip-specific HAL
   Part of Grbl
 
-  Copyright (c) 2025 kimstik
-  Intelligence assisted
-  License: MIT
+  TARGET: the SG2002's little C906L core - RV64, no MMU, machine mode only,
+  ~700 MHz. This is the RUNTIME core on EVERY SG2002 configuration. The
+  RISC-V-vs-ARM strap choice belongs to the BIG, Linux-hosting core (C906 or
+  Cortex-A53, mutually exclusive); it never frees an ARM core to target
+  instead, so "both ISA variants" collapses to exactly ONE port. See
+  PLAN.md's sg2002 entry.
+
+  DELIVERABLE SHAPE: a bare-metal blob, not a Linux program. Linux loads it
+  with the upstream `sophgo,cv1800b-c906l` remoteproc driver (ELF segments
+  into a device-tree reserved-memory carve-out; load/start/stop/restart via
+  /sys/class/remoteproc/.../state). ONE carve-out backs both the firmware
+  image and the shared-memory rings - see script.ld and shm.h.
+
+  ############################################################################
+  # EVERY CHIP FACT THIS PORT RESTS ON IS UNVERIFIED. No public TRM exists   #
+  # for SG2002/CV1800B; sg2002.h carries a per-block banner naming what each #
+  # claim rests on and what a bring-up engineer must confirm first. This is  #
+  # not boilerplate hedging - it is the honest state of the sources.         #
+  ############################################################################
 */
 
-#ifndef SG2002_PLATFORM_H
-#define SG2002_PLATFORM_H
+#ifndef PLATFORM_SG2002_H
+#define PLATFORM_SG2002_H
 
 #include <stdint.h>
-#include <stdbool.h>
-#include "regs.h"
-#include "config.h"
+#include "common/boot_init.h" // GRBL_BOOT_INIT (BUG #23, CONTRACTS.md #boot-init-unreachable)
+#include "sg2002.h"
+#include "timer.h"
 
-// Define platform identifier
-#define PLATFORM_SG2002 1
+// ============================================================================
+// PLATFORM IDENTIFICATION
+// ============================================================================
+// String matches grbl/platform/hal.h's own SG2002 branch exactly. It is
+// re-stated here (rather than left to hal.h) because the prelude injects this
+// header first, and an identical redefinition is silent while a differing one
+// warns on every translation unit.
+#undef PLATFORM_NAME
+#define PLATFORM_NAME     "Sophgo SG2002"
+#define PLATFORM_CPU      "RISC-V RV64IMAC (XuanTie C906L, no MMU, M-mode)"
+#define PLATFORM_ARCH     "RISC-V"
 
-// PIN MAPPING - GPIO DEFINITIONS (LicheeRV-Nano)
+// ============================================================================
+// PLATFORM CAPABILITIES
+// ============================================================================
+#define PLATFORM_HAS_FPU           0   // see the ARCH/ABI note below - built soft-float
+#define PLATFORM_HAS_DMA           1   // SoC has DMA (unused by this port)
+#define PLATFORM_HAS_USB           1   // owned by Linux, never by this core
+#define PLATFORM_HAS_HW_EEPROM     0   // NVMEM lives in the shared carve-out (nvmem.c)
+#define PLATFORM_HAS_HW_MULTIPLY   1   // M extension
+#define PLATFORM_HAS_HW_DIVIDE     1
 
-// Stepper motor step pins (GPIO0)
-#define X_STEP_PORT      GPIO0
-#define X_STEP_PIN       0
-#define Y_STEP_PORT      GPIO0
-#define Y_STEP_PIN       1
-#define Z_STEP_PORT      GPIO0
-#define Z_STEP_PIN       2
+/*
+  ARCH/ABI NOTE (the toolchain decision, recorded where it is consumed).
+  Built rv64imac / lp64 - SOFT FLOAT - even though the C906 family nominally
+  implements rv64gc. Two independent reasons, both checked against the
+  installed toolchain rather than assumed:
 
-// Stepper motor direction pins (GPIO0)
-#define X_DIR_PORT       GPIO0
-#define X_DIR_PIN        3
-#define Y_DIR_PORT       GPIO0
-#define Y_DIR_PIN        4
-#define Z_DIR_PORT       GPIO0
-#define Z_DIR_PIN        5
+  1. rv64gc/lp64d IS NOT BUILDABLE HERE. `gcc -march=rv64gc -mabi=lp64d
+     -print-multi-directory` resolves to `rv64imafdc/lp64d`, and
+     picolibc-riscv64-unknown-elf ships no such multilib - its rv64 list
+     stops at rv64imafc/lp64f (verified by listing the installed lib tree).
+     A double-precision-ABI build has no libc to link against on this
+     toolchain, full stop.
+  2. THE "L" IN C906L IS UNDOCUMENTED. The cut-down runtime core is
+     community-described as a C906 with the MMU (certainly) and some
+     extensions (unclearly) removed; nothing states whether F/D survive.
+     rv64imafc/lp64f DOES have a multilib and would be the natural home for
+     this project's FP=SINGLE posture - but an lp64f binary on a core
+     without F traps on its first FLW. rv64imac is a strict subset of every
+     C906 variant, so it runs regardless of how that question resolves.
 
-// Stepper enable pin (all axes)
-#define STEPPERS_DISABLE_PORT  GPIO0
-#define STEPPERS_DISABLE_PIN   6
+     This is a deliberately reversible decision: if F is confirmed present,
+     flipping the Makefile's ARCH/ABI to rv64imafc_zicsr/lp64f is a two-line
+     change that the FP=SINGLE knob and the post-link no-double assert
+     already cover unchanged.
 
-// Limit switch pins (GPIO1)
-#define X_LIMIT_PORT     GPIO1
-#define X_LIMIT_PIN      0
-#define Y_LIMIT_PORT     GPIO1
-#define Y_LIMIT_PIN      1
-#define Z_LIMIT_PORT     GPIO1
-#define Z_LIMIT_PIN      2
+  Soft float is not a hardship here: FP=SINGLE (CONTRACTS.md §17) keeps
+  everything in 32-bit soft float, which is what the AVR origin semantics
+  were, and 700 MHz has cycles to spare at GRBL's arithmetic rates.
+*/
 
-// Control pins (GPIO1)
-#define CONTROL_RESET_PORT       GPIO1
-#define CONTROL_RESET_PIN        3
-#define CONTROL_FEED_HOLD_PORT   GPIO1
-#define CONTROL_FEED_HOLD_PIN    4
-#define CONTROL_CYCLE_START_PORT GPIO1
-#define CONTROL_CYCLE_START_PIN  5
-#define CONTROL_SAFETY_DOOR_PORT GPIO1
-#define CONTROL_SAFETY_DOOR_PIN  6
+// ============================================================================
+// F_CPU - READ THIS BEFORE CHANGING THE CLOCK
+//
+// F_CPU here is the STEPPER TIMER'S TICK RATE, not the CPU core frequency.
+// That is what core actually uses it for (nuts_bolts.h TICKS_PER_MICROSECOND
+// feeds stepper period and pulse-width arithmetic; stepper.c's AMASS levels
+// are F_CPU/N cutoff frequencies on the same timer). Declaring the 700 MHz
+// CPU clock here would be a lie in exactly the direction CONTRACTS.md §14
+// item 9 warns about, and a fatal one: core computes
+//   step_pulse_time = -((pulse_us - 2) * TICKS_PER_MICROSECOND) >> 3
+// into a uint8_t (CONTRACTS.md §4's 8-bit horizon). At 700 ticks/us the
+// default 10 us pulse yields 700, which does not fit a uint8_t at all -
+// pulse widths would wrap to garbage for every realistic setting. At the
+// APB timer's clock the same expression stays inside the horizon, which is
+// the AVR-origin design point.
+//
+// The CPU frequency is a SEPARATE constant (SG2002_CPU_HZ) and is used for
+// nothing timing-critical - delays come from the CLINT mtime counter.
+// ============================================================================
+#ifndef F_CPU
+  #error "F_CPU not defined - build via this platform's Makefile (sets -DF_CPU=$(CLOCK)UL)"
+#endif
+_Static_assert(F_CPU > 0, "F_CPU must be a real clock frequency in Hz");
+_Static_assert((F_CPU / 1000000UL) >= 8UL,
+               "F_CPU/1000000 (TICKS_PER_MICROSECOND) below 8 makes the >>3 pulse-width "
+               "arithmetic of CONTRACTS.md #4 truncate to zero");
+// The 8-bit horizon caps the settable pulse width at
+//   pulse_us_max = 2 + (255 * 8) / TICKS_PER_MICROSECOND
+// (AVR's own ceiling at 16 MHz is 129 us by the same formula - this is an
+// inherited property of the origin arithmetic, not a new limitation). This
+// assert pins a floor of 30 us, three times GRBL's 10 us default and well
+// past any real step-driver requirement, so a future F_CPU change that
+// would quietly shrink the usable range below that fails the build instead.
+#define SG2002_PULSE_US_HEADROOM_CHECK  30UL
+_Static_assert((((SG2002_PULSE_US_HEADROOM_CHECK - 2UL) * (F_CPU / 1000000UL)) >> 3) <= 255UL,
+               "8-bit pulse horizon (CONTRACTS.md #4): at this F_CPU a 30 us step pulse "
+               "already overflows core's uint8_t step_pulse_time - F_CPU is too high for "
+               "the stepper timer role (see this header's F_CPU note)");
 
-// Spindle pins (GPIO2)
-#define SPINDLE_ENABLE_PORT      GPIO2
-#define SPINDLE_ENABLE_PIN       0
-#define SPINDLE_DIRECTION_PORT   GPIO2
-#define SPINDLE_DIRECTION_PIN    1
-#define SPINDLE_PWM_PORT         GPIO2
-#define SPINDLE_PWM_PIN          2
+// UNVERIFIED: nominal C906L frequency, community-sourced. Used only for
+// reporting and for the sanity bound on the mtime-based delay loop.
+#define SG2002_CPU_HZ        700000000UL
 
-// Coolant pins (GPIO2)
-#define COOLANT_FLOOD_PORT       GPIO2
-#define COOLANT_FLOOD_PIN        3
-#define COOLANT_MIST_PORT        GPIO2
-#define COOLANT_MIST_PIN         4
+// UNVERIFIED: CLINT mtime tick rate. Assumed equal to the timer block's
+// clock (both are documented by the community as the SoC's 25 MHz reference
+// on cv18xx parts). If these differ on real silicon, _delay_us/_delay_ms
+// scale wrong by a constant factor - measurable in one scope shot at
+// bring-up, and the ONLY thing that changes is this one constant.
+#define SG2002_MTIME_HZ      F_CPU
 
-// Probe pin (GPIO2)
-#define PROBE_PORT               GPIO2
-#define PROBE_PIN                5
+// ============================================================================
+// SHARED-WINDOW COHERENCY KNOB (declared port property, shaped like the FP
+// knob of CONTRACTS.md §17). Set by the Makefile; the full decision and its
+// justification live in shm.h's header.
+//   CMO (default)  - explicit T-Head cache maintenance around every ring
+//                    access. Correct under every hypothesis about this SoC.
+//   NONCACHEABLE   - integrator has CONFIRMED the carve-out is non-cacheable
+//                    on this core; cache ops removed, ordering fences kept.
+// Neither is a no-op; an unrecognised value is a hard error, never a
+// silently-degraded default.
+// ============================================================================
+#if !defined(SG2002_SHM_COHERENCY_CMO) && !defined(SG2002_SHM_COHERENCY_NONCACHEABLE)
+  #error "SHM_COHERENCY not selected - build via this platform's Makefile (SHM_COHERENCY=CMO|NONCACHEABLE)"
+#endif
+#if defined(SG2002_SHM_COHERENCY_CMO) && defined(SG2002_SHM_COHERENCY_NONCACHEABLE)
+  #error "SHM_COHERENCY: CMO and NONCACHEABLE are mutually exclusive"
+#endif
+#ifndef SG2002_SHM_COHERENCY_CMO
+  #define SG2002_SHM_COHERENCY_CMO 0
+#endif
 
-// Pin masks
-#define STEP_MASK          ((1UL << X_STEP_PIN) | (1UL << Y_STEP_PIN) | (1UL << Z_STEP_PIN))
-#define DIRECTION_MASK     ((1UL << X_DIR_PIN) | (1UL << Y_DIR_PIN) | (1UL << Z_DIR_PIN))
-#define STEPPERS_DISABLE_MASK  (1UL << STEPPERS_DISABLE_PIN)
-#define LIMIT_MASK         ((1UL << X_LIMIT_PIN) | (1UL << Y_LIMIT_PIN) | (1UL << Z_LIMIT_PIN))
-#define CONTROL_MASK       ((1UL << CONTROL_RESET_PIN) | (1UL << CONTROL_FEED_HOLD_PIN) | \
-                            (1UL << CONTROL_CYCLE_START_PIN) | (1UL << CONTROL_SAFETY_DOOR_PIN))
-#define PROBE_MASK         (1UL << PROBE_PIN)
+// ============================================================================
+// MEMORY - all of it is the DDR carve-out; there is no flash and no SRAM.
+// The numbers come from script.ld (single source of truth) via the Makefile.
+// ============================================================================
+#define HAL_EEPROM_SIZE   0   // no hardware EEPROM; nvmem.c backs settings in the carve-out
 
-// HAL GPIO MACROS
-
-// GPIO port type
-typedef GPIO_TypeDef* hal_gpio_port_t;
+// ============================================================================
+// TYPE DEFINITIONS (must precede hal_gpio.h). GPIO "port" is the DesignWare
+// bank index 0..3.
+// ============================================================================
+typedef uint8_t hal_gpio_port_t;
 #define HAL_GPIO_PORT_T_DEFINED
 
-// GPIO direction
-#define HAL_GPIO_SET_OUTPUT(port, mask)  ((port)->SWPORTA_DDR |= (mask))
-#define HAL_GPIO_SET_INPUT(port, mask)   ((port)->SWPORTA_DDR &= ~(mask))
+// ============================================================================
+// GPIO INTERRUPTS (CONTRACTS.md #2). Core passes (name_PCMSK, name_INT,
+// name_MASK); on this chip the first two carry the GPIO BANK index (board
+// config sets both to the bank) and the mask is the pin mask within it.
+// ============================================================================
+void hal_gpio_interrupt_enable(uint8_t bank, uint32_t mask);
+void hal_gpio_interrupt_disable(uint8_t bank, uint32_t mask);
 
-// GPIO write
-#define HAL_GPIO_SET_BITS(port, mask)    ((port)->SWPORTA_DR |= (mask))
-#define HAL_GPIO_CLEAR_BITS(port, mask)  ((port)->SWPORTA_DR &= ~(mask))
-#define HAL_GPIO_TOGGLE_BITS(port, mask) ((port)->SWPORTA_DR ^= (mask))
+#define HAL_GPIO_INTERRUPT_ENABLE(bank, unused, mask)   hal_gpio_interrupt_enable((bank), (mask))
+#define HAL_GPIO_INTERRUPT_DISABLE(bank, unused, mask)  hal_gpio_interrupt_disable((bank), (mask))
 
-// GPIO read
-#define HAL_GPIO_READ_PORT(port, mask)   ((port)->SWPORTA_DR & (mask))
-#define HAL_GPIO_READ_PIN(port, pin)     (((port)->SWPORTA_DR >> (pin)) & 1)
+// HAL_GPIO_IRQ_HANDLER is deliberately NOT defined here - hal_gpio.h owns it
+// exclusively (CONTRACTS.md #2.2).
 
-// GPIO write port with mask
-#define HAL_GPIO_WRITE_PORT(port, mask, value) \
-  do { \
-    uint32_t _tmp = (port)->SWPORTA_DR; \
-    _tmp = (_tmp & ~(mask)) | ((value) & (mask)); \
-    (port)->SWPORTA_DR = _tmp; \
-  } while(0)
+// ============================================================================
+// GPIO PULL-UPS (CONTRACTS.md #1.4) - real writes into the pad-control
+// block, never a no-op. gpio.h routes GPIO_MPULLUP_* here.
+// ============================================================================
+void hal_gpio_pullup_enable(uint8_t bank, uint32_t mask);
+void hal_gpio_pullup_disable(uint8_t bank, uint32_t mask);
 
-// HAL SERIAL (UART) MACROS
+// ============================================================================
+// MEMORY BARRIERS (CONTRACTS.md #12)
+//
+// `fence rw,rw` orders all prior loads/stores against all later ones - the
+// architecturally correct primitive for #12.1's ring publish and #12.4's
+// command-vs-data ordering. On this port it is NECESSARY BUT NOT SUFFICIENT
+// for anything crossing to the other core: see shm.h. Nothing in this file
+// may be used as a substitute for the cache maintenance there.
+// ============================================================================
+#define __DSB()  __asm__ volatile ("fence rw, rw" ::: "memory")
+#define __DMB()  __asm__ volatile ("fence rw, rw" ::: "memory")
 
-// Use UART0 for GRBL communication
-#define HAL_SERIAL_UART  UART0
+// ============================================================================
+// CRITICAL SECTIONS (CONTRACTS.md #8) - save/restore mstatus.MIE (bit 3).
+// Save/restore, not blind disable/enable: the pair runs inside the RX path
+// on DEBUG builds, where an unconditional re-enable would corrupt nesting.
+// ============================================================================
+#define HAL_CRITICAL_SECTION_BEGIN() \
+  uint64_t __hal_mstatus_save; \
+  __asm__ volatile ("csrr %0, mstatus" : "=r" (__hal_mstatus_save)); \
+  __asm__ volatile ("csrci mstatus, 8" ::: "memory")
 
-// Serial initialization
-void hal_serial_init(uint32_t baud_rate);
-#define HAL_SERIAL_INIT()  hal_serial_init(115200)
+#define HAL_CRITICAL_SECTION_END() \
+  __asm__ volatile ("csrw mstatus, %0" : : "r" (__hal_mstatus_save) : "memory")
 
-// Serial data access
-#define HAL_SERIAL_WRITE_DATA(data)  (HAL_SERIAL_UART->RBR_THR_DLL = (data))
-#define HAL_SERIAL_READ_DATA()       (HAL_SERIAL_UART->RBR_THR_DLL)
+// ============================================================================
+// INTERRUPT GLOBAL CONTROL (CONTRACTS.md #11). "memory" clobber is
+// mandatory (#12.6) - it is the compiler barrier that keeps stores from
+// floating across the interrupt-enable boundary.
+// ============================================================================
+#define sei()  __asm__ volatile ("csrsi mstatus, 8" ::: "memory")
+#define cli()  __asm__ volatile ("csrci mstatus, 8" ::: "memory")
 
-// HAL_SERIAL_RX_READY()/HAL_SERIAL_TX_READY() removed (cross-port
-// consistency audit, 2026-07-26): defined here and in stm32f103/f411/h523/
-// hc32f460 but called by nothing in grbl core (grep grbl/*.c) and absent
-// from CONTRACTS.md §7's serial macro table - core drives serial entirely
-// off the RX/TX ISR + INTERRUPT_ENABLE/DISABLE pair, never polls a ready
-// flag. Dead since the macros were written. Reintroduce with a real
-// caller if a future polling-mode serial path ever needs it.
+// ============================================================================
+// WATCHDOG (CONTRACTS.md #9) - deliberately UNDEFINED. A no-op would be
+// ILLEGAL under ENABLE_SOFTWARE_DEBOUNCE (debounce would silently vanish
+// while the raw ISR path is compiled out); leaving the family undefined
+// makes that build fail loudly instead, which is the contract's own
+// prescribed behaviour. Same posture as ch32v006/ch570.
+// ============================================================================
 
-// Serial interrupts
-#define HAL_SERIAL_RX_INTERRUPT_ENABLE()   (HAL_SERIAL_UART->DLH_IER |= UART_IER_ERBFI)
-#define HAL_SERIAL_RX_INTERRUPT_DISABLE()  (HAL_SERIAL_UART->DLH_IER &= ~UART_IER_ERBFI)
-#define HAL_SERIAL_TX_INTERRUPT_ENABLE()   (HAL_SERIAL_UART->DLH_IER |= UART_IER_ETBEI)
-#define HAL_SERIAL_TX_INTERRUPT_DISABLE()  (HAL_SERIAL_UART->DLH_IER &= ~UART_IER_ETBEI)
+// ============================================================================
+// PLIC / doorbell plumbing used by startup.c, handlers.c and serial.c.
+//
+// sg2002_plic_init() is called only from Reset_Handler, before main() -
+// exactly the shape BUG #23 hit on four other ports (a pre-main init chain
+// core's own golden-gate main.c never calls). GRBL_BOOT_INIT (noinline)
+// keeps it a real, separately-named symbol so ../common/init_check.sh's
+// post-link check (this port's Makefile INIT_SYMBOLS) can prove it survived
+// the link instead of silently vanishing into Reset_Handler if LTO is ever
+// turned on for this port.
+// ============================================================================
+GRBL_BOOT_INIT void sg2002_plic_init(void);
+void sg2002_plic_enable(uint32_t irq, uint32_t priority);
+void sg2002_plic_disable(uint32_t irq);
 
-// Serial ISR definitions
-#define HAL_SERIAL_RX_ISR()  void uart0_rx_handler(void)
-#define HAL_SERIAL_TX_ISR()  void uart0_tx_handler(void)
+void sg2002_doorbell_init(void);
+void sg2002_doorbell_ring(void);   // signal the host: data is ready
+void sg2002_doorbell_ack(void);    // clear OUR pending doorbell (called first in the ISR)
 
-// HAL TIMER MACROS (for stepper interrupt)
-
-// Use TIMER0 channel 0 for stepper interrupt
-#define HAL_TIMER_STEPPER  (&TIMER0->TIMER[0])
-
-// Timer initialization
-void hal_timer_stepper_init(void);
-#define HAL_TIMER_STEPPER_INIT()  hal_timer_stepper_init()
-
-// Timer control
-void hal_timer_stepper_start(void);
-void hal_timer_stepper_stop(void);
-void hal_timer_stepper_set_period(uint32_t ticks);
-uint32_t hal_timer_stepper_get_count(void);
-
-#define HAL_TIMER_STEPPER_START()         hal_timer_stepper_start()
-#define HAL_TIMER_STEPPER_STOP()          hal_timer_stepper_stop()
-#define HAL_TIMER_STEPPER_SET_PERIOD(t)   hal_timer_stepper_set_period(t)
-#define HAL_TIMER_STEPPER_GET_COUNT()     hal_timer_stepper_get_count()
-
-// Timer ISR
-#define HAL_TIMER_STEPPER_ISR()  void timer0_ch0_handler(void)
-
-// HAL SYSTEM MACROS
-
-// Critical section
-uint32_t hal_critical_enter(void);
-void hal_critical_exit(uint32_t state);
-extern uint32_t _hal_critical_state;
-
-#define HAL_CRITICAL_SECTION_BEGIN()  _hal_critical_state = hal_critical_enter()
-#define HAL_CRITICAL_SECTION_END()    hal_critical_exit(_hal_critical_state)
-
-// Interrupts
-#define HAL_ENABLE_INTERRUPTS()   enable_interrupts()
-#define HAL_DISABLE_INTERRUPTS()  disable_interrupts()
-
-// Delay functions
-void hal_delay_ms(uint32_t ms);
-void hal_delay_us(uint32_t us);
-
-#define HAL_DELAY_MS(ms)  hal_delay_ms(ms)
-#define HAL_DELAY_US(us)  hal_delay_us(us)
-
-// System reset
-void hal_system_reset(void);
-#define HAL_SYSTEM_RESET()  hal_system_reset()
-
-// HAL NVMEM MACROS (Non-volatile memory emulation)
-
-#define HAL_NVMEM_SIZE  1024  // 1KB NVMEM for settings
-
-void hal_nvmem_init(void);
-uint8_t hal_nvmem_read_byte(uint32_t addr);
-void hal_nvmem_write_byte(uint32_t addr, uint8_t data);
-
-#define HAL_NVMEM_INIT()              hal_nvmem_init()
-#define HAL_NVMEM_READ_BYTE(addr)     hal_nvmem_read_byte(addr)
-#define HAL_NVMEM_WRITE_BYTE(addr, d) hal_nvmem_write_byte(addr, d)
-
-// PLATFORM CONFIGURATION
-
-// CPU frequency (700 MHz)
-#define F_CPU  700000000UL
-
-// Timer tick frequency (timer runs at 100MHz, not F_CPU)
-#define TIMER_PRESCALER  1
-#define TIMER_TICKS_PER_MICROSECOND  (SG2002_TIMER_CLK / 1000000UL / TIMER_PRESCALER)
-
-// Stepper pulse timing (microseconds)
-#define STEP_PULSE_DELAY  10  // 10us step pulse
-
-// Platform info
-const char* hal_platform_get_name(void);
-const char* hal_platform_get_cpu(void);
-uint32_t hal_platform_get_cpu_freq(void);
-
-// HAL INITIALIZATION
-
-void hal_platform_init(void);
-
-// AVR COMPATIBILITY - cpu_map.h stubs
-// These are used by core GRBL code (limits.c, probe.c, system.c)
-// Platform-specific values override dummy/cpu_map.h defaults via #ifndef
-
-// Map AVR pin definitions to SG2002 GPIO ports
-#define LIMIT_DDR     0        // Not used on SG2002
-#define LIMIT_PORT    0        // Not used on SG2002
-#define LIMIT_PCMSK   0        // Not used on SG2002
-#define LIMIT_INT     0        // Not used on SG2002
-#define LIMIT_PIN     GPIO1    // GPIO1 for limit switches
-// LIMIT_MASK already defined above
-
-#define CONTROL_DDR   0        // Not used on SG2002
-#define CONTROL_PORT  0        // Not used on SG2002
-#define CONTROL_PCMSK 0        // Not used on SG2002
-#define CONTROL_INT   0        // Not used on SG2002
-#define CONTROL_PIN   GPIO1    // GPIO1 for control pins
-// CONTROL_MASK already defined above
-
-#define PROBE_DDR     0        // Not used on SG2002
-#define PROBE_PORT    0        // Not used on SG2002
-#define PROBE_PIN     GPIO2    // GPIO2 for probe pin
-// PROBE_MASK already defined above
-
-#endif // SG2002_PLATFORM_H
+#endif // PLATFORM_SG2002_H

@@ -127,24 +127,26 @@ that fails the build if the vector table or reset SP look wrong.
 - **See**: [SAMD21_PLAN.md](samd21/SAMD21_PLAN.md) (itself stale — treat [PLAN.md](PLAN.md) Phase 3 as authoritative over it), [PLAN.md](PLAN.md)
 
 ### SG2002 (Sophgo RISC-V)
-- **Status**: ❌ NON-FUNCTIONAL — never compiled (relabeled 2026-07-26; was
-  previously, incorrectly, described as "Work In Progress"/"partial").
-  Verified by direct build attempt: this is the FOURTH platform port found
-  in this state — (1) the Makefile never passes `--specs=picolibc.specs`,
-  so the first file fails on `math.h: No such file or directory`; (2) the
-  apt `picolibc-riscv64-unknown-elf` package has no `rv64imafdc`/`lp64d`
-  multilib, so there is no `crt0.o` for the ARCH/ABI this Makefile
-  requests even once the flag is fixed; (3) fatally, `platform.h` defines
-  a private `HAL_*` macro namespace (`HAL_GPIO_SET_OUTPUT`,
-  `HAL_TIMER_STEPPER_INIT`, ...) that core `stepper.c` has not called
-  since the Nov-2025 HAL_-strip refactor — this platform layer never
-  reaches `stepper.c` at all. See `sg2002/README.md`'s status banner for
-  full detail. Recommendation: restart from `_template`, do not repair in
-  place.
-- **Architecture**: RISC-V C906, 700MHz (RV64IMAFDC)
+- **Status**: ✅ BUILDS + LINKS, zero `PORT_TODO_*`, both flavors (2026-07-26).
+  ⚠ **NOT hardware-validated, and NOT "ready for hardware validation"** in the
+  sense the other ports use that phrase — no public TRM exists for this SoC
+  and no emulator models it, so every peripheral fact is community-sourced.
+  Read `sg2002/platform.md`'s seven-item pre-power-on list first.
+  The previous source tree was **deleted and rewritten from `_template`**, not
+  repaired: it had never compiled (Makefile missing `--specs=picolibc.specs`;
+  an ARCH/ABI with no picolibc multilib; and, fatally, a private `HAL_*` macro
+  namespace core `stepper.c` stopped calling in the Nov-2025 HAL_-strip
+  refactor, so that layer never reached `stepper.c` at all).
+- **Architecture**: XuanTie C906L runtime core — built **rv64imac / lp64
+  (soft float)**, deliberately not rv64gc: `rv64imafdc/lp64d` has no picolibc
+  multilib on the stock toolchain, and whether the cut-down "L" core keeps
+  F/D is undocumented, so an `lp64f` binary could trap on its first `FLW`.
+  See `sg2002/Makefile`'s ARCH/ABI note.
 - **Vendor**: Sophgo
 - **Memory**: 256MB DDR3
-- **Target board**: LicheeRV Nano
+- **Target board**: LicheeRV Nano / Milk-V Duo class (any SG2002 or CV1800B
+  board; the carve-out addresses in `script.ld` must match the board's device
+  tree `reserved-memory` node)
 - **Unique features**:
   - Dual-core: big core (C906 RISC-V or Cortex-A53 ARM, mutually exclusive
     boot-strap, runs Linux) + little C906L (RISC-V, no MMU, M-mode,
@@ -155,13 +157,41 @@ that fails the build if the vector table or reset SP look wrong.
     bare-metal
   - PLIC interrupt controller
   - High performance for complex G-code
-- **Current status**: NON-FUNCTIONAL source tree as described above,
-  unchanged pending a `_template` restart. Separately, PLAN.md now carries
-  a DESIGN-COMPLETE / IMPLEMENTATION-DEFERRED runtime-core channel design
-  (remoteproc lifecycle + shared-memory ring replacing UART for CONTRACTS
-  §7, cross-core cache-maintenance obligations per [CONTRACTS §23](CONTRACTS.md#cross-core-cache-coherency)) — that
-  design targets a rewrite of this platform, not a fix to the current
-  source. Not in the CI build matrix.
+- **Current status**: built. RELEASE 37156 / DEBUG 41180 bytes text; FP=SINGLE
+  post-link assert PASSED; boot-integrity PASSED (`_start` at the carve-out
+  base `0x8fe00000`); `ci/warn_baseline_sg2002.txt` committed from real logs;
+  two CI matrix rows added (DEBUG + RELEASE, board `generic`, **not**
+  `continue-on-error` — same two apt packages as the other RISC-V ports).
+  The design pass's channel design was implemented as specified: CONTRACTS §7
+  over a shared-memory ring with the mailbox doorbell as the RX ISR and a
+  DRAIN LOOP, BUG #19 interception inherited verbatim, one carve-out for both
+  firmware and rings, upstream `sophgo,cv1800b-c906l` remoteproc lifecycle
+  unchanged. Cross-core coherency ([CONTRACTS §23](CONTRACTS.md#cross-core-cache-coherency))
+  is discharged by explicit T-Head cache maintenance by default, with a
+  declared `SHM_COHERENCY=NONCACHEABLE` alternative — the non-cacheable route
+  is not the default because that section's own precondition (a PMA/MMU
+  configuration you can program) cannot be met on a no-MMU core. Gap log:
+  `CONTRACTS.md` slug `sg2002-companion-core-gaps`.
+  **Integration correction (2026-07-26, rebase onto the 69-commit-newer
+  integration branch)**: the port's own commit message claimed
+  "math.h missing, no rv64 picolibc multilib" as a standing blocker for the
+  rv64gc/lp64d combo it explicitly avoided — that claim does not apply to
+  what the Makefile actually requests (rv64imac_zicsr/lp64), which DOES have
+  a picolibc multilib on this toolchain (`riscv64-unknown-elf-gcc` 13.2.0 +
+  `picolibc-riscv64-unknown-elf` 1.8.6) and builds and links cleanly, both
+  flavors, measured on this machine. Two real gaps were found and fixed
+  during the rebase (not present in the rewrite as authored): (1)
+  `boards/generic/config.h` gated `COOLANT_MIST_*` behind `#ifdef ENABLE_M7`
+  inside a prelude-injected header — CONTRACTS.md #29's exact wrong-phase
+  class (the guard can never observe core's `config.h` define it), fixed by
+  defining the pins unconditionally, matching ch32v006/ch570's own precedent
+  for the identical bug; (2) the port had no boot-init-reachability wiring
+  at all (CONTRACTS.md #boot-init-unreachable, BUG #23) — `GRBL_BOOT_INIT`
+  now anchors `SystemClock_Config`/`sg2002_plic_init`, `Reset_Handler` is
+  `__attribute__((used))` (reached only via `_start`'s inline asm, the
+  ch32v006/ch570 precedent), and the Makefile runs `../common/init_check.sh`
+  at link time — `BOOT INIT: OK` on both flavors. Artifacts are now
+  committed (`artifacts/sg2002/`), MANIFEST.sha256 refreshed to 11 units.
 - **Target use case**: High-end CNC, complex multi-axis systems
 
 ---
@@ -170,19 +200,20 @@ that fails the build if the vector table or reset SP look wrong.
 
 There was no CI when this roadmap was first written; there is now (landed 2026-07-23, `.github/workflows/`):
 
-- **Build matrix** (`ci.yml`, 15 rows in the shared apt-toolchain matrix, re-verified 2026-07-26 by
+- **Build matrix** (`ci.yml`, 19 rows in the shared apt-toolchain matrix, re-verified 2026-07-26 by
   rebuilding every row locally): atmega328p (RELEASE only, 1), stm32f103 × {DEBUG, RELEASE} (2),
   stm32h523 × {DEBUG, RELEASE} (2), stm32f411 × {DEBUG, RELEASE} (2), samd21 × {megarm, generic} ×
-  {DEBUG, RELEASE} (4), ch32v006 × {DEBUG, RELEASE} (2), hc32f460 × {DEBUG, RELEASE} (2).
+  {DEBUG, RELEASE} (4), ch32v006 × {DEBUG, RELEASE} (2), hc32f460 × {DEBUG, RELEASE} (2), ch570 × {DEBUG, RELEASE} (2), sg2002 × {DEBUG, RELEASE} (2).
   **dsPIC33AK128MC102 landed in CI 2026-07-26** too, as its own dedicated `build-dspic33ak128mc102`
   job (2 legs, DEBUG/RELEASE) rather than a matrix row — the shared composite action is apt-only and
   XC-DSC's fetch/cache/SHA-256-verify/unattended-install shape doesn't fit it (see the job's header
-  comment in `ci.yml`). Still not in any matrix: sg2002 (non-functional, deferred by design),
-  `_template` (intentionally excluded — it's a checklist, not a shippable port), ch570 (not yet
-  landed — see its own entry below). It's a thin invoker: the platform Makefiles remain the actual
+  comment in `ci.yml`). Still not in any matrix:
+  `_template` (intentionally excluded — it's a checklist, not a shippable port). It's a thin
+  invoker: the platform Makefiles remain the actual
   build authority, CI just calls `make`.
 - **`docs-integrity` job**: `tools/check_contracts_numbering.py` fails the build on any
-  CONTRACTS.md numbering/anchor/cross-reference inconsistency (24 sections today, all consistent).
+  CONTRACTS.md numbering/anchor/cross-reference inconsistency (26 numbered sections today plus one
+  `§NEW`-placeholder section awaiting an integrator-assigned number, all consistent).
 - **CI is confirmed running on this fork (corrected 2026-07-26)**: PLAN.md's Current State
   previously recorded "the GitHub Actions API shows no runs for the branch yet (Actions possibly
   disabled on fork)" and Phase 0's exit criterion still literally reads "PENDING first GitHub

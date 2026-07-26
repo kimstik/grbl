@@ -1,0 +1,17 @@
+# sg2002 warning baseline - core-file warnings only. Platform files
+# (grbl/platform/sg2002/*.c) compile with ZERO warnings under -Wall -Wextra on
+# both flavors; every line below comes from a core grbl/*.c file and is the
+# same class/text the ch32v006 and ch570 baselines already carry (same core
+# sources, same gcc 13.2.0).
+#
+# Generated from REAL build logs (not hand-written): `make BUILD=DEBUG` and
+# `make BUILD=RELEASE` from a clean tree, each piped through
+# `ci/warn_ratchet.py --emit`. Unlike ch570, DEBUG and RELEASE emit the
+# IDENTICAL set here - this port's DEBUG flavor is -Og (not -O0), so gcc's
+# optimization-level-sensitive -Wimplicit-fallthrough analysis runs on both.
+#
+# May only shrink.
+gcode.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
+motion_control.c: warning: unused parameter 'cycle_mask' [-Wunused-parameter]
+report.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
+system.c: warning: this statement may fall through [-Wimplicit-fallthrough=]

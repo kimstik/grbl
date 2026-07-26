@@ -491,11 +491,166 @@ Priority order (revise as hardware/toolchain reality dictates):
       "gaps require hardware bring-up" rather than "ready for hardware
       validation" in PLATFORM_ROADMAP.md, reflecting the UNVERIFIED register
       facts honestly.
-- [ ] sg2002 (RISC-V 64, linux-class — decide scope first: bare-metal vs linux userspace)
+- [x] sg2002 (RISC-V 64, linux-class — scope decided: bare-metal blob for the
+      runtime core; **BUILT**, see the COMPLETE entry below)
 - [ ] hc32f460 (ARM M4, vendor-exotic — tests contract completeness)
-- [ ] **sg2002** DESIGN-COMPLETE / IMPLEMENTATION-DEFERRED (2026-07-26 runtime-core
-      design batch; owner's scope ruling below, executor's recommendation to defer
-      actual coding, owner may overrule in one line):
+- [x] **sg2002 COMPLETE** (owner overruled the deferral in one line — "sg2002 is
+      NOT deferred, build it"; built 2026-07-26 on branch
+      `claude/sg2002-port-01MYdHT6QaxWVxdRvWQFHuPi`, isolated from the samd21
+      port branch). Both flavors build and LINK with **zero `PORT_TODO_*`**;
+      RELEASE 37156 / DEBUG 41180 bytes text; FP=SINGLE post-link assert PASSED;
+      boot-integrity check PASSED (`_start` at the carve-out base
+      `0x8fe00000`); golden AVR `make validate` PASSED
+      (`79af184e67b27defd27a39309ac53563`, unchanged).
+      * The pre-existing `grbl/platform/sg2002/` was **deleted, not repaired** —
+        it had never compiled, was frozen on a `HAL_*` namespace removed in
+        Nov 2025, its Makefile lacked `--specs`, and it targeted an ISA/ABI the
+        installed picolibc has no multilib for. Restarted from `_template` with
+        ch32v006/ch570 as the RISC-V donors.
+      * **ARCH/ABI decision: `rv64imac_zicsr` / `lp64`, soft float** — NOT
+        `rv64gc`. Two independent reasons, both checked against the installed
+        toolchain rather than assumed: (a) `-march=rv64gc -mabi=lp64d` resolves
+        to the `rv64imafdc/lp64d` multilib and
+        `picolibc-riscv64-unknown-elf` does not ship it (its rv64 set stops at
+        `rv64imafc/lp64f`) — a DP-ABI build has no libc to link at all; (b) the
+        "L" in C906L is undocumented, so whether F/D survive the cut-down core
+        is unknown, and an `lp64f` binary traps on its first `FLW` if F is
+        absent. `rv64imac` is a strict subset of every C906 variant. Reversible
+        in two lines if F is confirmed. `-mcmodel=medany` is REQUIRED (the
+        default `medlow` cannot reach a `0x8FE00000` link address at all).
+      * **Coherency decision: explicit cache maintenance (CMO) by default**, with
+        the non-cacheable window as a declared, opt-in alternative
+        (`SHM_COHERENCY=CMO|NONCACHEABLE`, knob shaped like the FP knob; neither
+        is a no-op, unrecognised values are a hard error). Rationale: the
+        preferred simplification of
+        [§23](CONTRACTS.md#cross-core-cache-coherency) is
+        *unreachable* on this core — T-Head's documented way to mark memory
+        non-cacheable is PTE attribute bits, and the C906L has no MMU; what
+        remains is an undocumented PMA. Measured cost of the safe default: 472
+        bytes of text (37156 vs 36684). Full argument in `sg2002/shm.h`.
+      * Everything the design pass specified was built: CONTRACTS §7 over a
+        shared-memory ring, doorbell IRQ as the RX ISR with a DRAIN LOOP, BUG
+        #19 interception inherited verbatim (the call-count invariant is stated
+        at the top of `serial.c`), ONE carve-out for firmware + rings,
+        remoteproc lifecycle unchanged. The design pass's flagged open point —
+        **TX backpressure** — is CLOSED by construction: `serial_write()` spins
+        on the host's tail index with interrupts ENABLED, so liveness never
+        depends on a host→runtime doorbell.
+      * NVMEM has no flash to live in, so it is a 1 KiB slot in the same
+        carve-out with two durability tiers: tier 1 (survives a firmware
+        stop/start with NO host cooperation — the window is outside every
+        `PT_LOAD`, so remoteproc never writes it) and tier 2 (power cycle,
+        requires the host bridge to persist a dirty flag). Stated as an ABI
+        requirement in `platform.md`, not assumed.
+      * **Gap log**: `CONTRACTS.md` slug `sg2002-companion-core-gaps` (10
+        items). Two of them indict existing work and are the integrator's to
+        act on, not this branch's (it must not touch other ports):
+        (a) ch32v006's and ch570's `#ifdef STEP_PULSE_DELAY` / `#error` guards
+        **can never fire** — the option lives in core `config.h` (reached only
+        via `grbl.h:42`) while `timer.h` is prelude-injected long before it;
+        (b) `tools/build_artifacts.py build --platforms X` rewrites
+        `MANIFEST.sha256` with only X's entries, deleting every other port's
+        hashes. Also found: a `uint8_t []` linker symbol silently split every
+        cross-core `volatile uint32_t` index store into four byte stores (a
+        torn index the peer core can observe), and `make clean` cleans only one
+        BUILD flavor so a knob change can relink stale objects and report the
+        wrong binary.
+      * **Artifacts deliberately NOT committed on this branch.** `sg2002` is
+        registered in `tools/build_artifacts.py`'s `UNITS` table, but no
+        `artifacts/sg2002/` and no manifest change: a scoped refresh corrupts
+        the manifest (gap-log item 6) and a full one would guarantee a conflict
+        with the concurrently-landing samd21 branch. Integrator step: one
+        `python3 tools/build_artifacts.py build` after merge.
+      * CI: two rows added (DEBUG + RELEASE, board `generic`), **not**
+        `continue-on-error`. The toolchain story is not shaky — it is the same
+        two apt packages ch32v006 and ch570 already use, and the multilib this
+        port needs ships in the stock package (verified on disk). The port's
+        UNVERIFIED register facts are a HARDWARE risk; none of them can make a
+        compile or link flaky.
+      * NOT marked "ready for hardware validation" — see `platform.md`'s
+        seven-item pre-power-on list. No public TRM exists and no emulator
+        models this SoC, so every peripheral fact carries an `UNVERIFIED:`
+        banner naming its source, what to confirm, and the symptom of it being
+        wrong.
+      * **INTEGRATION COMPLETE (2026-07-26): rebased onto the 69-commit-newer
+        `claude/samd21-port` integration branch and landed.** This branch's
+        single commit deleted `prelude.h`/`regs.h`/`config.h` and restructured
+        around `boards/generic/`, while the integration branch had kept
+        evolving the OLD layout (F_CPU ULL widening + `clock_width.h` include
+        in the old `prelude.h`) — a plain merge produced modify/delete
+        conflicts across the rewrite. Resolved by re-applying the rewrite's
+        structure and re-establishing the invariants that landed in its
+        absence, not by replaying old file states over it:
+        - `F_CPU=$(CLOCK)ULL` (was `UL`) in the rewritten Makefile; the
+          `#36`/clock_width.h width guard re-added to
+          `boards/generic/prelude.h` (the file that now plays the prelude
+          role) since the deleted top-level `prelude.h` no longer exists to
+          carry it. Verified the assert actually evaluates: it did not need
+          to fire (F_CPU=25000000ULL is already 8 bytes), but its presence in
+          the injected header was confirmed by grep + a clean rebuild.
+        - **Build-blocker claim corrected, not just re-asserted.** The design
+          record above and this branch's own commit message both describe a
+          "no rv64 picolibc multilib" blocker — true for the `rv64gc/lp64d`
+          combo this port deliberately does NOT use, and independently
+          reproduced false for the `rv64imac_zicsr/lp64` combo it actually
+          builds with: `riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d
+          -specs=picolibc.specs ...` fails at link with `cannot find
+          .../rv64imafdc/lp64d/crt0.o: No such file or directory` (measured on
+          this machine), while the port's real Makefile invocation
+          (`rv64imac_zicsr/lp64`) builds and links both flavors cleanly:
+          RELEASE 37156/8/18056, DEBUG 41180/8/18056 text/data/bss — exactly
+          the sizes the original commit claimed. Wired into
+          `tools/build_artifacts.py` (already done by this branch's commit)
+          and a full-tree `python3 tools/build_artifacts.py build` run
+          (11 units, 62 files verified fresh by `... check`); every sibling
+          unit's hex/bin/syms byte-identical (only each `.elf.dump`'s
+          non-reproducible objdump-invocation first line differs, as
+          documented in that file's own header).
+        - **Two real gaps found in the rewrite during integration, fixed (not
+          just logged), neither present before this rebase's own scrutiny:**
+          (1) `boards/generic/config.h` gated `COOLANT_MIST_*` behind
+          `#ifdef ENABLE_M7`, inside `boards/generic/prelude.h`'s injection
+          chain — CONTRACTS.md #29's exact wrong-phase class this same rewrite
+          correctly AVOIDED for `STEP_PULSE_DELAY` in `timer.h` two files
+          over. Fixed by defining the pins unconditionally, matching
+          ch32v006/ch570's own precedent fix for the identical bug. (2) the
+          port had NO boot-init-reachability wiring (CONTRACTS.md
+          #boot-init-unreachable, BUG #23) — no `GRBL_BOOT_INIT`, no
+          `INIT_SYMBOLS`, no `init_check.sh` invocation, unlike every sibling
+          RISC-V port. Added: `common/boot_init.h` included from
+          `platform.h`; `GRBL_BOOT_INIT` on `SystemClock_Config` and
+          `sg2002_plic_init` (declaration + definition);
+          `__attribute__((used))` on `Reset_Handler` (reached only via
+          `_start`'s inline asm, same as ch32v006/ch570's identical case —
+          `noinline` alone would not stop that from being invisible to an
+          optimizer, so `used` is the correct, documented exception to
+          `boot_init.h`'s own "never use `used`" rule); Makefile
+          `INIT_SYMBOLS = Reset_Handler,SystemClock_Config,sg2002_plic_init`
+          + `../common/init_check.sh` run at link time. `BOOT INIT: OK` on
+          both flavors post-fix; sizes unchanged (annotations cost nothing
+          when nothing was being deleted, since this port has no `-flto` —
+          deliberately not added here either, to avoid a scope-creep risk on
+          an unrelated axis; the check still stands as ratchet insurance for
+          whenever LTO is turned on, the same posture ch570/`_template`
+          document for the same reason).
+        - The two gap-log items this branch flagged FOR the integrator
+          (ch32v006/ch570's dead `#ifdef STEP_PULSE_DELAY` guards; the
+          `build_artifacts.py --platforms X` manifest-truncation defect) were
+          BOTH already fixed independently on the integration branch by the
+          time this rebase landed — checked, not assumed: both ports'
+          `timer.h` files carry the "moved to serial.c" fix comment, and
+          `build_artifacts.py` carries the documented data-loss fix. No
+          action needed.
+        - Golden AVR `make -C grbl/platform/atmega328p validate` PASSED
+          (`79af184e67b27defd27a39309ac53563`, unchanged); all 7 warning
+          ratchets green including a freshly regenerated
+          `ci/warn_baseline_sg2002.txt` cross-check (4 distinct warnings, all
+          core-file, all in baseline, both flavors).
+      * Original design-pass record, kept verbatim below for provenance:
+- [x] **sg2002** DESIGN-COMPLETE / IMPLEMENTATION-DEFERRED (2026-07-26 runtime-core
+      design batch; owner's scope ruling below; the deferral recommendation was
+      OVERRULED by the owner and the port is now built — see the COMPLETE entry
+      above):
       * **Scope ruling (owner)**: Linux side is OUT OF SCOPE. The deliverable is a
         bare-metal blob for the runtime core only — loadable and restartable from
         Linux, not a Linux-side driver or userspace daemon we author from scratch
@@ -1781,7 +1936,9 @@ identity to integration time.
   stm32h523 (was "Ready for Hardware Testing"), stm32f411 (stale pre-optimization sizes), samd21
   (was severely UNDERSTATED — "WIP ~40%" when it's actually the most-verified port in the tree),
   dspic33ak128mc102 (added the restricted-license caveat above), samd21/SAMD21_PLAN.md (stale WIP
-  header). hc32f460/platform.md, sg2002/README.md, `_template`/README.md were already accurate,
+  header). hc32f460/platform.md, sg2002/README.md (that file is gone as of the
+  2026-07-26 sg2002 rewrite — replaced by sg2002/platform.md),
+  `_template`/README.md were already accurate,
   verified not edited. A `CHANGELOG.md` release-notes draft was authored at repo root covering
   the thesis, the 8-platform matrix, proof levels (samd21 = Renode-proven, everyone else =
   build/link/contract-proven only, NOBODY hardware-validated), the 21 numbered bugs (#17 phantom
