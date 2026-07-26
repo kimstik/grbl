@@ -152,6 +152,19 @@ Porting to a new chip no longer means reverse-engineering an existing port:
   push) — an earlier concern that it might be disabled on this fork was checked and is stale.
   Every gate described above has also been independently re-verified by fresh local builds today,
   which corroborates but is not a substitute for checking the Actions tab's own green/red status.
+  an owner-approved EULA but has no unattended-CI-fetch story yet; its free/unlicensed compiler
+  tier also silently caps optimization on `-Os` ("Options have been disabled due to restricted
+  license") rather than failing loudly, so its RELEASE size figure above is an approximation, not
+  an exact byte count. CH570 is recon'd and unblocked but porting hasn't started.
+- **GitHub Actions is running** — an earlier concern that it might be disabled on this fork was
+  checked and is stale. The "78 CI + 67 Smoke runs on this branch" figure is single-sourced: one
+  agent read it off the GitHub web UI (`github.com/kimstik/grbl/actions`) in a single pass; it has
+  not been independently corroborated, because both the orchestrator's and a reviewer's `gh api`
+  access to this repo returned 403 when re-checked. Treat the specific run counts as one person's
+  UI read, not a cross-checked fact — the qualitative claim (Actions is enabled and running on
+  pushes) is on firmer footing than the exact numbers. Every gate described above has also been
+  independently re-verified by fresh local builds today, which corroborates the gates themselves
+  but is not a substitute for checking the Actions tab's own green/red status.
 
 ### Contributing a new platform
 
