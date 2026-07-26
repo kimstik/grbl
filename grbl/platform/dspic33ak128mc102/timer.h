@@ -104,16 +104,22 @@ static inline void hal_timer_pulse_count_set(uint8_t val) {
 #define STP_PULSE_RESET_START()           do { CCP1TMR = 0; CCP1CON1bits.ON = 1; } while (0)
 #define STP_PULSE_RESET_STOP()            do { CCP1CON1bits.ON = 0; } while (0)
 
-#ifdef STEP_PULSE_DELAY
-  // CCP1 does have a second compare channel (CCP1RB) that COULD support
-  // the two-interrupt delayed-step scheme, but the exact dual-compare
-  // interrupt semantics needed (CONTRACTS.md #4 conditional macros) are
-  // unverified against real hardware and not implemented - fail loudly
-  // per the contract's conditional-no-op rule instead of mistiming
-  // pulses silently (STEP_PULSE_DELAY defaults off, config.h:425, so
-  // this does not affect the zero-PORT_TODO_* default build).
-  #error "STEP_PULSE_DELAY is not supported on dsPIC33AK128MC102 (CCP1RB dual-compare scheme not implemented/verified - see timer.h)"
-#endif
+// CCP1 does have a second compare channel (CCP1RB) that COULD support the
+// two-interrupt delayed-step scheme, but the exact dual-compare interrupt
+// semantics needed (CONTRACTS.md #4 conditional macros) are unverified
+// against real hardware and not implemented - this is meant to fail
+// loudly per the contract's conditional-no-op rule instead of mistiming
+// pulses silently (STEP_PULSE_DELAY defaults off, config.h:425, so this
+// does not affect the zero-PORT_TODO_* default build). The
+// `#ifdef STEP_PULSE_DELAY / #error` used to live right here, but this
+// file is reached through the build prelude (-include, CONTRACTS.md #0),
+// which runs before grbl.h's own #include "config.h" ever defines
+// STEP_PULSE_DELAY - the guard could never see it and the #error could
+// never fire (CONTRACTS.md #19 "guard that certifies instead of
+// checking", wrong-phase variant; see grbl/CONTRACTS.md gap log). Moved
+// to serial.c (already includes grbl.h for other reasons, so it runs
+// after core config.h has actually been processed) where it now
+// genuinely fires.
 
 // ============================================================================
 // SPINDLE PWM (CONTRACTS.md #6) - SCCP2, only compiled under VARIABLE_SPINDLE.
