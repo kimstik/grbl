@@ -95,10 +95,12 @@ GLD_SCRIPT = $(DFP_XC16)/support/dsPIC33A/gld/p$(MCPU).gld
 
 # Paths
 GRBL_DIR   = ../..
-# Keyed by BUILD flavor: DEBUG/RELEASE object dirs never alias, so switching
-# flavors without `make clean` can't silently relink stale objects under the
-# wrong name (thrice-bitten repo-wide fix - see PLAN.md).
-BUILD_DIR  = ../../../build/$(PLATFORM_NAME)/$(BUILD)
+# Keyed by BUILD flavor AND BOARD: DEBUG/RELEASE object dirs never alias, so
+# switching flavors without `make clean` can't silently relink stale objects
+# under the wrong name (thrice-bitten repo-wide fix - see PLAN.md). BOARD is
+# in the path too (bit samd21 a fourth time - BOARD wasn't keyed, so a
+# no-clean board switch silently shipped the other board's binary).
+BUILD_DIR  = ../../../build/$(PLATFORM_NAME)/$(BOARD)/$(BUILD)
 OUTPUT_DIR = ../../../build
 PLATFORM_DIR = .
 

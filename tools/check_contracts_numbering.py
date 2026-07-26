@@ -129,6 +129,19 @@ def find_dangling_links(text, valid_slugs, source_label):
     return errors
 
 
+# Directories that sit alongside/under the repo tree but are NOT the tracked
+# source repo: excluded from the cross-file scan entirely. ".claude/" is a
+# live scratch area (parallel agent worktrees under .claude/worktrees/<id>/,
+# each a full independent checkout of grbl/platform/*.md) - a real incident
+# had the checker fail on `.claude/worktrees/<id>/grbl/platform/PLAN.md`
+# linking to a CONTRACTS.md#slug that only existed in that in-progress
+# agent's own not-yet-merged branch, not in the CONTRACTS.md this run parsed.
+# That agent's work was never broken; the checker was scanning content that
+# isn't part of the repo being validated. See --selftest's
+# "excluded scratch dir" case for the regression test.
+EXCLUDED_SCAN_DIRS = {".git", ".claude"}
+
+
 def find_cross_repo_dangling_links(repo_root, valid_slugs, contracts_path):
     """Scan every other *.md file in the repo for links into CONTRACTS.md
     and verify their slug exists. Best-effort: only checked when repo_root
@@ -137,8 +150,7 @@ def find_cross_repo_dangling_links(repo_root, valid_slugs, contracts_path):
     errors = []
     checked = 0
     for dirpath, dirnames, filenames in os.walk(repo_root):
-        if ".git" in dirnames:
-            dirnames.remove(".git")
+        dirnames[:] = [d for d in dirnames if d not in EXCLUDED_SCAN_DIRS]
         for fn in filenames:
             if not fn.endswith(".md"):
                 continue
@@ -308,6 +320,47 @@ def selftest():
 
         check(_write_and_check(d, "dupslug.md", DUPLICATE_SLUG_DOC) == 1,
               "two sections sharing one slug must FAIL")
+
+        # Regression test for the live incident: check_contracts_numbering
+        # was scanning .claude/worktrees/<agent-id>/ - a parallel agent's own
+        # in-progress, not-yet-merged checkout - and failing on a dangling
+        # CONTRACTS.md#slug link that only that agent's branch would ever
+        # resolve. A file inside an excluded scratch dir with a deliberately
+        # dead link must NOT fail the check; the same dead link in a normal
+        # tracked-looking directory must still be caught.
+        with tempfile.TemporaryDirectory() as repo:
+            contracts_path = os.path.join(repo, "CONTRACTS.md")
+            with open(contracts_path, "w", encoding="utf-8") as f:
+                f.write(GOOD_DOC)
+
+            excluded_dir = os.path.join(
+                repo, ".claude", "worktrees", "agent-a95cc0325b1e280b4",
+                "grbl", "platform")
+            os.makedirs(excluded_dir)
+            with open(os.path.join(excluded_dir, "PLAN.md"), "w",
+                      encoding="utf-8") as f:
+                f.write(
+                    "See CONTRACTS.md\n"
+                    "[link](CONTRACTS.md#cross-arch-dedup-byte-invariance) "
+                    "for details.\n")
+
+            check(run_check(contracts_path, repo_root=repo) == 0,
+                  "a dead CONTRACTS.md#slug link inside an excluded scratch "
+                  "dir (.claude/worktrees/...) must NOT fail the check")
+
+            tracked_dir = os.path.join(repo, "doc")
+            os.makedirs(tracked_dir)
+            with open(os.path.join(tracked_dir, "REAL.md"), "w",
+                      encoding="utf-8") as f:
+                f.write(
+                    "See CONTRACTS.md\n"
+                    "[link](CONTRACTS.md#this-slug-was-never-authored) "
+                    "for details.\n")
+
+            check(run_check(contracts_path, repo_root=repo) == 1,
+                  "the SAME class of dead link in a real tracked directory "
+                  "must still FAIL - excluding .claude/ must not blind the "
+                  "checker to genuine dangling links")
 
         # Negative test requested by the task: prove the specific injected
         # duplicate (two sections both claiming to be "20") is caught, with
