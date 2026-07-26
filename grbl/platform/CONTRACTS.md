@@ -2248,24 +2248,43 @@ exactly as before.
   proportionally less for the common case of one or two ports changing,
   since `.elf` was the majority of most units' tracked bytes.
 
-**dsPIC33AK128MC102 is tracked but not hash-gated** (new fact this batch
-surfaced, not previously documented anywhere in this tree): `xc-dsc-gcc`'s
-restricted/Free license tier is **not byte-reproducible** — two consecutive
-`make clean && make BUILD=RELEASE` runs of the *unmodified* source tree
-were measured, while building this tooling, to differ in ~15% of the
-resulting ELF's bytes (`cmp -l`: 25361 of 166096 bytes), most plausibly a
-deliberate anti-tamper/watermarking behavior of the restricted tier and not
-anything this Makefile or `tools/build_artifacts.py` controls. Critically,
-the **symbol map is stable** across those same two builds (`diff` empty —
-function addresses/sizes don't move, only some padding/layout bytes do), so
-the staleness checker still hash-gates `grbl_dspic33ak128mc102.syms` for
-real drift and simply skips the elf/hex/bin comparison for this one unit
-(flagged via `nondeterministic_binary=True` in `tools/build_artifacts.py`'s
-`UNITS` table) rather than producing a permanent false positive. `bin`/`hex`
-are committed every refresh like every other port; `.elf` follows the same
-tag-time-only policy as every other port (see the subsection above) —
-when present, still useful for archival/manual inspection, just not part
-of the automated freshness gate for this one unit specifically.
+**dsPIC33AK128MC102's `.elf` (only the `.elf`) is tracked but not
+hash-gated** (fact first surfaced building this tooling; SCOPE CORRECTED by
+an adversarial review the same project — see "GAP 1 FIX" below): two
+consecutive `make clean && make BUILD=RELEASE` runs of the *unmodified*
+source tree were measured to differ in ~12-13% of the resulting **`.elf`'s**
+bytes (a re-measurement this later batch: 20829-22185 of ~166000 bytes,
+exact count wobbles run to run). Root cause, identified by the same review
+(not previously explained, just observed): the differing bytes are embedded
+`/tmp/ccXXXXXX.s.scnN` compiler-tempfile **SECTION NAMES** — `as`'s
+per-invocation randomly-named scratch assembly file, echoed into a handful
+of ELF section-name strings — not code, not layout, not a watermark.
+Critically, **`.bin` and `.hex` are BYTE-IDENTICAL** across the same two
+builds (`cmp -l`: empty) — `xc-dsc-objcopy`/`xc-dsc-bin2hex` read the
+*linked image's actual code/data bytes* and never see those compiler-scratch
+strings, so there is nothing for them to differ on. The **symbol map is
+also stable** across those same two builds (`diff` empty — function
+addresses/sizes don't move).
+
+- **GAP 1 FIX (adversarial review, this batch)**: the original
+  implementation used one all-or-nothing `nondeterministic_binary` flag
+  that skipped the hash comparison for `.elf` **AND** `.hex` **AND**
+  `.bin`, silently weakening the gate for two files that were never
+  actually nondeterministic. Renamed to `nondeterministic_elf` and scoped
+  to `.elf` only (`tools/build_artifacts.py`'s new
+  `hash_gated_extensions()` helper, covered by `--selftest`): `check` now
+  hash-gates dsPIC33AK's `.bin`/`.hex`/`.syms` for both RELEASE and DEBUG
+  exactly like every other unit (previously DEBUG wasn't even built for
+  this unit, since the old flag skipped the whole DEBUG stage) — only the
+  `.elf` comparison is skipped, and only because it is genuinely, provenly
+  nondeterministic. Re-verified this batch: two clean `BUILD=RELEASE`
+  rebuilds' `.bin`/`.hex` sha256 identical; the same two builds' `.elf`
+  sha256 differ (confirms both halves of the claim empirically, not just
+  by re-reading the old comment). `bin`/`hex` are committed every refresh
+  like every other port; `.elf` follows the same tag-time-only policy as
+  every other port (see the subsection above) — when present, still useful
+  for archival/manual inspection, just not part of the automated freshness
+  gate for this one unit specifically.
 
 **The mechanism**: `tools/build_artifacts.py` (subcommands `build`/`check`,
 plus a bare `--selftest` matching `ci/warn_ratchet.py`/
@@ -2287,6 +2306,75 @@ artifacts (`.elf` exempted from the missing-file case, per above). This is
 the **sixth ratchet** in this project, after golden MD5, warn baseline,
 boot integrity, no-DP assert, and docs integrity/CONTRACTS
 numbering.
+
+**GAP 2 FIX (adversarial review, this batch): the sixth ratchet now
+actually RUNS in CI** — before this batch, `tools/build_artifacts.py check`
+existed and was documented as "the sixth ratchet" but `.github/workflows/ci.yml`
+never invoked it (`grep -n build_artifacts .github/workflows/ci.yml` returned
+nothing), the same "certifies but never checks" failure class this project
+has already hit twice (`ci.yml`'s own warning-ratchet and boot-integrity
+history). Fixed by wiring `check --platforms <this-job's-units>` into every
+existing build job rather than adding a dedicated all-toolchains job:
+`check` needs every one of ARM/AVR/RISC-V/xc-dsc to rebuild everything, and
+no single existing CI job has all four — a dedicated job would either
+duplicate every toolchain-install step already present in the `build`
+matrix and the `build-dspic33ak128mc102` job (double the install cost for
+zero new coverage) or need `actions/download-artifact` to pull binaries
+across jobs (outside this workflow's allowed action set, per the
+`build-dspic33ak128mc102` job's own comment on why *it* isn't folded into
+`build-platform`). Each existing job already has exactly the one toolchain
+it needs on `$PATH`/at its probed location, already built its unit(s) once
+this run — running `check --platforms <its own units>` there re-verifies
+committed-vs-fresh for those units specifically, using a toolchain already
+installed for a step that already ran, at zero extra install cost. Across
+the full job matrix this still covers all ten units, same as a hypothetical
+all-toolchains job would, without ever installing two heavy toolchains
+(XC-DSC + one apt one) in the same job. The `docs-integrity` job (no
+toolchain, already the home of `check_contracts_numbering.py`) also gained
+`tools/build_artifacts.py --selftest` — it needs no compiler and was, like
+`check`, wired nowhere before this batch.
+
+**GAP 3 (documentation, adversarial review, this batch): DEBUG `.elf`
+manifest hashes are BUILD-PATH DEPENDENT; RELEASE is not.** `-g3` (every
+port's DEBUG flavor) embeds the compiler's absolute working directory
+(`DW_AT_comp_dir`) and, for at least the dsPIC33AK toolchain, some
+same-directory translation units' absolute source path (`DW_AT_name`) into
+DWARF debug info — so a DEBUG `.elf` built from the identical, unmodified
+source tree checked out at a *different absolute path* is a *different*
+file, purely from path length/content, nothing to do with source or
+toolchain drift. Measured (stm32f103, two full checkouts at
+deliberately-different-length paths): DEBUG `.elf` differs in 20 bytes,
+exactly the two paths' length delta, everywhere else byte-identical
+(confirms the mechanism: comp_dir string length is the only variable).
+RELEASE (`-g0`, no debug info at all) is measured **path-INDEPENDENT** —
+0-byte diff between the same two checkouts — so the gate that actually
+matters for the tracked/committed tree (RELEASE bin/hex/syms, `.elf` at tag
+time) is robust; only DEBUG's *manifest-recorded* hashes (never a committed
+binary, see "Why DEBUG isn't committed" in `artifacts/README.md`) are at
+risk, and only if `check` is ever run from a different absolute path than
+`build` was. **Fix option, applied this batch (proven cheap — see below)**:
+`-ffile-prefix-map=$(CURDIR)=/grbl-src` added to every port's `CFLAGS` (the
+literal target string doesn't matter, only that it's identical across
+checkouts) remaps the embedded path to a fixed, checkout-independent
+string. Verified (stm32f103, arm-none-eabi-gcc 13.2): DEBUG `.elf` becomes
+fully byte-identical across the two differently-pathed checkouts (0-byte
+diff, was 20) with the flag; RELEASE `.bin`/`.hex` sha256 UNCHANGED versus
+the flag-less build (proves the flag is free where it matters — RELEASE
+has no debug info to remap in the first place). Same RELEASE-unchanged
+proof re-run for ch32v006 (picolibc/RISC-V) and dsPIC33AK
+(xc-dsc-gcc 8.3.1) against their already-committed `artifacts/` hashes —
+identical in both cases. **Caveat, stated plainly rather than
+oversold**: on `xc-dsc-gcc` specifically, four locally-invoked translation
+units (`platform.c`/`handlers.c`/`serial.c`/`nvmem.c` — compiled as a bare
+filename, not a `../../relative/path.c`) still embed an absolute
+`DW_AT_name` untouched by `-ffile-prefix-map` (a toolchain quirk, not a
+flag-application bug — the ~16 other translation units in the same build
+ARE fully remapped); dsPIC33AK's DEBUG `.elf` is therefore *improved* but
+not *fully* path-independent. This is immaterial to the actual ratchet
+(dsPIC33AK's `.elf` is already `nondeterministic_elf`-exempt from hash
+comparison for an unrelated reason — the tempfile-section-name issue above
+— so its DEBUG `.elf` hash was never gated either way) but is recorded here
+so a future contributor doesn't re-discover it as a surprise.
 
 **A real bug this batch found and fixed while building the tool itself**
 (kept here as a lesson, not just in a commit message): the first
