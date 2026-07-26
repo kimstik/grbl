@@ -69,7 +69,14 @@ CFLAGS_EXTRA   = -I. -I../common/dummy -include prelude.h
 # Base compiler flags
 CFLAGS  = -march=$(ARCH) -mabi=$(ABI) -mcmodel=$(CMODEL)
 CFLAGS += -mtune=thead-c906
-CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)
+# BUG #18 class: plain UL happens to be safe here only because lp64d makes
+# `unsigned long` 64-bit on this target - relying on that is fragile (the
+# same suffix is NOT enough on the 32-bit-long STM32/HC32 family at their
+# clocks, see common/stm32/common.mk). ULL is guaranteed >=64-bit by the
+# standard regardless of ABI, so stepper.c:1015's compile-time constant
+# `TICKS_PER_MICROSECOND*1000000*60` (true 42000000000 @ 700 MHz) folds
+# correctly without depending on this port's ABI choice.
+CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)ULL
 CFLAGS += -Wall -Wextra
 CFLAGS += -ffunction-sections -fdata-sections
 
