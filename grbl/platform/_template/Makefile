@@ -170,30 +170,9 @@ CFLAGS += -ffunction-sections -fdata-sections
 CFLAGS += -ffile-prefix-map=$(CURDIR)=/grbl-src
 
 # FP PRECISION KNOB (CONTRACTS.md #17: "FP precision is a declared port
-# property"). PORT-TODO: every non-AVR port needs this - landed pattern
-# from samd21/Makefile (original probe: ~11KB of RELEASE .text was DP
-# soft-float/libm on a chip with no FPU at all) and copied verbatim to
-# ch32v006/stm32f103+f411+h523/ch570/hc32f460. GRBL core is float-typed
-# throughout but was written against avr-gcc, where double==float (32-bit)
-# - so its unsuffixed double literals (0.5*x, 1.0-y) and unsuffixed libm
-# calls (sqrt/atan2/sin/cos/floor/ceil/...) are only single-precision on
-# the origin AVR. Without this knob, any non-AVR core promotes them to
-# real 64-bit double, linking in DP soft-float (or wasting a real FPU) for
-# no semantic gain.
-#   FP=SINGLE (default): -fsingle-precision-constant keeps unsuffixed FP
-#     literals float; GRBL_FP_SINGLE arms boards/$(BOARD)/prelude.h's SP
-#     libm call-site mapping (PORT-TODO: add that block there, see
-#     samd21/generic/prelude.h for the exact 13-function list). Post-link,
-#     tools/assert_no_double.sh FAILS the build listing any DP machinery
-#     still linked in - wire ASSERT_FP into your real `link`/`all` recipe
-#     once the port actually finishes linking (this template's `link`
-#     target fails before reaching it, by design - see the design note at
-#     the top of this file).
-#   FP=DOUBLE: conscious opt-in deviation (native double-precision FPU, no
-#     SP loss to make up for) - must be declared in the port's own docs,
-#     see dspic33ak128mc102/Makefile for the one port that chose this.
-# Applied to BOTH build flavors - it is a semantics pin, not an
-# optimization.
+# property"). PORT-TODO: every non-AVR port needs this - see samd21/Makefile
+# for the full rationale, and PORT-TODO: add the SP libm call-site mapping
+# to boards/$(BOARD)/prelude.h (samd21/generic/prelude.h has the pattern).
 FP ?= SINGLE
 ifeq ($(FP),SINGLE)
   CFLAGS += -fsingle-precision-constant -DGRBL_FP_SINGLE
@@ -216,51 +195,13 @@ else
   CFLAGS += -DDEBUG
 endif
 
-# Linker flags. NOTE: --gc-sections is deliberately OMITTED here (unlike
-# samd21). The ISR dispatch wrappers in handlers.c are not yet wired into
-# any real vector table (this chip's IRQ layout is unknown), so nothing
-# keeps them reachable from Reset_Handler; --gc-sections would silently
-# discard those functions - and the PORT_TODO_* symbols they reference -
-# before the linker ever reports them, defeating the whole
-# linker-as-checklist mechanism (CONTRACTS.md, "the cautionary tale").
-# Objects on this link line are passed directly (not archived), so without
-# --gc-sections every section from every .o is kept and every PORT_TODO_*
-# reference surfaces. Re-add -Wl,--gc-sections once your vector table
-# really calls these dispatchers (PORTING-CHECKLIST Step 6).
-# -nostartfiles: this template supplies its own Reset_Handler/vector table
-# (startup.c) instead of newlib's crt0 - without this flag the linker still
-# pulls crt0.o in as a start file (independent of --gc-sections, which is
-# already omitted above), and crt0's _mainCRTStartup drags in exit()/_read/
-# _write/_sbrk/_close/_lseek from libc.a purely as C-runtime plumbing -
-# undefined-reference noise that has nothing to do with this port and would
-# pollute the PORT_TODO_* self-test signal.
-#
-# --specs=nosys.specs: some reachable libm/libc code path (unrelated to any
-# PORT_TODO_*) still references the low-level _sbrk/_read/_write/_close/
-# _lseek syscall stubs - normally invisible because --gc-sections (which
-# this template omits on purpose, see above) strips the specific unused
-# function pulling them in. nosys.specs supplies real (error-returning) stub
-# definitions for exactly those five, so the self-test's undefined-symbol
-# list stays 100% PORT_TODO_* signal. It does NOT switch to newlib-nano (no
-# feature/size tradeoff) - just the syscall layer.
-#
-# --gc-sections LIFECYCLE (CONTRACTS.md #14.3): "omit while PORT_TODO_* is
-# non-empty, re-add once it's zero" applies to every port copied from this
-# template, this Makefile included - a porter should flip the comment
-# above (and re-add -Wl,--gc-sections) the same session the port's
-# `make link` first reports zero PORT_TODO_*, not leave it omitted
-# forever "because the template did it that way." ch32v006/Makefile is
-# the reference: it started with this template's exact posture, then
-# needed an *explicit* -Wl,--no-gc-sections (not just omission) because
-# its picolibc-based toolchain's `-specs=picolibc.specs` unconditionally
-# re-appends --gc-sections to the link line regardless of what this
-# Makefile passes (a hazard this nosys.specs/arm-none-eabi toolchain does
-# NOT have - confirmed via -dumpspecs; that's why plain omission is
-# sufficient here and picolibc needed the stronger override) - then, once
-# the port reached zero PORT_TODO_* (all handlers wired into a real
-# vector table), switched to -Wl,--gc-sections for the size win with no
-# regression, verified by KEEP()ing the vector table in script.ld and
-# comparing nm/readelf on the IVT symbols before/after the flip.
+# Linker flags. --gc-sections OMITTED (PORT_TODO_* linker-checklist
+# mechanism, CONTRACTS.md #14.3 LIFECYCLE - re-add once this port reaches
+# zero PORT_TODO_* at link; ch32v006/Makefile is the reference for the flip).
+# -nostartfiles + --specs=nosys.specs: this template supplies its own
+# Reset_Handler/vector table, not newlib's crt0; nosys stubs
+# _sbrk/_read/_write/_close/_lseek so the PORT_TODO_* signal stays clean of
+# unrelated libc syscall symbols.
 LDFLAGS  = -mcpu=$(CPU) -mthumb $(FPU) -nostartfiles --specs=nosys.specs
 LDFLAGS += -Wl,-Map=$(MAP_FILE)
 LDFLAGS += -T script.ld
@@ -390,25 +331,13 @@ $(HEX_FILE): $(ELF_FILE)
 	$(OBJCOPY) -O ihex $< $@
 
 # Create binary file
-#
-# BOOT INTEGRITY (BUG #21 ratchet, CONTRACTS.md S18) - DO NOT DELETE THIS.
-# On a RELEASE (-flto) build the linker will happily produce an image with no
-# vector table: KEEP(*(.isr_vector)) acts at link time, but LTO's whole-program
-# IPA deletes an unreferenced vector_table[] before codegen, so there is no
-# input section left for KEEP to match. The link succeeds, `size` looks normal,
-# and the chip cannot boot because word0 of the .bin is code instead of the
-# initial SP. DEBUG (no LTO) looks fine - "DEBUG works / RELEASE bricks" is the
-# signature. This check reads word0/word1 of the finished image and fails the
-# build unless they are a real (SP, Thumb reset vector) pair.
-#
-# The image-side half of the fix lives in startup.c: Reset_Handler must write
-# SCB->VTOR = (uint32_t)vector_table, and vector_table must carry
+# BOOT INTEGRITY (BUG #21, CONTRACTS.md S18) - DO NOT DELETE. See
+# common/boot_check.sh for the LTO/vector-table rationale; startup.c's
+# Reset_Handler must set SCB->VTOR and vector_table must be
 # __attribute__((used)).
-#
 # PORT-TODO: set FLASH_ORIGIN/FLASH_LENGTH to match script.ld MEMORY{FLASH}.
-# PORT-TODO: on a non-ARM target (RISC-V has no SP-in-word0 convention) replace
-#            this with an equivalent entry-point assertion rather than deleting
-#            it - see ch32v006/Makefile for how that is written up.
+# PORT-TODO: on a non-ARM target (no SP-in-word0 convention) replace this
+#            with an entry-point assertion instead - see ch32v006/Makefile.
 BOOT_CHECK   = ../common/boot_check.sh
 FLASH_ORIGIN = 0x00000000
 FLASH_LENGTH = 65536

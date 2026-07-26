@@ -500,7 +500,7 @@ const stm32_platform_config_t stm32_config = {
   .gpio_model             = STM32F103_GPIO_MODEL,
 };
 
-// Ratchet for BUG #20 (PLAN.md Phase 2 static-assert sweep, 2026-07-26):
+// Ratchet for BUG #20:
 // stm32_nvmem.c's static cache buffer is sized from NVMEM_WINDOW_SIZE
 // (Makefile define, defaults to 4096 - stm32_nvmem.h). f103 is the sibling
 // of stm32h523/stm32f411, which already carry this guard (BUG #20 was found

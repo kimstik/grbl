@@ -114,10 +114,9 @@ static inline uint32_t hal_micros(void) {
 #define HAL_GPIO_INTERRUPT_DISABLE(pcmsk, pcie, mask)  ((pcmsk) &= ~(mask), PCICR &= ~(1 << (pcie)))
 #define HAL_GPIO_IRQ_HANDLER(int_name)                 ISR(int_name##_vect)
 
-// PLAN.md Phase 1 naming-migration closure (2026-07-26): an alternate
-// "new short names" trio (GPIO_INT_ENA/GPIO_INT_DIS/IRQ_HANDLER) used to
-// live here as a proposed future alias set. Grepped across grbl/ and every
-// platform/ dir: zero call sites, anywhere, ever - "not yet in base code"
+// An alternate "new short names" trio (GPIO_INT_ENA/GPIO_INT_DIS/
+// IRQ_HANDLER) used to live here as a proposed future alias set: zero call
+// sites anywhere in grbl/ or any platform/ dir - "not yet in base code"
 // never became "in base code". HAL_GPIO_INTERRUPT_ENABLE/DISABLE and
 // HAL_GPIO_IRQ_HANDLER above are THE canon (CONTRACTS.md #2; hal_gpio.h's
 // #ifndef-guarded single owner for every non-AVR platform expands to the

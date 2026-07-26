@@ -130,7 +130,7 @@ typedef struct {
 // RCC_CFGR0 bits (RM 3.4.2). PLL is a FIXED x2 multiplier (clock-tree
 // figure: HSI/HSE -> "*2" -> PLLCLK, 48MHz max) - there is no PLLMUL
 // field on V00X. HSI = 24 MHz (RM 3.3.2 "internal 24MHz RC oscillator").
-// TRAP (found this session): HPRE[3:0] RESET VALUE is 0b0010 = SYSCLK/3,
+// TRAP: HPRE[3:0] RESET VALUE is 0b0010 = SYSCLK/3,
 // NOT /1 - clock init MUST clear HPRE or HCLK is 3x slower than F_CPU.
 #define RCC_CFGR0_SW_Pos        0
 #define RCC_CFGR0_SW_Msk        (0x3UL << RCC_CFGR0_SW_Pos)
@@ -276,8 +276,8 @@ typedef struct {
 // PFIC (RM 6.5.2) - offsets confirmed against the RM register list.
 // Two 32-bit words cover all sources (<= 64 IRQs on QingKe V2).
 //
-// EXTRACTED (Phase 6 rolling #4, Part A): the struct + enable/disable
-// helpers moved to common/wch/wch_pfic.h verbatim (same offsets, same
+// EXTRACTED: the struct + enable/disable helpers moved to
+// common/wch/wch_pfic.h verbatim (same offsets, same
 // fence.i) once the CH570 recon proved QingKe V3C shares this exact
 // layout, differing only in IRQ-bank width (WCH_PFIC_IRQ_WORDS below) -
 // see that file's header for the byte-identity gate this extraction was
@@ -345,7 +345,7 @@ typedef enum {
 #define PFIC_VECTOR_COUNT   41   // vectors 0..40 per RM table 6-1
 
 // PFIC_EnableIRQ/PFIC_DisableIRQ (with the RM-mandated fence.i on disable)
-// now live in common/wch/wch_pfic.h (Phase 6 rolling #4, Part A extraction)
-// - IRQn_Type above converts implicitly to that header's uint32_t parameter.
+// now live in common/wch/wch_pfic.h - IRQn_Type above converts implicitly
+// to that header's uint32_t parameter.
 
 #endif // CH32V006_H

@@ -15,7 +15,7 @@
 #define BOARD_URL  ""
 
 // STEP PINS
-// LOGICAL PORT-IMAGE CONTRACT (BUG #17, PLAN.md Phase 3 / CONTRACTS.md #1):
+// LOGICAL PORT-IMAGE CONTRACT (BUG #17, CONTRACTS.md #1):
 // see samd21/megarm/config.h for the full rationale. X/Y/Z_STEP_BIT are
 // LOGICAL (core's native uint8_t port image, stepper.c get_step_pin_mask());
 // the real silicon pin is X/Y/Z_STEP_PIN. This board's physical pins happen
@@ -71,7 +71,7 @@
 #define DIRECTION_MASK_A    ((1UL<<X_DIRECTION_BIT)|(1UL<<Y_DIRECTION_BIT)|(1UL<<Z_DIRECTION_BIT))
 #define DIRECTION_MASK_B    0
 
-// PLAN.md Phase 2 static-assert sweep (2026-07-26): same BUG #17 invariant
+// Same BUG #17 invariant
 // as megarm/config.h - kept even though this board's translation is a pure
 // shift (no gather/scatter) since a future re-pinning could still pick
 // bits >7.
@@ -162,8 +162,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define SPINDLE_PWM_OFF_VALUE  0
 #define SPINDLE_PWM_RANGE      (SPINDLE_PWM_MAX_VALUE - SPINDLE_PWM_MIN_VALUE)
 
-// PLAN.md Phase 2 static-assert sweep (2026-07-26) closure (2026-07-26):
-// same fix/reasoning as megarm/config.h - this board shared the identical
+// Same fix/reasoning as megarm/config.h - this board shared the identical
 // tracked violation (65535 vs PER=0xFF vs uint8_t core duty). BUG #22
 // (reclassified 2026-07-26): the uint8_t assignment site truncated
 // harmlessly, but spindle_control.c:45's pwm_gradient computation is a

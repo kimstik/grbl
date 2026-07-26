@@ -106,30 +106,9 @@ CFLAGS += -ffunction-sections -fdata-sections
 # verified unaffected, DEBUG becomes checkout-path-independent.
 CFLAGS += -ffile-prefix-map=$(CURDIR)=/grbl-src
 
-# FP PRECISION KNOB (CONTRACTS #17: "FP precision is a declared port
-# property"). GRBL core is float-typed throughout but was written against
-# avr-gcc, where double==float (32-bit) - so its unsuffixed double literals
-# (0.5*x, 1.0-y) and unsuffixed libm calls (sqrt/atan2/sin/cos/floor/ceil/
-# round/lround/trunc/fabs) were ALWAYS single precision on the origin AVR.
-# Cortex-M0+ has no FPU at all and double is a real 64-bit type here, so
-# those same expressions promote for real and drag in DP soft-float
-# (__aeabi_dadd/dsub/dmul/ddiv, __eqdf2) plus DP libm (__ieee754_atan2,
-# __ieee754_sqrt, __ieee754_rem_pio2, __kernel_sin/cos, atan, ...) that the
-# AVR binary never contained - all of it computing precision core
-# immediately truncates back to float.
-#
-#   FP=SINGLE (default): template-faithful AVR double==float semantics.
-#     - -fsingle-precision-constant keeps unsuffixed FP literals float
-#     - GRBL_FP_SINGLE arms the board prelude's SP libm call-site mapping
-#     - post-link, tools/assert_no_double.sh FAILS the build listing
-#       offenders if any DP machinery still linked in - the linker is the
-#       truth, not the compile flags.
-#   FP=DOUBLE: conscious opt-in deviation - MORE precise than the template,
-#     must be declared in the port's docs. No SP pins, assert disarmed.
-#     Intended for ports with a native DP FPU, which the M0+ is not.
-#
-# Applied to BOTH build flavors - it is a semantics pin, not an
-# optimization, and DEBUG must debug the same arithmetic RELEASE ships.
+# FP PRECISION KNOB (CONTRACTS.md #17). Cortex-M0+ has no FPU; double is a
+# real 64-bit type here, so unsuffixed literals/libm calls promote for real
+# unless pinned to single (original probe chip for this knob).
 FP ?= SINGLE
 ifeq ($(FP),SINGLE)
   CFLAGS += -fsingle-precision-constant -DGRBL_FP_SINGLE
@@ -270,13 +249,7 @@ $(HEX_FILE): $(ELF_FILE)
 	$(OBJCOPY) -O ihex $< $@
 
 # Create binary file
-#
-# BOOT INTEGRITY (BUG #21 ratchet): objcopy will happily emit a .bin with no
-# vector table in it - KEEP(*(.isr_vector)) does not survive -flto, and nothing
-# else in the build fails when the table is gone. samd21 already survives by
-# construction (Reset_Handler writes SCB->VTOR = vector_table, which anchors
-# the table against LTO's IPA), so this check passes today - it is here so the
-# guarantee stays checked rather than accidental. See CONTRACTS.md S18.
+# BOOT INTEGRITY (BUG #21, CONTRACTS.md S18) - see common/boot_check.sh.
 # FLASH window must match script.ld MEMORY{FLASH}: 0x200, 255488 bytes.
 BOOT_CHECK   = ../common/boot_check.sh
 FLASH_ORIGIN = 0x00000200

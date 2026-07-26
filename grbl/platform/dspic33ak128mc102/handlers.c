@@ -69,7 +69,7 @@ void __attribute__((interrupt, no_auto_psv)) _U1TXInterrupt(void)
 
 // DELAY PRIMITIVES (PORTING-CHECKLIST Step 6)
 // __delay32()/FCY are real toolchain library primitives (libpic30.a,
-// verified this session: compiles, links against the shipped lib with no
+// verified: compiles, links against the shipped lib with no
 // extra flags). FCY = instruction-cycle frequency; dsPIC33A is a 32-bit
 // DSC core with a documented 1-cycle-per-instruction pipeline class -
 // FCY=F_CPU is ASSUMED here (UNVERIFIED against the RM, same status as
