@@ -128,6 +128,9 @@
 #elif defined(PLATFORM_HC32F460)
   #define PLATFORM_NAME "HC32F460"
 
+#elif defined(PLATFORM_CH570)
+  #define PLATFORM_NAME "CH570"
+
 #elif defined(PLATFORM_SG2002)
   #define PLATFORM_NAME "Sophgo SG2002"
 
@@ -162,6 +165,10 @@
 #elif defined(HC32F460) || defined(__HC32F460__)
   #define PLATFORM_HC32F460
   #define PLATFORM_NAME "HC32F460"
+
+#elif defined(CH570) || defined(__CH570__)
+  #define PLATFORM_CH570
+  #define PLATFORM_NAME "CH570"
 
 #else
   #error "Unknown platform! Define PLATFORM_xxx in Makefile"
@@ -200,6 +207,9 @@
 
 #elif defined(PLATFORM_HC32F460)
   #include "hc32f460/platform.h"
+
+#elif defined(PLATFORM_CH570)
+  #include "ch570/platform.h"
 #endif
 
 // ============================================================================

@@ -23,3 +23,19 @@ README.md
 # whose whole point is to be copied into every new port's directory. Without
 # this, `git add` on a freshly copied _template/ silently drops its README.
 !grbl/platform/*/README.md
+
+# SAME CLASS OF TRAP, caught before landing (Phase 6 rolling #4 review):
+# grbl/platform/ch570/vendor/ISP572.o is a deliberately vendored, TRACKED
+# binary (Apache-2.0, openwch/ch570 - LICENSE copied alongside in the same
+# directory) - line 2's blanket `*.o` rule would otherwise silently drop
+# it from every `git add -A`, exactly like the README.md rule above did
+# for platform docs until that exception landed. This is the ONE
+# vendored-binary exception in this tree; see CONTRACTS.md's CH570
+# gap-log entry for why the flash program/erase algorithm is carried as a
+# linked object instead of reimplemented (the vendor's own datasheet
+# states it deliberately does not document the register protocol this
+# function uses, and disassembly confirms real, non-trivial logic, not a
+# thin trampoline). Verify with `git check-ignore -v` after ANY future
+# .gitignore edit - a silent re-swallow here breaks every fresh clone's
+# link, not just this session's build.
+!grbl/platform/ch570/vendor/ISP572.o

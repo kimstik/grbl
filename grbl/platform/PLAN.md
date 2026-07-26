@@ -507,7 +507,101 @@ Priority order (revise as hardware/toolchain reality dictates):
         nor QEMU provide here). Cheaper, unblocked queue items (ch570, fully
         recon'd and ready) and in-flight work (hc32f460) should land first;
         owner may overrule this ordering in one line.
-- [ ] **ch570** RECON DONE (matrix in recon report): QingKe V3C RV32IMBC (full
+- [x] **ch570 COMPLETE** (rolling #4, second WCH chip, first shared-code
+      extraction): Part A extracted `common/wch/{wch_pfic.h,wch_critical.h,
+      wch_vectors.h}` out of ch32v006's ALREADY-LANDED PFIC struct/
+      enable-disable, mstatus critical-section/sei/cli/fence, and mtvec
+      vectored-mode write — HARD GATE PASSED: ch32v006's RELEASE `.bin`
+      MD5 identical before/after (`075d79ced3a3f7e9324e93f6936bec54`),
+      both flavors' `text/data` unchanged (41072/0 RELEASE, 46988/0
+      DEBUG), zero new ratchet warnings. Part B ported CH570 consuming it
+      plus a from-scratch chip layer (GPIO/UART/timers/flash are entirely
+      different IP, per the recon below): `make BUILD=DEBUG`/`BUILD=RELEASE`
+      both LINK with **zero `PORT_TODO_*`** (verified via `nm | grep
+      PORT_TODO`, empty both flavors) and **zero compiler warnings on
+      platform files** (baseline holds only the same 4 core-file warnings
+      ch32v006's baseline already has). Key facts closed during the port
+      (CONTRACTS.md new gap-log section, full detail there): (1) the
+      vendor SDK's own `core_riscv.h` interrupt-enable helper uses a
+      DIFFERENT CSR (raw 0x800) than the named `mstatus` (0x300)
+      `wch_critical.h` extracted from ch32v006 — resolved by finding TWO
+      independent, hardware-facing sources (WCH's own official
+      `startup_CH572.S` boot assembly, and cnlohr/ch32fun's MIT,
+      hardware-exercised, cross-generation codebase) both use `mstatus`
+      under a mainline toolchain, confirming the extraction was right and
+      the vendor C helper is the outlier, not reproduced. (2) That same
+      vendor startup file ACTIVELY SETS INTSYSCR=0x3 (both HWSTKEN and
+      INESTEN) during boot — the opposite of what this project's plain
+      `interrupt` attribute needs — so CH570's startup.c explicitly WRITES
+      INTSYSCR=0 (`wch_intsyscr_clear()`, new in `wch_vectors.h`, NOT
+      called by ch32v006 so its byte-identity gate holds) instead of just
+      trusting the documented reset-0 value. (3) TMR0 (the only
+      FIFO/DMA-capable timer) has no hardware clock prescaler — folded
+      into a software multiplier so `STP_TMR_PRESCALER_SET` stays a real
+      semantic, not a silent no-op. (4) GPIO interrupt hardware is
+      single-polarity edge-select only — closed via a new edge-flip
+      technique (arm one polarity, XOR it after each fire) that reproduces
+      CONTRACTS §2.6 "any pin CHANGE" semantics without hardware support
+      for it. (5) The flash program/erase algorithm is vendored as a real
+      linked binary object (`vendor/ISP572.o`, Apache-2.0, openwch/ch570) —
+      **the first vendored BINARY in this project's tree**, flagged
+      plainly for the owner: NOT a "boot-ROM call" (corrected after
+      integration review — it is an ordinary linked function, disassembly
+      confirms every internal call stays inside the same object) and NOT
+      avoidable by calling a documented entry point ourselves — the
+      CH572/CH570 Datasheet V1.1 states outright that it "does not
+      provide the introductions to FlashROM word data registers and
+      FlashROM control registers" and directs implementers to "call
+      related subprograms." Disassembly (~1.3KB of real control flow:
+      PFIC interrupt masking around the operation, address-range bounds
+      checking, an 8-command dispatcher, a real erase block-size-
+      selection loop) confirms it is not a thin trampoline either -
+      reimplementing it would mean hand-transcribing undocumented vendor
+      logic from disassembly (strictly riskier than linking the tested
+      object, for no legal gain since Apache-2.0 already permits
+      vendoring outright). Full investigation + the disassembly evidence
+      is in CONTRACTS.md's gap-log item 6.
+      **INTEGRATION REVIEW (post-batch, both blockers now closed):**
+      (a) `.gitignore`'s blanket `*.o` rule was silently swallowing
+      `vendor/ISP572.o` from every `git add -A` (same class of trap as
+      the README.md rule during `_template` work) — fixed with an
+      explicit `!grbl/platform/ch570/vendor/ISP572.o` exception, verified
+      three ways: `git check-ignore -v` (negation confirmed active),
+      `git add -A` (file now stages as `A`, not silently skipped), and a
+      genuine simulated fresh checkout (`git archive` of a
+      `git stash create` snapshot — a dangling commit object that touches
+      no branch/ref/HEAD — extracted to a clean directory and rebuilt:
+      identical RELEASE 40674/4/6849, `assert_no_double.sh` PASSED, boot
+      integrity OK). (b) A second, independent correction from the same
+      review: `nvmem.c`'s region-write-enable bracket originally claimed
+      "least privilege" (narrower `RB_ROM_CODE_WE` grant before calling
+      the vendor function); `readelf -r vendor/ISP572.o` shows both
+      `FLASH_CMD_ROM_WRITE`/`FLASH_CMD_ROM_ERASE` call `FLASH_START`
+      first, which unconditionally re-widens that same register to full
+      access — so the narrower grant only protects the margins around
+      the call, not the operation itself. Comments corrected to say so
+      honestly rather than repeat the overclaim.
+      Gates re-run (not just inspected): golden AVR MD5 PASSED
+      (79af184e…, text 30640); samd21 megarm RELEASE 31952/296; stm32f103
+      RELEASE 28700/80; stm32h523 RELEASE 25132/388; stm32f411 RELEASE
+      25796/80; hc32f460 RELEASE 25596/80 — every sibling byte-identical.
+      FP=SINGLE (default) `assert_no_double.sh` PASSED both flavors (zero
+      DP machinery, third RISC-V target confirmed — this one has hardware
+      M-extension multiply/divide but still no FPU, same leak class as
+      ch32v006's rv32ec). Boot-integrity (RISC-V `_start`-at-flash-base
+      form) PASSED both flavors. `mret` (opcode `0x30200073`)
+      disassembly-confirmed in all four real vector bodies. Sizes: DEBUG
+      46830/4/6850, RELEASE 40674/4/6849 (of 236KB usable flash / 12KB
+      RAM — 4KB reserved for NVMEM). CI: 2 matrix rows added
+      (`ch570` generic × `{DEBUG, RELEASE}`), warn baseline from real
+      build logs. NOT marked ready for hardware validation (no CH570
+      emulator exists, same posture as every RISC-V port so far) —
+      `boards/generic/config.h` is an explicit PLACEHOLDER pin map that
+      exceeds this chip's real 12-pin GPIO budget (datasheet-confirmed),
+      flagged loudly in its own file header, same class of honesty
+      ch32v006's and dsPIC33AK's own generic boards already established.
+      Previous recon entry preserved below for history:
+- [ ] ~~ch570 RECON DONE~~ (superseded by COMPLETE above): QingKe V3C RV32IMBC (full
       I+M — hw mul/div!, exact rv32im/ilp32 picolibc multilib exists), 240K user
       flash + 12K RAM (owner claim confirmed, ~$0.10 — cheaper than V006).
       SURPRISE: peripherals are ENTIRELY different IP vs V006 (16550-style UART,
@@ -533,6 +627,10 @@ Priority order (revise as hardware/toolchain reality dictates):
       (INTSYSCR=0 + plain `interrupt` attribute) transfers, not just the
       register primitives. (3) Flash is materially DIFFERENT from ch32v006 —
       4096-byte erase blocks, and write/erase go through a boot-ROM call
+      [CORRECTION, landed batch: not a boot-ROM call - an ordinary linked
+      function, see the COMPLETE entry above and CONTRACTS.md gap-log
+      item 6 - preserved verbatim below as the recon's own words at the
+      time, not edited retroactively]
       `FLASH_EEPROM_CMD()` gated by a "safe access" unlock (write 0x57 then
       0xA8 to `R8_SAFE_ACCESS_SIG`, ~112-cycle window) plus `R8_GLOB_ROM_CFG`
       region write-enable — NOT a KEYR-style unlock, so ch32v006's
@@ -1152,6 +1250,7 @@ identity to integration time.
   | stm32f411 | 32660 / 80              | **25796** / 80           | -6864  | -21.0% |
   | dspic33ak128mc102 | N/A — FP=DOUBLE is this port's declared default (native DP FPU), never carried the SINGLE rollout | ~41.8KB code | — | — |
   | hc32f460  | N/A (new port, rolling #3, `FP=SINGLE` from day one) | **25596** / 80 | N/A | N/A |
+  | ch570     | N/A (new port, rolling #4, `FP=SINGLE` from day one) | **40674** / 4  | N/A | N/A |
 
   RULE: any sibling size quoted in a ledger entry must be re-verified against
   this table at integration time, not copied from the entry's own drafting —

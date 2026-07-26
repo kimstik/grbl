@@ -1,0 +1,11 @@
+# ch570 warning baseline - core-file warnings only (identical class/text to
+# ch32v006's baseline - same core grbl.c files, same gcc version); platform
+# files (ch570/*.c) compile with ZERO warnings on both flavors. Generated
+# from real build logs (PLAN.md Phase 6 rolling #4 Part B): RELEASE (-Os)
+# emits these 4; DEBUG (-Og) emits none of them (gcc's -Wimplicit-fallthrough
+# analysis is optimization-level sensitive) - union of both real logs is
+# this file. May only shrink.
+gcode.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
+motion_control.c: warning: unused parameter 'cycle_mask' [-Wunused-parameter]
+report.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
+system.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
