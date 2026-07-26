@@ -29,6 +29,25 @@ boundary in the port.
   peaks near +1.000 (the arc is really interpolated, not a straight line),
   X ends at 3.000 and Y returns to 0.000, machine back in Idle.
 
+With --spindle, runs the BUG #22 register-observability stage: sends a
+handful of M3 S-words chosen STRICTLY INSIDE the linear part of the port's
+own $30 (rpm_max)/$31 (rpm_min) range (never at/above the rpm_max clamp -
+that clamp is exactly what let BUG #22 hide behind the original probe's
+M3 S1000, which never touched pwm_gradient), then reads TCC0's CC[0]
+register back over the Renode monitor (ci/renode/SAMD21_TCC.cs makes that
+register observable; it used to be an unmodeled Tag that always read 0).
+The expected duty for each S-word is computed independently in Python from
+spindle_control.c's own formula (see expected_pwm_value()), fed by the
+live $30/$31 values read back from "$$", the board's own
+SPINDLE_PWM_MIN_VALUE #define (grbl/platform/samd21/<board>/config.h), and
+- deliberately NOT the board's SPINDLE_PWM_MAX_VALUE #define, since a wrong
+value there *was* BUG #22 and trusting it would make the oracle agree with
+a still-broken build - TCC0's own PER register read back live (fixed to
+0xFF by PWM_INIT() regardless of what a board declares). Nothing here is a
+hardcoded magic duty number. A BUG #22-class regression (wrong
+SPINDLE_PWM_MAX_VALUE feeding pwm_gradient) makes firmware's CC[0] diverge
+from the PER-anchored expectation.
+
 Exit codes:
   0 - all requested stages passed
   1 - banner never appeared (hang analysis printed if monitor reachable)
@@ -36,11 +55,15 @@ Exit codes:
   4 - motion stage failed (no status reports, or MPos X frozen/incomplete)
   5 - arc/dwell stage failed (NaN, no arc interpolation, wrong endpoint,
       or never returned to Idle)
+  6 - spindle stage failed (CC[0] didn't match the computed expected duty
+      for at least one S-word)
 """
 
 import argparse
+import math
 import re
 import socket
+import struct
 import sys
 import time
 
@@ -54,6 +77,67 @@ OK_RE = re.compile(rb"ok\r?\n")
 # "nan"/"-inf" from printFloat, or GRBL's own error/ALARM lines.
 NAN_RE = re.compile(rb"(?i)\b(nan|-?inf(inity)?)\b")
 ERROR_RE = re.compile(rb"(?i)\b(error:\d+|ALARM:\d+)")
+# $30 (rpm_max) / $31 (rpm_min) lines in a "$$" settings dump.
+RPM_MAX_RE = re.compile(rb"\$30=([0-9.]+)")
+RPM_MIN_RE = re.compile(rb"\$31=([0-9.]+)")
+
+# TCC0 register offsets, matching grbl/platform/samd21/samd21.h's Tcc struct
+# (also ci/renode/SAMD21_TCC.cs, which backs sysbus.tcc0).
+TCC0_PER_OFFSET = 0x4C
+TCC0_CC0_OFFSET = 0x50
+
+
+def f32(x):
+    """Round a Python (double) float down to IEEE-754 single precision,
+    matching the port's GRBL_FP_SINGLE build (floor -> floorf, float
+    settings.rpm_max/rpm_min, float pwm_gradient - see
+    grbl/platform/samd21/megarm/prelude.h and spindle_control.c)."""
+    return struct.unpack("<f", struct.pack("<f", float(x)))[0]
+
+
+def expected_pwm_value(rpm, rpm_max, rpm_min, pwm_max_value, pwm_min_value):
+    """Bit-for-bit port of spindle_control.c's spindle_compute_pwm_value(),
+    single-precision arithmetic throughout (f32 at each step, mirroring
+    floorf/float ops), so the SPINDLE stage's expectation comes from the
+    firmware's own formula rather than a hardcoded duty number. Assumes the
+    default 100% spindle_speed_ovr (rpm *= 0.010*ovr collapses to rpm).
+
+    spindle_speed_ovr multiplier and the uint8_t assignment's mod-256
+    truncation are both reproduced (the latter is what a BUG #22-class
+    huge pwm_gradient wraps through - see pwm_sim.c in the BUG #22
+    investigation for the same wraparound model)."""
+    rpm_max = f32(rpm_max)
+    rpm_min = f32(rpm_min)
+    if rpm_min >= rpm_max or rpm >= rpm_max:
+        return pwm_max_value & 0xFF
+    if rpm <= rpm_min:
+        return 0 if rpm == 0.0 else (pwm_min_value & 0xFF)
+    pwm_range = f32(pwm_max_value - pwm_min_value)
+    gradient = f32(pwm_range / f32(rpm_max - rpm_min))
+    diff = f32(rpm - rpm_min)
+    term = f32(diff * gradient)
+    value = math.floor(term) + pwm_min_value
+    return int(value) & 0xFF
+
+
+def parse_define(text, name):
+    m = re.search(r"#define\s+" + re.escape(name) + r"\s+(\d+)", text)
+    if not m:
+        raise RuntimeError(f"{name} not found in board config.h")
+    return int(m.group(1))
+
+
+def read_double_word(mon, peripheral, offset, wait=0.3):
+    """Read a 32-bit register from a peripheral over the Renode monitor
+    (e.g. 'sysbus.tcc0'). Assumes the emulation is currently paused."""
+    text = monitor_cmd(mon, f"{peripheral} ReadDoubleWord {offset}", wait=wait)
+    matches = re.findall(r"0x[0-9A-Fa-f]+", text)
+    if not matches:
+        raise RuntimeError(
+            f"no value returned reading {peripheral}+{offset:#x}: {text!r}")
+    # The command echo itself contains the offset (e.g. "0x50"); the actual
+    # register value is whatever the monitor prints last.
+    return int(matches[-1], 16)
 
 
 def connect_retry(port, deadline, name):
@@ -298,6 +382,99 @@ def arc_stage(sock, transcript, timeout):
     return True
 
 
+def spindle_stage(uart, mon, transcript, timeout, board_config_path):
+    """THE BUG #22 REGISTER-OBSERVABILITY STAGE.
+
+    Deliberately does NOT trust the board's SPINDLE_PWM_MAX_VALUE #define
+    for the expected-duty computation: that #define declaring the wrong
+    value (65535 instead of 255) *was* BUG #22, so an oracle built from the
+    same header would trivially "match" a build that still has the bug -
+    firmware and test would both compute pwm_gradient from the same wrong
+    constant and agree with each other while being wrong together. Instead,
+    the oracle's full-scale value is TCC0's own PER register, read back
+    live over the Renode monitor before any spindle command - PER is set
+    unconditionally to 0xFF by PWM_INIT() (samd21/timer.h) regardless of
+    what SPINDLE_PWM_MAX_VALUE a board declares, so it is the actual
+    hardware duty domain, independent of the bug. SPINDLE_PWM_MIN_VALUE
+    IS read from the board's config.h - it was never the wrong value in
+    BUG #22 (every samd21 board consistently declares 1) and has no
+    register-level equivalent to observe instead.
+
+    The live $30 (rpm_max)/$31 (rpm_min) come out of the "$$" dump already
+    sitting in `transcript`. For a handful of S-words chosen STRICTLY
+    inside (rpm_min, rpm_max) - never at/above the rpm_max clamp, which is
+    what let the original BUG #22 probe (M3 S1000) miss the bug entirely -
+    this sends M3 S<word>, pauses the emulation, reads TCC0 CC[0] back over
+    the Renode monitor, and compares it against expected_pwm_value()'s
+    independent re-derivation of spindle_control.c's own formula. Returns
+    (ok, rows) where rows is a list of (s_word, expected, observed) for the
+    report table.
+    """
+    with open(board_config_path, "r") as f:
+        config_text = f.read()
+    pwm_min_value = parse_define(config_text, "SPINDLE_PWM_MIN_VALUE")
+
+    monitor_cmd(mon, "pause", wait=0.3)
+    pwm_max_value = read_double_word(mon, "sysbus.tcc0", TCC0_PER_OFFSET)
+    monitor_cmd(mon, "start", wait=0.3)
+
+    m_max = RPM_MAX_RE.search(transcript)
+    m_min = RPM_MIN_RE.search(transcript)
+    if not m_max or not m_min:
+        print("FAIL: spindle - could not find $30/$31 in the '$$' dump",
+              flush=True)
+        return False, []
+    rpm_max = float(m_max.group(1))
+    rpm_min = float(m_min.group(1))
+    print(f"spindle: hardware TCC0 PER (full-scale oracle)={pwm_max_value} "
+          f"board config {board_config_path} -> "
+          f"SPINDLE_PWM_MIN_VALUE={pwm_min_value}; live $30={rpm_max} "
+          f"$31={rpm_min}", flush=True)
+
+    # Fractions strictly inside (0, 1) of the rpm_min..rpm_max span - never
+    # at or above rpm_max, so pwm_gradient is always actually exercised
+    # (the rpm>=rpm_max clamp branch, which never touches pwm_gradient, is
+    # exactly what hid BUG #22 from the original M3 S1000 probe).
+    fractions = [0.10, 0.25, 0.50, 0.75, 0.90]
+    rows = []
+    ok = True
+    for frac in fractions:
+        s_word = rpm_min + frac * (rpm_max - rpm_min)
+        s_word = round(s_word)
+        expected = expected_pwm_value(float(s_word), rpm_max, rpm_min,
+                                       pwm_max_value, pwm_min_value)
+
+        if not send_and_wait_ok(uart, f"M3 S{s_word}".encode(), transcript,
+                                 timeout):
+            print(f"FAIL: spindle - no 'ok' for M3 S{s_word}", flush=True)
+            return False, rows
+
+        monitor_cmd(mon, "pause", wait=0.3)
+        observed = read_double_word(mon, "sysbus.tcc0", TCC0_CC0_OFFSET)
+        per = read_double_word(mon, "sysbus.tcc0", TCC0_PER_OFFSET)
+        monitor_cmd(mon, "start", wait=0.3)
+
+        match = observed == expected
+        ok = ok and match
+        rows.append((s_word, expected, observed))
+        status = "match" if match else "MISMATCH"
+        print(f"spindle: S{s_word:<6.0f} expected CC[0]={expected:3d} "
+              f"observed CC[0]={observed:3d} PER={per} [{status}]",
+              flush=True)
+
+    if not send_and_wait_ok(uart, b"M5", transcript, timeout):
+        print("FAIL: spindle - no 'ok' for M5", flush=True)
+        return False, rows
+
+    if ok:
+        print("PASS: spindle - CC[0] matched the computed expected duty "
+              "for every S-word", flush=True)
+    else:
+        print("FAIL: spindle - CC[0] did not match the computed expected "
+              "duty for at least one S-word (BUG #22 class)", flush=True)
+    return ok, rows
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--uart-port", type=int, default=3456)
@@ -312,11 +489,26 @@ def main():
                     help="after the motion stage, run the G2 arc + G4 dwell "
                          "FP-precision arbiter stage (implies --motion)")
     ap.add_argument("--arc-timeout", type=float, default=120.0)
+    ap.add_argument("--spindle", action="store_true",
+                    help="after $$, run the BUG #22 register-observability "
+                         "stage: M3 S-words inside the linear rpm range, "
+                         "TCC0 CC[0] checked against spindle_control.c's "
+                         "own formula")
+    ap.add_argument("--spindle-timeout", type=float, default=30.0)
+    ap.add_argument("--board", default="megarm",
+                    help="samd21 board directory to read "
+                         "SPINDLE_PWM_MAX_VALUE/MIN_VALUE from "
+                         "(grbl/platform/samd21/<board>/config.h)")
+    ap.add_argument("--board-config", default=None,
+                    help="explicit path to the board config.h, overrides "
+                         "--board")
     ap.add_argument("--transcript", default=None,
                     help="write raw UART transcript to this file")
     args = ap.parse_args()
     if args.arc:
         args.motion = True
+    board_config_path = (args.board_config or
+                          f"grbl/platform/samd21/{args.board}/config.h")
 
     transcript = bytearray()
     rc = 1
@@ -343,6 +535,26 @@ def main():
                     read_until(uart, re.compile(rb"\$132=.*?ok", re.S),
                                time.monotonic() + 5, transcript)
                     print("PASS: '$$' settings dump received", flush=True)
+                    if args.spindle:
+                        mon = connect_retry(args.monitor_port,
+                                             time.monotonic() + 30,
+                                             "renode monitor")
+                        if mon is None:
+                            print("FAIL: spindle - could not reach Renode "
+                                  "monitor", flush=True)
+                            rc = 6
+                        else:
+                            mon.settimeout(1.0)
+                            try:
+                                mon.recv(4096)  # drain banner/prompt
+                            except socket.timeout:
+                                pass
+                            spindle_ok, _ = spindle_stage(
+                                uart, mon, transcript,
+                                args.spindle_timeout, board_config_path)
+                            mon.close()
+                            if not spindle_ok:
+                                rc = 6
                     if args.motion:
                         moved, _ = motion_stage(uart, transcript,
                                                 args.motion_timeout)
