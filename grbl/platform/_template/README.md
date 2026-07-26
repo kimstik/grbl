@@ -1,10 +1,17 @@
 # `_template` - copy-me starting point for a new GRBL port
 
 This directory is not a port. It is CONTRACTS.md and PORTING-CHECKLIST.md
-materialized as a stub skeleton, structured exactly like `../samd21/`
-(the canonical post-prelude reference). Every macro/function a real chip
-would need but this template cannot supply generically expands to a call
-to an **undeclared** `PORT_TODO_<name>()` function. That means:
+materialized as a stub skeleton. Its prelude/Makefile structure (one
+`-include` per board, chaining gpio.h -> common/gpio.h -> config.h ->
+platform.h) follows `../samd21/` (the original post-prelude reference);
+its `boards/<name>/` board directory layout instead follows
+`../ch32v006/`, `../ch570/`, `../dspic33ak128mc102/` - those three plus
+this template are the majority convention (samd21's bare `<name>/` at the
+platform root predates `boards/` and was never migrated - see the
+Makefile's header comment if you're reconciling the two). Every macro/
+function a real chip would need but this template cannot supply
+generically expands to a call to an **undeclared** `PORT_TODO_<name>()`
+function. That means:
 
 - every `.c` file in this directory **compiles today**, warnings and all
   (each unimplemented call is an implicit-function-declaration warning -

@@ -80,6 +80,32 @@ Phase 1 landed: every platform now injects its whole macro chain via ONE
   order (`$(BOARD)/prelude.h:36-39`): platform `gpio.h` -> `common/gpio.h` ->
   `config.h` -> `platform.h`. Platform accessor overrides MUST precede
   `common/gpio.h` (its defaults are `#ifndef`-guarded, common/gpio.h:32-50).
+  ch32v006, ch570, dspic33ak128mc102 and `_template` all follow this same
+  4-step shape (a per-board `prelude.h` chaining gpio.h -> common/gpio.h ->
+  config.h -> platform.h) because those platforms have more than one board
+  (or are designed to, in `_template`'s case) and `config.h` is the
+  per-board pin map that has to be selectable independently of the chip's
+  own `platform.h`.
+
+- **stm32f103 / stm32f411 / stm32h523 / hc32f460: a legitimate 2-step
+  chain, not a broken 4-step one.** `stm32f103/Makefile` (and its f411/h523/
+  hc32f460 siblings) inject a single `-include prelude.h` same as SAMD21,
+  but that `prelude.h` chains only `gpio.h -> ../common/gpio.h`
+  (`stm32f103/prelude.h:31-32`, `hc32f460/prelude.h:30-31`) - it does NOT
+  also chain a `config.h`/`platform.h` pair. These four platforms have
+  exactly ONE board each (no per-board pin-map selection to inject), so
+  `platform.h` (which already `#include`s the pin map directly, e.g.
+  `stm32f103/platform.h`'s own board section) arrives through the
+  ORDINARY, un-injected include chain instead: `grbl.h` -> `platform/hal.h`
+  -> `stm32f103/platform.h` (hal.h's `PLATFORM_STM32F103` branch, same
+  routing every platform uses for its own `platform.h`). The single
+  `-include prelude.h` here exists ONLY to get `gpio.h`/`common/gpio.h`
+  ordering right before any core `.c` file's own includes run - the same
+  load-bearing reason SAMD21's prelude puts `gpio.h` first, just with two
+  fewer links in the chain because there is no per-board `config.h` to
+  select. If you are auditing one of these four ports against the 4-step
+  description above and it looks incomplete, it isn't - check which shape
+  applies before flagging a gap.
 
 Two compliance routes per subsystem:
 - **Macro route**: core .c file is compiled; platform supplies macros (AVR serial).

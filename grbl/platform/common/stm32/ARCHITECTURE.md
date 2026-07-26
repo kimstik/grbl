@@ -7,6 +7,23 @@
 
 ---
 
+> **PATH-ACCURACY NOTE (cross-port consistency audit, 2026-07-26):** this
+> document's directory tree and code samples predate the real
+> implementation and describe a `grbl/hal/platforms/stm32_common/` layout
+> that was never built. The real shared code lives at
+> `grbl/platform/common/stm32/` (this file's own directory - see
+> `common.mk` alongside it) and is consumed by `stm32f103/`, `stm32f411/`,
+> `stm32h523/` as siblings under `grbl/platform/`, not
+> `grbl/hal/platforms/`. Every `../common/stm32/...` include path below has
+> been corrected to the real `../common/stm32/...` relative path so a
+> reader copying a snippet doesn't chase a directory that doesn't exist;
+> the broader marketing tone/self-grading and the fictional
+> `platform_config.h`/`platform_instance.c` layer this file describes are
+> a separate, larger truth-rewrite tracked in PLAN.md's docs-truth
+> backlog, not performed here.
+
+---
+
 ## OVERVIEW
 
 This architecture provides **reusable HAL code** for all STM32 families (F1/F4/H5/etc).
@@ -24,7 +41,7 @@ This architecture provides **reusable HAL code** for all STM32 families (F1/F4/H
 
 ```
 grbl/hal/platforms/
-├── stm32_common/              ← Shared code for ALL STM32
+├── common/stm32/              <- Shared code for ALL STM32 (this file's own directory)
 │   ├── stm32_platform.h       # Platform config abstraction
 │   ├── stm32_flash.h          # Flash API (platform implements)
 │   ├── stm32_nvmem.c/h        # NVMEM cache (100% reusable)
@@ -77,7 +94,7 @@ const stm32_platform_config_t stm32_config = {
 };
 ```
 
-### Layer 3: Common Code (`stm32_common/`)
+### Layer 3: Common Code (`common/stm32/`)
 
 Uses `stm32_config` to work with any platform:
 
@@ -158,7 +175,7 @@ mkdir grbl/hal/platforms/stm32f411
 #ifndef PLATFORM_CONFIG_H
 #define PLATFORM_CONFIG_H
 
-#include "../stm32_common/stm32_platform.h"
+#include "../common/stm32/stm32_platform.h"
 
 // Clock frequencies
 #define STM32F411_CPU_FREQ      100000000UL  // 100 MHz
@@ -209,7 +226,7 @@ const stm32_platform_config_t stm32_config = {
 #### Step 4: Implement `stm32f4_flash.c`
 
 ```c
-#include "../stm32_common/stm32_flash.h"
+#include "../common/stm32/stm32_flash.h"
 #include "stm32f4xx.h"  // Or use CMSIS
 
 stm32_status_t stm32_flash_erase_page(uint32_t addr) {
@@ -237,9 +254,9 @@ stm32_status_t stm32_flash_write(uint32_t addr, const uint8_t* data, uint32_t si
 
 ```c
 #include "platform_config.h"
-#include "../stm32_common/stm32_timing.h"
-#include "../stm32_common/stm32_nvmem.h"
-#include "../stm32_common/stm32_watchdog.h"
+#include "../common/stm32/stm32_timing.h"
+#include "../common/stm32/stm32_nvmem.h"
+#include "../common/stm32/stm32_watchdog.h"
 
 void hal_clock_config(void) {
   // F411-specific: HSE 25MHz → PLL 100MHz
@@ -278,9 +295,9 @@ DEVICE = STM32F411xE
 CPU = cortex-m4
 
 SOURCES = ... platform.c platform_instance.c stm32f4_flash.c \
-          ../stm32_common/stm32_nvmem.c \
-          ../stm32_common/stm32_timing.c \
-          ../stm32_common/stm32_watchdog.c
+          ../common/stm32/stm32_nvmem.c \
+          ../common/stm32/stm32_timing.c \
+          ../common/stm32/stm32_watchdog.c
 ```
 
 #### Step 7: Done!

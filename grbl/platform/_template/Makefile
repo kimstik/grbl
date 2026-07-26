@@ -1,10 +1,24 @@
 #  Makefile for GRBL on _template (copy-me starting point for new ports)
 #  Part of Grbl
 #
-#  This Makefile is modeled directly on grbl/platform/samd21/Makefile - the
-#  canonical post-prelude structure. Copy this whole _template/ directory,
-#  rename it to your platform, then edit every line marked PORT-TODO below.
-#  See README.md for the full copy -> rename -> fill-in order.
+#  This Makefile's PRELUDE STRUCTURE (one -include per board, chaining
+#  gpio.h -> common/gpio.h -> config.h -> platform.h) is modeled on
+#  grbl/platform/samd21/Makefile - the original post-prelude reference.
+#  Its BOARD DIRECTORY LAYOUT (boards/<name>/ instead of a bare <name>/ at
+#  the platform root) instead follows ch32v006/ch570/dspic33ak128mc102 -
+#  those three plus this template are the majority (4 of 5 multi-board-
+#  capable ports); samd21 (<name>/ at root, no boards/ level) is the
+#  outlier that predates the boards/ convention and was never migrated.
+#  Audit note: if you're reconciling this with samd21 for a "which is the
+#  template modeled on" question, that's why the two don't match on this
+#  one axis - it's not a copy error. Moving samd21 to boards/<name>/ for
+#  full consistency is a reasonable future cleanup (RECOMMENDED, not done
+#  here - it touches a golden-adjacent, gate-verified port for a pure
+#  layout change with no functional benefit, so it's left as the
+#  integrator's call rather than performed inside this audit).
+#  Copy this whole _template/ directory, rename it to your platform, then
+#  edit every line marked PORT-TODO below. See README.md for the full
+#  copy -> rename -> fill-in order.
 #
 #  DESIGN NOTE (why this will not link): every macro this Makefile's sources
 #  need but the chip doesn't yet have expands to a call to an undeclared
@@ -29,8 +43,24 @@
 
 # Rename to your platform's directory name.
 PLATFORM_NAME  = _template
-# Your chip part number, e.g. STM32F103C8.
-DEVICE         = CHANGEME
+# PORT-TODO: your platform token - must equal the suffix of a
+# `#elif defined(PLATFORM_<TOKEN>)` branch in grbl/platform/hal.h (add one
+# there for your new platform; see stm32f103/ch32v006/ch570/hc32f460/
+# dspic33ak128mc102's DEVICE values - all are the uppercased PLATFORM_NAME,
+# NOT a full chip part number like "STM32F103C8"). Below, CFLAGS derives
+# `-DPLATFORM_$(DEVICE)` from this ONE variable (no separate line to
+# remember). Leaving DEVICE=TEMPLATE (the shipped default) resolves through
+# hal.h's own `PLATFORM_TEMPLATE` branch -> this directory's platform.h,
+# which is what keeps the raw, unedited template compiling (PORT_TODO_*
+# stubs only fail at link - CONTRACTS.md's "linker-as-checklist"). The
+# moment you change DEVICE to a real token you MUST also add hal.h's
+# matching elif branch; forgetting that is now a LOUD compile-time
+# `#error "Unknown platform!"` from hal.h instead of silently falling back
+# to this template's generic stub file while your real platform.h is never
+# even included - that silent-wrong-file class of bug is exactly what the
+# old hardcoded `-DPLATFORM_TEMPLATE` line (unparametrized, easy to forget
+# because nothing marked it PORT-TODO) used to allow.
+DEVICE         = TEMPLATE
 # -mcpu value for your core (cortex-m0/m0plus/m3/m4/...).
 CPU            = cortex-m0
 # Verified system clock in Hz - feeds F_CPU (nuts_bolts.h's
@@ -89,11 +119,17 @@ GRBL_SOURCES = main.c motion_control.c gcode.c spindle_control.c coolant_control
                protocol.c stepper.c settings.c planner.c nuts_bolts.c limits.c jog.c \
                print.c probe.c report.c system.c
 
-# Platform-specific sources (this directory). No platform.c: critical
-# sections and sei/cli are pure macros in platform.h (no state needed);
-# everything else stateful (ISR dispatch wrappers, delay stubs) lives in
-# handlers.c, and the TU-replacement files are serial.c/nvmem.c.
-PLATFORM_SOURCES = startup.c handlers.c serial.c nvmem.c
+# Platform-specific sources (this directory). Critical sections and sei/cli
+# stay pure macros in platform.h (genuinely no state needed - PRIMASK
+# save/restore is a two-instruction inline asm sequence on every Cortex-M
+# core). Everything else STATEFUL - clock/GPIO-IRQ chip bring-up, the
+# delay-loop calibration constants, hal_millis()-class timebases - lives in
+# platform.c, same as every landed port (samd21/ch32v006/ch570/hc32f460/
+# dspic33ak128mc102/stm32f103 all needed one; a prior revision of this
+# template claimed "no state needed" for the whole file, which was only
+# ever true of the critical-section macros). ISR *vector* dispatch wrappers
+# stay in handlers.c; the TU-replacement files are serial.c/nvmem.c.
+PLATFORM_SOURCES = platform.c startup.c handlers.c serial.c nvmem.c
 
 # All sources
 SOURCES = $(addprefix $(GRBL_DIR)/,$(GRBL_SOURCES)) \
@@ -107,7 +143,12 @@ vpath %.c $(GRBL_DIR)
 
 # Base compiler flags
 CFLAGS  = -mcpu=$(CPU) -mthumb $(FPU)
-CFLAGS += -DPLATFORM_TEMPLATE -DF_CPU=$(CLOCK)
+# Parametrized per DEVICE (see the PORT-TODO comment on DEVICE above) - every
+# real port uses this same `-DPLATFORM_$(DEVICE)` form (samd21/ch32v006/
+# ch570/dspic33ak128mc102/hc32f460 Makefiles, common/stm32/common.mk); the
+# old hardcoded `-DPLATFORM_TEMPLATE` here was the one line the "edit every
+# PORT-TODO" convention didn't cover.
+CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)
 CFLAGS += -D__$(DEVICE)__
 CFLAGS += -Wall -Wextra
 CFLAGS += -ffunction-sections -fdata-sections
@@ -118,6 +159,41 @@ CFLAGS += -ffunction-sections -fdata-sections
 # every future port inherits it by default). See
 # common/stm32/common.mk's matching comment for the full rationale.
 CFLAGS += -ffile-prefix-map=$(CURDIR)=/grbl-src
+
+# FP PRECISION KNOB (CONTRACTS.md #17: "FP precision is a declared port
+# property"). PORT-TODO: every non-AVR port needs this - landed pattern
+# from samd21/Makefile (original probe: ~11KB of RELEASE .text was DP
+# soft-float/libm on a chip with no FPU at all) and copied verbatim to
+# ch32v006/stm32f103+f411+h523/ch570/hc32f460. GRBL core is float-typed
+# throughout but was written against avr-gcc, where double==float (32-bit)
+# - so its unsuffixed double literals (0.5*x, 1.0-y) and unsuffixed libm
+# calls (sqrt/atan2/sin/cos/floor/ceil/...) are only single-precision on
+# the origin AVR. Without this knob, any non-AVR core promotes them to
+# real 64-bit double, linking in DP soft-float (or wasting a real FPU) for
+# no semantic gain.
+#   FP=SINGLE (default): -fsingle-precision-constant keeps unsuffixed FP
+#     literals float; GRBL_FP_SINGLE arms boards/$(BOARD)/prelude.h's SP
+#     libm call-site mapping (PORT-TODO: add that block there, see
+#     samd21/generic/prelude.h for the exact 13-function list). Post-link,
+#     tools/assert_no_double.sh FAILS the build listing any DP machinery
+#     still linked in - wire ASSERT_FP into your real `link`/`all` recipe
+#     once the port actually finishes linking (this template's `link`
+#     target fails before reaching it, by design - see the design note at
+#     the top of this file).
+#   FP=DOUBLE: conscious opt-in deviation (native double-precision FPU, no
+#     SP loss to make up for) - must be declared in the port's own docs,
+#     see dspic33ak128mc102/Makefile for the one port that chose this.
+# Applied to BOTH build flavors - it is a semantics pin, not an
+# optimization.
+FP ?= SINGLE
+ifeq ($(FP),SINGLE)
+  CFLAGS += -fsingle-precision-constant -DGRBL_FP_SINGLE
+  ASSERT_FP = ../../../tools/assert_no_double.sh $(PREFIX)nm $(ELF_FILE)
+else ifeq ($(FP),DOUBLE)
+  ASSERT_FP = @echo "FP=DOUBLE: declared-double port build, no-DP assert disarmed"
+else
+  $(error FP must be SINGLE or DOUBLE, got "$(FP)")
+endif
 
 # CFLAGS_EXTRA must be ABSOLUTELY FIRST to override grbl headers (cpu_map.h, etc)
 CFLAGS += $(CFLAGS_EXTRA) -I$(PLATFORM_DIR) -I$(GRBL_DIR)/platform -I$(GRBL_DIR)
@@ -221,6 +297,9 @@ $(BUILD_DIR)/%.o: $(GRBL_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 # Compile platform-specific files
+$(BUILD_DIR)/platform.o: platform.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
 $(BUILD_DIR)/startup.o: startup.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
@@ -241,6 +320,7 @@ $(BUILD_DIR)/nvmem.o: nvmem.c | $(BUILD_DIR)
 link: objects
 	$(CC) $(LDFLAGS) -o $(ELF_FILE) $(OBJECTS) $(LIBS)
 	$(SIZE) --format=berkeley $(ELF_FILE)
+	$(ASSERT_FP)
 
 # Create hex file
 $(HEX_FILE): $(ELF_FILE)
