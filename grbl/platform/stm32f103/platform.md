@@ -243,3 +243,74 @@ Verified this session (fresh build, both flavors):
 **Optimization Level**: `-Os -flto`
 
 ---
+
+
+---
+
+# Design notes moved out of file banners
+
+Source-compactness directive: file banners carry one purpose line plus
+the license block; the rationale that used to sit above the `#include`s
+lives here, keyed by file.
+
+## `config.h`
+
+config.h - STM32F103 platform configuration
+
+Defines all STM32F103-specific parameters for the common code.
+
+## `flash.c`
+
+flash.c - STM32F1 flash programming implementation
+
+Flash controller for STM32F1 family (F103, F105, F107).
+
+## `gpio.h`
+
+gpio.h - STM32F103 GPIO register accessors and macro overrides
+
+Injected by prelude.h BEFORE platform/common/gpio.h: that file only
+supplies AVR-style defaults for accessors/macros that are not already
+defined (all of its definitions are #ifndef-guarded), so everything
+here wins by coming first.
+Composition contract (platform/CONTRACTS.md section 1): core code calls
+GPIO_*(NAME) macros; NAME##_PORT / NAME##_BIT / NAME##_MASK come from the
+pin map in platform.h (NAME##_PORT is a GPIO_TypeDef*).
+
+## `handlers.c`
+
+handlers.c - STM32F103 interrupt vector wrappers
+
+Real IRQ vectors for the timers (TIM2/TIM3) and external interrupts
+(EXTI, limit switches + control pins). Each wrapper clears the peripheral
+interrupt flag FIRST, then calls the core-supplied ISR body - clearing
+after would lose edges/updates that arrive during the body, and for
+ISR_STEP_RESET specifically would ghost the final overflow after the
+timer is stopped (CONTRACTS.md sections 2.3 and 5.1).
+
+## `platform.c`
+
+platform.c - STM32F103 platform implementation
+
+STM32F103 (Blue Pill) implementation of HAL functions.
+ARM Cortex-M3, 72 MHz, 20KB RAM, 64-128KB Flash
+
+## `platform.h`
+
+platform.h - STM32F103 platform configuration
+
+This file provides platform-specific definitions for STM32F103 (Blue Pill).
+ARM Cortex-M3, 72 MHz, 20KB RAM, 64-128KB Flash
+
+## `regs.h`
+
+regs.h - STM32F103 register definitions
+
+Minimal register definitions for STM32F103C8T6 to avoid CMSIS dependency.
+Includes only registers needed for GRBL operation.
+
+## `startup.c`
+
+startup.c - Startup code for STM32F103
+
+Interrupt vector table and reset handler for STM32F103C8T6.
