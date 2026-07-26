@@ -21,12 +21,14 @@ extern uint32_t _sbss, _ebss;
 extern int main(void);
 
 // Interrupt vector table (defined at the bottom of this file). Forward-declared
-// here so Reset_Handler can take its address. That address-taking is the ONLY
-// thing that keeps the table alive under -flto: KEEP() in script.ld runs at
+// here so Reset_Handler can take its address. KEEP() in script.ld runs at
 // link time, but LTO's whole-program IPA deletes an unreferenced vector_table[]
 // before codegen, so ltrans never emits a .isr_vector input section for KEEP()
-// to match. Result: a RELEASE .bin whose first word is code, not the initial
-// SP - the chip cannot boot. DEBUG (no LTO) looks fine. See CONTRACTS.md S18.
+// to match. This address-taking (paired with `used` on the definition below -
+// two independently-sufficient, defense-in-depth mechanisms, not both
+// required on this toolchain, see CONTRACTS.md S18) is what keeps the table
+// alive under -flto. Without either: a RELEASE .bin whose first word is code,
+// not the initial SP - the chip cannot boot. DEBUG (no LTO) looks fine.
 extern const void *vector_table[];
 
 // REVIEW: ERROR HANDLING - Improved fault handlers for debugging and safety

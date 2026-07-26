@@ -1074,7 +1074,7 @@ strips the interpreter out of a CNC firmware. On f103 that showed up as a
 so IPA never runs, the table is emitted, `KEEP()` works, and everything
 looks correct. Any bug report of this shape should be checked here first.
 
-### Required, all three of these
+### Two defense-in-depth mechanisms, plus one mandatory check
 
 1. **A real code reference.** `Reset_Handler` must write
    `SCB->VTOR = (uint32_t)vector_table;` as its first action. Taking the
@@ -1086,15 +1086,32 @@ looks correct. Any bug report of this shape should be checked here first.
 2. **`__attribute__((used))` on the table.** Belt to the VTOR write's
    braces — states the liveness directly rather than relying on IPA
    tracing the address-taking.
-3. **A post-link BOOT INTEGRITY check. Mandatory, not optional.** (1) and
-   (2) fix today's build; only (3) notices when a future change breaks it
-   again. Every ARM port runs `grbl/platform/common/boot_check.sh` after
-   `objcopy`: read word0/word1 of the finished `.bin`, require word0 to
-   look like an initial SP (`0x2xxxxxxx`, 4-byte aligned) and word1 to
-   look like a Thumb reset vector (odd, inside the image's flash window),
-   fail the build printing the actual bytes otherwise. Wired into
+3. **A post-link BOOT INTEGRITY check. Mandatory, not optional.** Every
+   ARM port runs `grbl/platform/common/boot_check.sh` after `objcopy`:
+   read word0/word1 of the finished `.bin`, require word0 to look like an
+   initial SP (`0x2xxxxxxx`, 4-byte aligned) and word1 to look like a
+   Thumb reset vector (odd, inside the image's flash window), fail the
+   build printing the actual bytes otherwise. Wired into
    `common/stm32/common.mk` (all STM32 ports inherit it), `samd21/Makefile`
    and `_template/Makefile` (every future port inherits it).
+
+**(1) and (2) are not both load-bearing on this toolchain — corrected.**
+The original writeup for this fix claimed all three were jointly
+required. Re-tested empirically on stm32f103 (GCC 13.2.1, `-Os -flto`)
+by disabling each in turn while keeping the other: `used`-attribute alone
+(VTOR write commented out) links a table that survives IPA and passes
+`boot_check.sh` unchanged; VTOR-write alone (`used` removed from the
+attribute) does the same. Either mechanism alone is sufficient on this
+compiler at this optimization level. Both are kept anyway, as
+**defense-in-depth across compilers and optimization levels**: (1) is
+real codegen-visible address-taking, which some future IPA implementation
+could in principle reason its way around if the store is provably
+dead-store-eliminated elsewhere; (2) is an explicit liveness annotation
+that doesn't depend on IPA tracing an address-of at all. They fail for
+different reasons, so keeping both costs nothing and covers more ground
+than either alone. (3), the boot-integrity check, is the only one of the
+three that is actually mandatory — it is what notices when a future
+change breaks (1), (2), or both.
 
 ### A linker ASSERT is NOT a substitute — verified, not assumed
 
@@ -1107,7 +1124,7 @@ alignment only. Keep it for that, and do not mistake it for the guard.
 
 VTOR ignores bits [6:0], so the table needs **at least** 128-byte
 alignment, and architecturally the next power of two ≥ `4 × vector_count`:
-f103/f411 (60 vectors, 240 B) → 256; h523 (78 vectors, 312 B) → 512;
+f103/f411 (59 vectors, 236 B) → 256; h523 (77 vectors, 308 B) → 512;
 samd21 → 256. Each `script.ld` carries the matching `. = ALIGN(n)` before
 `KEEP(*(.isr_vector))` plus an `ASSERT` on the resulting address. The
 ALIGNs are no-ops at today's `FLASH ORIGIN` values — they exist so the
@@ -1122,3 +1139,97 @@ still live, so ch32v006 asserts the architecture-appropriate invariant
 instead — `_start` must link at the flash base — and its Makefile
 documents why the word0 form is N/A. **A port may translate this check;
 it may not drop it.**
+
+## 19. Guard hardening: two lessons from an adversarial review of §17/§18
+
+An adversarial review of the FP=SINGLE assert (§17) and the boot-integrity
+ratchet (§18) — the two newest guards at the time — found both were
+weaker than they looked, with working exploits, not just theoretical
+gaps. Both are fixed; the lessons are recorded here so the pattern is
+recognized earlier next time.
+
+### Lesson 1: a guard that checks the wrong symbol family is worse than no guard — it certifies
+
+`tools/assert_no_double.sh` denied double-precision machinery by matching
+the *generic* libgcc soft-float names: `__adddf3`, `__subdf3`, `__muldf3`,
+`__divdf3`, the `__*df2` compares. Those are what a hosted (non-EABI)
+libgcc emits. **Every target this project ships is ARM**, and
+arm-none-eabi-gcc's libgcc renames every soft-float double libcall to the
+`__aeabi_*` AAPCS family instead — `__aeabi_dadd`/`dsub`/`dmul`/`ddiv`,
+never the generic names. The assert was checking a symbol family that
+never appears in any object this repo produces.
+
+Demonstrated exploit: an object doing plain `double a; ... (a+b)-(a*b)/(b-a);`
+linked on this toolchain contains `__aeabi_dadd`, `__aeabi_dsub`,
+`__aeabi_dmul`, `__aeabi_ddiv` and **zero** `__adddf3`-family symbols. The
+pre-fix script reported `FP=SINGLE post-link assert PASSED: no DP
+machinery`, exit 0, on a binary that had just linked real 64-bit
+arithmetic. A green check that never fires is a missing check; a green
+check that *actively reports clean on a poisoned build* is worse — it is
+load-bearing evidence in the wrong direction, and everything downstream
+(a reviewer, a CI dashboard, a future porter skimming the log) treats
+"PASSED" as proof of the property it was supposed to verify. **A guard
+that checks the wrong symbol family doesn't fail to protect — it
+certifies the exact thing it exists to catch.**
+
+Fix: the denylist now matches both families (generic and `__aeabi_*`),
+plus `__muldc3`/`__divdc3` (complex double, genuine computation under
+either naming scheme) and `__floatdidf` (64-bit int→double widening,
+unlike its 32-bit sibling `__floatsidf` has no legitimate call site in
+this codebase). A `--selftest` mode (style matched to
+`ci/warn_ratchet.py --selftest`) builds a synthetic "pure `__aeabi_*`
+arithmetic, zero generic names" symbol table — the exact shape of the
+demonstrated exploit — and asserts the script catches it, end to end
+through the real entry point with a fake `nm`, so this specific class of
+blindness has a permanent regression test and cannot silently reappear
+via some future "helpful" refactor of the regex.
+
+**General takeaway:** when a guard is defined as a name/pattern denylist
+or allowlist, the question to ask before trusting a PASS is not "does the
+pattern look reasonable" but "did I verify the pattern against what THIS
+toolchain, on THIS target, actually emits" — generic documentation for a
+tool family (libgcc) is not evidence for a specific ABI (AAPCS/EABI) of
+it. A regex that was correct for a different platform than the one
+shipping is a guard in name only.
+
+### Lesson 2: a guard is only as good as the build system's failure handling around it
+
+`boot_check.sh` (§18) and `assert_no_double.sh` (§17) both run as a
+recipe step *after* the artifact they inspect already exists on disk
+(`objcopy` writes the `.bin` before `boot_check.sh` runs on it; `$(CC)`
+writes the `.elf` before `$(ASSERT_FP)` runs on it). Neither guard failing
+deletes what it just condemned. Without `.DELETE_ON_ERROR:` (a *make*
+built-in, off by default), a failed recipe leaves its half-built target
+sitting on disk with a fresh mtime — and the next invocation of `make`
+compares that mtime against its prerequisites, sees the target is newer,
+concludes "up to date", and skips the recipe **and the guard inside it**
+entirely. The guard is real; the build system serves its own scar tissue
+around it.
+
+Demonstrated exploit (reproduced live on samd21, see PLAN.md): inject
+genuine double-typed arithmetic into `platform.c` (a `volatile double`
+pair that `-fsingle-precision-constant` cannot neutralize — the flag only
+touches unsuffixed FP *constants*, not the type of already-double
+variables) and build `FP=SINGLE` without `.DELETE_ON_ERROR:`. First
+`make`: link succeeds (writes the ELF), `assert_no_double.sh` correctly
+FAILS and lists the offenders, `make` exits 2 — but the poisoned ELF is
+still on disk. Second `make`, no source changes: exit 0, `objcopy`/`hex`/
+`bin`/`dump` all run straight off the stale DP-poisoned ELF, no relink, no
+re-assert. A build that failed loudly once is served as a success forever
+after, silently, until someone touches a source file.
+
+Fix: `.DELETE_ON_ERROR:` added to every platform Makefile that didn't
+have it (`grbl/platform/common/stm32/common.mk`, `samd21/Makefile`,
+`ch32v006/Makefile`, `_template/Makefile`, `dspic33ak128mc102/Makefile`,
+`sg2002/Makefile`). With it: the same first `make` still fails, but GNU
+Make prints `Deleting file '.../grbl_samd21.elf'` and removes it; the
+second `make` has no choice but to redo the full chain, and fails again,
+honestly, every time, until the underlying defect is fixed.
+
+**General takeaway:** a post-link/post-objcopy check is not a complete
+guard by itself — it is a guard *plus an assumption* that a failed recipe
+leaves nothing behind for the next invocation to trust. That assumption
+is false in GNU Make unless `.DELETE_ON_ERROR:` is set. Any future
+platform Makefile (copy-me template included) must carry this line from
+day one, not bolt it on after the first bricked artifact is found
+surviving in the wild.

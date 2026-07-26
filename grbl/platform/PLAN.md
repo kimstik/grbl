@@ -532,6 +532,70 @@ markers in the tree instead of a silent no-op.
 
 ## Current State (update each session)
 
+- **[x] GUARD HARDENING (2026-07-26) — adversarial review of §17/§18's guards
+  found both weaker than they looked, with WORKING exploits. All four
+  findings fixed; see CONTRACTS.md §19 for the two lessons in full.**
+  1. **`assert_no_double.sh` was blind on every target this project ships.**
+     Its denylist matched only generic libgcc names (`__adddf3`...); ARM's
+     libgcc renames DP soft-float ops to `__aeabi_*` (AAPCS), which the
+     script never checked. Demonstrated: a hand-built object doing plain
+     `double` arithmetic links `__aeabi_dadd/dsub/dmul/ddiv`, zero generic
+     names, and the old script printed `PASSED: no DP machinery`, exit 0.
+     Fixed: denylist now covers both families plus `__muldc3`/`__divdc3`
+     (complex double) and `__floatdidf`; only `__aeabi_d2f` stays tolerated
+     (verified via `nm` on the landed samd21 ELF — it is still the only
+     conversion present, at the `_delay_ms(double)` boundary). Added
+     `--selftest` (8 checks, `ci/warn_ratchet.py`-style: positive + negative
+     + end-to-end through a fake `nm`) — `PASS (8 checks)`. Re-run on real
+     builds: samd21 FP=SINGLE RELEASE still `31952/296/6160`, assert PASSES
+     honestly (confirmed via `nm`, only `__aeabi_d2f`); an FP=DOUBLE build
+     (43020 text, real double arithmetic pulled in by dropping the SP pins)
+     correctly FAILS, listing both `__aeabi_dcmp*`/`__aeabi_cdcmp*` and
+     generic `__gedf2`/`__ltdf2`-family offenders together.
+  2. **No `.DELETE_ON_ERROR:` anywhere** — a failed recipe left its
+     half-built target on disk with a fresh mtime, so the next `make` saw
+     it as up to date and skipped the recipe (and the guard inside it).
+     Demonstrated live on samd21: injected genuine `volatile double`
+     arithmetic into `platform.c` (untouched by `-fsingle-precision-constant`,
+     which only pins unsuffixed *constants*), built without the fix — first
+     `make` correctly FAILED (assert caught it) but left the poisoned ELF on
+     disk; second `make` exited 0, ran `objcopy`/hex/bin/dump straight off
+     the stale poisoned ELF, no relink, no re-assert. Fixed: `.DELETE_ON_ERROR:`
+     added (one line each, near the top) to `common/stm32/common.mk`,
+     `samd21/Makefile`, `ch32v006/Makefile`, `_template/Makefile`,
+     `dspic33ak128mc102/Makefile`, `sg2002/Makefile`. Re-ran the same repro
+     with the fix in place: first `make` fails and GNU Make prints
+     `Deleting file '.../grbl_samd21.elf'` (confirmed gone via `ls`); second
+     `make` reruns the full chain and fails again, honestly — no stale
+     artifact served either time. Exploit repro code (the injected
+     `dp_leak_*` symbols in `platform.c`) was reverted after verification;
+     `platform.c` diffs clean against HEAD.
+  3. **BUG #21 "both mechanisms load-bearing" wording was not empirically
+     true.** Re-tested on stm32f103 (GCC 13.2.1, `-Os -flto`): disabling the
+     `used` attribute while keeping the VTOR write still passes
+     `boot_check.sh`; disabling the VTOR write while keeping `used` also
+     passes. Either alone suffices on this toolchain. CONTRACTS.md §18 and
+     the three STM32 `startup.c` comments reworded to "two independently-
+     sufficient, defense-in-depth mechanisms" (kept for cross-compiler/
+     cross-opt-level robustness) rather than "both required"; the
+     post-link BOOT INTEGRITY check remains the one truly mandatory layer.
+  4. **Vector-count comments were off by one.** Real `vector_table[]` sizes,
+     counted from the actual arrays: f103/f411 59 entries / 236 B (not 60 /
+     240), h523 77 entries / 308 B (not 78 / 312) — PLAN.md's own BUG #21
+     entry below already had h523 right (77/308B) but the three `script.ld`
+     files and CONTRACTS.md ~line 1045 said 60/240 and 78/312. Corrected in
+     all three `script.ld` files + CONTRACTS.md; `ALIGN(256/256/512)` values
+     themselves were already correct (next-power-of-two headroom absorbs
+     the off-by-one either way) and were left untouched.
+  GATES after all four fixes: AVR golden `make -C grbl/platform/atmega328p
+  validate` PASSED (MD5 79af184e67b27defd27a39309ac53563, unchanged);
+  samd21 RELEASE still `31952/296/6160`, assert PASSING, DEBUG also PASSING;
+  all three STM32 (f103/f411/h523) RELEASE build clean with
+  `BOOT INTEGRITY: OK`. Concurrency note: another agent was adding the FP
+  knob to ch32v006/stm32f103/stm32f411/stm32h523 Makefiles at the same
+  time — the `.DELETE_ON_ERROR:` insertions were kept to one line each,
+  placed away from the CFLAGS/FP region, to keep any 3-way merge trivial.
+
 - **[x] BUG #21 FIXED (2026-07-25) — vector table restored on all three STM32
   ports.** Mechanism re-verified before fixing, not taken on faith: baseline
   f103 RELEASE `.bin` word0 = `0x785a4b08` (code bytes, not an SP), `.isr_vector`
