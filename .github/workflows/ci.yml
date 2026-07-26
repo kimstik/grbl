@@ -9,6 +9,19 @@ permissions:
   contents: read
 
 jobs:
+  # Fast, toolchain-free doc-integrity check: CONTRACTS.md section numbers
+  # must be unique/sequential, every heading needs its stable slug anchor,
+  # and every #slug cross-reference (in CONTRACTS.md or any other repo doc)
+  # must resolve. Catches the "parallel agents both picked section 20"
+  # class of bug at PR time instead of at manual integration.
+  docs-integrity:
+    name: docs integrity (CONTRACTS.md numbering)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: CONTRACTS.md numbering/cross-reference check
+        run: python3 tools/check_contracts_numbering.py
+
   # One matrix row per platform/board/flavor; adding a port = one new row
   # (plus its ci/warn_baseline_<platform>.txt, which may start empty).
   # Example future row: platform sg2002 with gcc-riscv64-unknown-elf.

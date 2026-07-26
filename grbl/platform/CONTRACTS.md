@@ -31,6 +31,41 @@ ever. A port that cannot implement a macro must fail at link time
 
 ---
 
+> **APPENDING A NEW SECTION? READ THIS FIRST — numbering collisions have
+> bitten this file four times.** Parallel agents each read the current
+> highest `## N.` and pick "the next number" — when more than one agent is
+> authoring at once, they all compute the same N and the integrator has to
+> renumber by hand at merge time, which silently breaks anyone else's
+> `§N`/`section N` cross-reference into the section that got moved.
+>
+> **The fix: numbering is the integrator's job, not yours.**
+> 1. Append your new section at the very end of the file, heading it
+>    `## §NEW. Your Title` (the literal placeholder text `§NEW`, not a
+>    guessed number). The integrator renumbers it to the real next N at
+>    merge time — that is a rename-only edit and never collides.
+> 2. Give it a stable slug anchor right above the heading:
+>    `<a id="your-topic-slug"></a>` on its own line, then `## §NEW. Your
+>    Title` on the next. Pick a short kebab-case slug describing the
+>    *topic*, not the number (e.g. `cross-core-cache-coherency`, not
+>    `section-23`) — the slug is permanent even when the number moves.
+> 3. When you need to cite another section, cite it by slug, not by
+>    number — write a real markdown link whose target is that section's
+>    anchor id (e.g. a link reading "§N" whose href is
+>    "hash-mark-that-sections-slug"). Copy the slug from that section's
+>    `<a id="...">` line right above its heading. A bare `§N` or
+>    `section N` with no slug link is a latent bug the moment anything
+>    gets renumbered — it silently points at whatever the integrator moved
+>    into that slot.
+> 4. Before you cite a section, `grep '<a id="' CONTRACTS.md` to get the
+>    real slug — do not guess it from the title.
+> 5. `tools/check_contracts_numbering.py` (wired into CI) fails the build
+>    on duplicate/non-sequential `## N.` numbers, a heading missing its
+>    anchor, or a link whose slug has no matching anchor anywhere in the
+>    file — run it before you open a PR that touches this file.
+
+---
+
+<a id="boundary-wiring"></a>
 ## 0. How the boundary is wired
 
 Phase 1 landed: every platform now injects its whole macro chain via ONE
@@ -60,6 +95,7 @@ code. `make validate` checks `grbl.hex` MD5 `79af184e67b27defd27a39309ac53563`
 
 ---
 
+<a id="gpio-data"></a>
 ## 1. GPIO — data / direction / pull-up (`GPIO_M*`, `GPIO_B*`, `GPIO_DIR_*`)
 
 Defined in `common/gpio.h`. Composition: macros take a NAME (e.g. `LIMIT`,
@@ -111,6 +147,7 @@ Contracts:
    pull-ups are NOT actually enabled on that port as written. Known gap.
 5. **No-op**: ILLEGAL for everything except the pull-up pair per (4).
 
+<a id="gpio-interrupts"></a>
 ## 2. GPIO interrupts (`GPIO_INT_ON/OFF`, `HAL_GPIO_IRQ_HANDLER`)
 
 | Macro | Semantics | Context | Core use sites |
@@ -155,6 +192,7 @@ Contracts:
    contract is edge detection on both edges — core treats *any* change as a
    trigger (limits.c:95-101).
 
+<a id="stepper-timer"></a>
 ## 3. Stepper timer (`STP_TMR_*`)
 
 Semantic origin: AVR Timer1 CTC (atmega328p/timer.h:42-54).
@@ -173,6 +211,7 @@ Timing: `ISR_STEP` total budget < 33.3 us (stepper.c:318-320); PERIOD_SET runs
 inside it every tick. Bounded sync waits allowed (samd21/timer.h:67 waits
 TC3 SYNCBUSY); unbounded loops are not.
 
+<a id="pulse-reset-timer"></a>
 ## 4. Pulse-reset timer (`STP_PULSE_RESET_*`, `STP_PULSE_DELAY_INIT`)
 
 Semantic origin: AVR Timer0, 8-bit, prescale /8 baked into START
@@ -201,6 +240,7 @@ Also: prescale. AVR START uses /8 (timer.h:65 `TCCR0B = 1<<CS01`) and the `>>3`
 in core compensates. A port clocking this timer at F_CPU/1 must divide by 8 in
 hardware or rescale — the core arithmetic is untouchable.
 
+<a id="isr-definition-macros"></a>
 ## 5. Timer ISR definition macros (`ISR_STEP`, `ISR_STEP_RESET`, `ISR_STEP_DELAY`)
 
 Core defines the bodies: stepper.c:326, 496, 511. AVR expands directly to
@@ -209,7 +249,7 @@ vectors (atmega328p/timer.h:37-39). ARM route: expand to named plain functions
 then call the body** (handlers.c:30-47).
 
 Contracts:
-1. Flag-clear-first, same rationale as section 2.3. `ISR_STEP_RESET` stops the
+1. Flag-clear-first, same rationale as [section 2.3](#gpio-interrupts). `ISR_STEP_RESET` stops the
    timer inside the body (stepper.c:503); clearing the flag after that write
    can ghost or drop the final overflow.
 2. `ISR_STEP` re-enables global interrupts mid-body (`sei()`, stepper.c:355) so
@@ -226,6 +266,7 @@ Contracts:
    (stepper.c:513) — see GPIO preservation contract; `st.step_bits` was
    captured with the non-STEP bits included (stepper.c:338).
 
+<a id="spindle-pwm"></a>
 ## 6. Spindle PWM (`PWM_*`)
 
 Only compiled under `VARIABLE_SPINDLE` (spindle_control.c guards). AVR origin:
@@ -254,6 +295,7 @@ Contracts:
 4. `PWM_DISABLE()` must drive the spindle pin inactive, not float it
    (SPINDLE_PWM_MIN_VALUE comment, megarm/config.h:140).
 
+<a id="serial"></a>
 ## 7. Serial (`HAL_SERIAL_*`)
 
 AVR macro route: grbl/serial.c compiled; macros at atmega328p/platform.h:215-251.
@@ -290,6 +332,7 @@ verify your divisor formula against the datasheet at 115200, not just 9600.
 - Consumer side (core, serial.c:96-108,115-123) reads index once into a local —
   preserve that pattern in TU replacements.
 
+<a id="critical-sections"></a>
 ## 8. Critical sections (`HAL_CRITICAL_SECTION_BEGIN/END`)
 
 Use sites: system.c:357-401 (all eight `sys_rt_exec_*` RMW helpers) and
@@ -310,6 +353,7 @@ Contract:
    while `hal_critical_enter/exit` sit unused in platform.c — lost-update races
    on `sys_rt_exec_state` between mainline and EIC/SERCOM ISRs. Known gap.
 
+<a id="watchdog-debounce"></a>
 ## 9. Watchdog debounce (`HAL_WATCHDOG_*`)
 
 Compiled only under `ENABLE_SOFTWARE_DEBOUNCE` (config.h:472, default off).
@@ -331,6 +375,7 @@ compile everywhere — which is the correct loud failure mode. No-op: ILLEGAL
 when the option is on (debounce would silently vanish and the raw ISR path is
 compiled out); leave the macros undefined instead.
 
+<a id="nvmem-eeprom"></a>
 ## 10. NVMEM / EEPROM (link-level API)
 
 Not macros — four functions, declared in eeprom.h:24-27 and nvmem.h:31-36
@@ -381,6 +426,7 @@ Contracts:
 6. Out-of-range reads return 0xFF, writes are dropped (samd21/nvmem.c:69-81) —
    matches erased-flash semantics; core never reads out of range in practice.
 
+<a id="interrupt-global-control"></a>
 ## 11. Interrupt global control (`sei`/`cli`)
 
 Core calls bare `sei()` (main.c:48, stepper.c:355). AVR: native. Non-AVR must
@@ -390,6 +436,7 @@ stores from floating across the interrupt-enable boundary).
 
 ---
 
+<a id="weak-memory-obligations"></a>
 ## 12. Weak-memory obligations — consolidated
 
 Every ARM/RISC-V implementation must be audited against this list; the AVR
@@ -400,7 +447,7 @@ origin needed none of it, so nothing in core will remind you:
    data read if the consumer can race a concurrent producer slot reuse.
 2. **volatile != atomic**: `volatile uint8_t` gives width-atomicity of the
    single access only. Any RMW (`|=`, `&=~`) shared with an ISR needs
-   `HAL_CRITICAL_SECTION_*` or interrupt masking (section 8).
+   `HAL_CRITICAL_SECTION_*` or interrupt masking ([section 8](#critical-sections)).
 3. **ISR INTFLAG**: clear peripheral flag BEFORE running the core handler body
    (handlers.c:31,37,44,81). Write-1-to-clear registers: write ONLY the bit you
    are handling (`TC3->INTFLAG = TC_INTFLAG_MC0`, not `= 0xFF`).
@@ -414,15 +461,27 @@ origin needed none of it, so nothing in core will remind you:
    forever (the "compiles but dead" class, PLAN.md Phase 3).
 6. **Interrupt-enable boundaries**: `sei`/`cli`/PRIMASK asm needs `"memory"`
    clobber (samd21/platform.h:206-207).
+7. **NVIC preemption priority ordering, where a port assigns explicit
+   priorities** (recommended by [§5.2](#isr-definition-macros) rather than relying on default
+   equal-priority no-nesting): the pulse-reset timer IRQ gets the
+   numerically lowest value (highest preemption priority), so it can
+   interrupt the stepper ISR per [§5.2](#isr-definition-macros)'s AVR-nesting semantic; the stepper
+   timer IRQ is next; any interrupt whose body can run long relative to
+   the 33.3us ISR-hot budget — in practice, serial RX/TX — gets a
+   numerically higher value (lower preemption priority) so it cannot
+   starve the stepper/pulse-reset pair. Reference implementation:
+   stm32f411/platform.c:248,260,300 and hc32f460/platform.c (pulse-reset=0,
+   stepper=1, USART=3).
 
+<a id="samd21-known-gaps"></a>
 ## 13. Known contract gaps in the SAMD21 reference (do not copy blindly)
 
 The SAMD21 port is the ARM *adaptation reference*, not a compliance gold
-standard. Open violations, all cited above: prescaler silent no-op (§3),
-empty critical sections (§8), CONTROL input bits above bit 7 (§1.3),
-pull-up accessor mapped to PORT CTRL (§1.4), pulse-width 16-bit overflow
-horizon (§4), PWM range 65535 vs PER=0xFF vs core uint8_t (§6.2),
-EIC arming never called (§2.1). Each is a Phase-3 closure item; each future
+standard. Open violations, all cited above: prescaler silent no-op ([§3](#stepper-timer)),
+empty critical sections ([§8](#critical-sections)), CONTROL input bits above bit 7 ([§1.3](#gpio-data)),
+pull-up accessor mapped to PORT CTRL ([§1.4](#gpio-data)), pulse-width 16-bit overflow
+horizon ([§4](#pulse-reset-timer)), PWM range 65535 vs PER=0xFF vs core uint8_t ([§6.2](#spindle-pwm)),
+EIC arming never called ([§2.1](#gpio-interrupts)). Each is a Phase-3 closure item; each future
 port must clear this whole file instead.
 
 Closed: `_delay_us/_delay_ms` empty stubs — real calibrated busy-wait
@@ -430,6 +489,7 @@ implementations landed (samd21/platform.c:169-214, commit dd5c5e7). The
 lesson stands: empty delay stubs compile and break homing debounce and
 spindle ramp silently.
 
+<a id="ch32v006-riscv-gaps"></a>
 ## 14. RISC-V gaps found porting ch32v006 (Phase 4 M1-M3, first non-ARM port)
 
 PLAN.md Phase 4 law: "each port strengthens the system" — every gap below
@@ -484,10 +544,10 @@ when a real RISC-V chip hit it. All found empirically this session
    2-level nesting = bit 1 INESTEN; BOTH reset to 0 and are LEFT 0
    (documented choice, startup.c): HWSTKEN=0 matches GCC's software
    save/restore frame exactly, INESTEN=0 gives the same no-preemption
-   posture as the SAMD21 M0+ reference (§5.2) and avoids the nested-trap
+   posture as the SAMD21 M0+ reference ([§5.2](#isr-definition-macros)) and avoids the nested-trap
    mepc/mstatus clobber hazard (GCC's interrupt attribute saves GPRs
    only). Consequence: core's `sei()` inside ISR_STEP defers, not nests,
-   the pulse-reset IRQ — acceptable per §5.2's existing precedent.
+   the pulse-reset IRQ — acceptable per [§5.2](#isr-definition-macros)'s existing precedent.
 3. **`-specs=picolibc.specs` silently re-enables `--gc-sections`,
    defeating `_template`'s stated Makefile strategy of "just don't pass
    --gc-sections"**: picolibc's own linker spec (`*link:` rule, visible
@@ -622,13 +682,13 @@ RM or a failing build, not theory.
 11. **"Second timer" may not exist: audit IRQ capability, not timer
    count** — CH32V006's TIM3 is a "streamlined" compare-only timer with
    NO interrupt output at all (RM 13; it paces TIM1/ADC/DMA). The
-   pulse-reset role (§4) moved to the QingKe STK, which is actually the
+   pulse-reset role ([§4](#pulse-reset-timer)) moved to the QingKe STK, which is actually the
    BETTER fit: its STCLK=0 mode ticks at HCLK/8 — bit-identical to the
    AVR Timer0 F_CPU/8 prescale, so core's `>>3` arithmetic transfers
    with no rescaling; CMPLR is fixed at 256 and COUNT_SET preloads the
-   8-bit value (the §4 overflow-horizon contract on a 32-bit counter).
+   8-bit value (the [§4](#pulse-reset-timer) overflow-horizon contract on a 32-bit counter).
    Cost: the STK has ONE compare — `STEP_PULSE_DELAY` is unsupported
-   and `#error`s loudly (legal per §4 conditional rule). Checklist
+   and `#error`s loudly (legal per [§4](#pulse-reset-timer) conditional rule). Checklist
    lesson: PORTING-CHECKLIST Step 3 must ask "does the candidate timer
    HAVE an interrupt line" before allocating it.
 12. **EXTI line/port collision is a board-design constraint** on every
@@ -637,9 +697,9 @@ RM or a failing build, not theory.
    different ports or one group's interrupts are unroutable. The M1-M3
    placeholder board had exactly this bug (LIMIT PD0-2 + CONTROL
    PA0-2); CONTROL moved to PB3-5. On V00x additionally ALL lines 0-7
-   share the single EXTI7_0 vector — the §2.5 shared-vector dispatch
+   share the single EXTI7_0 vector — the [§2.5](#gpio-interrupts) shared-vector dispatch
    rule applies to the whole GPIO interrupt space, and per-group
-   disable (§2.1) works because the two groups own disjoint INTENR
+   disable ([§2.1](#gpio-interrupts)) works because the two groups own disjoint INTENR
    bits.
 13. **`-O0` debug builds do not fit small-flash parts**: soft-float
    rv32ec grbl at -O0 is ~77 KB of .text vs 61 KB available (62 K minus
@@ -648,6 +708,7 @@ RM or a failing build, not theory.
    below ~96 KB flash should expect the same decision; RELEASE (-Os)
    text here is ~55.5 KB, so headroom exists but not at -O0.
 
+<a id="stm32f411-gaps"></a>
 ## 15. Gaps found porting stm32f411 (Phase 6 rolling port #1, first ARM
 Cortex-M4F port with a real FPU and the first "same family, different
 memory map" stress test — F411 is ST's F4 line, not F1 or H5, and looks
@@ -679,7 +740,7 @@ inline in `stm32f411/regs.h`'s file header).
    H5's split `RPR1`/`FPR1` rising/falling pending pair. `stm32f411/
    handlers.c` therefore reuses stm32f103's shared-vector dispatch shape
    (`EXTI9_5_IRQHandler`/`EXTI15_10_IRQHandler` dispatching to both core
-   handlers per §2.5) rather than stm32h523's per-line vectors. Two "same
+   handlers per [§2.5](#gpio-interrupts)) rather than stm32h523's per-line vectors. Two "same
    family" axes (GPIO model, EXTI model) do not travel together across
    STM32 generations; each needs its own donor-port check.
 3. **USART register model also splits independently of the GPIO model**:
@@ -724,17 +785,17 @@ inline in `stm32f411/regs.h`'s file header).
    provides a matching hard-float `fpv4-sp-d16` libc/libm/libgcc variant
    (confirmed by a clean link with no ABI-mismatch errors), unlike
    ch32v006's rv32ec case where no hardware F/D extension exists at all
-   (§14.4) and the choice was forced rather than optional. stm32h523 already
+   ([§14.4](#ch32v006-riscv-gaps)) and the choice was forced rather than optional. stm32h523 already
    set this precedent one FPU generation up (`fpv5-sp-d16`); this port
    follows it rather than falling back to softfp by default.
 6. **HPRE already resets to /1 on F4 (no CH32-class trap here), but the
-   §14.9 lesson is still followed defensively**: unlike CH32V00x's
-   `RCC_CFGR0.HPRE` reset value of SYSCLK/3 (§14.9(a)), STM32F4's
+   [§14.9](#ch32v006-riscv-gaps) lesson is still followed defensively**: unlike CH32V00x's
+   `RCC_CFGR0.HPRE` reset value of SYSCLK/3 ([§14.9](#ch32v006-riscv-gaps)(a)), STM32F4's
    `RCC_CFGR.HPRE` reset value genuinely is 0000 = SYSCLK/1 (RM0383) — so
    this port's clock config would have worked even without touching HPRE.
    `hal_clock_config()` clears/sets it explicitly anyway, on the principle
    that "verified correct by inspection of the reset value" is exactly the
-   failure mode §14.9 exists to warn against generalizing from — a future
+   failure mode [§14.9](#ch32v006-riscv-gaps) exists to warn against generalizing from — a future
    F4-family variant's errata or a copy-paste onto a chip with a different
    reset value should not silently inherit an implicit assumption.
 7. **Golden AVR gate, and the samd21/stm32f103/stm32h523/ch32v006 sibling
@@ -747,6 +808,7 @@ inline in `stm32f411/regs.h`'s file header).
    `grbl/platform/CONTRACTS.md`, `grbl/platform/PLATFORM_ROADMAP.md`,
    `ci/warn_baseline_stm32f411.txt`, and `.github/workflows/ci.yml`.
 
+<a id="dspic33ak128mc102-gaps"></a>
 ## 16. Gaps found porting dsPIC33AK128MC102 (Phase 6 rolling port #2 —
 THE THIRD ISA FAMILY: dsPIC33A 32-bit DSC, neither ARM nor RISC-V. This
 is the port the `_template`/contract system was supposed to be stressed
@@ -778,19 +840,19 @@ disassembly. RM-only facts that could not be locally verified are marked.
    its own interrupt builtins — but `LATB |= (1u<<3)` compiles to a
    THREE-instruction load/modify/store at `-Og` AND `-Os`
    (disasm-proven), and dsPIC33A has no LATxSET/LATxCLR alias registers
-   (grepped the DFP header). So the §1.2 mixed-writer hazard
+   (grepped the DFP header). So the [§1.2](#gpio-data) mixed-writer hazard
    (STEPPERS_DISABLE/SPINDLE/COOLANT from mainline + `st_go_idle()`
    inside ISR_STEP) is REAL on a chip whose ISA looks AVR-safe on paper.
    Fix shape: GPIO_BSET/BCLR wrapped in the save/restore critical
    section (gpio.h); GPIO_MWO stays bare RMW under the ISR-only writer
-   discipline. `_template/gpio.h`'s §1.2 audit box now has its first
+   discipline. `_template/gpio.h`'s [§1.2](#gpio-data) audit box now has its first
    "ISA has the instruction, codegen won't promise it" reproducer.
 3. **"What barriers exist?" can legitimately answer NONE**: the dsPIC33A
    instruction set has no fence/DSB/DMB-class instruction. Single core,
    single bus master (DMA unused), no cache, in-order pipeline — the
    compiler is the only reordering agent, so `__DSB()/__DMB()` are
    compiler barriers (`asm volatile("":::"memory")`), which is exactly
-   what §12.1/§12.4 need here. SFR read-after-write pipeline hazards are
+   what [§12.1](#weak-memory-obligations)/[§12.4](#weak-memory-obligations) need here. SFR read-after-write pipeline hazards are
    the COMPILER's job (xc-dsc inserts visible `neop` padding after SFR
    stores). UNVERIFIED residue for Step 5: whether NVMCON command
    sequencing wants the classic-PIC SFR-readback idiom — the RM is not
@@ -801,7 +863,7 @@ disassembly. RM-only facts that could not be locally verified are marked.
    movfpsf_32 … postreload`, gcode.c:1133 — an FPU float-store-to-static
    pattern) at `-O1` and `-Og` but is clean at `-O0/-O2/-O3/-Os`
    (probed all six on gcode.c). DEBUG therefore uses `-O0 -g3` (128 KB
-   flash absorbs it; contrast §14.13 where small flash forced the
+   flash absorbs it; contrast [§14.13](#ch32v006-riscv-gaps) where small flash forced the
    opposite call). Checklist lesson: on a niche-vendor GCC fork, probe
    the optimization matrix against the float-heaviest core file (gcode.c)
    BEFORE writing any port code. Also: XC-DSC v3.30 is GCC 8.3.1 —
@@ -813,9 +875,9 @@ disassembly. RM-only facts that could not be locally verified are marked.
    cleared; ANSEL exists only for ports A/B on this device). Both folded
    into function-call direction helpers that clear ANSEL unconditionally
    (stm32f103/ch32v006 function-call precedent, new reason). CNPUx is a
-   real bit-per-pin pull-up register — §1.4 satisfied by construction,
+   real bit-per-pin pull-up register — [§1.4](#gpio-data) satisfied by construction,
    first port where the pull-up contract cost zero thought.
-6. **The §14.3 gc-sections hazard is ABSENT here, and the check method
+6. **The [§14.3](#ch32v006-riscv-gaps) gc-sections hazard is ABSENT here, and the check method
    is now proven**: xc-dsc specs contain no gc-sections rule
    (`-dumpspecs` grepped), and the M3 link's 33-symbol PORT_TODO list
    was diffed IDENTICAL against `nm -u` over all 20 objects — the
@@ -823,7 +885,7 @@ disassembly. RM-only facts that could not be locally verified are marked.
    Every future port should run that same nm-vs-link diff once before
    trusting its M3 list.
 7. **dsPIC33A interrupt model upgrades on classic dsPIC in ways that
-   matter to §5.2**: INTCON1 has a real GIE bit (global enable — classic
+   matter to [§5.2](#isr-definition-macros)**: INTCON1 has a real GIE bit (global enable — classic
    16-bit dsPIC had only IPL games), `__builtin_get_isr_state/
    set_isr_state/disable_interrupts` map to SR.IPL + GIE save/restore
    with a single atomic `bclr` for disable (all disasm-verified → sei/
@@ -846,7 +908,7 @@ disassembly. RM-only facts that could not be locally verified are marked.
    `#error`s instead of silently vanishing. Boards that cannot fit a
    signal must fail loudly at compile, not drop it.
 10. **Separate peripheral clock generators = a new "F_CPU lie" vector**
-   (§14.9's class, third variant): on dsPIC33A the CPU clock (CLKGEN1)
+   ([§14.9](#ch32v006-riscv-gaps)'s class, third variant): on dsPIC33A the CPU clock (CLKGEN1)
    and peripheral clocks are independent clock generators; which CLKGEN
    feeds Timer1/SCCP/UART and at what ratio is RM-only and NOT yet
    verified. Flagged loudly in platform.h/timer.h: Step 3 must re-derive
@@ -905,7 +967,7 @@ guessed.
    (1..256) and multiplies by 8 IN SOFTWARE before loading `CCP1PR`,
    running the timer at its raw tick instead of fighting a 2-bit `TMRPS`
    field that (per the assumed family encoding) offers /1,/4,/16,/64 —
-   none of which is /8. This is the "or rescale" branch CONTRACTS.md #4
+   none of which is /8. This is the "or rescale" branch [CONTRACTS.md #4](#pulse-reset-timer)
    already names, exercised for the first time.
 15. **PPS is two different verification classes, not one**: RPn INPUT
    muxing (`RPINRx`) is FULLY VERIFIED — the field is literally the
@@ -988,6 +1050,7 @@ guessed.
    noted at #9 above, re-confirmed while implementing).
 
 
+<a id="fp-precision"></a>
 ## 17. FP precision is a DECLARED port property (found dieting ch32v006 —
     **RUNTIME-PROVEN on samd21 under Renode, 2026-07-25**)
 
@@ -1153,13 +1216,13 @@ guessed.
    re-measured on both boards/both flavors, **unchanged** at 31952/296
    RELEASE (megarm and generic both assert-PASS); all four converted ports
    build and assert-PASS on both DEBUG and RELEASE (8 images); STM32
-   boot-integrity check (BUG #21 ratchet, §18) PASSED on all 6 STM32
+   boot-integrity check (BUG #21 ratchet, [§18](#vector-table-lto)) PASSED on all 6 STM32
    images; ch32v006's RISC-V `_start`-at-flash-base boot check PASSED on
    both flavors. `FP=DOUBLE` re-verified as a true no-op vs. pre-rollout
    HEAD on all four ports (byte-identical text to the pre-knob baseline)
    before switching each to the `FP=SINGLE` default.
 7. **dsPIC33AK128MC102 IS the intended first conscious `FP=DOUBLE`
-   consumer, landed (Steps 3-6, this session)** — §17.3's own framing
+   consumer, landed (Steps 3-6, this session)** — [§17.3](#fp-precision)'s own framing
    named this chip class ("ports with a native DP FPU ... where DP costs
    cycles, not kilobytes") before this port existed to prove it; it now
    does. `Makefile` sets `FP ?= DOUBLE` (this port's own default, the
@@ -1172,15 +1235,16 @@ guessed.
    (the knob stays bidirectional — `boards/generic/prelude.h` carries the
    same SP libm call-site shim as samd21's, guarded by `GRBL_FP_SINGLE`)
    but is not this port's declared default and has not been runtime-
-   exercised (no dsPIC33A emulator exists, CONTRACTS.md #16). Both
+   exercised (no dsPIC33A emulator exists, [CONTRACTS.md #16](#dspic33ak128mc102-gaps)). Both
    `FP=DOUBLE` flavors (the default) link with zero `PORT_TODO_*`: RELEASE
    ~41.8KB code / DEBUG ~53.2KB code (both well inside the 128KB budget) —
-   see CONTRACTS.md #16 items 12-20 for the Steps 3-6 register-fact
+   see [CONTRACTS.md #16](#dspic33ak128mc102-gaps) items 12-20 for the Steps 3-6 register-fact
    writeup this build rests on.
 
+<a id="vector-table-lto"></a>
 ## 18. KEEP() does not survive LTO: vector tables need a real code reference
 
-*(Section number assigned by the BUG #21 work item; §17 is FP precision, landed
+*(Section number assigned by the BUG #21 work item; [§17](#fp-precision) is FP precision, landed
 RUNTIME-PROVEN by the concurrent workstream.)*
 
 Empirical, from BUG #21: stm32f103, stm32f411 and stm32h523 RELEASE
@@ -1283,10 +1347,11 @@ instead — `_start` must link at the flash base — and its Makefile
 documents why the word0 form is N/A. **A port may translate this check;
 it may not drop it.**
 
+<a id="guard-hardening"></a>
 ## 19. Guard hardening: two lessons from an adversarial review of §17/§18
 
-An adversarial review of the FP=SINGLE assert (§17) and the boot-integrity
-ratchet (§18) — the two newest guards at the time — found both were
+An adversarial review of the FP=SINGLE assert ([§17](#fp-precision)) and the boot-integrity
+ratchet ([§18](#vector-table-lto)) — the two newest guards at the time — found both were
 weaker than they looked, with working exploits, not just theoretical
 gaps. Both are fixed; the lessons are recorded here so the pattern is
 recognized earlier next time.
@@ -1337,7 +1402,7 @@ shipping is a guard in name only.
 
 ### Lesson 2: a guard is only as good as the build system's failure handling around it
 
-`boot_check.sh` (§18) and `assert_no_double.sh` (§17) both run as a
+`boot_check.sh` ([§18](#vector-table-lto)) and `assert_no_double.sh` ([§17](#fp-precision)) both run as a
 recipe step *after* the artifact they inspect already exists on disk
 (`objcopy` writes the `.bin` before `boot_check.sh` runs on it; `$(CC)`
 writes the `.elf` before `$(ASSERT_FP)` runs on it). Neither guard failing
@@ -1377,6 +1442,7 @@ platform Makefile (copy-me template included) must carry this line from
 day one, not bolt it on after the first bricked artifact is found
 surviving in the wild.
 
+<a id="wch-isr-attribute"></a>
 ## 20. Vendor ISR attribute silently ignored on mainline GCC: WCH's `"WCH-Interrupt-fast"` degrades to a plain function (CH570 recon)
 
 Found while closing the QingKe V3C interrupt-entry question for the CH570
@@ -1406,7 +1472,7 @@ RULE for every WCH/QingKe port on this toolchain: leave `INTSYSCR` (CSR
 0x804) at its reset value 0 — explicitly write 0 as defense-in-depth,
 don't rely on reset state alone — and use the plain
 `__attribute__((interrupt))`, machine mode, GCC's own default, verified
-correct by disassembly in CONTRACTS §14 item 2 (`mret` = opcode
+correct by disassembly in CONTRACTS [§14](#ch32v006-riscv-gaps) item 2 (`mret` = opcode
 `0x30200073`). NEVER adopt the vendor's `__INTERRUPT`/`WCH-Interrupt-fast`
 macro on a mainline toolchain — it is written for WCH's forked compiler
 and does not carry over to this project's apt-installed one.
@@ -1421,6 +1487,7 @@ actually emitted before trusting any vendor interrupt macro on a
 toolchain the vendor didn't ship. A warning is not a failure signal here,
 and the build succeeding either way is exactly what makes this trap
 silent.
+<a id="static-assert-sweep"></a>
 ## 21. `_Static_assert` sweep — four more contracts made compile-time facts
 (PLAN.md Phase 2, 2026-07-26)
 
@@ -1428,7 +1495,7 @@ Beyond the CPU_FREQ example (samd21/platform.h:50), four more contract
 classes from this document are now enforced at compile time instead of
 living only in prose or a code comment:
 
-1. **§6.2 duty domain, "duty-cap-twins" class**:
+1. **[§6.2](#spindle-pwm) duty domain, "duty-cap-twins" class**:
    `_Static_assert(SPINDLE_PWM_MAX_VALUE <= 255, ...)` — added to
    stm32f103/platform.h, stm32h523/platform.h, stm32f411/platform.h,
    ch32v006/boards/generic/config.h, dspic33ak128mc102/boards/generic/
@@ -1438,14 +1505,14 @@ living only in prose or a code comment:
    REVIEW #3 caught it by inspection — a build-time assert would have
    caught both instances the moment the wrong value was typed.
    **samd21 (megarm + generic) deliberately does NOT get this assert**:
-   both boards still declare `SPINDLE_PWM_MAX_VALUE 65535` (§6 item 2,
+   both boards still declare `SPINDLE_PWM_MAX_VALUE 65535` ([§6](#spindle-pwm) item 2,
    "Known gap" above) — a live, tracked violation, not a stale doc. Adding
    the assert there today would turn a runtime bug into an unrelated build
    break inside a static-assert-sweep batch that does not own fixing PWM
    range (that needs its own `PER`/`CC[0]` rework and a Renode re-verify).
    Each samd21 board's config.h carries a comment saying so, with an
    instruction to add the assert in the SAME commit that fixes the range.
-2. **§10 NVMEM window vs cache buffer, BUG #20 class**: stm32h523 and
+2. **[§10](#nvmem-eeprom) NVMEM window vs cache buffer, BUG #20 class**: stm32h523 and
    stm32f411 already had `_Static_assert(FLASH_PAGE_SIZE * FLASH_NUM_PAGES
    <= NVMEM_WINDOW_SIZE, ...)`; stm32f103 (sharing the same
    `common/stm32/stm32_nvmem.c` cache-buffer pattern) was missing the
@@ -1455,19 +1522,19 @@ living only in prose or a code comment:
    sized directly from the same macro that defines the erase unit, so there
    is no independent Makefile-supplied size to drift against — checked in
    each file, not assumed.
-3. **§1/§17(BUG #17) STEP/DIR logical bits, "port-image" class**: core
+3. **[§1](#gpio-data)/[§17](#fp-precision)(BUG #17) STEP/DIR logical bits, "port-image" class**: core
    packs `step_outbits`/`dir_outbits`/`axislock` into a `uint8_t`
    (stepper.c) — every `X/Y/Z_STEP_BIT` and `X/Y/Z_DIRECTION_BIT` must
    resolve to <= 7. `_Static_assert(X_STEP_BIT <= 7 && ... , ...)` added to
    all 7 non-AVR ports (stm32f103/h523/f411, ch32v006, dspic33ak128mc102,
    samd21 megarm+generic, `_template`) at the point each board's config
    finishes defining these bits. This is exactly the invariant BUG #17's
-   fix (§3 of this doc's Phase-3 history, PLAN.md) established for samd21
+   fix (PLAN.md Phase 3 history) established for samd21
    by hand; the assert makes sure a future re-pin on any port can't
    silently regress into the same truncation. atmega328p/`grbl/cpu_map.h`
    intentionally NOT touched — core file, golden-MD5 gate, outside port-code
    review scope.
-4. **§7 serial ring buffer vs index type, BUG #12 class**: the three
+4. **[§7](#serial) serial ring buffer vs index type, BUG #12 class**: the three
    TU-replacement `serial.c` files (samd21, ch32v006, dspic33ak128mc102)
    use `uint8_t rx/tx_buffer_head/tail` that wrap via plain `+1` (no
    explicit modulo) — correct only if `RX_RING_BUFFER`/`TX_RING_BUFFER`
@@ -1487,13 +1554,14 @@ become fully known (after the relevant `#define`s, before first use) — no
 new validation machinery, no runtime cost, zero bytes in any built image
 (verified: every port's RELEASE size is byte-identical to the CANONICAL
 RELEASE SIZE TABLE before and after this batch).
+<a id="hc32f460-gaps"></a>
 ## 22. Gaps found porting HC32F460 (Phase 6 rolling port #3 — first
 HDSC/Huada vendor-exotic chip, and the first port where NO donor in this
 tree shares peripheral IP at all)
 
 Every prior ARM port in this tree (samd21, stm32f103/h523/f411) is either
 an Atmel/Microchip or ST part; all of them share enough peripheral-IP
-family resemblance that CONTRACTS.md sections 14/15 could talk about
+family resemblance that CONTRACTS.md [sections 14](#ch32v006-riscv-gaps)/15 could talk about
 "reuse the donor's shape, re-derive the addresses". HC32F460 (HDSC/XHSC,
 formerly Huada Semiconductor) breaks that assumption completely: TIMER0/
 TIMERA, the GPIO PORT model, the INTC interrupt router, EFM flash, and the
@@ -1509,8 +1577,8 @@ symbols — `nm -u` on both finished ELFs is empty).
    `hc32f4a0_ddl` Device Driver Library exists and is publicly mirrored
    (github.com/Mmatsnev/hc32f4a0), but no LICENSE file or SPDX header was
    found anywhere in it this session — only a bare "(C) HDSC" copyright
-   footer. This is the OPPOSITE of CONTRACTS.md section 16 item 11 (dsPIC33AK
-   DFP, Apache-2.0, confirmed) and section 14 item 7 (ch32v006's Zephyr dtsi
+   footer. This is the OPPOSITE of CONTRACTS.md [section 16](#dspic33ak128mc102-gaps) item 11 (dsPIC33AK
+   DFP, Apache-2.0, confirmed) and [section 14](#ch32v006-riscv-gaps) item 7 (ch32v006's Zephyr dtsi
    cross-check, Apache-2.0, confirmed) — those two precedents both found
    permissive licenses and used the vendor material as a source of truth.
    Here, the honest answer was "not confirmed permissive", so this port did
@@ -1524,7 +1592,7 @@ symbols — `nm -u` on both finished ELFs is empty).
    green light.
 2. **Klipper3d/klipper's real shipped firmware is a legitimate cross-check
    class this file did not have a name for yet**: neither "vendor SDK"
-   (section 14 item 7 precedent) nor "device family pack" (section 16 item
+   ([section 14](#ch32v006-riscv-gaps) item 7 precedent) nor "device family pack" ([section 16](#dspic33ak128mc102-gaps) item
    11 precedent) — a THIRD source class: independent, real, GPL-3.0
    firmware actually running on physical HC32F460 hardware in the field
    (Voxelab Aquila 3D printers, `src/hc32f460/*` in Klipper mainline).
@@ -1542,7 +1610,7 @@ symbols — `nm -u` on both finished ELFs is empty).
 3. **A chip can lack a fixed per-peripheral NVIC vector table entirely —
    a fourth interrupt-architecture family after ARM-hardware-fetch (samd21/
    stm32*), RISC-V mtvec/PFIC (ch32v006), and linker-synthesized IVT
-   (dsPIC33A, section 16 item 1)**: HC32F460's INTC is an event ROUTER —
+   (dsPIC33A, [section 16](#dspic33ak128mc102-gaps) item 1)**: HC32F460's INTC is an event ROUTER —
    every peripheral interrupt source (compare-match timers, USART RX/TI,
    external pin EIRQ, …) is assigned at runtime to one of a small shared
    pool of identically-named vector slots (`Int000_IRQn`..`Int031_IRQn`,
@@ -1554,7 +1622,7 @@ symbols — `nm -u` on both finished ELFs is empty).
    makes at init time, not the table layout. Checklist lesson: PORTING-
    CHECKLIST Step 3's "audit IRQ capability before allocating" question now
    has a THIRD possible answer beyond "yes, fixed vector" (STM32/SAMD) and
-   "no, this peripheral has no interrupt line at all" (CONTRACTS section 14
+   "no, this peripheral has no interrupt line at all" (CONTRACTS [section 14](#ch32v006-riscv-gaps)
    item 11): "yes, but the vector number is a runtime choice, not a
    compile-time fact" — a future porter must not assume Int000_IRQn means
    anything in particular without reading `platform.c`'s `intc_route()`
@@ -1573,7 +1641,7 @@ symbols — `nm -u` on both finished ELFs is empty).
    assumption baked into every prior port) is not actually universal.
 5. **GPIO direction/pull-up is a per-pin configuration WORD, not a
    per-port bitfield register** — same shape-class as stm32f411/h523's
-   MODER/PUPDR (CONTRACTS section 14 item 5's "4-bit packed config
+   MODER/PUPDR (CONTRACTS [section 14](#ch32v006-riscv-gaps) item 5's "4-bit packed config
    register" lesson) but a further generalization: here it is not even a
    shared per-port register with N bits per pin, but (per this port's
    best-effort model, since the real PCONR sub-layout was not reachable
@@ -1584,13 +1652,13 @@ symbols — `nm -u` on both finished ELFs is empty).
    same call on their own packed-register shapes. Checklist lesson,
    sharpened again: before allocating a `GPIO_DREG`/`GPIO_PREG` bit-op
    macro on ANY new vendor, check not just "is it packed 2+ bits per pin"
-   (section 14 item 5) but "is direction/pull config even a per-PORT
+   ([section 14](#ch32v006-riscv-gaps) item 5) but "is direction/pull config even a per-PORT
    register at all, or could it be per-PIN" — the answer changes the
    addressing math, not just the bit width.
 6. **Struct-shaped best-effort register layouts are worse than absent ones
    UNLESS FLAGGED, and this port is the first to flag EVERY SINGLE ONE
    at its point of definition, not just in a file-header disclaimer**:
-   CONTRACTS section 14 item 7 stated this lesson (dsPIC's PFIC placeholder
+   CONTRACTS [section 14](#ch32v006-riscv-gaps) item 7 stated this lesson (dsPIC's PFIC placeholder
    struct had wrong offsets that "compiled fine and read plausibly"). This
    port goes one step further as a methodology: every base address, bit
    position, and field name in `regs.h` that could not be sourced from
@@ -1615,7 +1683,7 @@ symbols — `nm -u` on both finished ELFs is empty).
    `vsqrt.f32` present (1 occurrence — `sqrtf()` compiling to the single
    real FPU instruction), 82 `vmul.f32` / 161 combined `vadd/vsub/vdiv.f32`
    — the identical `vmul.f32` count stm32f411 measured after its own
-   `FP=SINGLE` rollout (CONTRACTS section 17.7), unsurprising since it is
+   `FP=SINGLE` rollout (CONTRACTS [section 17.7](#fp-precision)), unsurprising since it is
    the same compiler/core-code/FPU-class combination. Zero `__aeabi_d*` or
    generic DP soft-float symbols anywhere in the image (`nm | grep -iE
    "aeabi|df2"` empty) — cleaner than stm32f411's own result, which
@@ -1627,8 +1695,8 @@ symbols — `nm -u` on both finished ELFs is empty).
    `_delay_ms`/`_delay_us` were written SysTick-integer-native from the
    start, with no double-typed remainder arithmetic to leak in the first
    place — the fix was designed in, not retrofitted).
-8. **Boot-integrity and vector-table-under-LTO mechanics (CONTRACTS section
-   18) transfer unmodified**: `SCB->VTOR = (uint32_t)vector_table` in
+8. **Boot-integrity and vector-table-under-LTO mechanics (CONTRACTS
+   [section 18](#vector-table-lto)) transfer unmodified**: `SCB->VTOR = (uint32_t)vector_table` in
    `Reset_Handler`, `__attribute__((used))` on the table, `KEEP(*(.isr_vector))`
    plus `. = ALIGN(256)` in `script.ld` (48 vectors × 4 bytes = 192, next
    power of two = 256 — the same architectural VTOR-alignment rule as
@@ -1636,7 +1704,7 @@ symbols — `nm -u` on both finished ELFs is empty).
    the Makefile identically to every STM32/samd21 port. `boot_check.sh`
    reported OK on both flavors this session. Nothing new here — worth
    recording only as confirmation that this mechanism is genuinely
-   ARM-architectural, not STM32-family-specific, exactly as section 18
+   ARM-architectural, not STM32-family-specific, exactly as [section 18](#vector-table-lto)
    already claimed.
 9. **Gates re-run (not just inspected) this session**: golden AVR
    `make -C grbl/platform/atmega328p validate` **PASSED** (MD5
@@ -1649,9 +1717,10 @@ symbols — `nm -u` on both finished ELFs is empty).
    `grbl/platform/PLAN.md`, `grbl/platform/PLATFORM_ROADMAP.md`,
    `ci/warn_baseline_hc32f460.txt`, and `.github/workflows/ci.yml`.
 
+<a id="cross-core-cache-coherency"></a>
 ## 23. Cross-core shared memory needs cache maintenance, not just ordering (SG2002 recon — a new class beyond BUG #12)
 
-Every port closed so far (§12 item 1, BUG #12) shares one cache domain
+Every port closed so far ([§12](#weak-memory-obligations) item 1, BUG #12) shares one cache domain
 with its own ISRs: producer and consumer are the same core (or a
 core/DMA pair) inside one coherent view of memory, so a release-store
 paired with `__DMB()`/a fence is the whole obligation — get the ORDER
@@ -1675,11 +1744,11 @@ ORTHOGONAL obligations; satisfying one says nothing about the other.
 T-Head's C906/C906L expose custom cache-management ops for this
 (XTheadCmo family, e.g. `th.dcache.call`) — not the base RISC-V ISA, a
 vendor extension, so treat the encodings with the same "verify against
-THIS toolchain" skepticism as §14/§20 rather than assuming portability
+THIS toolchain" skepticism as [§14](#ch32v006-riscv-gaps)/[§20](#wch-isr-attribute) rather than assuming portability
 from documentation alone.
 
 This composes with the existing command-vs-data ordering obligation
-(BUG #13 class, §12 item 4) into a THIRD requirement, not a
+(BUG #13 class, [§12](#weak-memory-obligations) item 4) into a THIRD requirement, not a
 replacement: the doorbell/MMIO write that announces "data ready" must
 be sequenced strictly AFTER the writeback that makes the data actually
 visible in memory, or the consumer can be signaled before there is
@@ -1704,7 +1773,7 @@ domain (different cores, no hardware coherency — as opposed to same-core
 producer/ISR-consumer pairs, which is every port to date), ask "is this
 memory coherent between these two agents" as a question separate from
 "is this memory ordered between these two agents." Ordering-only
-fixes (§12 item 1) are necessary but not sufficient once a second cache
+fixes ([§12](#weak-memory-obligations) item 1) are necessary but not sufficient once a second cache
 enters the picture. This class is invisible to every test this project
 can run without the actual hardware (no emulator models cross-core cache
 incoherency at this fidelity) and its failure mode is not a hang or a

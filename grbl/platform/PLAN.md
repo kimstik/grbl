@@ -404,7 +404,7 @@ Priority order (revise as hardware/toolchain reality dictates):
       UNVERIFIED placeholder flagged at its own definition site in `regs.h`
       — the port is NOT claimed "ready for hardware validation" in the
       unqualified sense stm32f411 was; see `hc32f460/platform.md` and
-      CONTRACTS.md section 20 (new, 9 items: no-donor-IP-at-all,
+      [CONTRACTS.md section 22](CONTRACTS.md#hc32f460-gaps) (new, 9 items: no-donor-IP-at-all,
       vendor-SDK-license-came-back-negative for the first time, Klipper-as-
       real-firmware-cross-check as a new source class, the INTC event-router
       as a 4th interrupt-architecture family, split USART RX/TX interrupt
@@ -471,7 +471,7 @@ Priority order (revise as hardware/toolchain reality dictates):
         `HAL_SERIAL_READ_DATA()` the same number of times it would for N
         individual bytes. That call-count invariant is the one thing a future
         implementer must not violate when writing the drain loop. New cross-core
-        cache-maintenance obligation for this ring: CONTRACTS §21 (writeback
+        cache-maintenance obligation for this ring: [CONTRACTS §23](CONTRACTS.md#cross-core-cache-coherency) (writeback
         before doorbell, invalidate before read, or map the window non-cacheable
         and skip the whole class).
         Linux side needs NO custom kernel module: `mmap()` the ring out of the
@@ -488,11 +488,12 @@ Priority order (revise as hardware/toolchain reality dictates):
         condition rarely bind in practice, but this is NOT fully solved by this
         design pass — flagged for whoever implements, not silently assumed away.
       * **Why deferred (executor's recommendation)**: no public TRM exists for
-        SG2002 — every peripheral/IRQ/cache fact in this entry and in CONTRACTS
-        §21 is community-sourced (kernel patches, SDK headers, board-support
+        SG2002 — every peripheral/IRQ/cache fact in this entry and in
+        [CONTRACTS §23](CONTRACTS.md#cross-core-cache-coherency) is community-sourced (kernel patches, SDK headers, board-support
         repos), not vendor documentation. And — a first for this project — there
         is NO emulator model available for pre-hardware verification of a
-        correctness-critical class (the cache-coherency work of §21 specifically
+        correctness-critical class (the cache-coherency work of
+        [§23](CONTRACTS.md#cross-core-cache-coherency) specifically
         needs real silicon or a cycle-accurate multi-core model neither Renode
         nor QEMU provide here). Cheaper, unblocked queue items (ch570, fully
         recon'd and ready) and in-flight work (hc32f460) should land first;
@@ -512,7 +513,7 @@ Priority order (revise as hardware/toolchain reality dictates):
       §3.4.2, shipped in openwch/ch570 (Apache-2.0) — identical semantics to
       V2C (CONTRACTS §14 item 2). NOT unconditional hw stacking; plain GCC
       `__attribute__((interrupt))` at reset-default INTSYSCR is safe, same as
-      ch32v006. Companion trap this recon surfaced, see CONTRACTS §20: the
+      ch32v006. Companion trap this recon surfaced, see [CONTRACTS §20](CONTRACTS.md#wch-isr-attribute): the
       vendor's own `"WCH-Interrupt-fast"` attribute silently no-ops on this
       toolchain — do not copy it. **CH570 is unblocked for porting.**
       Confirmed facts for whoever writes the port: (1) PFIC register offsets
@@ -621,6 +622,60 @@ survivors of that rollback, not evidence of a partial apply. Never truncate its
 output with `head`; always check `git status` afterward to confirm what
 actually landed, and prefer `--3way` so a conflict surfaces as resolvable
 markers in the tree instead of a silent no-op.
+
+**CONTRACTS.md NUMBERING IS THE INTEGRATOR'S JOB, NOT A SHARED COUNTER**
+(owner-visible failure, 2026-07-26: section 20 collided three ways, section
+21 twice, requiring manual renumbering at integration FOUR times in one
+day). Root cause: `CONTRACTS.md`'s sections are numbered `## N.`, and every
+parallel agent appending a new section reads the current file, finds the
+current highest N, and appends `N+1`. Two or three agents authoring at once
+all read the SAME highest N (their worktrees forked before any of them
+landed) and all compute the SAME N+1 — a shared mutable counter with no
+synchronization, the classic concurrent-increment race, just done by
+sub-agents instead of threads. Renumbering at integration doesn't just cost
+orchestrator time: it silently invalidates every `§N`/`section N`
+cross-reference an EARLIER agent already wrote into a DIFFERENT file
+(PLAN.md, PLATFORM_ROADMAP.md, a port's own platform.md/README.md) pointing
+at whatever used to live in that slot — those references now silently point
+at the wrong section, and nothing fails to compile or build when that
+happens.
+
+**Fix, structural not procedural** (a reminder to re-brief, not just a
+one-time cleanup): numbering a shared, append-only, human-readable list is
+not a job parallel agents can coordinate on without a lock they don't have —
+so don't ask them to. The integrator (this loop) is the only writer that
+sees the whole queue at merge time, so numbering moved there:
+- Authors append their new section at the end with a placeholder heading
+  (`## §NEW. Title`) instead of guessing a number; the integrator assigns
+  the real N when the batch lands — a rename-only edit that never collides
+  because only one agent (the integrator) ever performs it.
+- Every section gets a permanent slug anchor (`<a id="topic-slug"></a>`
+  directly above its `## N.` heading) that never changes even when the
+  integrator renumbers it. Authors cite each other BY SLUG
+  (`[§N](#that-sections-slug)`), never by bare number — a slug link survives
+  a renumbering; a bare `§N`/`section N` reference does not and fails
+  silently (no build error, no broken link, just prose pointing at the
+  wrong thing).
+- `tools/check_contracts_numbering.py` (wired into CI as the `docs-integrity`
+  job) fails the build on duplicate or non-sequential `## N.` numbers, a
+  heading with no matching anchor, or a `#slug` link anywhere in the repo
+  whose target anchor doesn't exist — the mechanical version of "verify the
+  count isn't racing" that no individual agent could see on its own.
+- The instruction lives at the TOP of `CONTRACTS.md` itself (right after the
+  cautionary-tale paragraph, before section 0) specifically so an agent that
+  reads only the top of the file before appending — which is the realistic
+  failure mode, not an agent reading this ledger entry — still gets it.
+
+**General lesson for any future shared append-only ledger this project
+grows** (not just this file): if two or more agents can be authoring the
+same document concurrently, any property that requires seeing "the current
+state of the whole document" to compute correctly (the next number, the
+next ID, a running total) MUST be assigned by whichever single agent
+integrates the batch, never computed by the authoring agents themselves —
+they should each author content plus a stable, collision-proof identifier
+they can invent unilaterally (a descriptive slug, a UUID, their own
+worktree-scoped name), and leave anything ordinal or cross-referencing that
+identity to integration time.
 
 ## Decision Log
 
