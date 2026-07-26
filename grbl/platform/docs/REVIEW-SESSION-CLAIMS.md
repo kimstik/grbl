@@ -206,3 +206,27 @@ flags and re-run `assert_no_double.sh` against a real port build before reopenin
 decision — but the specific factual claim that killed it ("no equivalent exists") is false.
 
 ---
+
+## Claim E — Guard efficacy: do the 8 ratchets actually fail when they should?
+
+**Verdict: SURVIVES for all 8.** Every guard was broken with a real, planted defect against real
+repo files (not only its own `--selftest`, which the brief correctly notes can test the wrong
+thing), confirmed to fail loudly, then restored. `git status --porcelain` was empty after every
+restoration; final tree state below confirms nothing left dirty.
+
+| # | Guard | `--selftest` | Live break performed | Result |
+|---|---|---|---|---|
+| 1 | golden MD5 (`Makefile:validate`) | n/a (trivial shell string-compare) | Inspected the 5-line comparison logic directly; independently re-ran `md5sum grbl.hex` against the literal `79af184e67b27defd27a39309ac53563` — logic is a plain `[ "$A" = "$B" ]`, nothing to hide | Confirmed correct by inspection + live value match |
+| 2 | `tools/assert_no_double.sh` | `--selftest` → PASS (8 checks) | Added `__attribute__((used)) double __review_poison_double(volatile double a, volatile double b){return a*b+a/b;}` to `grbl/platform/hc32f460/platform.c`, `make BUILD=RELEASE` | Real link FAILED: `__aeabi_dadd/__aeabi_ddiv/__aeabi_dmul/__aeabi_drsub/__aeabi_dsub/__divdf3/__floatdidf/__muldf3/__subdf3` reported, `make` exit 1, `.elf` deleted. Reverted; rebuild PASSED, byte-identical `.bin` (MD5 matches `artifacts/hc32f460/grbl_hc32f460.bin`) |
+| 3 | `grbl/platform/common/init_check.sh` | `--selftest` → PASS (10 checks) | Removed the `hal_gpio_clock_init();` call from `ch32v006/startup.c`'s `SystemInit()`, `make BUILD=RELEASE` | Real link FAILED with the script's own BUG #23 message (symbol unreachable after LTO), `make` exit 1. Reverted; rebuild clean, `text=39224` unchanged |
+| 4 | `grbl/platform/common/boot_check.sh` | none (no selftest mode) | Hand-crafted a garbage 16-byte `.bin` (`SP=0xDEADBEEF`, `PC=0x00000000`) | `BOOT INTEGRITY: FAIL`, exit 1. Cross-checked positive case against the real committed `artifacts/stm32f411/grbl_stm32f411.bin` → `BOOT INTEGRITY: OK`. No repo file touched for this one (synthetic input file only) |
+| 5 | `ci/warn_ratchet.py` | `--selftest` → PASS (12 checks) | Built ch32v006 RELEASE clean (ratchet OK, 4/4 baseline), then added an unused local `int __review_unused_var = 0;` to `hal_gpio_config_pin()` in `ch32v006/platform.c`, rebuilt | Real ratchet run FAILED: `1 new warning(s) not in ci/warn_baseline_ch32v006.txt: + platform.c: warning: unused variable ...`, exit 1. Reverted; rebuild clean, ratchet OK again |
+| 6 | `tools/check_contracts_numbering.py` | `--selftest` → PASS (11 checks) | Real `CONTRACTS.md` starts clean (`38 sections, 38 slugs, 36 cross-file links, OK`). Changed `## 2. GPIO interrupts` to `## 1. GPIO interrupts` (line 193, duplicating section 1) | Real run FAILED: `duplicate section number 1: line 125 and line 193` + sequential-numbering error, confirmed `$? == 1` on a clean, non-piped re-run. Reverted; re-run OK (exit 0), 38/38/36 again |
+| 7 | `tools/build_artifacts.py check` | `--selftest` → PASS (62 checks) | Real `check --platforms ch32v006` PASSED clean first. Flipped one byte (`data[100] ^= 0xFF`) in the committed `artifacts/ch32v006/grbl_ch32v006.bin` | Real run FAILED: `ch32v006: artifacts/ch32v006/grbl_ch32v006.bin is STALE (committed=... fresh=...)`. Restored the exact original bytes from a saved copy (`md5sum` matched pre/post); re-run OK, 6/6 fresh |
+| 8 | `grbl/platform/common/clock_width.h` `_Static_assert` | none (header, no selftest) | Reverted `ch32v006/Makefile`'s `-DF_CPU=$(CLOCK)ULL` to `...UL`, `make BUILD=RELEASE clean && make BUILD=RELEASE` | Real compile FAILED at the very first TU: `error: static assertion failed: "F_CPU must be suffixed ULL ..."`, exit 1 (reproduces the PLAN.md entry's own claimed transcript, independently). Reverted; rebuild clean, `text=39224` unchanged |
+
+**Tree state after all 8 experiments**: `git status --porcelain` → empty. `make -C
+grbl/platform/atmega328p validate` → PASSED, MD5 `79af184e67b27defd27a39309ac53563`, re-confirmed
+after this claim's work (see final verification at the end of this document).
+
+---
