@@ -10,6 +10,34 @@ Status key: REFUTED / SURVIVES / UNVERIFIED. Findings ranked most-severe first i
 (This file is being built incrementally; committed after each claim closes so a session
 limit does not lose work.)
 
+## Summary, ranked most-severe first
+
+1. **Claim F — REFUTED.** "clang has no equivalent to `-fsingle-precision-constant`" is false.
+   `-cl-single-precision-constant` works identically in plain C (driver forwards it to `-cc1`
+   unconditionally; verified with IR dumps and `nm` on a real ARM cross-build — zero `__aeabi_d*`
+   symbols, matching real gcc byte-for-byte). This was the sole factual basis for killing the
+   entire clang toolchain axis for every FP=SINGLE port; the decision should be revisited.
+2. **Claim C1 — REFUTED (undercount, not live).** samd21 has 4 overlapping `config.h`/`platform.h`
+   macro names, not the claimed 2, and one (`LIMIT_MASK`) is a genuinely unguarded silent
+   duplicate — the exact BUG #25 shadow-mechanism CONTRACTS.md §33 says exists nowhere outside the
+   three STM32 ports. Currently harmless (values agree textually), but the "always `#undef`
+   announced" invariant is false as stated.
+3. **Claim C2 — SURVIVES for what's claimed; real unaudited gap flagged.** BUG #24's specific
+   claims (ch32v006 fixed, ch570 structurally immune) both hold up. But hc32f460's `hal_gpio_init()`
+   never gates any GPIO port clock, and the port's own cross-check source documents an FCG-class
+   gate register existing on this chip family — a plausible, real, currently undocumented candidate
+   for the same bug class, not covered by any existing claim (silence, not a false statement).
+4. **Claim A — SURVIVES (substance), minor doc self-contradiction.** The core `-fanalyzer` sweep
+   is real, calibrated (a planted UAF+OOB defect is caught with real codegen, confirmed inert only
+   under `-fsyntax-only` which no CI script uses), and reproduces exactly. But
+   `TOOLCHAIN-VERSIONS.md`'s own headline sentence ("zero... under... arm-none-eabi-gcc 14.2.1")
+   is contradicted by its own table three lines later (one real CWE-787 hit, correctly judged a
+   false positive on independent re-verification).
+5. **Claims B, C3, D, E — SURVIVE.** Full baseline audit, pin-width class scope, byte-identity
+   across all 10 built units (independently rebuilt, not trusted from the self-modified generator),
+   and all 8 guards (each broken with a real planted defect against real files, not only
+   `--selftest`, then restored) all hold up under direct re-verification.
+
 ---
 
 ## Claim A — "Zero `-fanalyzer` findings anywhere in `grbl/*.c`" (avr-gcc 16.1.0, arm-none-eabi-gcc 14.2.1)
