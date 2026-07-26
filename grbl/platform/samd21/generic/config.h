@@ -106,36 +106,64 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define LIMIT_MASK_B        0
 
 // CONTROL PINS
+//
+// LOGICAL PORT-IMAGE CONTRACT, extended from STEP/DIRECTION above (BUG #17
+// class, CONTRACTS.md #limit-bit-width-second-consumer): core narrows
+// `GPIO_MRD(CONTROL, IREG)` to a uint8_t in system.c:43. FEED_HOLD(8)/
+// CYCLE_START(9)/SAFETY_DOOR(8) truncate to 0 as shipped (`1<<8`/`1<<9` mod
+// 256 = 0) - control input silently stuck for those three lines; RESET(7)
+// happened to still fit. Real pins move to *_PIN; *_BIT is LOGICAL and
+// contiguous with RESET's, so CONTROL_L2P/P2L collapse to a pure shift, same
+// shape as this board's STEP/DIRECTION translation above.
 
 #define CONTROL_RESET_PORT      PORT_GROUPA
-#define CONTROL_RESET_PIN       7
-#define CONTROL_RESET_BIT       7
+#define CONTROL_RESET_PIN       7    // real silicon pin
+#define CONTROL_RESET_BIT       0    // LOGICAL
 
 #define CONTROL_FEED_HOLD_PORT  PORT_GROUPA
 #define CONTROL_FEED_HOLD_PIN   8
-#define CONTROL_FEED_HOLD_BIT   8
+#define CONTROL_FEED_HOLD_BIT   1
 
 #define CONTROL_CYCLE_START_PORT   PORT_GROUPA
 #define CONTROL_CYCLE_START_PIN    9
-#define CONTROL_CYCLE_START_BIT    9
+#define CONTROL_CYCLE_START_BIT    2
 
 #define CONTROL_SAFETY_DOOR_PORT   PORT_GROUPA
-#define CONTROL_SAFETY_DOOR_PIN    8
-#define CONTROL_SAFETY_DOOR_BIT    8
+#define CONTROL_SAFETY_DOOR_PIN    8    // shares FEED_HOLD's physical pin
+#define CONTROL_SAFETY_DOOR_BIT    1    // shares FEED_HOLD's logical bit
 
-#define CONTROL_MASK_A      ((1UL<<CONTROL_RESET_PIN)|(1UL<<CONTROL_FEED_HOLD_PIN)|(1UL<<CONTROL_CYCLE_START_PIN))
+#define CONTROL_MASK_PHYS    ((1UL<<CONTROL_RESET_PIN)|(1UL<<CONTROL_FEED_HOLD_PIN)|(1UL<<CONTROL_CYCLE_START_PIN))
+#define CONTROL_L2P(v)        ((uint32_t)(v) << CONTROL_RESET_PIN)
+#define CONTROL_P2L(v)        ((uint32_t)(v) >> CONTROL_RESET_PIN)
+
+#define CONTROL_MASK_A      ((1UL<<CONTROL_RESET_BIT)|(1UL<<CONTROL_FEED_HOLD_BIT)|(1UL<<CONTROL_CYCLE_START_BIT))
 #define CONTROL_MASK_B      0
 
 #define CONTROL_INVERT_MASK CONTROL_MASK_A
 
+_Static_assert(CONTROL_RESET_BIT <= 7 && CONTROL_FEED_HOLD_BIT <= 7 &&
+               CONTROL_CYCLE_START_BIT <= 7 && CONTROL_SAFETY_DOOR_BIT <= 7,
+               "CONTROL logical bits must fit core's uint8_t group read (BUG #17 class, CONTRACTS.md #limit-bit-width-second-consumer)");
+
 // PROBE PIN
+//
+// Same class as CONTROL above: probe.c:54 narrows `GPIO_MRD(PROBE, IREG)`
+// to a uint8_t return. Real silicon bit 10 truncated to a constant 0 as
+// shipped - probe input dead on this board too, found during the same audit.
 
 #define PROBE_PORT          PORT_GROUPA
-#define PROBE_PIN           10
-#define PROBE_BIT           10
+#define PROBE_PIN           10   // real silicon pin
+#define PROBE_BIT            0   // LOGICAL
 
-#define PROBE_MASK_A        (1UL<<PROBE_PIN)
+#define PROBE_MASK_PHYS     (1UL<<PROBE_PIN)
+#define PROBE_L2P(v)        ((uint32_t)(v) << PROBE_PIN)
+#define PROBE_P2L(v)        ((uint32_t)(v) >> PROBE_PIN)
+
+#define PROBE_MASK_A        (1UL<<PROBE_BIT)
 #define PROBE_MASK_B        0
+
+_Static_assert(PROBE_BIT <= 7,
+               "PROBE logical bit must fit core's uint8_t group read (BUG #17 class, CONTRACTS.md #limit-bit-width-second-consumer)");
 
 // SPINDLE CONTROL PINS
 

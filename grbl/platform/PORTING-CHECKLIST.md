@@ -69,8 +69,28 @@ toggle, or emulator cycle count).
 
 - [ ] Board config: `*_PORT/_BIT/_MASK` for STEP, DIRECTION, STEPPERS_DISABLE,
       LIMIT, CONTROL, PROBE, SPINDLE_*, COOLANT_* (megarm/config.h as model).
-      **Input groups (LIMIT/CONTROL/PROBE) must land in bits 0-7** or be
-      remapped in accessors — core truncates reads to uint8_t (§1.3).
+      **STEP, DIRECTION, LIMIT, CONTROL and PROBE are the five truncation-risk
+      groups — every one of their `*_BIT` constants must land in bits 0-7**
+      (core narrows each to `uint8_t`: the ISR port image for STEP/DIRECTION,
+      `GPIO_MRD(name, IREG)` for LIMIT/CONTROL/PROBE, PLUS `settings.c`'s
+      `get_limit_pin_mask()` as a second, easy-to-miss LIMIT consumer — §1.3,
+      [§limit-bit-width-second-consumer](CONTRACTS.md#limit-bit-width-second-consumer)).
+      SPINDLE_*/COOLANT_*/STEPPERS_DISABLE are NOT in this class (single-bit
+      `GPIO_BSET/BCLR/BGETOUT` ops on the native register width — never
+      narrowed; don't spend an assert on them). **Answer width per GROUP, not
+      per port**: if a group's physical pins already fit bits 0-7, add a
+      `_Static_assert(<name>_BIT <= 7, ...)` next to the pin defines (zero
+      cost, every port in this tree does this today). If they don't — and you
+      cannot just move the pin (a fixed header layout, a shared physical pin
+      with another signal, etc. — check first: BUG #26 shows a free low bit is
+      often the simpler fix when nothing is soldered yet) — reach for
+      `common/gpio_logical.h`'s `GPIO_LOGICAL_DISPATCH_*`/`GPIO_LOGICAL_PASSTHRU_*`
+      macros: define that group's `_L2P`/`_P2L`/`_MASK_PHYS` and a
+      `GPIO_..._<NAME>()` override, following samd21/gpio.h or ch570/gpio.h as
+      a model (the latter also shows the trap when the SAME group's mask
+      feeds a real hardware interrupt-arm call, not just a core-visible
+      compare — see [§logical-contract-vs-constraint-cure](CONTRACTS.md#logical-contract-vs-constraint-cure)
+      for the full worked example before you copy either pattern blindly).
 - [ ] Register accessors `GPIO_OREG/IREG/DREG/PREG` if platform layout differs
       from AVR naming (samd21/gpio.h:15-18). Pull-up accessor must actually
       enable pull-ups (§1.4 — SAMD21 got this wrong).

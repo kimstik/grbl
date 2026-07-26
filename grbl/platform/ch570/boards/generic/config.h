@@ -84,30 +84,57 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define LIMIT_MASK          ((1UL<<X_LIMIT_BIT)|(1UL<<Y_LIMIT_BIT)|(1UL<<Z_LIMIT_BIT))
 
 // GPIO_INT_ON/OFF plumbing (limits.c): core passes (name_PCMSK, name_INT,
-// name_MASK); this chip has one port and no PCIE-equivalent bit, so both
-// arguments are unused placeholders (platform.h's
-// HAL_GPIO_INTERRUPT_ENABLE/DISABLE macros discard them) - f103/ch32v006
-// precedent.
-#define LIMIT_PCMSK         0
+// name_MASK). This chip has one port and no PCIE-equivalent bit, so the
+// middle argument stays an unused placeholder - but the FIRST slot
+// (name_PCMSK) is repurposed here to carry the real PHYSICAL arm mask
+// (gpio.h's HAL_GPIO_INTERRUPT_ENABLE/DISABLE now read `port`, not `mask` -
+// see that file's comment for why). LIMIT is physical==logical, so its
+// PCMSK is just its own MASK; CONTROL is not (see below), and needs its own
+// _MASK_PHYS for this slot.
+#define LIMIT_PCMSK         LIMIT_MASK
 #define LIMIT_INT           0
 
-// CONTROL PINS (PA15, PA16, PA17) - safety door shares feed-hold (no
-// dedicated input in this pin-starved placeholder - same convention as
-// every other generic board in this tree).
+// CONTROL PINS (PA15, PA16, PA17)
+//
+// LOGICAL PORT-IMAGE CONTRACT (BUG #17 class, CONTRACTS.md
+// #limit-bit-width-second-consumer): system.c:43 narrows
+// `GPIO_MRD(CONTROL, IREG) ^ CONTROL_MASK` to a uint8_t, then tests it
+// against `1<<CONTROL_RESET_BIT` etc - CONTROL_MASK and *_BIT here MUST be
+// LOGICAL for that chain to work at all. Physical PA15/16/17 don't fit,
+// and this placeholder pin map is already packed too tight (every bit
+// 0-21 except 4 is spoken for by some other group) to just move CONTROL
+// into a free low slot the way BUG #26 moved a LIMIT pin - so this port
+// gets the samd21-style translation instead (CONTRACTS.md #gpio-data):
+// gpio.h's GPIO_MRD_CONTROL/GPIO_MDIR_INP_CONTROL/GPIO_MPULLUP_EN/
+// DIS_CONTROL consume CONTROL_MASK_PHYS directly; CONTROL_MASK itself is
+// the logical value core reads. Real silicon bits are contiguous, so
+// CONTROL_L2P/P2L collapse to a pure shift, same shape as STEP/DIRECTION
+// above. Safety door shares feed-hold's pin (no dedicated input in this
+// pin-starved placeholder - same convention as every other generic board
+// in this tree).
 
-#define CONTROL_RESET_PIN         15
-#define CONTROL_RESET_BIT         15
+#define CONTROL_RESET_PIN         15   // real silicon pin (placeholder)
+#define CONTROL_RESET_BIT         0    // LOGICAL
 #define CONTROL_FEED_HOLD_PIN     16
-#define CONTROL_FEED_HOLD_BIT     16
+#define CONTROL_FEED_HOLD_BIT     1
 #define CONTROL_CYCLE_START_PIN   17
-#define CONTROL_CYCLE_START_BIT   17
-#define CONTROL_SAFETY_DOOR_PIN   16
-#define CONTROL_SAFETY_DOOR_BIT   16
+#define CONTROL_CYCLE_START_BIT   2
+#define CONTROL_SAFETY_DOOR_PIN   16   // shares FEED_HOLD's physical pin
+#define CONTROL_SAFETY_DOOR_BIT   1    // shares FEED_HOLD's logical bit
+
+#define CONTROL_MASK_PHYS    ((1UL<<CONTROL_RESET_PIN)|(1UL<<CONTROL_FEED_HOLD_PIN)|(1UL<<CONTROL_CYCLE_START_PIN))
+#define CONTROL_L2P(v)        ((uint32_t)(v) << CONTROL_RESET_PIN)
+#define CONTROL_P2L(v)        ((uint32_t)(v) >> CONTROL_RESET_PIN)
 
 #define CONTROL_MASK         ((1UL<<CONTROL_RESET_BIT)|(1UL<<CONTROL_FEED_HOLD_BIT)|(1UL<<CONTROL_CYCLE_START_BIT))
 #define CONTROL_INVERT_MASK  CONTROL_MASK
+_Static_assert(CONTROL_RESET_BIT <= 7 && CONTROL_FEED_HOLD_BIT <= 7 &&
+               CONTROL_CYCLE_START_BIT <= 7 && CONTROL_SAFETY_DOOR_BIT <= 7,
+               "CONTROL logical bits must fit core's uint8_t group read (BUG #17 class, CONTRACTS.md #limit-bit-width-second-consumer)");
 
-#define CONTROL_PCMSK        0
+// See LIMIT_PCMSK note above: this slot carries the PHYSICAL arm mask
+// (CONTROL_MASK would arm the wrong pins - it is logical after the fix above).
+#define CONTROL_PCMSK        CONTROL_MASK_PHYS
 #define CONTROL_INT          0
 
 // UART1 (PA2=RX, PA3=TX) - REAL hardware fact: this is the chip's DEFAULT
@@ -121,6 +148,8 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define PROBE_PIN            6
 #define PROBE_BIT             6
 #define PROBE_MASK           (1UL<<PROBE_BIT)
+_Static_assert(PROBE_BIT <= 7,
+               "PROBE logical bit must fit core's uint8_t group read / invert-mask XOR (BUG #26 class, CONTRACTS.md #limit-bit-width-second-consumer)");
 
 // SPINDLE - PWM1 is a FIXED-function pin on this chip: PA7. NOT a
 // placeholder choice (datasheet pin table, ch570.h). Enable/direction are

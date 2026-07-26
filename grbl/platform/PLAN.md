@@ -2992,3 +2992,108 @@ mechanism and deserve their own work items.
   `§NEW`, landed by other work before this session's rebase) — left alone,
   per the file's own policy that renumbering is the integrator's job, not
   a contributor's.
+
+- **BUG #26 FOLLOW-UP: width/truncation audit across every port, two more
+  live bugs found and fixed, common/gpio_logical.h landed (2026-07-26,
+  numbering NOT final — integrator assigns).** Owner tasked a full survey
+  of the five truncation-risk groups (STEP/DIRECTION/LIMIT/CONTROL/PROBE)
+  across all 11 ports after BUG #26, to decide whether samd21's BUG #17
+  logical-port-image contract (`L2P`/`P2L`) should be promoted everywhere
+  or whether the constraint cure (`_Static_assert(<=7)`) stays where it's
+  sufficient. Full survey table, design reasoning, and per-port disposition:
+  CONTRACTS.md
+  [§logical-contract-vs-constraint-cure](CONTRACTS.md#logical-contract-vs-constraint-cure).
+
+  **Two more live bugs found, same failure class as BUG #17/#26, neither
+  previously documented**:
+  1. **samd21 (both boards): CONTROL and PROBE inputs were dead.** megarm's
+     CONTROL bits (14/15/16) were already CONTRACTS.md's own documented
+     "known gap"; megarm's PROBE bit (19) was not. samd21 generic's
+     FEED_HOLD/CYCLE_START/SAFETY_DOOR (8/9/8) and PROBE (10) were not
+     documented at all — found this audit by enumerating every core
+     consumer of every `*_BIT` constant, not by re-reading old docs.
+  2. **stm32f103/f411/h523: PROBE was dead (bit 15, PC15)** — same failure
+     shape as BUG #26's Z_LIMIT_BIT, one input group over. Notably, this
+     one was NEVER visible to `-Woverflow` at all (not even as accepted
+     baseline debt like BUG #26 was): the truncation is a *runtime* AND
+     between a register read and a mask, narrowed only at the enclosing
+     `uint8_t` return — gcc's constant-conversion warning has no compile-time
+     constant to flag. Confirmed by grepping every `ci/warn_baseline_*.txt`
+     for probe.c/system.c overflow/conversion lines: zero hits anywhere.
+     **No baseline entry was found masking a width bug in this pass** — the
+     one class of "invisible" truncation this audit turned up was invisible
+     to the *entire mechanism*, not hidden in an accepted baseline line.
+
+  **Design landed**: `grbl/platform/common/gpio_logical.h` — the reusable
+  per-NAME dispatch scaffold (`GPIO_LOGICAL_DISPATCH_*`/
+  `GPIO_LOGICAL_PASSTHRU_*`) extracted out of samd21/gpio.h's BUG #17
+  mechanism, since a second port (ch570, below) needed the identical shape.
+  The *translation formulas* stay per-board (inherently pin-map-specific);
+  only the indirection plumbing is shared. Applied:
+  - samd21 megarm + generic: CONTROL and PROBE now go through the same
+    logical dispatch STEP/DIRECTION already used.
+  - ch570: same, PLUS a real hardware-interrupt-arm fix — this port's
+    `GPIO_INT_ON` is NOT inert (unlike samd21's), so redefining
+    `CONTROL_MASK` as logical without more would have armed the wrong
+    physical GPIO pins (0/1/2 — LIMIT/SERIAL_RX on this chip) the moment
+    the width fix landed. Fixed by repurposing the previously-unused
+    `name_PCMSK` argument slot to carry the real physical arm mask instead
+    (`platform.h`'s `HAL_GPIO_INTERRUPT_ENABLE/DISABLE` now read `port`, not
+    `mask`); `handlers.c`'s own physical-register pending-bit test needed
+    the matching correction, found by tracing every consumer of the
+    constant, not by inspection.
+  - stm32f103/f411/h523: **kept the constraint cure, deliberately** — PROBE
+    moved PC15→PC0 (free bit, never wired to real hardware on any of the
+    three, same reasoning BUG #26 used for `Z_LIMIT_PIN`) plus the matching
+    assert. The dead second `PROBE_PIN` copy in each port's `config.h` (the
+    pre-existing dual-pin-map debt) was synced to match — leaving it stale
+    tripped a real `"PROBE_PIN" redefined` warning once the two copies
+    disagreed, caught by a full rebuild against the warning baseline, not
+    asserted in advance.
+  - hc32f460, ch32v006, dspic33ak128mc102, `_template`: no live bug (every
+    group already fits bits 0-7) — added the missing LIMIT/CONTROL/PROBE
+    `_Static_assert`s so the guarantee is uniform across the whole tree,
+    not just the ports that happened to have a documented incident.
+    hc32f460 in particular had ZERO width asserts before this batch (not
+    even STEP/DIRECTION) despite already being safe — a guard gap, not a
+    live bug, now closed.
+
+  **Gates, all re-run, all green**: golden AVR `make validate` PASSED
+  (`79af184e67b27defd27a39309ac53563`, untouched — no `grbl/` core file in
+  this batch). All 9 implemented ports rebuilt both flavors (18 builds)
+  clean; every warning ratchet green (`ci/warn_ratchet.py` against every
+  `ci/warn_baseline_*.txt`, zero new warnings anywhere after the
+  `PROBE_PIN` redefinition above was resolved at the source). Byte-identity
+  proof against committed `artifacts/`, per port: **byte-identical**
+  (assert-only changes) — hc32f460, ch32v006, dspic33ak128mc102 (RELEASE
+  `.bin`/`.hex`/`.syms` MD5 unchanged; only `.elf.dump` differs, and only
+  because objdump embeds a non-reproducible invocation path, per that
+  file's own header comment). **Real, expected size growth** (behavior
+  fixed, not neutral) — samd21 megarm RELEASE 31956→32176 (+220), samd21
+  generic RELEASE 31944→32132 (+188), ch570 RELEASE 38434→38586 (+152),
+  stm32f103 RELEASE 29116→29200 (+84, bin-file-size delta), stm32f411
+  RELEASE 26212→26304 (+92), stm32h523 RELEASE 25860→25960 (+100). CONTROL/
+  PROBE translation verified by disassembly, not just "it compiled and
+  linked": samd21 generic's `system_control_get_state()` compiles
+  `GPIO_MRD_CONTROL`'s translation to a single `lsrs r3, r3, #7` plus a
+  mask (the expected pure-shift form for this board's contiguous physical
+  pins), not a branch. `artifacts/` refreshed for exactly the 6 units whose
+  RELEASE output changed (`tools/build_artifacts.py build --platforms
+  samd21-megarm,samd21-generic,stm32f103,stm32f411,stm32h523,ch570`); the 3
+  assert-only ports' MANIFEST DEBUG-hash records updated separately
+  (`--platforms hc32f460,ch32v006,dspic33ak128mc102`) with zero content
+  change, confirmed. Full-tree `tools/build_artifacts.py check`: "56
+  file(s) verified fresh across 10 unit(s)", clean.
+
+  **Found but deliberately not fixed** (out of this batch's scope, flagged
+  for whoever picks it up next): (1) samd21's `GPIO_INT_ON`/`OFF` remain an
+  empty no-op ([§gpio-interrupts](CONTRACTS.md#gpio-interrupts) item 1,
+  pre-existing) — a comment now flags that whoever closes that gap must
+  reach for `CONTROL_L2P(CONTROL_MASK)` at the arm call site, not the bare
+  (now-logical) `CONTROL_MASK`, or they will reproduce ch570's near-miss.
+  (2) The stm32 `config.h`-vs-`platform.h` dual-pin-map debt (pre-existing,
+  documented elsewhere) is unchanged in kind — only `PROBE_PIN`'s copy was
+  synced because this batch's own fix would otherwise have introduced a
+  fresh warning; the general dual-canon issue is a separate item, not
+  claimed closed here. (3) sg2002 has no code yet (design-only, Phase 6
+  deferral) — nothing to audit until it lands.
