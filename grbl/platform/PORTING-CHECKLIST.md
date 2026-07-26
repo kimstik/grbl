@@ -76,6 +76,34 @@ toggle, or emulator cycle count).
       enable pull-ups (§1.4 — SAMD21 got this wrong).
 - [ ] Audit `GPIO_MWO`/`GPIO_BSET` RMW atomicity for registers shared between
       mainline and ISR writers; use hardware set/clear registers if needed (§1.2).
+- [ ] **Every port your board's `*_PORT` macros name has its bus clock
+      enabled before first use** (BUG #24 — see CONTRACTS.md's
+      "A configured, wired GPIO pin still does nothing if its PORT's bus
+      clock was never gated on" section, anchor `gpio-port-clock-gating`;
+      not linked here as a real markdown link because its heading is
+      still `§NEW` pending integrator renumbering, and
+      `check_contracts_numbering.py` does not register a `§NEW` section's
+      anchor as a valid cross-file link target until then) — on
+      every ARM/RISC-V family here, a GPIO port sits behind its own bit in
+      a peripheral clock-enable register (STM32 `RCC->APB2ENR`/`AHBxENR`
+      IOPxEN/GPIOxEN, CH32V00x `RCC->PB2PCENR` IOPxEN), and a gated port
+      reads back zero and ignores every write regardless of how correctly
+      the rest of the GPIO code is written. `ch32v006` shipped with STEP/
+      DIRECTION/STEPPERS_DISABLE/COOLANT (GPIOC) and CONTROL (GPIOB) wired
+      and configured correctly but never clock-gated — dead pins on real
+      silicon, invisible to every other gate (link, golden AVR, warning
+      ratchet, `assert_no_double.sh`, even BUG #23's `init_check.sh`, which
+      proves your clock/GPIO bring-up function *runs*, not which bits it
+      sets). Derive the enable mask from the same `*_PORT` macros the pin-
+      config code already consumes (a small pointer-dispatch helper, see
+      `ch32v006/platform.c`'s `gpio_port_clken()`) rather than a hand-typed
+      literal — a literal silently goes stale the moment a re-pin adds a
+      port nobody remembers to add to it. This is NOT `_Static_assert`-able
+      (`*_PORT` are runtime pointer values, not preprocessor tokens); do
+      the derivation as real code and prove it ran via
+      `common/init_check.sh` (tag the enabling function `GRBL_BOOT_INIT`,
+      add it to `INIT_SYMBOLS`) — that proves reachability, not mask
+      completeness, so re-check this box by hand on every re-pin.
 
 Exit: test main() drives STEP/DIR pins, reads a jumpered LIMIT pin high/low
 with pull-up on/off.
