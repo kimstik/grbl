@@ -126,6 +126,7 @@ GRBL_BOOT_INIT void SystemClock_Config(void);
 // Deliberately noinline and NOT `used` - see common/boot_init.h.
 GRBL_BOOT_INIT void SystemInit(void) {
   SystemClock_Config();
+  hal_gpio_clock_init();   // BUG #24: GPIOB/C clocks were never gated on
 }
 
 // ============================================================================

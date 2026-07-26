@@ -2478,16 +2478,18 @@ atmega328p took Makefile-only changes and are byte-identical.
 Recorded so they are not rediscovered as novel; both are outside BUG #23's
 mechanism and deserve their own work items.
 
-  1. **`ch32v006` never enables the GPIOC/GPIOD port clocks.**
-     `RCC->PB2PCENR` is written in exactly two places in the whole port:
-     `platform.c:202` (`hal_timer_spindle_pwm_init`, adds `IOPAEN`) and
-     `serial.c:48` (adds `IOPDEN`). The generic board puts STEP, DIRECTION,
-     STEPPERS_DISABLE and COOLANT_FLOOD on **GPIOC**, whose clock is never
-     enabled at all, and LIMIT on GPIOD (enabled only incidentally, by the
-     serial path). Same *symptom class* as BUG #23 — a port whose pins are
-     never really configured — but a different *mechanism*: the register
-     write does not exist, rather than existing and being unreachable. The
-     new ratchet cannot see this: there is no missing symbol to detect.
+  1. **`ch32v006` never enables the GPIOC/GPIOD port clocks — CLOSED,
+     see BUG #24 below.**
+     `RCC->PB2PCENR` was written in exactly two places in the whole port
+     that set an `IOPxEN` bit: `platform.c:202` (`hal_timer_spindle_pwm_init`,
+     adds `IOPAEN`) and `serial.c:48` (adds `IOPDEN`). The generic board puts
+     STEP, DIRECTION, STEPPERS_DISABLE and COOLANT_FLOOD on **GPIOC**, whose
+     clock was never enabled at all, and LIMIT on GPIOD (enabled only
+     incidentally, by the serial path). Same *symptom class* as BUG #23 — a
+     port whose pins are never really configured — but a different
+     *mechanism*: the register write does not exist, rather than existing
+     and being unreachable. The BUG #23 ratchet cannot see this: there is
+     no missing symbol to detect.
   2. **`SPINDLE_ENABLE_PIN` has two conflicting live values on
      stm32f103/f411/h523.** The port's `config.h` (which shadows core's via
      `-I.`) and `platform.h` both define it unguarded with *different*
@@ -2599,3 +2601,104 @@ mechanism and deserve their own work items.
     `artifacts/README.md`, `PLAN.md`, `CONTRACTS.md`. No port `Makefile`,
     source file, or CI config touched — `-ffile-prefix-map` reviewed and
     left as-is, not edited.
+
+- **2026-07-26 — BUG #24 FIXED: ch32v006 never enabled the GPIOC/GPIOB
+  port clocks — STEP/DIR/STEPPERS_DISABLE/COOLANT and CONTROL were dead
+  pins on real silicon.** Follow-up on item 1 of the "two adjacent
+  defects" list directly above (itself surfaced by the BUG #23 audit).
+  Re-verified the claim from scratch rather than trusted: grepped every
+  `PB2PCENR`/`RCC` write under `ch32v006/`, `ch570/`, `common/wch/` and
+  cross-checked against `boards/generic/config.h`'s pin map.
+  - **Confirmed, and worse than reported**: `RCC->PB2PCENR` had exactly
+    three write sites, only two of which set an `IOPxEN` bit —
+    `platform.c:90` (`hal_gpio_interrupt_enable`, `AFIOEN` only),
+    `platform.c:202` (`hal_timer_spindle_pwm_init`, `IOPAEN`), `serial.c:48`
+    (`serial_init`, `IOPDEN`). Cross-checked against every `*_PORT` macro
+    in `boards/generic/config.h`: GPIOA (PROBE, SPINDLE_*) was covered by
+    the spindle-init IOPAEN; GPIOD (LIMIT, SERIAL_TX/RX) was covered only
+    incidentally by the serial-init IOPDEN. **GPIOC (STEP, DIRECTION,
+    STEPPERS_DISABLE, COOLANT_FLOOD) and GPIOB (CONTROL_RESET/FEED_HOLD/
+    CYCLE_START/SAFETY_DOOR) had NO write anywhere that ever set IOPCEN or
+    IOPBEN** — the original one-line audit named only GPIOC/GPIOD;
+    GPIOB (the entire CONTROL input group) was an equally real, previously
+    unreported instance of the same hole.
+  - **What this means on the bench**: motion never happens (STEP/DIRECTION
+    read back zero, write is ignored), steppers never disable, coolant
+    never switches, and reset/feed-hold/cycle-start/safety-door inputs
+    never work — while `make BUILD=RELEASE` links clean, the golden AVR
+    gate is untouched, the warning ratchet is green, `assert_no_double.sh`
+    passes, and BUG #23's own `init_check.sh` reports `SystemInit`/
+    `SystemClock_Config` reachable (that ratchet proves those functions
+    *run*, not which register bits they set) — every existing gate is
+    green on a board that cannot move.
+  - **ch570 checked for the same defect — does NOT have it.** `ch570.h`'s
+    own header documents a single always-on GPIO port ("PA", discrete
+    registers, AVR-style — matches the datasheet's "12 general input and
+    output pins" on one port). There is no per-port clock-gate register
+    for GPIO on this chip at all; the only gated peripherals
+    (`R8_SLP_POWER_CTRL`/`R8_CLK_SYS_CFG`) are clock-tree/sleep-mode, never
+    GPIO. No change made to ch570 — nothing to gate.
+  - **Fix**: `platform.c` gained `gpio_port_clken(GPIO_TypeDef*)` (pointer-
+    equality dispatch over GPIOA/B/C/D) and `hal_gpio_clock_init()`, which
+    ORs that helper's result over every `*_PORT` macro the board defines
+    (12 of them) into `RCC->PB2PCENR` — derived from the same pin-map
+    macros the GPIO config code already consumes, not a hand-copied
+    literal, so a future re-pin can't silently reopen this hole. Wired
+    into the existing BUG #23 boot chain: `GRBL_BOOT_INIT`-tagged, called
+    from `SystemInit()` before `main()`, added to `Makefile`'s
+    `INIT_SYMBOLS` — `common/init_check.sh` now proves it is reachable in
+    every RELEASE link, the same mechanism BUG #23 established. Removed
+    the now-redundant `IOPAEN`/`IOPDEN` bits previously set inline inside
+    `hal_timer_spindle_pwm_init`/`serial_init` (single source of truth).
+  - **Ratchet considered and rejected for the completeness half**: a
+    `_Static_assert` cannot check "the enable mask covers every port these
+    `*_PORT` macros name" because the macros are runtime pointer values,
+    not preprocessor-comparable tokens — any such assert would have to
+    reimplement the same runtime dispatch and check the derivation against
+    itself, a guard that cannot fail (the exact blind-guard trap PLAN.md
+    already warns about re: `assert_no_double.sh`-class checks). What WAS
+    added is real: the reachability ratchet above. What was NOT invented:
+    a fake completeness check. `PORTING-CHECKLIST.md`'s GPIO step now asks
+    porters to verify every `*_PORT` their board defines has a
+    corresponding clock-enable bit, so the next re-pin is asked at the
+    right time instead of discovered on a dead bench.
+  - **Gates re-run**: golden AVR `make -C grbl/platform/atmega328p
+    validate` PASSED (MD5 `79af184e67b27defd27a39309ac53563`, untouched —
+    no core file or `atmega328p/` file in this batch); warning ratchet
+    green on both flavors (`ci/warn_ratchet.py` against
+    `ci/warn_baseline_ch32v006.txt`, 4 pre-existing core-only warnings,
+    0 new); `assert_no_double.sh` PASSED both flavors; `init_check.sh`
+    PASSED both flavors listing `hal_gpio_clock_init` as defined; boot
+    integrity (`_start=0x00000000`) PASSED both flavors; ch570 rebuilt
+    unaffected (38434/4/6852 RELEASE, 46830/4/6850 DEBUG — untouched by
+    this batch, confirmed via `git diff --stat` touching only
+    `ch32v006/{Makefile,platform.c,platform.h,serial.c,startup.c}` plus
+    docs and `artifacts/ch32v006/*`); stm32f103 RELEASE rebuilt unaffected
+    as a sibling sanity check. **Byte deltas (measured before/after on
+    this exact tree, not against a stale historical figure)**: ch32v006
+    RELEASE `.text` 39024 → 39044 (**+20 bytes**, `data`/`bss` unchanged
+    at 0/2752); DEBUG `.text` 46988 → 47120 (**+132 bytes**, `bss`
+    unchanged at 2750) — the larger DEBUG delta is the un-inlined
+    `gpio_port_clken` helper's full body at `-Og`, expected and harmless
+    (one-time boot-time cost, never ISR-hot). `artifacts/ch32v006/`
+    (`.bin`/`.hex`/`.syms`) refreshed via `tools/build_artifacts.py build
+    --skip-debug --platforms ch32v006`; `MANIFEST.sha256` hand-merged back
+    against the pre-fix committed file so only the three ch32v006 lines
+    changed (the tool's `--platforms` flag regenerates the whole shared
+    manifest from only the platforms it rebuilds, which would have
+    silently dropped every other port's tracked hash — caught before
+    committing, not shipped).
+  - **Docs**: CONTRACTS.md gained a new end-of-file section (anchor
+    `gpio-port-clock-gating`, heading `§NEW` pending integrator renumbering
+    per the file's own collision-avoidance rule) generalizing the failure
+    mode across every ARM/RISC-V port in this tree (each gates GPIO behind
+    a bus clock-enable bit under a different register name); the
+    "Two adjacent defects" item above marked CLOSED with a plain-text
+    pointer (not a markdown link — `check_contracts_numbering.py`'s
+    heading-number regex does not register a `§NEW` section's anchor as a
+    valid link target until it is renumbered, so a real link would have
+    reported as a false dangling-link failure). `tools/
+    check_contracts_numbering.py` re-run: same 2 pre-existing problems as
+    before this batch (duplicate/non-sequential `26` at lines 2593/2721,
+    both already present pre-fix and both the integrator's stated job, not
+    introduced here) — zero new problems from this session's edits.

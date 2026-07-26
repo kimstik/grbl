@@ -2970,15 +2970,28 @@ passes that one, which is why the matcher is field-exact.
 
 Recorded so they are not rediscovered as novel:
 
-1. **`ch32v006` never enables GPIOC/GPIOD port clocks.** `RCC->PB2PCENR`
-   is written in exactly two places: `hal_timer_spindle_pwm_init` (adds
-   `IOPAEN`) and `serial_init` (adds `IOPDEN`). The board's STEP/DIRECTION/
-   STEPPERS_DISABLE/COOLANT pins are all on **GPIOC**, whose clock is
-   never enabled, and LIMIT is on GPIOD (enabled only incidentally, by
-   the serial path). Same *symptom class* as BUG #23 — a port whose pins
-   are never really configured — but a different *mechanism*: the register
-   write does not exist, rather than existing and being unreachable. The
-   BUG #23 ratchet cannot see this (there is no missing symbol to detect).
+1. **`ch32v006` never enables GPIOC/GPIOD port clocks — CLOSED, BUG #24.**
+   `RCC->PB2PCENR` was written in exactly two places that set an `IOPxEN`
+   bit: `hal_timer_spindle_pwm_init` (adds `IOPAEN`) and `serial_init`
+   (adds `IOPDEN`). The board's STEP/DIRECTION/STEPPERS_DISABLE/COOLANT
+   pins are all on **GPIOC**, and CONTROL is on **GPIOB** — neither port's
+   clock was ever enabled anywhere (broader than the original one-line
+   finding above, which named only GPIOC/GPIOD: GPIOB was equally
+   ungated). LIMIT/serial's GPIOD was enabled only incidentally, by the
+   serial path, which is exactly the kind of coincidence that breaks the
+   moment a board separates those two signals onto different ports. Same
+   *symptom class* as BUG #23 — a port whose pins are never really
+   configured — but a different *mechanism*: the register write does not
+   exist, rather than existing and being unreachable, so the BUG #23
+   ratchet could not see it (there is no missing symbol to detect). See
+   the new "A configured, wired GPIO pin still does nothing if its PORT's
+   bus clock was never gated on" section appended at the end of this file
+   (anchor `gpio-port-clock-gating`) for the fix and the new
+   reachability-based ratchet — not linked here as a real markdown link:
+   its heading is still `§NEW` (integrator renumbers), and this checker's
+   `## N.` heading pattern does not register a `§NEW` section's anchor as
+   a valid link target until that renumbering happens, so a real link
+   here would report as dangling until then.
 2. **`SPINDLE_ENABLE_PIN` has two conflicting live values on
    stm32f103/f411/h523.** The port's `config.h` (which shadows core's via
    `-I.`) and `platform.h` both define it unguarded, with *different*
@@ -2990,3 +3003,104 @@ Recorded so they are not rediscovered as novel:
    pin and driven on another. Additionally `stm32h523::hal_gpio_init`
    consumes neither macro — it hardcodes `(1 << 7)` literals, so its pin
    map is decorative regardless.
+
+<a id="gpio-port-clock-gating"></a>
+## §NEW. A configured, wired GPIO pin still does nothing if its PORT's bus clock was never gated on (BUG #24)
+
+Distinct from [§boot-init-unreachable](#boot-init-unreachable) (BUG #23,
+code that exists but nothing calls) and from [§1](#gpio-data) (pins wired
+to the wrong bit): this is a port whose GPIO code is reachable, correct,
+and called — and still inert, because the peripheral bus never delivered
+a clock to that port's register block. On every ARM/RISC-V MCU family in
+this tree, each GPIO port sits behind its own bit in a peripheral
+clock-enable register (STM32 `RCC->APB2ENR`/`AHBxENR` IOPxEN/GPIOxEN,
+CH32V00x `RCC->PB2PCENR` IOPxEN, HC32/others under a different name for
+the same gate). While that bit is 0, the port's registers read back all
+zero and ignore every write — `CFGLR`/`MODER`/`OUTDR` writes silently
+no-op, exactly like [§3](#stepper-timer)'s "prescaler that compiles and
+destroys machine behavior" cautionary tale, one level down in the address
+space instead of in a macro body.
+
+**Empirical case, ch32v006 (verified via a real `make BUILD=RELEASE`
+rebuild this session, `grbl/platform/ch32v006/`):** `RCC->PB2PCENR` had
+exactly two write sites that ever set an `IOPxEN` bit —
+`hal_timer_spindle_pwm_init()` (`IOPAEN`, because it also owns TIM1's
+AFIO remap) and `serial_init()` (`IOPDEN`, because USART1 lives there).
+Cross-checking the board's own pin map
+(`boards/generic/config.h`) against that set:
+
+| Port | Signals | Clock ever enabled? |
+|---|---|---|
+| GPIOA | PROBE, SPINDLE_ENABLE/DIRECTION/PWM | yes (`hal_timer_spindle_pwm_init`) |
+| GPIOB | CONTROL_RESET/FEED_HOLD/CYCLE_START/SAFETY_DOOR | **no** |
+| GPIOC | STEP, DIRECTION, STEPPERS_DISABLE, COOLANT_FLOOD | **no** |
+| GPIOD | LIMIT, SERIAL_TX/RX | yes (`serial_init`, incidentally covers LIMIT) |
+
+GPIOC carried the entire motion output group — on real silicon this board
+never moves, never disables steppers, and never runs coolant, while
+compiling clean, linking clean, and passing every existing gate (golden
+AVR untouched, warning ratchet green, `assert_no_double.sh` green,
+[§boot-init-unreachable](#boot-init-unreachable)'s `init_check.sh` green
+— that ratchet proves `SystemInit` and `SystemClock_Config` are reachable,
+it says nothing about which bits they set). GPIOB (CONTROL: feed-hold/
+cycle-start/reset/safety-door) was equally dead. GPIOD only worked by the
+coincidence of LIMIT and USART1 sharing a port on this particular
+placeholder pin map — a board that moved LIMIT to its own port would lose
+limit switches with no other code change and no compiler warning.
+
+### The fix: derive the enable set from the pin map, not a literal
+
+`grbl/platform/ch32v006/platform.c` gained a `gpio_port_clken(GPIO_TypeDef*)`
+helper (pointer-equality dispatch over `GPIOA/B/C/D`) and
+`hal_gpio_clock_init()`, which ORs the result of that helper over every
+`*_PORT` macro the board defines (`STEP_PORT`, `DIRECTION_PORT`,
+`STEPPERS_DISABLE_PORT`, `COOLANT_FLOOD_PORT`, `LIMIT_PORT`,
+`CONTROL_PORT`, `PROBE_PORT`, `SPINDLE_ENABLE_PORT`,
+`SPINDLE_DIRECTION_PORT`, `SPINDLE_PWM_PORT`, `SERIAL_TX_PORT`,
+`SERIAL_RX_PORT`) into `RCC->PB2PCENR`. A hand-written literal
+(`IOPAEN|IOPBEN|IOPCEN|IOPDEN`) would have fixed today's board but drifts
+silently the moment a re-pin adds a port nobody remembers to add to the
+literal — the exact failure mode this section documents, reintroduced by
+the fix itself. Deriving from the same `*_PORT` macros the pin-config code
+already consumes means a re-pin that moves a signal to a new port
+automatically gates that port's clock too; it cannot silently regress.
+The redundant `IOPAEN`/`IOPDEN` bits previously set inline inside
+`hal_timer_spindle_pwm_init`/`serial_init` were removed (single source of
+truth) once `hal_gpio_clock_init()` — called from `SystemInit()` before
+`main()`, per [§boot-init-unreachable](#boot-init-unreachable)'s ordering
+rule "GPIO after clock, both before `main()`" — was proven to run first.
+
+### The ratchet considered, and the one actually added
+
+A `_Static_assert` cannot check this: `*_PORT` are runtime pointer values
+(`(GPIO_TypeDef*)0x...`), not preprocessor-comparable tokens, so there is
+no way to assert at compile time "the enable mask covers every port these
+pointers name" without reimplementing the same runtime dispatch inside
+the assert and thereby checking the derivation against itself — a guard
+that cannot fail (PLAN.md's standing warning about `assert_no_double.sh`-
+class guards applies here too). What *was* added is
+[§boot-init-unreachable](#boot-init-unreachable)'s existing reachability
+ratchet, extended: `hal_gpio_clock_init` is tagged `GRBL_BOOT_INIT` and
+added to `ch32v006/Makefile`'s `INIT_SYMBOLS`, so `common/init_check.sh`
+now proves it is a real, called, non-inlined function in every RELEASE
+link — the same proof BUG #23 established for `SystemInit`/
+`SystemClock_Config`. That proves the function *runs*; it does not prove
+its *contents* are complete (a future board that adds a 5th port and
+forgets to add it to `hal_gpio_clock_init`'s OR-chain would still pass
+every existing gate). This is the honestly-scoped half of the fix: the
+reachability ratchet was cheap, real, and reused an established mechanism;
+a completeness ratchet was not, and none was invented to fake one. Porters
+adding a new `*_PORT` to a board's config.h must manually extend
+`gpio_port_clken`'s dispatch and `hal_gpio_clock_init`'s call list — flagged
+in `PORTING-CHECKLIST.md`'s GPIO step so it is asked at the right time
+instead of discovered on the bench.
+
+`ch570` (`grbl/platform/ch570/`, same WCH family, shares `common/wch/`)
+was audited for the same defect and does **not** have it: that chip has a
+single GPIO port ("PA", `ch570.h` — datasheet: "The chip provides a group
+of GPIO ports PA with 12 general input and output pins") implemented as
+always-on discrete registers, AVR-style — there is no per-port clock-gate
+register for GPIO on this chip at all (confirmed by reading `ch570.h`'s
+register map: the only gated peripherals behind `R8_SLP_POWER_CTRL`/
+`R8_CLK_SYS_CFG` are clock-tree and sleep-mode related, never GPIO). No
+change was made to ch570 — there is nothing to gate.
