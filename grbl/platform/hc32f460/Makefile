@@ -79,7 +79,13 @@ vpath %.c $(GRBL_DIR)
 vpath %.c $(PLATFORM_DIR)
 
 CFLAGS  = -mcpu=$(CPU) -mthumb $(FPU)
-CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)
+# BUG #18 class, widened: at 200 MHz, plain UL (32-bit unsigned long on this
+# ABI) still overflows stepper.c:1015's compile-time constant
+# `TICKS_PER_MICROSECOND*1000000*60` (true 12000000000, UL wraps to
+# 3410065408, silently - unsigned wraparound isn't warned). ULL is
+# guaranteed >=64-bit, so the constant folds correctly. See
+# common/stm32/common.mk's matching comment for the measured proof.
+CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)ULL
 CFLAGS += -Wall -Wextra
 CFLAGS += -ffunction-sections -fdata-sections
 

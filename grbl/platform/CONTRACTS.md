@@ -3841,3 +3841,126 @@ core's width. A future re-pin that violates (a) fails the build; a future
 re-pin under (b) cannot violate the contract because core never sees the
 physical bit number at all. sg2002 has no code yet, so nothing to guarantee
 there — the same audit applies the day it lands.
+
+<a id="clock-constant-width"></a>
+## 36. A clock constant must be wide enough for its worst real value, not its current one (BUG #18 class)
+
+**Correction first**: PLAN.md's BUG #18 entry ("F_CPU: `-DF_CPU=$(CLOCK)UL`,
+stepper.c:1015 computes unsigned, warning gone") was itself incomplete, and
+no section of this file documented the underlying contract - there was no
+"§18" here to cross-reference. This section is that missing contract, not
+an edit to an existing one.
+
+**The arithmetic**: core's `grbl/nuts_bolts.h:47` defines
+`TICKS_PER_MICROSECOND (F_CPU/1000000)`; `grbl/stepper.c:1015` computes
+`TICKS_PER_MICROSECOND*1000000*60` - every operand a compile-time constant,
+so GCC folds the whole thing at compile time, before it ever reaches the
+runtime `*inv_rate` float multiply. The fold happens in F_CPU's own type.
+An `int` (no suffix) overflows this above ~35.8 MHz; `unsigned long`
+(`UL`) only pushes that ceiling to ~71.58 MHz, because `unsigned long` is
+**32-bit on every ILP32 target this tree ships for** (ARM/AVR/RISC-V32
+`-mabi=ilp32*`) - `TICKS_PER_MICROSECOND*60,000,000` exceeds `UINT32_MAX`
+the moment `TICKS_PER_MICROSECOND` (= clock in MHz) passes 71. Only
+`unsigned long long` (`ULL`) is guaranteed >=64 bits by the C standard
+regardless of target ABI, and only it survives every clock this tree
+actually uses (72-250 MHz on the affected ARM ports, 700 MHz on sg2002).
+
+**The trap that made this a two-strike class**: unsigned overflow is
+**silent** - it is well-defined wraparound, not undefined behavior, so
+`-Woverflow` does not fire on it the way it fires on signed overflow.
+Confirmed empirically (arm-none-eabi-gcc 13.2.1, xc-dsc-gcc 8.3.1,
+riscv64-unknown-elf-gcc 13.2.0, real `-S`/`-c` codegen, not
+`-fsyntax-only`): `F_CPU=200000000UL` on an ILP32 target compiles clean,
+zero warnings, and silently bakes in `3410065408` where the true value is
+`12000000000` - a ~3.52x error with nothing in the build log to find it.
+This is exactly what happened to `dspic33ak128mc102` (200 MHz): its own
+Makefile carried `-DF_CPU=$(CLOCK)UL`, checked in under a "BUG #18 FIXED"
+banner, and was never actually fixed - the warning's disappearance was
+mistaken for the bug's disappearance. `hc32f460` (200 MHz, no suffix at
+all) and `stm32f103/f411/h523` (72/96/250 MHz, no suffix,
+`common/stm32/common.mk`) carried the same defect with the warning still
+visible (signed overflow), which is why they were caught and dsPIC wasn't.
+
+**The rule**: any clock constant that feeds `TICKS_PER_MICROSECOND` or an
+equivalent core-consumed timing macro must carry `ULL`, not `UL` -
+regardless of whether the port's CURRENT `CLOCK` value happens to fit
+under 32 bits today. A port's clock is a Makefile variable a future board
+revision changes; a suffix that is "safe" only because of today's value is
+a latent recurrence of this exact bug, one clock bump away. `samd21`
+(48 MHz), `ch32v006` (48 MHz), `ch570` (60 MHz) keep `UL` deliberately -
+their real clocks are under the 32-bit threshold, so widening them is an
+unjustified diff with a real (if small) code-size cost at the three
+runtime-variable pulse-time call sites (stepper.c:240,242,245) and no
+numeric benefit; if any of their `CLOCK` values ever rises above ~71 MHz,
+this section's rule applies to them too and `UL` must be revisited.
+`HAL_CPU_FREQ`/`CPU_FREQ`-style port-owned capability constants (separate
+macros, not derived from this Makefile define) are a different contract
+and must be audited independently - most already carry a correctly-sized
+literal (hc32f460's own `HAL_CPU_FREQ` is real, 200000000UL, and *is*
+consumed directly in a runtime multiply/SysTick-reload, which is exactly
+why 32-bit is fine there: 200000000/1000 fits any width), except
+stm32h523/platform.h's `HAL_CPU_FREQ` (72000000UL, stale copy-paste from
+its stm32f103 sibling, "72 MHz" comment and all - dead code, confirmed
+unused anywhere in that port's own sources, so numerically inert, not
+fixed here because it is outside this section's scope and touching it
+risks the concurrent pin-width batch's territory in the same file).
+
+<a id="baseline-entry-discipline"></a>
+## 37. A warning-baseline entry requires a recorded judgement, not a resemblance
+
+This file has no written rule for what may enter a `ci/warn_baseline_*.txt`
+file. BUG #18's own history shows the gap is not theoretical: the F_CPU/UL
+fix was judged correct at samd21, and the SAME suffix was then applied to
+ch32v006/ch570/dspic33ak128mc102 because it had already worked once, not
+because each site's own arithmetic was re-derived at its own clock. It
+happened to hold for ch32v006/ch570 (48/60 MHz, under the 32-bit
+threshold) and silently failed for dspic33ak128mc102 (200 MHz, over it) -
+see [§clock-constant-width](#clock-constant-width). A baseline entry is
+the same class of decision wearing a different hat: "this diagnostic is
+safe" is a claim about the code at hand, and a claim about a different
+site is not evidence for it.
+
+The concrete, already-landed precedent this rule generalizes from:
+`config.h`'s "dual pin-map canon" comment, verbatim, on two ports before
+BUG #25's fix - h523's copy said **"same pattern already accepted for
+stm32f103"**, f411's said **"same accepted pattern already carried by
+stm32f103/stm32h523"** ([§33](#gpio-pin-map-single-owner)). Both were
+citing precedent instead of checking the site: `SPINDLE_ENABLE_PIN`/
+`SPINDLE_DIRECTION_PIN`/`COOLANT_FLOOD_PIN` actually disagreed in value
+between `config.h` and `platform.h` on the ports carrying that comment,
+and the disagreement drove a real miswired relay - "already accepted
+elsewhere" was the reasoning that let it sit unexamined on a second and
+third port after the first.
+
+**The rule**:
+
+1. Every `ci/warn_baseline_<port>.txt` entry's surrounding comment must
+   state, for that entry specifically, WHY the diagnostic is a false
+   positive or accepted debt - argued from the flagged code itself (its
+   actual values, types, or call sites), not from the entry's shape
+   matching one already in this file or another port's baseline.
+2. **"Same pattern/class already accepted elsewhere" is not, by itself, a
+   judgement.** It may be cited as supporting context after the site has
+   been independently checked, never as the check itself. If the
+   justification text could be copy-pasted to a different file:line
+   without editing anything but the filename, it has not yet stated a
+   judgement.
+3. A baseline entry for a numeric diagnostic (`-Woverflow`,
+   `-Wconversion`, `-Wtype-limits` and siblings) must record the actual
+   value in question (the wrapped/truncated result GCC reports, or the
+   values being compared) and why that specific number is harmless -
+   "the compiler flagged a conversion but it looked fine" is not a
+   judgement without the number. `docs/TOOLCHAIN-VERSIONS.md`'s §2
+   catalogue and this file's [§34](#core-purity-diagnostic-response) both
+   already model the expected shape; hold every baseline file to it.
+4. When one fix is applied to more than one file or port under a shared
+   assumption (a suffix, a flag, a static assert), each site's own
+   numbers must be independently re-derived before the fix is trusted
+   there - inheriting a fix's correctness from the one site that was
+   actually checked is the same failure as inheriting a baseline entry's
+   safety from the one site that was actually read.
+5. An entry that cannot be justified under points 1-3 is not deleted on
+   sight either - flag it for a real look (as this section's own audit
+   did across every `ci/warn_baseline_*.txt` in the tree) rather than
+   mass-removing or mass-keeping. Silence in either direction is the same
+   mistake this rule exists to stop.
