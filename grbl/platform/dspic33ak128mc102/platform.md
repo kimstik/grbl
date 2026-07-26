@@ -6,7 +6,7 @@ dual-precision hardware FPU, motor-control PWM + SCCP, PPS pin remap,
 Community hardware reference: MC106 Curiosity (needs its own `boards/`
 dir; the shipped `boards/generic` is a paper pinout for the bare chip).
 
-## Status (Phase 6 rolling #2, M1–M3 complete)
+## Status (Phase 6 rolling #2 — Steps 3-6 COMPLETE, 2026-07-26)
 
 - M1: skeleton compiles (toolchain crt0 + linker-synthesized IVT — see
   `platform.c` startup-model banner for why there is no `startup.c`).
@@ -14,8 +14,32 @@ dir; the shipped `boards/generic` is a paper pinout for the bare chip).
   clock docs — **UNVERIFIED ON SILICON**, no emulator exists) + GPIO
   (LAT/PORT/TRIS/ANSEL/CNPU model, token-paste accessors, critical-
   section-wrapped single-bit writes — see `gpio.h` ATOMICITY note).
-- M3: all core `.c` compile; `make link` lists exactly the PORT_TODO_*
-  symbols for timers/serial/nvmem/handlers (Steps 3–6, next batch).
+- M3: all core `.c` compile.
+- **Steps 3-6 (real implementations)**: T1 = stepper timer, SCCP1 =
+  pulse-reset (software x8 rescale of the 8-bit overflow-horizon contract
+  instead of a hardware /8 prescale — this timer doesn't have one),
+  SCCP2 = spindle PWM, UART1 (freshly mined register model — no donor
+  port existed for this ISA's UART), NVMEM via ROW PROGRAM into a
+  linker-reserved fixed flash address (`__attribute__((address(...)))`,
+  link-tested clean against the unmodified vendor `.gld`), GPIO Change
+  Notification arm/disarm, real ISR bodies (flag-clear-first, dispatching
+  to the core-supplied `__isr_step_impl`/`LIMIT_INT_IRQHandler`/
+  `CONTROL_INT_IRQHandler`), real `_delay_us/_delay_ms` via the
+  toolchain's own `__delay32`/`libpic30.h`. **`make BUILD=DEBUG` and
+  `make BUILD=RELEASE` both build the full ELF+hex and link with ZERO
+  `PORT_TODO_*`** (verified: `nm | grep PORT_TODO` empty on both). Sizes:
+  RELEASE ~41.8KB code / DEBUG ~53.2KB code (128KB flash), RAM ~3.8KB
+  RELEASE (16KB). See CONTRACTS.md §16 items 12-20 for the full register-
+  fact writeup, including two specific RM-only gaps (SCCP MOD/CLKSEL/
+  TMRPS encodings, PPS OUTPUT function-select codes) that are structurally
+  real but numerically UNVERIFIED pending hardware bring-up.
+- **FP=DOUBLE is this port's declared default** (native DP FPU — the
+  chip class CONTRACTS.md §17.3 was written for): `Makefile` sets
+  `FP ?= DOUBLE`, disarms `assert_no_double.sh`, and documents why inline.
+  `FP=SINGLE` remains available (bidirectional knob, `boards/generic/
+  prelude.h` carries the same SP libm shim as samd21) but is not the
+  default and has not been runtime-exercised (no dsPIC33A emulator
+  exists).
 - NOT in CI yet: unattended toolchain fetch in CI is a separate ledger
   item (PLAN.md).
 
@@ -57,6 +81,19 @@ Compile pattern (all three parts load-bearing): `-mcpu=33AK128MC102
 - **AVR SBI atomicity does NOT transfer** (`gpio.h`): `LATx |= bit` is a
   3-instruction RMW at `-Og`/`-Os` (disasm-proven) and there are no
   LATxSET/CLR registers → GPIO_BSET/BCLR are critical-section wrapped.
-- **Interrupt nesting is native** (`handlers.c`): IPCx priorities let the
-  pulse-reset IRQ genuinely preempt the stepper IRQ (better than the
-  M0+ reference posture; Step 3 must set priorities explicitly).
+- **Interrupt nesting is native** (`handlers.c`, `platform.c`): IPCx
+  priorities let the pulse-reset IRQ genuinely preempt the stepper IRQ
+  (CCT1IP=5 > T1IP=4) — better than the M0+ reference posture.
+- **NVMEM window reserved by fixed address, not a custom linker script**
+  (`nvmem.c`): `__attribute__((address(0x81F800)))` on a `static const`
+  object claims the last 2KB erase page of program flash; link-tested
+  clean against the *unmodified* vendor `.gld` — future code growth that
+  collides fails the link loudly instead of corrupting silently.
+- **PPS is two different verification classes** (`platform.h`): RPn INPUT
+  muxing is fully verified (field = literal RPn number); RPn OUTPUT
+  muxing uses UNVERIFIED placeholder function-select codes (no
+  value-group exists anywhere in the vendored `.atdf` for any `RPORx`
+  field — genuinely RM-only, unlike most of this port's other gaps).
+- **FP=DOUBLE is this port's declared default** (`Makefile`): native DP
+  FPU makes 64-bit float arithmetic native-cost, not soft-float-tax —
+  the chip class CONTRACTS.md §17.3 named before this port existed.

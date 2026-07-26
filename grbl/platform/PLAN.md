@@ -206,14 +206,38 @@ Priority order (revise as hardware/toolchain reality dictates):
       R 28644), 13-row CI matrix, baseline real-log (14). Old dir was fiction
       (never built, duty-cap twin inside). CONTRACTS §15: 7 family-mix traps
       (F4 = H5-GPIO + F1-EXTI/USART hybrid; TIM1@0x40010000 else SDIO hit).
-- [~] **dsPIC33AK128MC102** M1-M3 DONE (rolling #2, THE THIRD ISA): XC-DSC 3.30
-      installed per recipe, 33 PORT_TODO remain (Steps 3-6 next batch), CONTRACTS
-      §16 = 11 items (linker-owned IVT — third startup model; barrier-free ISA;
-      compiler won't emit atomic bset -> critical-wrapped BSET/BCLR; -O1/-Og ICE;
-      ANSEL analog trap; native priority nesting first!). NO CI rows yet — XC-DSC
-      fetch-in-CI = separate item. NOTE: agent pushed directly (protocol deviation,
-      my prompt omission) — post-hoc gates ALL GREEN (golden, samd21 60864,
-      h523 48644); accepted. Future briefs re-state: NEVER push, return diffs.
+- [x] **dsPIC33AK128MC102 COMPLETE** (rolling #2, THE THIRD ISA): Steps 3-6
+      LANDED 2026-07-26 — `make BUILD=DEBUG` and `make BUILD=RELEASE` both
+      build the FULL ELF+hex and LINK with **zero `PORT_TODO_*`** (verified:
+      `nm | grep PORT_TODO` empty on both finished ELFs — `all` target flipped
+      from objects-only to full ELF+hex per the M1-M3-era comment's own
+      instruction). T1=stepper, SCCP1=pulse-reset (software x8 rescale instead
+      of a hardware /8, since TMRPS doesn't offer it), SCCP2=spindle PWM
+      (SPINDLE_PWM_MAX_VALUE=255 single canon — no duty-cap-twins bug on this
+      board, config.h already had it right). UART1 real register model (fresh
+      DFP mining, NOT classic UxMODE/UxSTA shape — no donor port existed).
+      NVMEM: page-batched RMW using ROW PROGRAM (NVMOP=0x2, atdf-VERIFIED, not
+      RM-only like most of this port) into a `__attribute__((address(...)))`-
+      reserved window — link-tested to place cleanly against the *unmodified*
+      vendor `.gld`, no port-authored linker script. FP knob wired
+      `FP ?= DOUBLE` (this port's OWN default — native DP FPU, CONTRACTS §17
+      item 7 new) with `assert_no_double.sh` disarmed and `FP=SINGLE` still
+      available (bidirectional knob, unexercised). Sizes: RELEASE ~41.8KB
+      code / DEBUG ~53.2KB code (of 128KB flash), RAM ~3.8KB RELEASE (of 16KB).
+      Gates re-run (not just inspected): golden AVR MD5 PASSED (79af184e…,
+      text 30640); samd21 megarm RELEASE 31952/296 (exact); stm32f411 RELEASE
+      32660/80/129968, boot-integrity OK; ch32v006 generic RELEASE 54904/0/2749,
+      boot-integrity OK. CONTRACTS §16 grew from 11 to 20 items (new: PPS
+      input-vs-output verification split, NVM controller mostly atdf-verified
+      — a rare case where the vendored pack DOES answer the question —, no
+      PSVPAG on this core, real `__delay32`/`libpic30.h` delay mechanism, CN
+      edge-style assumption). Still NOT in CI (unattended XC-DSC fetch remains
+      a separate item, unchanged from M1-M3). Previous entry below (M1-M3,
+      2026-07-25) preserved for history:
+      NO CI rows yet — XC-DSC fetch-in-CI = separate item. NOTE: agent pushed
+      directly (protocol deviation, prompt omission) — post-hoc gates ALL
+      GREEN (golden, samd21 60864, h523 48644); accepted. Future briefs
+      re-state: NEVER push, return diffs.
       (original entry: owner-requested 2026-07-23; chip chosen by executor:
       28-pin = ATmega328p DIP-28 heir, 200 MHz, DP-FPU, motor-control PWM + SCCP/MCCP,
       PPS pin remap eases 28-pin budget; MC106 Curiosity = community hardware variant.
@@ -237,11 +261,19 @@ Priority order (revise as hardware/toolchain reality dictates):
         f103 29900). **NO CI ROWS YET — unattended XC-DSC fetch in CI is a
         separate item** (installer is 83 MB from ww1.microchip.com; needs a
         cache strategy decision). Warn baseline: deferred with the CI row.
-      * [ ] Steps 3-6: T1 stepper timer + SCCP1 pulse-reset + SCCP2/PG1 PWM +
-        UART1 + NVM flash window + CN interrupts + delays; FIRST verify from RM:
-        which CLKGEN feeds the peripherals (F_CPU-lie hazard, §16.10), NVM page
-        size/sequence (§16.3 residue), IPCx priorities (pulse-reset > stepper,
-        §16.7)
+      * [x] **Steps 3-6 LANDED 2026-07-26**: T1 stepper timer + SCCP1
+        pulse-reset + SCCP2 PWM + UART1 + NVM flash window (row-program,
+        atdf-verified page/row sizes) + CN interrupts (edge-style, ASSUMED)
+        + real delays (`__delay32`/`libpic30.h`). The CLKGEN-feeds-
+        peripherals question (§16.10) and the SCCP MOD/CLKSEL/TMRPS
+        encodings (§16.13 new) remain UNVERIFIED — genuinely RM-only, no
+        amount of DFP grepping resolves them — loudly flagged in
+        timer.h/platform.c, does not block the zero-PORT_TODO_* build
+        goal. IPCx priorities set explicitly: CCT1IP=5 > T1IP=4
+        (pulse-reset preempts stepper — dsPIC33A nests by priority
+        natively, the first port that can honor this AVR sei()-nesting
+        semantic for real). FP knob: `FP ?= DOUBLE` declared default
+        (native DP FPU, CONTRACTS §17 item 7).
       * [ ] CI wiring: cached XC-DSC installer or fetch step + 2 matrix rows +
         warn baseline from real logs
 - [ ] hc32f460 (ARM M4, vendor-exotic — tests contract completeness)
@@ -595,6 +627,41 @@ markers in the tree instead of a silent no-op.
   knob to ch32v006/stm32f103/stm32f411/stm32h523 Makefiles at the same
   time — the `.DELETE_ON_ERROR:` insertions were kept to one line each,
   placed away from the CFLAGS/FP region, to keep any 3-way merge trivial.
+- **[x] dsPIC33AK128MC102 Steps 3-6 COMPLETE (2026-07-26)** — Phase 6
+  rolling #2 finished. Real toolchain (xc-dsc-gcc 8.3.1) + real DFP
+  (1.5.263), both already installed at `/opt` from the M1-M3 session, used
+  end to end. `make BUILD=DEBUG` and `make BUILD=RELEASE` both build the
+  full ELF+hex and link with zero `PORT_TODO_*` (`nm | grep PORT_TODO`
+  empty both flavors — confirmed by grep, not inspection). T1 stepper
+  timer, SCCP1 pulse-reset (a genuinely new 8-bit-overflow-horizon shape:
+  software x8 rescale on a real period-compare register instead of
+  fighting a non-/8 hardware prescaler), SCCP2 spindle PWM, a freshly-
+  mined UART1 register model (no donor port — first UART for this ISA),
+  and flash-based NVMEM via ROW PROGRAM into a linker-reserved fixed-
+  address window (`__attribute__((address(0x81F800)))`, link-tested
+  clean against the *unmodified* vendor `.gld` — no port-authored linker
+  script needed). FP knob wired `FP ?= DOUBLE` as this port's own default
+  (native DP FPU — CONTRACTS §17 item 7, the chip §17.3 was written for),
+  `assert_no_double.sh` disarmed, `FP=SINGLE` still available via the
+  same shim pattern as samd21 (bidirectional knob, unexercised this
+  session). Sizes: RELEASE ~41.8KB / DEBUG ~53.2KB code (128KB flash
+  budget), RAM ~3.8KB RELEASE (16KB budget). CONTRACTS.md §16 grew 11→20
+  items — two verification classes stand out: (a) NVM controller facts
+  are MOSTLY atdf-verified (a rare case where the vendored pack answers
+  the question, unlike almost everything else in this port), (b) PPS
+  input muxing is fully verified (field = literal RPn number) while PPS
+  OUTPUT muxing has zero value-groups anywhere in the DFP (genuinely
+  RM-only, best-effort placeholder codes used, loudly flagged). Gates
+  RE-RUN this session (not just inspected): golden AVR MD5 PASSED
+  (`79af184e67b27defd27a39309ac53563`, text 30640, `AVR_GCC_PATH=/usr`
+  override needed — no toolchain at the Makefile's default `$(HOME)/
+  avr-toolchain` path in this environment); samd21 megarm RELEASE
+  31952/296 (exact match, `TOOLCHAIN_PATH=/usr/bin`); stm32f411 RELEASE
+  32660/80/129968, boot-integrity OK; ch32v006 generic RELEASE
+  54904/0/2749, boot-integrity OK (all three needed the same
+  `TOOLCHAIN_PATH=/usr/bin` override — no code regressions, dsPIC work
+  touched only its own directory + CONTRACTS.md + this file). Still NOT
+  in CI (unattended XC-DSC fetch remains a separate ledger item).
 
 - **[x] BUG #21 FIXED (2026-07-25) — vector table restored on all three STM32
   ports.** Mechanism re-verified before fixing, not taken on faith: baseline
