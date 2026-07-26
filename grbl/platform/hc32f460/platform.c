@@ -61,6 +61,29 @@ GRBL_BOOT_INIT void hal_clock_config(void) {
   CMU_CKSWR = CMU_CKSWR_MPLL;
 
   pwc_registers_lock();
+
+  /* 5. Peripheral clock gates (BUG #24 class, CONTRACTS.md
+     #gpio-port-clock-gating - audited on this port this session for the
+     GPIO instance specifically; GPIO turned out not to be FCG-gated at all
+     on this chip, see hal_gpio_init()'s comment below and regs.h's PWC_FCG1/
+     PWC_FCG2 comment for the full evidence). What the audit DID find: this
+     port's own USART1 and TIMER0/TIMERA_1 peripherals (used below and in
+     hal_timer_*_init()) have real FCG gate bits that were never being set,
+     so on real silicon their registers would read back plausible values and
+     silently ignore every write - exactly BUG #24's symptom, just on the
+     serial/timer peripherals instead of GPIO. Derived from exactly the
+     peripherals this port's own init functions configure (same "derive from
+     what's actually used, not a blanket literal" principle
+     CONTRACTS.md#gpio-port-clock-gating established for ch32v006), not an
+     enable-everything literal. Placed outside the FPRC unlock/lock bracket
+     above deliberately: the real driver's unlock check
+     (`IS_FCG0_UNLOCKED()`) only ever gates FCG0, never FCG1/FCG2/FCG3
+     (regs.h comment). CLEARING the bit enables the clock on this chip -
+     confirmed polarity, opposite of the STM32-style "1=enabled" convention
+     every other ARM port in this tree uses (regs.h comment has the driver
+     citation). */
+  PWC_FCG1 &= ~PWC_FCG1_USART1;
+  PWC_FCG2 &= ~(PWC_FCG2_TIMER0_1 | PWC_FCG2_TIMER0_2 | PWC_FCG2_TIMERA_1);
 }
 
 /* GPIO FUNCTIONS
@@ -135,6 +158,18 @@ void hal_gpio_interrupt_disable(HC32_PORT_TypeDef* port, uint32_t mask) {
 }
 
 GRBL_BOOT_INIT void hal_gpio_init(void) {
+  /* No GPIO/PORT peripheral clock gate exists on this chip (BUG #24 audit,
+     CONTRACTS.md #gpio-port-clock-gating, this session): a full scan of
+     every bit in the real PWC_FCG0/FCG1/FCG2/FCG3 registers, and of the
+     real GPIO driver source and the real FCG driver source (both
+     cross-checked, see regs.h's PWC_FCG1/PWC_FCG2 comment for the exact
+     sources), found no GPIO/PORT entry anywhere. GPIO on HC32F460 is not
+     FCG-gated at all - like ch570 (CONTRACTS.md #gpio-port-clock-gating),
+     a documented "not applicable", confirmed rather than assumed. Nothing
+     to add here for GPIO; see hal_clock_config() for the real BUG #24
+     instance this same audit found on this port (USART1/TIMER0/TIMERA_1,
+     not GPIO). */
+
   /* Step/direction/stepper-enable (PA0-6) as outputs */
   hal_gpio_set_output(GPIOA, STEP_MASK | DIRECTION_MASK | STEPPERS_DISABLE_MASK);
   HAL_GPIO_SET_BITS(GPIOA, STEPPERS_DISABLE_MASK);   /* disable steppers initially (active LOW) */
