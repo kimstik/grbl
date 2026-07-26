@@ -17,7 +17,8 @@
 # here.
 #
 # Removed 2026-07-26: `stepper.c: ... integer overflow ... '-884901888'
-# [-Woverflow]` (BUG #18 class, CONTRACTS.md #18). Root cause: this port's
+# [-Woverflow]` (BUG #18 class, CONTRACTS.md's clock-constant-width
+# section). Root cause: this port's
 # own Makefile passed F_CPU with NO suffix at all at 200 MHz - the true
 # compile-time constant is 12000000000, not the wrapped -884901888 (a real
 # ~3.52x-too-fast stepper timing bug). Fixed at the source (ULL suffix);
