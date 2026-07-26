@@ -120,3 +120,215 @@ jobs:
       - name: Golden gate (make validate)
         if: matrix.platform == 'atmega328p'
         run: make -C grbl/platform/atmega328p validate
+
+  # dspic33ak128mc102: deliberately NOT a row in the `build` matrix above.
+  # Every other platform's toolchain is `apt-get install <packages>` (see
+  # build-platform/action.yml "Install toolchain" step) - a single stateless
+  # command with nothing to cache and nothing to verify beyond apt's own
+  # package signing. XC-DSC is the opposite shape on every axis: an 83 MB
+  # vendor .run installer fetched over plain HTTPS from Microchip (not a
+  # package registry), an unattended-install flag sequence with one
+  # undocumented-but-required flag, a SEPARATELY fetched 15 MB Device Family
+  # Pack, and (this project's own stated "favourite failure class") no
+  # integrity guarantee at all unless CI checks the SHA-256 itself. Bending
+  # build-platform's single apt-get step to cover this with an
+  # `if: inputs.platform == 'dspic33ak128mc102'` branch would smuggle a
+  # fetch/cache/verify/unattended-install pipeline into an action whose only
+  # job today is "run apt-get" - worse for every future apt-based port
+  # reading that file. A dedicated job keeps the composite action honestly
+  # apt-only and keeps all of the dsPIC-specific ceremony in one place a
+  # reviewer can read top to bottom.
+  #
+  # EULA: XC-DSC FreeMode is licensed for unattended/CI use - owner-approved
+  # 2026-07-24 (PLAN.md Decision Log, "OWNER DIRECTIVES 2026-07-24").
+  #
+  # KNOWN GAP (not fixed here - CI wiring only, no port sources touched):
+  # the landed Makefile's $(HEX_FILE) rule invokes `$(BIN2HEX) $<` without
+  # `-mdfp=`, but xc-dsc-bin2hex (like xc-dsc-nm/objdump) hard-requires
+  # `-mdfp=<DFP path>` to resolve device SFR/memory info - confirmed locally
+  # by re-running the exact failing command with `-mdfp=` added, which then
+  # succeeds. `make BUILD=... all` (the default target) therefore currently
+  # fails at the hex step for both flavors; `make BUILD=... link` (the
+  # Makefile's own documented "linker-as-checklist" target - see its `help`
+  # text) succeeds and produces the full ELF. This job builds `link` and
+  # generates the .hex itself (steps below) rather than patching the
+  # Makefile, per this task's gate. Tracked as a follow-up in PLAN.md.
+  build-dspic33ak128mc102:
+    name: dspic33ak128mc102 ${{ matrix.build }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [DEBUG, RELEASE]
+    env:
+      # Recipe + hashes: PLAN.md Decision Log ("TOOLCHAIN RECON") and this
+      # port's own Makefile header comment, re-verified end-to-end (real
+      # download + sha256sum + unattended install + build both flavors)
+      # while wiring this job - see task's returned proof log.
+      XC_DSC_URL: https://ww1.microchip.com/downloads/aemDocuments/documents/DEV/ProductDocuments/SoftwareTools/xc-dsc-v3.30-full-install-linux64-installer.run
+      XC_DSC_SHA256: 0df20c1a552bf0ce08aa139b9cb1efd71bf65b9d9f37e3982763f4f8738bfa11
+      DFP_URL: https://packs.download.microchip.com/Microchip.dsPIC33AK-MC_DFP.1.5.263.atpack
+      # DFP SHA-256 was NOT in the original Decision Log recipe (only the
+      # installer's was) - captured this session from a real download,
+      # cross-checked against the server's own `x-amz-meta-sha256` response
+      # header (independent source, same value): both read
+      # 811360fb86d92e3d4519dab3948bf895e8468b37ab7203a7d5ca2bfac2b07bbb.
+      DFP_SHA256: 811360fb86d92e3d4519dab3948bf895e8468b37ab7203a7d5ca2bfac2b07bbb
+      XC_DSC_PREFIX: /opt/xc-dsc
+      DFP_PATH: /opt/dspic33ak-mc-dfp
+      DL_DIR: ${{ github.workspace }}/.dl-cache
+    steps:
+      - uses: actions/checkout@v4
+
+      # Two independent caches, keyed on version+SHA (not just version): if
+      # Microchip ever reshuffles a "same version" file, the hash changes,
+      # the key misses, and the corrupted-download check below still runs
+      # against the freshly re-fetched file instead of trusting a stale
+      # cache entry silently. Cold run: both miss, ~100 MB downloaded. Warm
+      # run (normal push, nothing toolchain-related changed): both hit,
+      # zero download - restore is a local tar unpack, not a network fetch.
+      # DEBUG and RELEASE share the same key (same installer/DFP) and run
+      # concurrently: the two matrix legs racing to *save* the same key on
+      # a cold run is expected and benign (actions/cache no-ops the loser,
+      # does not fail the job); both still restore correctly on every
+      # later run once either one has populated it.
+      - name: Cache XC-DSC installer
+        id: cache-installer
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DL_DIR }}/xc-dsc-installer.run
+          key: xc-dsc-installer-v3.30-${{ env.XC_DSC_SHA256 }}
+
+      - name: Cache dsPIC33AK-MC DFP
+        id: cache-dfp
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DL_DIR }}/dspic33ak-mc-dfp.atpack
+          key: dspic33ak-mc-dfp-1.5.263-${{ env.DFP_SHA256 }}
+
+      - name: Download XC-DSC installer (cache miss only)
+        if: steps.cache-installer.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$DL_DIR"
+          curl -fsSL --retry 3 -o "$DL_DIR/xc-dsc-installer.run" "$XC_DSC_URL"
+
+      - name: Download dsPIC33AK-MC DFP (cache miss only)
+        if: steps.cache-dfp.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$DL_DIR"
+          curl -fsSL --retry 3 -o "$DL_DIR/dspic33ak-mc-dfp.atpack" "$DFP_URL"
+
+      # BLOCKING integrity check, unconditional (cache hit AND miss): a
+      # corrupted download that still "installs" without complaint is
+      # exactly the failure class this project has been burned by before
+      # (see ci/warn_ratchet.py's own history). Re-checked every run, even
+      # from cache, so a poisoned/altered cache entry fails loudly here
+      # instead of silently "installing" downstream.
+      - name: Verify installer + DFP SHA-256
+        run: |
+          echo "${XC_DSC_SHA256}  ${DL_DIR}/xc-dsc-installer.run" | sha256sum -c -
+          echo "${DFP_SHA256}  ${DL_DIR}/dspic33ak-mc-dfp.atpack" | sha256sum -c -
+
+      # Unattended install (fast: local file, no network) - `--netservername
+      # ""` is REQUIRED though undocumented (installer hangs/fails without
+      # it on a headless runner; verified this session).
+      - name: Install XC-DSC (unattended, FreeMode - EULA approved for CI, PLAN.md Decision Log)
+        run: |
+          chmod +x "$DL_DIR/xc-dsc-installer.run"
+          "$DL_DIR/xc-dsc-installer.run" \
+            --mode unattended --unattendedmodeui none \
+            --prefix "$XC_DSC_PREFIX" --LicenseType FreeMode \
+            --ModifyAll 0 --netservername ""
+          "$XC_DSC_PREFIX/bin/xc-dsc-gcc" --version
+
+      - name: Unpack DFP (Apache-2.0; .atpack is a plain zip)
+        run: |
+          mkdir -p "$DFP_PATH"
+          unzip -q "$DL_DIR/dspic33ak-mc-dfp.atpack" -d "$DFP_PATH"
+          test -f "$DFP_PATH/xc16/support/dsPIC33A/gld/p33AK128MC102.gld"
+
+      - name: "Build (make link - see KNOWN GAP comment above re: all/hex)"
+        id: build
+        run: |
+          tag="dspic33ak128mc102-${{ matrix.build }}"
+          log="build/${tag}.log"
+          # Plain if/then, NOT `$( [ x = y ] && echo z )`: that pattern's
+          # command substitution exits nonzero whenever the test is false
+          # (no `echo` runs to swallow it), and GitHub Actions runs `run:`
+          # under `bash -eo pipefail` by default - so on RELEASE the `&&`
+          # short-circuit would silently kill this step before make even
+          # starts. Caught locally while proving this exact script end to
+          # end (see task's returned proof log) - a smaller instance of
+          # this project's own "favourite failure class."
+          suffix=""
+          if [ "${{ matrix.build }}" = "DEBUG" ]; then suffix="_dbg"; fi
+          elf="build/grbl_dspic33ak128mc102${suffix}.elf"
+          mkdir -p build
+          make -C grbl/platform/dspic33ak128mc102 \
+            BUILD=${{ matrix.build }} \
+            TOOLCHAIN_PATH="$XC_DSC_PREFIX/bin" DFP_PATH="$DFP_PATH" \
+            link 2>&1 | tee "$log"
+          echo "log=$log" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "elf=$elf" >> "$GITHUB_OUTPUT"
+
+      # Workflow-level workaround for the KNOWN GAP above: bin2hex needs the
+      # same -mdfp= the Makefile already passes to gcc/ld but not to
+      # bin2hex. Done here, not in the Makefile, per this task's "no port
+      # sources touched" gate.
+      - name: Generate .hex (bin2hex needs -mdfp=, Makefile rule omits it)
+        run: |
+          "$XC_DSC_PREFIX/bin/xc-dsc-bin2hex" "${{ steps.build.outputs.elf }}" -mdfp="$DFP_PATH/xc16"
+
+      # Assert step: zero PORT_TODO_* is this port's own Definition-of-Done
+      # (Makefile `link` target comment / PLAN.md "zero PORT_TODO_*"
+      # entries) - enforced here since there is no Renode/emulator boot
+      # check for dsPIC33A (none exists for this core - PLAN.md/CONTRACTS
+      # §16 both say so explicitly), so this nm-based assert IS this
+      # platform's boot-check-equivalent gate.
+      - name: Assert zero PORT_TODO_* (linker-as-checklist, Definition-of-Done)
+        run: |
+          elf="${{ steps.build.outputs.elf }}"
+          if "$XC_DSC_PREFIX/bin/xc-dsc-nm" -mdfp="$DFP_PATH/xc16" "$elf" | grep -q PORT_TODO; then
+            echo "::error::PORT_TODO_* symbols remain - port is not actually done"
+            "$XC_DSC_PREFIX/bin/xc-dsc-nm" -mdfp="$DFP_PATH/xc16" "$elf" | grep PORT_TODO
+            exit 1
+          fi
+
+      - name: Warning ratchet
+        run: >
+          python3 ci/warn_ratchet.py
+          --log '${{ steps.build.outputs.log }}'
+          --baseline 'ci/warn_baseline_dspic33ak128mc102.txt'
+
+      # RELEASE-only note (not enforced as a check - there is nothing to
+      # assert against without a licensed compiler): xc-dsc-gcc FreeMode
+      # prints "Options have been disabled due to restricted license" on
+      # every -Os translation unit instead of failing. RELEASE therefore
+      # may not reflect true -Os codegen, and any size figure derived from
+      # this job's RELEASE artifact is APPROXIMATE, not exact - do not
+      # quote it as a precise byte count (platform.md says the same).
+      - name: RELEASE size caveat (free-tier -Os is silently disabled)
+        if: matrix.build == 'RELEASE'
+        run: |
+          echo "::notice::dsPIC33AK128MC102 RELEASE built with XC-DSC FreeMode: -Os is silently disabled ('Options have been disabled due to restricted license'). Treat this build's size as approximate, not an exact -Os figure."
+          grep -c "Options have been disabled due to restricted license" "${{ steps.build.outputs.log }}" || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: grbl-${{ steps.build.outputs.tag }}
+          path: |
+            build/*.hex
+            build/*.elf
+            build/*.map
+            build/*.log
+          if-no-files-found: error
+
+  # ch570: TODO - not landed on origin as of this workflow's authoring
+  # (checked: no grbl/platform/ch570/ directory on the branch this job was
+  # added from). Do NOT add matrix rows or guess a build command/toolchain
+  # recipe for it here - wire it in a follow-up once the port actually
+  # lands and its own Makefile documents a real, verified toolchain recipe
+  # (same bar as dsPIC33AK128MC102 above: re-verify the recipe, don't just
+  # copy a claim from a planning doc).

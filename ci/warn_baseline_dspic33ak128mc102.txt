@@ -1,0 +1,9 @@
+# dspic33ak128mc102 warning baseline - core-file warnings only (identical class
+# to every other port's baseline, both DEBUG and RELEASE emit the same four);
+# platform files (platform.c/handlers.c/serial.c/nvmem.c) compile clean.
+# Generated from real xc-dsc-gcc 8.3.1 (XC-DSC v3.30) build logs, both flavors,
+# this session (see PLAN.md Decision Log / CI wiring entry). May only shrink.
+gcode.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
+motion_control.c: warning: unused parameter 'cycle_mask' [-Wunused-parameter]
+report.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
+system.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
