@@ -412,13 +412,16 @@ Priority order (revise as hardware/toolchain reality dictates):
         baseline has (gcode.c/motion_control.c/report.c/system.c).
         TWO real gaps found and handled, neither a port-source fix (gate:
         no port sources touched):
-        (1) the landed Makefile's `$(HEX_FILE)` rule calls `$(BIN2HEX) $<`
+        (1) [x] **FIXED 2026-07-26** (see Decision Log "dsPIC `make all`
+        HEX-STEP FOLLOW-UP CLOSED" entry below for the full proof): the
+        landed Makefile's `$(HEX_FILE)` rule calls `$(BIN2HEX) $<`
         without `-mdfp=`, but bin2hex hard-requires it (confirmed: same
-        command + `-mdfp=` succeeds) — `make ... all` therefore currently
-        fails at the hex step for both flavors. Worked around at the
+        command + `-mdfp=` succeeds) — `make ... all` therefore used to
+        fail at the hex step for both flavors. Was worked around at the
         workflow level (`make ... link` + a workflow-level `bin2hex
-        -mdfp=...` step) instead of patching the Makefile; tracked here as
-        a follow-up for whoever next touches this port's Makefile.
+        -mdfp=...` step) instead of patching the Makefile; now patched at
+        the source (Makefile passes `-mdfp=$(DFP_XC16)`), `ci.yml`
+        simplified back to `all`, workaround step removed.
         (2) a shell bug caught in this job's OWN first draft, not the
         port: `elf="...$( [ "$X" = Y ] && echo z )..."` silently kills a
         `run:` step under GitHub Actions' default `bash -eo pipefail` the
@@ -1096,6 +1099,65 @@ identity to integration time.
   optimization on `-Os`" wording elsewhere in this file, `CHANGELOG.md`,
   `dspic33ak128mc102/platform.md`, its `Makefile`, and `ci.yml`'s `::notice::`
   has been corrected to match.
+- 2026-07-26 **dsPIC `make all` HEX-STEP FOLLOW-UP CLOSED, ch570 CI TODO
+  STALE-CLEANED**: two items handed down from the dsPIC CI-wiring session
+  above.
+  (1) **Makefile fix**: `grbl/platform/dspic33ak128mc102/Makefile`'s
+  `$(HEX_FILE)` rule now passes `-mdfp=$(DFP_XC16)` to `$(BIN2HEX)`, same
+  as every other tool invocation that needs DFP device info. Proved, not
+  just compiled: with the real xc-dsc-gcc 8.3.1 + DFP 1.5.263 already
+  present in this environment (`/opt/xc-dsc`, `/opt/Microchip.dsPIC33AK-
+  MC_DFP.1.5.263` — matches the Makefile's own `TOOLCHAIN_PATH`/`DFP_PATH`
+  defaults), `make BUILD=DEBUG all` and `make BUILD=RELEASE all` both now
+  complete end to end (previously failed at the hex step for both). Hex
+  sanity-checked, not just "exit 0": every record's checksum verified in
+  Python (2676 RELEASE / 3396 DEBUG records, zero bad), record-type
+  histogram is 00 (data)/01 (EOF, exactly one)/04 (extended linear
+  address) only — no junk record types — and the `:04` address bases
+  (0x0000/0x0080/0x007F) match the ELF's own section addresses
+  (`.reset`/`.text` at 0x800000-region, `.data` at 0x4000-region, config
+  fuses at 0x7F3xxx) and the DFP linker script's `program` region
+  (origin 0x800004, length 0x1FFFC → end 0x820000 = 128 KB), i.e. the
+  hex's extent is the real 128 KB flash window, not an artifact. Zero
+  `PORT_TODO_*` both flavors (nm-verified). Also exercised every other
+  target while in there: `clean` (removes both flavors' output artifacts +
+  the invoked flavor's object dir — same shape as ch32v006's `clean`, not
+  a defect), `clean-all`, `link` (both flavors, standalone), `compdb`
+  (20 entries, matches 16 grbl-core + 4 platform sources) — none hid the
+  same class of missing-flag defect. `ci.yml`'s dsPIC job simplified to
+  match: builds `all` directly instead of `link` + a workflow-level
+  `bin2hex -mdfp=` workaround step (the workaround's own justifying
+  comment is now removed as it no longer applies). Golden AVR MD5 PASSED
+  (79af184e…), untouched — only this port's own Makefile and `ci.yml`
+  touched, no other port sources.
+  (2) **ch570 CI TODO was already stale, not actually missing**: re-checking
+  `ci.yml` this session found the `ch570` matrix rows (generic ×
+  DEBUG/RELEASE, `gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf` —
+  same shape as `ch32v006`'s rows) were in fact already landed in the same
+  commit that landed the CH570 port itself (d4c5245), which ran in
+  parallel with (and merged before) the dsPIC CI-wiring session above — so
+  the "ch570 not landed, TODO left" note in that session's own entry was
+  true at the time it was written but stale by the time both branches
+  merged. The dangling `# ch570: TODO - not landed...` comment block at
+  the bottom of `ci.yml`, contradicting the real rows already present
+  above it, is removed. `ci/warn_baseline_ch570.txt` confirmed present and
+  re-verified against fresh local build logs for both flavors (`warn_
+  ratchet: OK - 4 distinct warning(s), all in baseline` both times — same
+  core-file class as ch32v006's baseline, exactly as its own header
+  states). Vendor object clean-checkout proof re-run: `git archive HEAD |
+  tar -t | grep ISP572.o` finds it; extracting that archive to a directory
+  outside the working tree and running `make -C grbl/platform/ch570
+  BOARD=generic BUILD=RELEASE` there links clean (`.text`/`.data` 40674/4,
+  matching the port's own landing numbers byte-for-byte) — a real,
+  isolated fresh-checkout build, not a re-use of the working tree's build
+  directory. `ci.yml` parses (`python3 -c "import yaml; ..."` — 3 jobs, 17
+  `build`-matrix rows covering exactly the 8 apt-based landed ports +
+  ch570, plus the dedicated `build-dspic33ak128mc102` job = every landed
+  port; `sg2002` correctly absent, still DESIGN-COMPLETE/IMPLEMENTATION-
+  DEFERRED, not a real port). `tools/check_contracts_numbering.py` OK (25
+  sections/slugs, 8 cross-file links, all consistent) since `PLAN.md` was
+  touched. No port sources touched for this item — `ci.yml` and this file
+  only.
 
 ## Current State (update each session)
 

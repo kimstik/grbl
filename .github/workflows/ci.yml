@@ -142,17 +142,16 @@ jobs:
   # EULA: XC-DSC FreeMode is licensed for unattended/CI use - owner-approved
   # 2026-07-24 (PLAN.md Decision Log, "OWNER DIRECTIVES 2026-07-24").
   #
-  # KNOWN GAP (not fixed here - CI wiring only, no port sources touched):
-  # the landed Makefile's $(HEX_FILE) rule invokes `$(BIN2HEX) $<` without
-  # `-mdfp=`, but xc-dsc-bin2hex (like xc-dsc-nm/objdump) hard-requires
-  # `-mdfp=<DFP path>` to resolve device SFR/memory info - confirmed locally
-  # by re-running the exact failing command with `-mdfp=` added, which then
-  # succeeds. `make BUILD=... all` (the default target) therefore currently
-  # fails at the hex step for both flavors; `make BUILD=... link` (the
-  # Makefile's own documented "linker-as-checklist" target - see its `help`
-  # text) succeeds and produces the full ELF. This job builds `link` and
-  # generates the .hex itself (steps below) rather than patching the
-  # Makefile, per this task's gate. Tracked as a follow-up in PLAN.md.
+  # FIXED (was KNOWN GAP): the landed Makefile's $(HEX_FILE) rule used to
+  # invoke `$(BIN2HEX) $<` without `-mdfp=`, but xc-dsc-bin2hex (like
+  # xc-dsc-nm/objdump) hard-requires `-mdfp=<DFP path>` to resolve device
+  # SFR/memory info, so `make BUILD=... all` failed at the hex step for
+  # both flavors (only `make BUILD=... link` worked). The Makefile's
+  # $(HEX_FILE) rule now passes `-mdfp=$(DFP_XC16)` like every other tool
+  # invocation that needs it - `all` builds the full ELF+hex directly, no
+  # workflow-level bin2hex workaround needed anymore. Re-verified end to
+  # end this session: both flavors' `all` complete, hex checksums valid,
+  # extents plausible for 128 KB flash (PLAN.md follow-up closed).
   build-dspic33ak128mc102:
     name: dspic33ak128mc102 ${{ matrix.build }}
     runs-on: ubuntu-latest
@@ -247,7 +246,7 @@ jobs:
           unzip -q "$DL_DIR/dspic33ak-mc-dfp.atpack" -d "$DFP_PATH"
           test -f "$DFP_PATH/xc16/support/dsPIC33A/gld/p33AK128MC102.gld"
 
-      - name: "Build (make link - see KNOWN GAP comment above re: all/hex)"
+      - name: "Build (make all - full ELF+hex, Makefile hex-step fix landed)"
         id: build
         run: |
           tag="dspic33ak128mc102-${{ matrix.build }}"
@@ -267,18 +266,10 @@ jobs:
           make -C grbl/platform/dspic33ak128mc102 \
             BUILD=${{ matrix.build }} \
             TOOLCHAIN_PATH="$XC_DSC_PREFIX/bin" DFP_PATH="$DFP_PATH" \
-            link 2>&1 | tee "$log"
+            all 2>&1 | tee "$log"
           echo "log=$log" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "elf=$elf" >> "$GITHUB_OUTPUT"
-
-      # Workflow-level workaround for the KNOWN GAP above: bin2hex needs the
-      # same -mdfp= the Makefile already passes to gcc/ld but not to
-      # bin2hex. Done here, not in the Makefile, per this task's "no port
-      # sources touched" gate.
-      - name: Generate .hex (bin2hex needs -mdfp=, Makefile rule omits it)
-        run: |
-          "$XC_DSC_PREFIX/bin/xc-dsc-bin2hex" "${{ steps.build.outputs.elf }}" -mdfp="$DFP_PATH/xc16"
 
       # Assert step: zero PORT_TODO_* is this port's own Definition-of-Done
       # (Makefile `link` target comment / PLAN.md "zero PORT_TODO_*"
@@ -327,11 +318,3 @@ jobs:
             build/*.map
             build/*.log
           if-no-files-found: error
-
-  # ch570: TODO - not landed on origin as of this workflow's authoring
-  # (checked: no grbl/platform/ch570/ directory on the branch this job was
-  # added from). Do NOT add matrix rows or guess a build command/toolchain
-  # recipe for it here - wire it in a follow-up once the port actually
-  # lands and its own Makefile documents a real, verified toolchain recipe
-  # (same bar as dsPIC33AK128MC102 above: re-verify the recipe, don't just
-  # copy a claim from a planning doc).
