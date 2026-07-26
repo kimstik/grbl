@@ -1939,3 +1939,80 @@ identity to integration time.
     adversarial review's finding that this was a significant, previously
     live spindle-output bug, not a cosmetic no-op, is accepted and recorded
     here rather than argued with.
+
+- **[x] `-flto` ENABLED ON ch32v006/ch570 RELEASE (2026-07-26)** — a
+  compactness audit measured, by real rebuild, that turning on
+  `-flto -fno-fat-lto-objects`/`-flto -Os` (RELEASE only, BUILD-gated,
+  matching the samd21/stm32*/hc32f460/sg2002 house style already in every
+  ARM port's Makefile) shrinks both RISC-V ports' RELEASE binaries:
+  - **ch32v006**: text 41072 → **39012 B (−2060, −5.0%)**.
+  - **ch570**: text 40674 → **38422 B (−2252, −5.5%)**.
+  Both numbers re-measured live in this batch (not projected from the
+  audit) and matched exactly.
+  - **Precondition the audit hit before either number was real**: naive
+    `-flto` breaks the boot path on both ports. `Reset_Handler` is reached
+    from exactly one place — `_start`'s raw inline asm (`jal
+    Reset_Handler`), invisible to LTO's whole-program IPA (it never parses
+    asm strings for symbol references). With no visible C-level caller,
+    IPA for an executable link concludes `Reset_Handler` is dead and
+    deletes its definition before codegen, and the link fails loudly:
+    `undefined reference to 'Reset_Handler'`. This is **BUG #21's exact
+    mechanism** (`KEEP()`/table-reachability cannot save a symbol IPA
+    already erased) on an ISA where the ARM ports' usual defense
+    (`Reset_Handler` address-taken from a C-visible `vector_table[]`) does
+    not apply, because RISC-V reset is entered by hand-written assembly,
+    not a hardware-loaded pointer table. Fix: `__attribute__((used))` on
+    `Reset_Handler` in both `ch32v006/startup.c` and `ch570/startup.c` —
+    nothing else needed pinning. `PFIC_Vector[]` and every ISR it addresses
+    were already `used`/address-taken from the earlier `--gc-sections`
+    lifecycle fix (CONTRACTS.md §14 item 3) and needed no change. Full
+    writeup, slug `lto-asm-only-reachable-symbols`, appended to
+    CONTRACTS.md as a new placeholder-numbered gap-log section (integrator
+    assigns the final `## N.`).
+  - **Symbol-survival proof (not assumed)**: post-`-flto` `nm` on both
+    RELEASE ELFs confirms `_start`, `Reset_Handler`, `PFIC_Vector`, and
+    every real ISR body present by name (`Default_Handler`,
+    `SysTick_Handler`, `TIM2_IRQHandler`, `EXTI7_0_IRQHandler`,
+    `USART1_IRQHandler` on ch32v006; `Default_Handler`, `SysTick_Handler`,
+    `TMR_IRQHandler`, `GPIOA_IRQHandler`, `UART_IRQHandler` on ch570).
+    Disassembly of two ISR bodies per port confirms `mret` (opcode
+    `0x30200073`) is still the last instruction emitted
+    (`TIM2_IRQHandler`/`USART1_IRQHandler` on ch32v006,
+    `TMR_IRQHandler`/`UART_IRQHandler` on ch570) — CONTRACTS.md §20's
+    trap-return contract holds under LTO.
+  - **DEBUG unaffected, by design**: `-flto` gated on `BUILD==RELEASE`
+    only, same as every ARM port. DEBUG stays `-Og -g3` on both RISC-V
+    ports — confirmed byte-for-byte unchanged (`used` is inert without
+    `-flto`): ch32v006 DEBUG 46988/0, ch570 DEBUG 46830/4, both matching
+    the pre-batch recorded figures exactly.
+  - **Gates re-run this batch**: golden AVR `make -C
+    grbl/platform/atmega328p validate` **PASSED** (MD5
+    `79af184e67b27defd27a39309ac53563`, text 30640); RISC-V boot-integrity
+    check (Makefile's `_start`-at-flash-base assertion, the RISC-V form of
+    BUG #21's ratchet) **OK** all four builds (`_start=0x00000000`);
+    `tools/assert_no_double.sh` FP=SINGLE post-link assert **PASSED** all
+    four builds; `ci/warn_ratchet.py` **OK** against
+    `ci/warn_baseline_ch32v006.txt`/`ci/warn_baseline_ch570.txt` for all
+    four build logs (ch570 RELEASE additionally reported 4 baseline
+    warnings no longer observed — left in the baseline per the one-way
+    ratchet rule, not removed); zero `PORT_TODO_*` in all four ELFs.
+  - **Artifacts refreshed** (both ports' binaries legitimately shrank):
+    `tools/build_artifacts.py build` regenerated
+    `artifacts/ch32v006/{grbl_ch32v006.bin,.hex,.syms}`,
+    `artifacts/ch570/{grbl_ch570.bin,.hex,.syms}`, and
+    `artifacts/MANIFEST.sha256`. `tools/build_artifacts.py check` **OK**
+    across all 10 buildable units afterward — the other 8 units (all 7
+    untouched sibling ports plus dsPIC's own non-byte-reproducible
+    exemption) rebuilt byte-identical to their already-committed
+    artifacts, confirmed via `git diff --stat` showing zero changed bytes
+    outside `ch32v006/`, `ch570/`, and `MANIFEST.sha256` — this batch is
+    scoped to exactly the two ports it targets, verified rather than
+    assumed. `tools/build_artifacts.py --selftest`,
+    `tools/assert_no_double.sh --selftest`, `ci/warn_ratchet.py
+    --selftest`, and `tools/check_contracts_numbering.py` all still PASS
+    unchanged.
+  - **Files touched**: `grbl/platform/ch32v006/{Makefile,startup.c}`,
+    `grbl/platform/ch570/{Makefile,startup.c}`,
+    `artifacts/{ch32v006,ch570}/*`, `artifacts/MANIFEST.sha256`,
+    `CONTRACTS.md`, `PLAN.md`. No other platform's source, Makefile, or CI
+    config touched.

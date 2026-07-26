@@ -123,8 +123,24 @@ void SystemInit(void) {
 
 // ============================================================================
 // RESET HANDLER (C portion - reached from _start with SP already valid)
+//
+// `used` (CONTRACTS.md gap log, LTO batch): the ONLY call to this function
+// is `jal Reset_Handler` inside _start's raw inline asm, below - invisible
+// to LTO's IPA (it never parses asm strings for symbol references). With
+// -flto and no other caller in the C call graph, whole-program analysis for
+// an executable link treats an unreferenced external symbol as dead and
+// removes it before codegen ever runs; the link then fails with "undefined
+// reference to Reset_Handler" (the DEFINITION got deleted, but _start's
+// asm-level call still needs it resolved). This is BUG #21's exact
+// mechanism (KEEP() cannot save a symbol IPA already erased) on an ISA
+// where the ARM ports' usual defense (Reset_Handler address-taken from a
+// C-visible vector_table[]) does not apply - reset here is entered via
+// hand-written assembly, not a hardware-loaded table entry. `used` pins
+// this function to the emitted-symbols root set regardless of visible
+// callers, the same role it already plays on PFIC_Vector[] below.
 // ============================================================================
 
+__attribute__((used))
 void Reset_Handler(void) {
   uint32_t *src, *dst;
 
