@@ -19,6 +19,11 @@
 // GRBL_BOOT_INIT - the anchor attribute on the pre-main init chain (BUG #23)
 #include "common/boot_init.h"
 
+// BUG #24: enables every GPIO port the board's *_PORT macros reference
+// (platform.c) - must run before any GPIO_DIR_*/GPIO_MDIR_*/hal_gpio_config_pin
+// call. Called from SystemInit() (startup.c).
+GRBL_BOOT_INIT void hal_gpio_clock_init(void);
+
 // ============================================================================
 // PLATFORM IDENTIFICATION
 // ============================================================================

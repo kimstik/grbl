@@ -62,6 +62,31 @@ void hal_gpio_pullup_disable(GPIO_TypeDef* port, uint32_t mask) {
   }
 }
 
+// BUG #24: PB2PCENR gates each port's own bus clock (RM 3.4.7); a gated
+// port reads back zero and ignores every write. Nothing ever set IOPBEN
+// (CONTROL, PB3-5) or IOPCEN (STEP/DIRECTION/STEPPERS_DISABLE/
+// COOLANT_FLOOD, PC0-7) - the only IOPxEN bits written anywhere were
+// IOPAEN (spindle PWM init, below) and IOPDEN (serial_init, which only
+// covers LIMIT by coincidence of sharing GPIOD with USART1). Derived from
+// the board's own *_PORT macros - each a compile-time constant pointer -
+// instead of a hand-copied literal, so a re-pin can't silently reopen
+// this hole.
+static uint32_t gpio_port_clken(GPIO_TypeDef* port) {
+  if (port == GPIOB) { return RCC_PB2PCENR_IOPBEN; }
+  if (port == GPIOC) { return RCC_PB2PCENR_IOPCEN; }
+  if (port == GPIOD) { return RCC_PB2PCENR_IOPDEN; }
+  return RCC_PB2PCENR_IOPAEN;
+}
+
+GRBL_BOOT_INIT void hal_gpio_clock_init(void) {
+  RCC->PB2PCENR |= gpio_port_clken(STEP_PORT) | gpio_port_clken(DIRECTION_PORT) |
+                   gpio_port_clken(STEPPERS_DISABLE_PORT) | gpio_port_clken(COOLANT_FLOOD_PORT) |
+                   gpio_port_clken(LIMIT_PORT) | gpio_port_clken(CONTROL_PORT) |
+                   gpio_port_clken(PROBE_PORT) | gpio_port_clken(SPINDLE_ENABLE_PORT) |
+                   gpio_port_clken(SPINDLE_DIRECTION_PORT) | gpio_port_clken(SPINDLE_PWM_PORT) |
+                   gpio_port_clken(SERIAL_TX_PORT) | gpio_port_clken(SERIAL_RX_PORT);
+}
+
 // ============================================================================
 // GPIO EXTERNAL INTERRUPTS (Step 6, CONTRACTS.md #2)
 // ============================================================================
@@ -199,7 +224,7 @@ void hal_timer_pulse_reset_init(void) {
   a plain GPIO (f103 pattern, timer.h note).
 */
 void hal_timer_spindle_pwm_init(void) {
-  RCC->PB2PCENR |= RCC_PB2PCENR_TIM1EN | RCC_PB2PCENR_AFIOEN | RCC_PB2PCENR_IOPAEN;
+  RCC->PB2PCENR |= RCC_PB2PCENR_TIM1EN | RCC_PB2PCENR_AFIOEN;  // IOPAEN: hal_gpio_clock_init (BUG #24)
 
   // TIM1 partial remap: CH1 -> PA3 (RM table 7-8, TIM1_RM=0100).
   AFIO->PCFR1 = (AFIO->PCFR1 & ~AFIO_PCFR1_TIM1_RM_Msk)

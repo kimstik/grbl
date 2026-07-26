@@ -45,7 +45,7 @@ static volatile uint8_t tx_buffer_tail = 0;
 void hal_gpio_config_pin(GPIO_TypeDef* port, uint8_t pin, uint32_t cfg4); // platform.c
 
 void serial_init(void) {
-  RCC->PB2PCENR |= RCC_PB2PCENR_USART1EN | RCC_PB2PCENR_IOPDEN | RCC_PB2PCENR_AFIOEN;
+  RCC->PB2PCENR |= RCC_PB2PCENR_USART1EN | RCC_PB2PCENR_AFIOEN;  // IOPDEN: hal_gpio_clock_init (BUG #24)
 
   // PD5 = TX: alternate-function push-pull. PD6 = RX: input with pull-up
   // (idle-high line; avoids garbage while the cable is unplugged).

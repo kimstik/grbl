@@ -161,7 +161,7 @@ CFLAGS += -specs=picolibc.specs
 # STM32/HC32 family uses hal_system_init/hal_clock_config/hal_gpio_init,
 # this port uses SystemInit + SystemClock_Config, the dsPIC uses an underscore-
 # prefixed _hal_clock_config reached through a crt0 user_init table.
-INIT_SYMBOLS ?= Reset_Handler,SystemInit,SystemClock_Config
+INIT_SYMBOLS ?= Reset_Handler,SystemInit,SystemClock_Config,hal_gpio_clock_init
 INIT_CHECK = ../common/init_check.sh
 
 CFLAGS += $(CFLAGS_EXTRA) -I$(PLATFORM_DIR) -I$(GRBL_DIR)/platform -I$(GRBL_DIR)
