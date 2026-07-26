@@ -1672,21 +1672,20 @@ Disassembly of section .text:
  8000d4c:	mov.w	r1, #32768	@ 0x8000
  8000d50:	mov	r0, r5
  8000d52:	bl	8000cd4 <hal_gpio_pullup_enable>
- 8000d56:	mov.w	r1, #640	@ 0x280
+ 8000d56:	mov.w	r1, #12288	@ 0x3000
  8000d5a:	mov	r0, r4
  8000d5c:	bl	8000c10 <hal_gpio_set_output>
- 8000d60:	mov.w	r3, #41943040	@ 0x2800000
- 8000d64:	movs	r1, #1
- 8000d66:	str	r3, [r4, #16]
- 8000d68:	mov	r0, r5
- 8000d6a:	bl	8000c10 <hal_gpio_set_output>
- 8000d6e:	ldr	r2, [pc, #32]	@ (8000d90 <hal_gpio_init+0x90>)
- 8000d70:	ldr.w	r3, [r2, #2052]	@ 0x804
- 8000d74:	bic.w	r3, r3, #15
- 8000d78:	orr.w	r3, r3, #11
- 8000d7c:	str.w	r3, [r2, #2052]	@ 0x804
- 8000d80:	pop	{r3, r4, r5, pc}
- 8000d82:	nop
+ 8000d60:	mov.w	r3, #805306368	@ 0x30000000
+ 8000d64:	mov.w	r1, #8192	@ 0x2000
+ 8000d68:	str	r3, [r4, #16]
+ 8000d6a:	mov	r0, r5
+ 8000d6c:	bl	8000c10 <hal_gpio_set_output>
+ 8000d70:	ldr	r2, [pc, #28]	@ (8000d90 <hal_gpio_init+0x90>)
+ 8000d72:	ldr.w	r3, [r2, #2052]	@ 0x804
+ 8000d76:	bic.w	r3, r3, #15
+ 8000d7a:	orr.w	r3, r3, #11
+ 8000d7e:	str.w	r3, [r2, #2052]	@ 0x804
+ 8000d82:	pop	{r3, r4, r5, pc}
  8000d84:	.word	0x40021000
  8000d88:	.word	0x40010800
  8000d8c:	.word	0x40011000

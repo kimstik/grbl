@@ -2613,8 +2613,6 @@ vendor's cores. Every claim below is a real build in this session.
 <a id="boot-init-unreachable"></a>
 ## 27. Defined but never called + LTO = silently absent; byte-invariance is a WEAK signal (cite the slug, #boot-init-unreachable, not "§27", from elsewhere)
 
-## 27. Defined but never called + LTO = silently absent; byte-invariance is a WEAK signal (renumbered from a duplicate "26" during BUG #25's docs pass - see PLAN.md's numbering-collision note; cite this slug, not a number, from elsewhere)
-
 *(Companion to [§18](#vector-table-lto), which is the same failure class one
 level down: §18 lost a **data** table the hardware reads behind the
 compiler's back; this section loses **code** that nothing calls. Cite both
@@ -3380,7 +3378,7 @@ core code will recur constantly, and the answer is always the same one.
 ---
 
 <a id="gpio-pin-map-single-owner"></a>
-## §NEW. Two headers both defining the pinout: which one wins is a per-translation-unit accident, not a decision (BUG #25)
+## 33. Two headers both defining the pinout: which one wins is a per-translation-unit accident, not a decision (BUG #25)
 
 Same *symptom class* as the "GPIO port clock gating" section above
 (anchor `gpio-port-clock-gating`, BUG #24 - not a real link here: that
