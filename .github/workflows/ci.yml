@@ -304,14 +304,17 @@ jobs:
       # RELEASE-only note (not enforced as a check - there is nothing to
       # assert against without a licensed compiler): xc-dsc-gcc FreeMode
       # prints "Options have been disabled due to restricted license" on
-      # every -Os translation unit instead of failing. RELEASE therefore
-      # may not reflect true -Os codegen, and any size figure derived from
-      # this job's RELEASE artifact is APPROXIMATE, not exact - do not
-      # quote it as a precise byte count (platform.md says the same).
-      - name: RELEASE size caveat (free-tier -Os is silently disabled)
+      # every -Os translation unit instead of failing. This means RELEASE
+      # is -O2-equivalent codegen, not true -Os (FreeMode silently
+      # substitutes -O2 for -O3/-Os - settled by codegen comparison: an
+      # explicit -O2 whole-firmware rebuild is byte-identical to this
+      # RELEASE artifact). It does NOT make the size figure approximate -
+      # the byte count is exact and reproducible (platform.md says the
+      # same).
+      - name: RELEASE size note (free-tier -Os is -O2-equivalent codegen)
         if: matrix.build == 'RELEASE'
         run: |
-          echo "::notice::dsPIC33AK128MC102 RELEASE built with XC-DSC FreeMode: -Os is silently disabled ('Options have been disabled due to restricted license'). Treat this build's size as approximate, not an exact -Os figure."
+          echo "::notice::dsPIC33AK128MC102 RELEASE built with XC-DSC FreeMode: -Os is silently substituted with -O2-equivalent codegen ('Options have been disabled due to restricted license'). The build's size is exact and reproducible, but it is -O2, not true -Os."
           grep -c "Options have been disabled due to restricted license" "${{ steps.build.outputs.log }}" || true
 
       - name: Upload artifacts

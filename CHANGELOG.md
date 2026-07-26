@@ -36,7 +36,7 @@ macro-based HAL (no runtime function-pointer indirection) has been put through h
 | samd21 (megarm / generic) | ARM Cortex-M0+ | 31952 / 31940 | yes |
 | ch32v006 | RISC-V rv32ec | 41072 / 0 | yes |
 | hc32f460 | ARM Cortex-M4F | 25596 / 80 | yes |
-| dsPIC33AK128MC102 | dsPIC33 DSC | ~41.8KB (approx.) | no — toolchain fetch unresolved |
+| dsPIC33AK128MC102 | dsPIC33 DSC | 41816 (~41.8KB), exact — `-O2`-equivalent codegen, not true `-Os` (see note below) | no — toolchain fetch unresolved |
 
 **Four of the five ARM ports — stm32f103, stm32h523, stm32f411, and hc32f460 — are now smaller
 than the 8-bit AVR reference build.** Only samd21 (Cortex-M0+) is larger, and that's an honest
@@ -138,10 +138,16 @@ Porting to a new chip no longer means reverse-engineering an existing port:
   (shared-memory-ring channel over the Linux `remoteproc` framework instead of a UART) but is
   intentionally deferred — implementation, not analysis, is what's missing.
 - **dsPIC33AK128MC102 and CH570 are not in CI.** dsPIC33's toolchain (XC-DSC) works locally with
-  an owner-approved EULA but has no unattended-CI-fetch story yet; its free/unlicensed compiler
-  tier also silently caps optimization on `-Os` ("Options have been disabled due to restricted
-  license") rather than failing loudly, so its RELEASE size figure above is an approximation, not
-  an exact byte count. CH570 is recon'd and unblocked but porting hasn't started.
+  an owner-approved EULA but has no unattended-CI-fetch story yet. Its free/unlicensed compiler
+  tier silently substitutes `-O2` codegen for `-O3`/`-Os` ("Options have been disabled due to
+  restricted license" printed on every TU at those levels) rather than failing loudly — settled
+  by codegen comparison, not just by reading that message: per-TU disassembly shows `-O3` is
+  byte-identical to `-O2`, and a whole-firmware RELEASE rebuild with an explicit `-O2` reproduces
+  the same 41816-byte image with zero restriction messages. This is Microchip's own licensing-tier
+  behavior (FreeMode is the installer's own default, not something this project's install recipe
+  selected), and it does **not** make the RELEASE size figure above approximate — 41816 B is exact
+  and reproducible, it's just `-O2`-equivalent codegen rather than true `-Os`. CH570 is recon'd and
+  unblocked but porting hasn't started.
 - **GitHub Actions is running** (78 CI + 67 Smoke runs on this branch as of this writing, one per
   push) — an earlier concern that it might be disabled on this fork was checked and is stale.
   Every gate described above has also been independently re-verified by fresh local builds today,

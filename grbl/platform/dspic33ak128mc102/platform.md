@@ -28,16 +28,30 @@ dir; the shipped `boards/generic` is a paper pinout for the bare chip).
   toolchain's own `__delay32`/`libpic30.h`. **`make BUILD=DEBUG` and
   `make BUILD=RELEASE` both build the full ELF+hex and link with ZERO
   `PORT_TODO_*`** (verified: `nm | grep PORT_TODO` empty on both). Sizes:
-  RELEASE ~41.8KB code / DEBUG ~53.2KB code (128KB flash), RAM ~3.8KB
-  RELEASE (16KB). **Treat these size numbers as approximate, not exact**: a
-  fresh RELEASE (`-Os`) build this session printed `Options have been
-  disabled due to restricted license` from `xc-dsc-gcc` - the free/
-  unlicensed tier of this Microchip compiler silently caps optimization
-  instead of failing loudly, so RELEASE may not reflect true `-Os` codegen.
-  Sizes are also inherently approximate given the multi-segment Harvard
-  memory layout (`readelf` shows multiple `.text` sections at different
-  program-memory pages) and no single `size` tool ships with xc-dsc. See
-  CONTRACTS.md §16 items 12-20 for the full register-
+  RELEASE 41816 B (~41.8KB) code / DEBUG 53220 B (~53.2KB) code (128KB
+  flash), RAM ~3.8KB RELEASE (16KB). **These figures are exact and
+  reproducible, not approximate** — settled by codegen comparison, not by
+  reading the compiler's message text: a RELEASE (`-Os`) build prints
+  `Options have been disabled due to restricted license` from `xc-dsc-gcc`
+  on every translation unit, and a rebuild of the whole firmware with an
+  explicit `-O2` in place of `-Os` produces a BYTE-IDENTICAL 41816 B image
+  with zero restriction messages. So the free/unlicensed tier of this
+  Microchip compiler silently substitutes `-O2` codegen for `-O3`/`-Os`
+  rather than failing loudly or producing a fuzzy result — RELEASE here is
+  `-O2`-equivalent codegen, not true `-Os`, but its byte count is exact.
+  This is Microchip's own licensing-tier behavior, not this port's install
+  recipe: `--LicenseType FreeMode` is the installer's own default (the
+  `WorkstationMode`/`NetworkMode` alternatives need an account-bound
+  activated license file, not a flag), and Microchip's own bundled manual
+  describes the free tier as giving "the basic amount of code optimization"
+  vs "increased levels" on PRO. A 60-day free PRO evaluation exists but is
+  account-bound, interactive, time-limited, and not CI-scriptable, so it
+  isn't a path to a truly-`-Os` automated build — don't re-investigate it.
+  (The multi-segment Harvard memory layout — `readelf` shows multiple
+  `.text` sections at different program-memory pages — and the lack of a
+  `size` tool in xc-dsc are real quirks of this ISA, but they don't affect
+  the byte counts above: those come from the same linked `.elf` both
+  times.) See CONTRACTS.md §16 items 12-20 for the full register-
   fact writeup, including two specific RM-only gaps (SCCP MOD/CLKSEL/
   TMRPS encodings, PPS OUTPUT function-select codes) that are structurally
   real but numerically UNVERIFIED pending hardware bring-up.

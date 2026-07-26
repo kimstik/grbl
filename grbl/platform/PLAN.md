@@ -428,8 +428,12 @@ Priority order (revise as hardware/toolchain reality dictates):
         RELEASE caveat carried into the workflow (`::notice::` + comment,
         not asserted): XC-DSC FreeMode prints "Options have been disabled
         due to restricted license" on every `-Os` TU (confirmed: 20/20
-        RELEASE compiles this session) — RELEASE size figures are
-        approximate, never to be reported as an exact `-Os` byte count.
+        RELEASE compiles this session). **Settled later (see the CANONICAL
+        RELEASE SIZE TABLE / dsPIC size note): this is FreeMode silently
+        substituting `-O2` codegen for `-Os`, not a source of numeric
+        doubt — the RELEASE byte count itself is exact and reproducible**
+        (confirmed by a byte-identical whole-firmware rebuild with an
+        explicit `-O2`), it just isn't true `-Os` codegen.
         Gates re-run: golden AVR MD5 PASSED (79af184e…) — untouched by
         this session, CI-wiring-only. ch570: not landed on origin as of
         this session (`grbl/platform/ch570/` absent, checked via
@@ -1068,6 +1072,31 @@ identity to integration time.
   absent — checked this branch and `origin/master` via `git ls-tree`); a
   clearly-marked TODO was left in `ci.yml` rather than a guessed row/recipe.
 
+- 2026-07-26 **dsPIC RELEASE-size dispute SETTLED by codegen comparison, not by
+  re-reading the compiler's message text**: free-tier `xc-dsc-gcc` v3.30 silently
+  substitutes `-O2` codegen for `-O3` and `-Os` (prints "Options have been
+  disabled due to restricted license" on every TU at those levels, no message at
+  `-O2`). Per-TU probe: `-O0` 1604B, `-O1` 900B, `-O2` 872B (no message), `-O3`
+  872B byte-identical disassembly to `-O2` (message printed anyway), `-Os` 876B
+  (message printed). Whole-firmware proof: the RELEASE build (`-Os`) and a
+  rebuild with an explicit `-O2` produce a BYTE-IDENTICAL 41816 B image, but the
+  `-O2` build prints zero restriction messages. Conclusion, settled in both
+  directions — the earlier "install-flags caused it" hypothesis is WRONG
+  (FreeMode is the installer's own default; `--LicenseType` offers
+  `WorkstationMode`/`NetworkMode` too, but both need an account-bound activated
+  license file, not a flag, so no install-recipe change would have avoided this),
+  and the "so the size is only approximate" conclusion drawn from it was ALSO
+  WRONG (41816 B / ~41.8KB RELEASE and 53220 B / ~53.2KB DEBUG are exact and
+  reproducible; the free tier just silently gives `-O2`-equivalent codegen
+  instead of true `-Os`, per Microchip's own bundled manual — "the basic amount
+  of code optimization" on free, "increased levels" on PRO). A 60-day free PRO
+  evaluation exists but is account-bound, interactive, time-limited, and NOT
+  CI-scriptable — not a path out of this for automated builds, so don't
+  re-investigate it. This closes the question: every "approximate"/"caps
+  optimization on `-Os`" wording elsewhere in this file, `CHANGELOG.md`,
+  `dspic33ak128mc102/platform.md`, its `Makefile`, and `ci.yml`'s `::notice::`
+  has been corrected to match.
+
 ## Current State (update each session)
 
 - **[x] RELEASE-READINESS TRUTH AUDIT (2026-07-26)** — Phase 5's last item prep (tag v0.x).
@@ -1075,9 +1104,12 @@ identity to integration time.
   table: all match exactly (atmega328p golden MD5 unchanged; stm32f103/h523/f411, samd21
   megarm+generic, ch32v006, hc32f460 all byte-identical to the table; dspic33ak128mc102 builds
   DEBUG+RELEASE with zero PORT_TODO_* using the real xc-dsc-gcc 8.3.1 + DFP 1.5.263 already
-  present in this environment — NEW FINDING: its RELEASE (`-Os`) compile prints "Options have
-  been disabled due to restricted license" from the free-tier compiler, so its size figures stay
-  approximate, not exact, until a licensed build confirms them). Provenance thesis independently
+  present in this environment — NEW FINDING (later SETTLED, see the dsPIC size note below): its
+  RELEASE (`-Os`) compile prints "Options have been disabled due to restricted license" from the
+  free-tier compiler on every TU, but the resulting RELEASE size is exact and reproducible, not
+  approximate — the free tier silently substitutes `-O2` codegen for `-O3`/`-Os` rather than
+  producing a fuzzy result; a rebuild with an explicit `-O2` in place of `-Os` is byte-identical to
+  the `-Os` RELEASE image). Provenance thesis independently
   re-verified from a fresh live clone of `gnea/grbl` v1.1h.20190825 (not reused from a prior
   claim): `.text` differs by exactly 2 bytes, the `GRBL_VERSION_BUILD` date string. CI matrix
   (15 rows) and all three workflow YAMLs re-checked (valid YAML; matrix covers exactly
@@ -1333,7 +1365,7 @@ identity to integration time.
   | stm32f103 | 33924 / 80              | **28700** / 80           | -5224  | -15.4% |
   | stm32h523 | 32448 / 388             | **25132** / 388          | -7316  | -22.5% |
   | stm32f411 | 32660 / 80              | **25796** / 80           | -6864  | -21.0% |
-  | dspic33ak128mc102 | N/A — FP=DOUBLE is this port's declared default (native DP FPU), never carried the SINGLE rollout | ~41.8KB code | — | — |
+  | dspic33ak128mc102 | N/A — FP=DOUBLE is this port's declared default (native DP FPU), never carried the SINGLE rollout | 41816 B (~41.8KB), exact — `-O2`-equivalent codegen, not true `-Os` (free-tier xc-dsc-gcc substitution, see dsPIC size note) | — | — |
   | hc32f460  | N/A (new port, rolling #3, `FP=SINGLE` from day one) | **25596** / 80 | N/A | N/A |
   | ch570     | N/A (new port, rolling #4, `FP=SINGLE` from day one) | **40674** / 4  | N/A | N/A |
 
