@@ -115,56 +115,15 @@ void serial_write(uint8_t data) {
   SERCOM3->INTENSET = SERCOM_USART_INTFLAG_DRE;
 }
 
-uint8_t serial_read() {
-  uint8_t tail = rx_buffer_tail;
-
-  if (rx_buffer_head == tail) {
-    return SERIAL_NO_DATA;
-  } else {
-    uint8_t data = rx_buffer[tail];
-    tail++;
-    if (tail == RX_RING_BUFFER) { tail = 0; }
-    rx_buffer_tail = tail;
-    return data;
-  }
-}
-
-void serial_reset_read_buffer() {
-  rx_buffer_tail = rx_buffer_head;
-}
-
-uint8_t serial_get_rx_buffer_available() {
-  uint8_t head = rx_buffer_head;
-  uint8_t tail = rx_buffer_tail;
-
-  if (head >= tail) {
-    return (RX_BUFFER_SIZE - (head - tail));
-  } else {
-    return ((tail - head - 1));
-  }
-}
-
-uint8_t serial_get_rx_buffer_count() {
-  uint8_t head = rx_buffer_head;
-  uint8_t tail = rx_buffer_tail;
-
-  if (head >= tail) {
-    return (head - tail);
-  } else {
-    return (RX_RING_BUFFER - (tail - head));
-  }
-}
-
-uint8_t serial_get_tx_buffer_count() {
-  uint8_t head = tx_buffer_head;
-  uint8_t tail = tx_buffer_tail;
-
-  if (head >= tail) {
-    return (head - tail);
-  } else {
-    return (TX_RING_BUFFER - (tail - head));
-  }
-}
+// The five chip-agnostic ring-buffer accessors core GRBL calls
+// (serial_read / serial_reset_read_buffer / serial_get_rx_buffer_available
+// / serial_get_rx_buffer_count / serial_get_tx_buffer_count) are shared
+// verbatim with every other TU-replacement port. This port originally
+// wrote the identical logic with if/else instead of early return and K&R
+// empty parens; the shared copy is the early-return/(void) form, and both
+// samd21 boards were proven byte-identical across the swap. Included HERE,
+// after the buffers above, because it is their definitions it operates on.
+#include "../common/serial_ring_accessors.h"
 
 // SERCOM3 interrupt handler
 void SERCOM3_Handler(void) {

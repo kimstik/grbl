@@ -106,51 +106,15 @@ void serial_write(uint8_t data) {
   _U1TXIE = 1;
 }
 
-// Pure ring-buffer math below - no hardware access. Preserve the "read
-// index once into a local" pattern (core serial.c:96-108).
-
-uint8_t serial_read(void) {
-  uint8_t tail = rx_buffer_tail;
-
-  if (rx_buffer_head == tail) {
-    return SERIAL_NO_DATA;
-  }
-  uint8_t data = rx_buffer[tail];
-  tail++;
-  if (tail == RX_RING_BUFFER) { tail = 0; }
-  rx_buffer_tail = tail;
-  return data;
-}
-
-void serial_reset_read_buffer(void) {
-  rx_buffer_tail = rx_buffer_head;
-}
-
-uint8_t serial_get_rx_buffer_available(void) {
-  uint8_t head = rx_buffer_head;
-  uint8_t tail = rx_buffer_tail;
-
-  if (head >= tail) {
-    return (RX_BUFFER_SIZE - (head - tail));
-  }
-  return (tail - head - 1);
-}
-
-uint8_t serial_get_rx_buffer_count(void) {
-  uint8_t head = rx_buffer_head;
-  uint8_t tail = rx_buffer_tail;
-
-  if (head >= tail) { return (head - tail); }
-  return (RX_RING_BUFFER - (tail - head));
-}
-
-uint8_t serial_get_tx_buffer_count(void) {
-  uint8_t head = tx_buffer_head;
-  uint8_t tail = tx_buffer_tail;
-
-  if (head >= tail) { return (head - tail); }
-  return (TX_RING_BUFFER - (tail - head));
-}
+// Pure ring-buffer math below - no hardware access. The five accessors
+// core GRBL calls (serial_read / serial_reset_read_buffer /
+// serial_get_rx_buffer_available / serial_get_rx_buffer_count /
+// serial_get_tx_buffer_count) are shared verbatim with every other
+// TU-replacement port. Included HERE, after the buffers above, because it
+// is their definitions it operates on; see that header for what it
+// requires and why the "read index once into a local" pattern (core
+// serial.c:96-108) must be preserved.
+#include "../common/serial_ring_accessors.h"
 
 // ============================================================================
 // UART INTERRUPT DISPATCH (called from _U1RXInterrupt/_U1TXInterrupt in
