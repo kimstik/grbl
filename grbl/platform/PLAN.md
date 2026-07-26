@@ -501,7 +501,9 @@ markers in the tree instead of a silent no-op.
 
 - REPORTING DOCTRINE (owner 2026-07-24): owner-facing size metric = RELEASE
   flash body (text+data) per port; DEBUG sizes are internal gate proxies only.
-  Canonical table: h523 28692 / f411 28724 / f103 29980 / AVR 30640(golden) /
+  Numbers as of this doctrine's authoring (2026-07-24, since superseded twice
+  — see the CANONICAL RELEASE SIZE TABLE further below for current figures):
+  h523 28692 / f411 28724 / f103 29980 / AVR 30640(golden) /
   samd21 43332 / ch32v006 55560. COMPACTNESS drive dispatched: (1) ch32 diet —
   --no-gc-sections is now unjustified (port complete, PORT_TODO gone; lifecycle
   rule: no-gc during porting, gc after zero-PORT_TODO -> to _template+§14.3);
@@ -657,11 +659,16 @@ markers in the tree instead of a silent no-op.
   override needed — no toolchain at the Makefile's default `$(HOME)/
   avr-toolchain` path in this environment); samd21 megarm RELEASE
   31952/296 (exact match, `TOOLCHAIN_PATH=/usr/bin`); stm32f411 RELEASE
-  32660/80/129968, boot-integrity OK; ch32v006 generic RELEASE
-  54904/0/2749, boot-integrity OK (all three needed the same
-  `TOOLCHAIN_PATH=/usr/bin` override — no code regressions, dsPIC work
-  touched only its own directory + CONTRACTS.md + this file). Still NOT
-  in CI (unattended XC-DSC fetch remains a separate ledger item).
+  25796/80, boot-integrity OK; ch32v006 generic RELEASE 41072/0,
+  boot-integrity OK (all three needed the same `TOOLCHAIN_PATH=/usr/bin`
+  override — no code regressions, dsPIC work touched only its own
+  directory + CONTRACTS.md + this file). f411/ch32v006 figures
+  re-verified at integration against current HEAD — this batch's
+  authoring worktree branched before the FP=SINGLE rollout landed on
+  those two ports, so the numbers first drafted here (32660/80 f411,
+  54904/0 ch32v006) were pre-rollout; the CANONICAL RELEASE SIZE TABLE
+  below is the authority these were checked against. Still NOT in CI
+  (unattended XC-DSC fetch remains a separate ledger item).
 
 - **[x] BUG #21 FIXED (2026-07-25) — vector table restored on all three STM32
   ports.** Mechanism re-verified before fixing, not taken on faith: baseline
@@ -698,7 +705,10 @@ markers in the tree instead of a silent no-op.
   `(0 & 0xFF) == 0` PASSED. The ASSERT guards alignment only; the post-link
   check is the sole thing that catches a vanished table. Comments in all three
   `script.ld` files corrected to say so.
-- **SIZE TABLE MUST BE RE-CANONICALIZED** — the old STM32 numbers were measuring
+- **SIZE TABLE MUST BE RE-CANONICALIZED** (superseded — see the CANONICAL
+  RELEASE SIZE TABLE further below, re-measured 2026-07-26 post-FP=SINGLE;
+  numbers here are the BUG#21-fix snapshot, kept as evidence, not current) —
+  the old STM32 numbers were measuring
   binaries with the ISRs and G-code path missing. New honest RELEASE flash body
   (text+data), owner-facing metric per the 2026-07-24 reporting doctrine:
 
@@ -735,6 +745,13 @@ markers in the tree instead of a silent no-op.
   | stm32f103 | 33924 / 80              | **28700** / 80           | -5224  | -15.4% |
   | stm32h523 | 32448 / 388             | **25132** / 388          | -7316  | -22.5% |
   | stm32f411 | 32660 / 80              | **25796** / 80           | -6864  | -21.0% |
+  | dspic33ak128mc102 | N/A — FP=DOUBLE is this port's declared default (native DP FPU), never carried the SINGLE rollout | ~41.8KB code | — | — |
+
+  RULE: any sibling size quoted in a ledger entry must be re-verified against
+  this table at integration time, not copied from the entry's own drafting —
+  agent worktrees branch from whatever HEAD existed when they started, and
+  sibling ports keep moving underneath them (see the dsPIC entry above for
+  the failure mode this guards against).
 
   DEBUG sizes (all assert-PASSING, all boot-integrity-PASSING): ch32v006 60648
   -> 46988; stm32f103 48852 -> 43120; stm32h523 48660 -> 41508; stm32f411
