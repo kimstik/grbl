@@ -4089,3 +4089,373 @@ third port after the first.
    did across every `ci/warn_baseline_*.txt` in the tree) rather than
    mass-removing or mass-keeping. Silence in either direction is the same
    mistake this rule exists to stop.
+<a id="sg2002-companion-core-gaps"></a>
+## §NEW. Gaps found porting SG2002 (first companion-core port: no flash, no clock to configure, a second cache domain, and an OS on the other side)
+
+*(Section number deliberately left as the literal `§NEW` placeholder per this
+file's top-of-file authoring rule - the integrator assigns the real number at
+merge time. Cite this section by its slug, `sg2002-companion-core-gaps`, not
+by a number.)*
+
+SG2002 is structurally unlike every port before it. Its target is not "the
+CPU on the board" - it is a *companion* core inside a Linux SoC: no flash of
+its own, no clock tree it is allowed to touch, a peer core with a separate
+cache, and a loader (`remoteproc`) that is a kernel driver rather than a
+programmer. Several checklist steps therefore do not mean what they say on
+this shape of target, and two long-standing habits in this tree turn out to be
+silently broken. Everything below is empirical - from a disassembly, a failing
+build, or a code read with the line cited - not theory.
+
+### 1. A linker symbol declared `uint8_t []` silently TORE every cross-core 32-bit index store
+
+The shared window's address comes from the linker, reached the obvious way:
+
+```c
+extern uint8_t __shm_start[];
+#define SG2002_SHM ((volatile sg2002_shm_t *)(void *)__shm_start)
+```
+
+`sg2002_shm_t`'s ring indices are `volatile uint32_t`. Disassembling
+`serial_init()` showed GCC emitting **four `sb` byte stores** for each of
+them, not one `sw`. GCC propagates the *declared* alignment of the extern
+symbol (1, for a `uint8_t` array) through the cast, decides the whole
+structure may be unaligned, and splits every wide access.
+
+On a single-core port that is a performance wart. Here it is **a torn index
+the other core can observe halfway written** - precisely the silent cross-core
+corruption the coherency work exists to prevent, produced by a *declaration
+detail*, with no warning, no failing test, and no diagnostic. Declaring the
+alignment fixed it (single `sw`, and 712 bytes of text disappeared as a side
+effect):
+
+```c
+extern uint8_t __shm_start[] __attribute__((aligned(SG2002_CACHE_LINE)));
+```
+
+Two general lessons, both of which generalise past this chip:
+
+- **`volatile` guarantees the access HAPPENS; it does not guarantee the access
+  is SINGLE.** [§12](#weak-memory-obligations) item 2 already says
+  "volatile != atomic" about read-modify-write. This is a second, narrower way
+  the same word misleads: even a plain aligned store of a `volatile uint32_t`
+  can become four stores if the compiler believes the address is unaligned.
+  Any index another agent reads concurrently needs its width-atomicity
+  *established*, not assumed.
+- **The declared type of a linker-provided symbol is part of the ABI**, not a
+  formality. `extern uint8_t x[]` is the idiomatic spelling and it is the
+  wrong one whenever the symbol is about to be cast to something with
+  alignment requirements.
+
+Found by reading the disassembly of a function that had already been reviewed
+and looked correct. Nothing else in this project's gate set would have caught
+it.
+
+### 2. Cache maintenance acts on LINES: single-writer-per-line is a layout obligation, not padding
+
+Extends [§23](#cross-core-cache-coherency). Once a port hand-maintains
+coherency, the *layout* of the shared structure becomes load-bearing in a way
+it never is for a same-core producer/ISR ring:
+
+> If the producer index and the consumer index share one cache line, writing
+> back the index you own also writes back your stale copy of the index the
+> other core owns - **silently reverting the other core's progress**.
+
+So every independently-written word in a cross-core structure must start its
+own cache line, and that property must be pinned (`_Static_assert` on
+`offsetof(...) % LINE == 0`) so a later field insertion cannot quietly undo
+it. The symmetric rule constrains the *invalidate* side: a consumer may only
+invalidate memory it never writes, or it discards its own stores. Both are
+satisfied here by construction - one writer per line, and `observe()` is only
+ever pointed at the peer's index or at ring data this core does not produce -
+and both are stated at each call site, because neither is visible in the code
+that calls them.
+
+### 3. The "preferred simplification" of [§23](#cross-core-cache-coherency) has a precondition a no-MMU core cannot meet
+
+[§23](#cross-core-cache-coherency) recommends mapping the shared window
+non-cacheable "where the SoC's PMA/MMU configuration allows it", and that
+recommendation is sound - but the qualifier is doing more work than it looks
+like. The documented T-Head mechanism for marking memory non-cacheable is the
+extended attribute bits in a **PTE**, and this target is a **no-MMU core in
+machine mode**: there are no PTEs. What remains is the SoC's PMA, fixed in
+fabric and undocumented for a chip with no TRM.
+
+The port therefore defaults to explicit cache maintenance and offers the
+non-cacheable window as a *declared* alternative
+(`SHM_COHERENCY=CMO|NONCACHEABLE`, shaped exactly like
+[§17](#fp-precision)'s FP knob: two real implementations, neither a no-op -
+`NONCACHEABLE` still emits the ordering fences - and an unrecognised value is
+a hard error). Measured cost of the safe default: 472 bytes of text.
+
+**Lesson for the doc, not just for this port:** when a contract offers a
+"preferred simplification", the reader has to check its precondition against
+the actual core, and a port that cannot meet it should say so in one sentence
+rather than silently taking the harder route (or, worse, taking the easy route
+on a machine where it does not hold). "Which of these two did you pick, and
+why" belongs in the port's own docs as a declared property.
+
+### 4. A `#ifdef` on a CORE build option, written in a prelude-injected header, CAN NEVER FIRE
+
+**This one indicts two already-landed ports.** `ch32v006/timer.h:76` and
+`ch570/timer.h:71` both carry:
+
+```c
+#ifdef STEP_PULSE_DELAY
+  #error "STEP_PULSE_DELAY is not supported on <chip> ..."
+#endif
+```
+
+presented (in this file, [§14](#ch32v006-riscv-gaps) item 11, and in
+[§4](#pulse-reset-timer)'s conditional rule) as the loud failure that makes
+the missing feature legal. It is dead code. `STEP_PULSE_DELAY` lives in core
+`grbl/config.h`, which is included from exactly one place - `grbl.h:42` - and
+`grbl.h` is included by core `.c` files. `timer.h` is pulled in by
+`platform.h`, which the Makefile `-include`s via the board prelude at the very
+top of **every** translation unit, long before any core header. At the moment
+that `#ifdef` is evaluated, `STEP_PULSE_DELAY` cannot possibly be defined by
+the documented enable path (uncommenting it in `config.h`).
+
+Verified both ways: passing `-DSTEP_PULSE_DELAY` on the command line *does*
+trip ch570's `#error` (so the guard is not syntactically broken), but the
+in-`config.h` route - the only route the option documents - reaches it never.
+A user who enables `STEP_PULSE_DELAY` the intended way gets a build that
+succeeds and a machine whose delayed-step path is quietly wrong.
+
+This is [§19](#guard-hardening) Lesson 1's shape exactly ("a guard that checks
+the wrong thing does not fail to protect - it certifies"), in a new location:
+not the wrong symbol *family*, the wrong *translation phase*.
+
+**Rule:** a platform file that needs to branch on a CORE build option must
+include `grbl.h` itself. `serial.c` already does on every port (it needs the
+`CMD_*` bytes), which is why the same class of guard works there. This port
+puts its `STEP_PULSE_DELAY` guard in `handlers.c` and adds
+`#include "../../grbl.h"` for exactly this reason; the guard was then verified
+to fire. Conversely, macro *definitions* in a prelude-injected header must be
+unconditional - `timer.h` here defines `PWM_*` and the delayed-step macros
+with no `#ifdef` at all, since a core-option guard there could only ever
+mislead. Suggested follow-up for the integrator, out of scope for this branch
+(it must not touch other ports): move ch32v006's and ch570's
+`STEP_PULSE_DELAY` guards into a TU that sees `grbl.h`.
+
+### 5. `make clean` cleans ONE flavor, and a stale-object relink then silently reports the wrong build
+
+Every Makefile in this tree derives `BUILD_DIR = .../$(BUILD)` with
+`BUILD ?= DEBUG`. So a bare `make clean` removes only the DEBUG object
+directory. The RELEASE objects survive - and a following
+`make BUILD=RELEASE SOMEKNOB=other` sees them as up to date, relinks them, and
+prints a plausible size for a binary built with the **previous** knob setting.
+
+Hit live while measuring this port's `SHM_COHERENCY` knob:
+`make clean && make BUILD=RELEASE SHM_COHERENCY=NONCACHEABLE` produced a
+binary byte-identical to the CMO build, and the natural reading of that result
+("the knob does nothing") was wrong - the knob works, the objects were stale.
+Two flavors of damage: a real setting can look broken, and (worse) a broken
+setting can look correct. It is the same *class* as
+[§19](#guard-hardening) Lesson 2 (`.DELETE_ON_ERROR:` - make's default
+behaviour serving a stale artifact as a fresh result), one level up: there the
+guard's verdict was stale, here the whole object set is.
+
+`make clean BUILD=RELEASE` is the correct incantation today. Note that the
+per-flavor `BUILD_DIR` split is itself a *fix* (PLAN.md's DEBUG/RELEASE
+object-collision entry) - this is a rough edge of that fix, not a reason to
+undo it. A `clean` that removed every flavor, or a knob fingerprint that
+forced a rebuild when the flags change, would close it; both are cross-port
+changes and deliberately not made on this branch.
+
+### 6. `build_artifacts.py build --platforms X` REWRITES the manifest with only X
+
+Code read, `tools/build_artifacts.py` `do_build()`: `release_entries` and
+`debug_entries` start empty, are appended to only for the *selected* units,
+and are then written over `artifacts/MANIFEST.sha256` wholesale. The existing
+manifest is never read. A scoped refresh - the exact thing
+`PORTING-CHECKLIST.md`'s Definition-of-Done item 8 recommends when "a full
+10-unit rebuild is overkill" - therefore **deletes every other port's recorded
+hashes**, after which `check` reports them as missing from the manifest.
+
+Not exercised here (this branch registers `sg2002` in the `UNITS` table but
+deliberately commits no artifacts and does not touch the manifest - a full
+regeneration on an isolated branch would conflict with any concurrently
+landing port, and a scoped one would corrupt the file). Flagged for the
+integrator: `do_build` should merge into the parsed existing manifest instead
+of replacing it, and `--platforms` should probably refuse to write the
+manifest at all until it does.
+
+### 7. On a companion core, PORTING-CHECKLIST Step 1 has nothing to configure - and its wording actively misleads
+
+Step 1 says "System clock to the frequency you pass as `F_CPU`". On a
+remoteproc-loaded companion core there is no clock to bring up: the PLLs, the
+DDR controller and every peripheral clock were configured by the boot chain
+and are owned by Linux drivers. A second writer would be a *bug*, not
+diligence. `SystemClock_Config()` here is genuinely empty, with the reasoning
+stated in the function - an honest empty function with a contract, not the
+"compiles but dead" stub class.
+
+The obligation Step 1 actually protects (a lie about `F_CPU` breaks every
+later step invisibly) is discharged instead by **declaration plus a
+compile-time check**. Which leads to the sharper finding:
+
+**`F_CPU` too HIGH is as fatal as `F_CPU` too low, and nothing said so.**
+[§14](#ch32v006-riscv-gaps) item 9 records the classic trap (an undivided HPRE
+making the real clock 3x slower than declared). The inverse bites on any
+application-class core: `F_CPU` feeds `TICKS_PER_MICROSECOND`, and
+[§4](#pulse-reset-timer)'s pulse arithmetic lands in a `uint8_t`:
+
+```
+step_pulse_time = -((pulse_us - 2) * TICKS_PER_MICROSECOND) >> 3
+```
+
+At a 700 MHz `F_CPU`, the default 10 us pulse computes 700 - it does not fit a
+`uint8_t` at all, and every realistic pulse width wraps to garbage. The
+resolution is that **`F_CPU` is the STEPPER TIMER's tick rate, not the CPU
+frequency** - true on AVR only because they coincide there. This port declares
+the 25 MHz APB timer clock and keeps the CPU frequency as a separate constant
+used for nothing timing-critical.
+
+Recommended for `_template` and any future fast-core port, since the failure
+is otherwise invisible until a scope is on the pins:
+
+```c
+_Static_assert((((PULSE_US_HEADROOM - 2UL) * (F_CPU / 1000000UL)) >> 3) <= 255UL,
+               "8-bit pulse horizon: F_CPU too high for the stepper-timer role");
+```
+
+The general ceiling the origin arithmetic imposes is
+`pulse_us_max = 2 + (255 * 8) / TICKS_PER_MICROSECOND` - 129 us on the 16 MHz
+AVR, i.e. an inherited property, not a new limitation.
+
+### 8. Item 7 of [§12](#weak-memory-obligations) is NVIC-shaped and does not transfer to a PLIC
+
+[§12](#weak-memory-obligations) item 7 tells a port to give pulse-reset the
+highest preemption priority, the stepper next, and serial a lower one so it
+cannot starve the pair. On a **PLIC** that is only half implementable:
+priorities decide which source is *claimed first when several are pending
+simultaneously*; a PLIC has no preemption levels and cannot interrupt a
+handler that is already running. Setting priorities satisfies the letter of
+the item and delivers none of the starvation protection.
+
+The second half has to be solved in software, and can be: the long-running
+handler re-enables interrupts around its own body, exactly the way core's
+`ISR_STEP` does with its `sei()`. Here the doorbell handler's drain loop is
+bounded only by how much the host sent (up to a full 8 KiB ring) - orders of
+magnitude past the 33.3 us ISR-hot budget - so it brackets the drain with
+`sei()`/`cli()` and the stepper pair preempts it freely. It cannot recurse
+into itself because the PLIC will not re-deliver a claimed-but-incomplete
+source.
+
+That requires real nesting, which in turn requires the trap entry to save
+`mepc`/`mstatus` itself: GCC's `__attribute__((interrupt))` prologue saves
+GPRs and **not** those two CSRs, so a nested trap silently destroys the outer
+trap's return address. This is the first port in the tree to nest rather than
+defer (ch32v006 and ch570 both defer, which
+[§5.2](#isr-definition-macros) accepts); the saving is four instructions and it
+is what makes [§5.2](#isr-definition-macros)'s AVR semantic actually hold
+instead of merely being tolerated.
+
+**Suggested edit to item 7 of [§12](#weak-memory-obligations):** say "where the
+interrupt controller HAS preemption levels (NVIC, PFIC)", and name the
+software bracket as the required substitute where it does not.
+
+### 9. Contract macros can be satisfied by a hardware shape the contract never imagined - the check is the SEMANTIC, not the mechanism
+
+Four of this port's blocks lack the register the contract's reference
+implementation uses, and none of the four is a no-op:
+
+- **No timer prescaler.** [§3](#stepper-timer)'s `STP_TMR_PRESCALER_SET`
+  becomes a stored software multiplier applied by `PERIOD_SET` (ch570's
+  technique, reused). The observable semantic - the next segment's real-time
+  period scales by the selected divisor - is identical.
+- **No F_CPU/8 pulse tick.** [§4](#pulse-reset-timer) explicitly permits
+  rescaling; `START()` loads `(256 - val) * 8` counts, which reproduces *both*
+  halves of the contract at once: the exact pulse width and the 8-bit overflow
+  HORIZON (the `256` is computed from the `uint8_t` core handed over, so the
+  wrap point stays core's, not the 32-bit counter's). This is the SAMD21 gap
+  of [§4](#pulse-reset-timer) fixed rather than inherited.
+- **No UART at all.** [§7](#serial) over a shared-memory ring, with one
+  deliberate cardinality change: the doorbell fires once per burst so the
+  handler drain-loops. [§7](#serial)'s table binds semantics, not
+  one-interrupt-per-byte, so this is legal - and BUG #19's realtime
+  interception is inherited verbatim *provided* the drain loop performs the
+  per-byte classify exactly as many times as N separate byte interrupts would.
+  That call-count invariant is the single thing a future editor must not
+  break, and it is stated at the top of the file that could break it: a "fast
+  path" memcpy'ing a run of bytes past the switch would compile, link, pass
+  every gate in this repo, and silently disable the reset key.
+- **No atomic set/clear registers, and no pull-up register.** DesignWare
+  apb_gpio has neither. [§1.2](#gpio-data) names the remedy when hardware
+  set/clear does not exist (a critical section) and this port takes it for
+  every DR/DDR read-modify-write; [§1.4](#gpio-data) forbids a no-op pull-up,
+  so the pulls are real writes into the SoC pad block, with the per-pad
+  register mapping supplied by the board config because it is a package fact
+  and not derivable. Being wrong there is a bring-up defect; being absent
+  would be a contract violation.
+
+### 10. Documenting UNVERIFIED facts: per-block banners, and confining the weakest block to two functions
+
+This is the first port in the tree with **no vendor documentation of any
+kind** - not "the TRM is thin", but no TRM exists.
+[§14](#ch32v006-riscv-gaps) item 7 already recorded that "struct-shaped
+best-effort register layouts are worse than absent ones", with the RM as the
+mitigation. With no RM, two other mitigations were used and are worth reusing:
+
+- **Per-block banners that grade themselves.** Confidence is not uniform and a
+  blanket file-level "unverified" flattens it. The DesignWare GPIO/timer
+  blocks and the PLIC/CLINT are third-party IP with published specifications,
+  so only the *instantiation* (base address, IRQ number, clock) is guesswork;
+  the vendor mailbox has no specification anywhere. Each block states what its
+  claim rests on, what a bring-up engineer must confirm, and **what the
+  symptom of it being wrong looks like** - the last being the part that
+  actually saves time (e.g. "a wrong PLIC context delivers no interrupt at
+  all: the firmware boots, prints its banner, and never steps").
+- **Put the least-documented block off the correctness-critical path, on
+  purpose.** The mailbox doorbell is the weakest fact in the port, so the ring
+  protocol was designed to be fully self-describing through its head/tail
+  indices: a host that ignores the doorbell and polls is a functional peer,
+  and every mailbox access is confined to two functions. A wrong doorbell
+  costs **liveness**, never data integrity. Choosing which unverified fact is
+  allowed to be load-bearing is a design decision, and it should be made
+  deliberately rather than discovered later.
+
+### 11. Two gaps this port itself introduced, found rebasing onto a 69-commit-newer integration branch
+
+This port's own commit was written and merge-tested against an OLD base and
+never checked against the invariants that landed on the integration branch
+while it was away. Both are the exact classes this file already names
+elsewhere in this same port's gap log and in sibling ports' own histories -
+not new bug classes, just this port's own instance of them, caught at
+integration time rather than left latent:
+
+- **`#ifdef ENABLE_M7` inside a prelude-injected header** -
+  `boards/generic/config.h` gated `COOLANT_MIST_PORT/PIN/BIT` behind it. This
+  file is reached through `boards/generic/prelude.h`'s `-include`, which runs
+  before core `grbl.h`'s own `#include "config.h"` ever defines `ENABLE_M7`
+  ([§29](#prelude-phase-dead-guard)'s wrong-phase class) - the guard could never
+  observe the option even if a user enabled it, permanently dropping mist
+  coolant. The identical bug was already found and fixed on ch32v006 and
+  ch570's own `boards/generic/config.h` (see their file comments); this
+  port's `timer.h` correctly AVOIDED the same class for `STEP_PULSE_DELAY`
+  two files over, in the same batch, which is what made the config.h instance
+  conspicuous rather than plausible. Fixed by defining the pins
+  unconditionally - core's own correctly-timed `#ifdef ENABLE_M7` in
+  `coolant_control.c` is the only place that ever reads them.
+- **No boot-init-reachability wiring at all** ([§boot-init-unreachable](#boot-init-unreachable),
+  BUG #23) - unlike every sibling RISC-V port, this port shipped with no
+  `GRBL_BOOT_INIT`, no `INIT_SYMBOLS`, and no `../common/init_check.sh`
+  invocation in its Makefile. `SystemClock_Config()` and `sg2002_plic_init()`
+  are called only from `Reset_Handler`, before `main()` - precisely the shape
+  that deleted four other ports' clock/GPIO bring-up under `-flto`. This port
+  has no `-flto` today, so nothing was silently lost yet, but the absence of
+  the ratchet itself was the gap: the day RELEASE gains `-flto` (the house
+  style every sibling RISC-V port already follows), this port had zero
+  protection against the identical regression. Fixed: both functions tagged
+  `GRBL_BOOT_INIT` (declaration in `platform.h`, definition in `platform.c`);
+  `Reset_Handler` tagged `__attribute__((used))` instead (ch32v006/ch570's own
+  precedent - it is reached only via `_start`'s raw inline asm `jal
+  Reset_Handler`, invisible to any IPA `noinline` would help against, so
+  `used` is the correct, narrow exception to "never use `used` here" rather
+  than a violation of it); Makefile gained `INIT_SYMBOLS =
+  Reset_Handler,SystemClock_Config,sg2002_plic_init` and runs
+  `../common/init_check.sh` at link time. `BOOT INIT: OK` on both flavors;
+  sizes unchanged (`noinline`/`used` cost nothing when the functions were
+  never going to be inlined or deleted in the first place - this port
+  deliberately did NOT also add `-flto`, to avoid stacking an unrelated
+  optimization-correctness risk onto this same rebase).
