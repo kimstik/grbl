@@ -86,7 +86,16 @@ vpath %.c $(COMMON_DIR)
 
 # Base compiler flags
 CFLAGS  = -mcpu=$(CPU) -mthumb $(FPU)
-CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)
+# BUG #18 class, widened: plain UL is NOT enough here. F_CPU feeds
+# stepper.c:1015's `TICKS_PER_MICROSECOND*1000000*60`, a compile-time
+# constant; on this ABI unsigned long is still 32-bit, so it only avoids
+# overflow up to ~71 MHz - every port on this file (72/96/250 MHz) exceeds
+# that and silently wraps to the WRONG constant with no warning (unsigned
+# wraparound isn't diagnosed, unlike signed). ULL is unsigned long long,
+# >=64-bit on every ISO C target, so the constant folds correctly at any
+# real clock. Verified: arm-none-eabi-gcc -S at 250 MHz emits the exact
+# 15000000000 value with ULL vs a silently wrapped 2115098112 with UL.
+CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)ULL
 CFLAGS += -Wall -Wextra
 CFLAGS += -ffunction-sections -fdata-sections
 

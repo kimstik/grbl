@@ -107,7 +107,14 @@ vpath %.c $(GRBL_DIR)
 # is available but the toolchain default is gnu99-era; pin it explicitly.
 ARCHFLAGS = -mcpu=$(MCPU) -mdfp=$(DFP_XC16)
 CFLAGS  = $(ARCHFLAGS) -std=gnu11
-CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)UL
+# BUG #18 class, UL->ULL correction: this port's own prior fix (plain UL)
+# was NOT sufficient at 200 MHz - unsigned long is still 32-bit on this
+# toolchain (confirmed: xc-dsc-gcc emits a 4-byte object for it), so
+# stepper.c:1015's `TICKS_PER_MICROSECOND*1000000*60` (true 12000000000)
+# silently wrapped to 3410065408 with zero warning (unsigned overflow
+# isn't diagnosed the way signed overflow is). ULL is >=64-bit on every
+# target; xc-dsc-gcc emits the correct 8-byte constant with it.
+CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)ULL
 CFLAGS += -Wall -Wextra
 
 # Build-path independence for DEBUG's DWARF info (CONTRACTS.md

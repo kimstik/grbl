@@ -93,7 +93,13 @@ CFLAGS  = -mcpu=$(CPU) -mthumb $(FPU)
 # same expression (2.88e9 @ 48MHz) overflows signed int32 - UB plus a
 # compiler warning. The UL suffix here makes F_CPU (and therefore
 # TICKS_PER_MICROSECOND's expansion) unsigned long, so the product is
-# computed in uint32 - no core edit, no more overflow.
+# computed in uint32 - no core edit, no more overflow AT THIS CLOCK.
+# CORRECTION (found auditing the stm32/hc32/dspic siblings): UL only works
+# because 48 MHz keeps the product under 2^32-1 - it is NOT a general fix.
+# unsigned long is still 32-bit on this ABI, so any clock above ~71 MHz
+# wraps silently even with UL (unsigned overflow isn't warned, unlike
+# signed) - those ports need ULL instead. Do not copy plain UL onto a
+# future samd21 board clocked above ~71 MHz without re-checking this.
 CFLAGS += -DPLATFORM_$(DEVICE) -DF_CPU=$(CLOCK)UL
 CFLAGS += -D__$(DEVICE)__
 CFLAGS += -Wall -Wextra
