@@ -188,7 +188,7 @@ MAP_FILE  = $(OUTPUT_DIR)/$(BINARY_NAME).map
 # TARGETS
 # ============================================================================
 
-all: $(BUILD_DIR) $(OUTPUT_DIR) $(HEX_FILE) $(BIN_FILE) $(DUMP_FILE)
+all: $(BUILD_DIR) $(OUTPUT_DIR) $(HEX_FILE) $(BIN_FILE) $(DUMP_FILE) warn_check
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -252,6 +252,48 @@ $(BIN_FILE): $(ELF_FILE)
 $(DUMP_FILE): $(ELF_FILE)
 	$(OBJDUMP) -Sxdstr $< >$@
 
+# WARNING RATCHET (ci/warn_ratchet.py) wired at build time, shared by every
+# STM32 family Makefile including this file - CONTRACTS.md
+# #warn-ratchet-build-time-wiring. Until this landed, ci/warn_ratchet.py was
+# invoked ONLY from .github/workflows/ci.yml against a log CI captured
+# itself; a developer's local `make` was completely blind to warning
+# regressions even though the other three ratchets (ASSERT_FP/INIT_CHECK/
+# BOOT_CHECK above) all fire locally. See common/warn_check.sh's header for
+# the full soundness rationale (why the log capture forces its own
+# from-scratch scratch-directory build rather than trusting whatever TUs
+# happen to already be stale in $(BUILD_DIR), and why a plain `>file 2>&1`
+# redirect - not a `| tee` pipeline - is what keeps this safe from the
+# bash-pipefail class of trap that already broke a CI step in this project
+# once for real).
+#
+# The recursive $(MAKE) below targets the scratch ELF path directly (never
+# `all`/`warn_check` themselves) specifically to avoid a `warn_check ->
+# rebuild -> all -> warn_check -> ...` infinite recursion, since `all`
+# above lists `warn_check` as its own prerequisite.
+#
+# BUILD_DIR and OUTPUT_DIR are overridden to two DISTINCT scratch
+# subdirectories (obj/ vs out/), not the same path - overriding both to one
+# identical directory makes this Makefile's own `$(BUILD_DIR): mkdir -p
+# $(BUILD_DIR)` and `$(OUTPUT_DIR): mkdir -p $(OUTPUT_DIR)` rules collide on
+# one target name, which GNU Make reports as "overriding recipe for target"
+# - a real warning the ratchet then (correctly) catches and fails on. Caught
+# by this exact mechanism while landing it; keep them separate.
+WARN_SCRATCH     = $(OUTPUT_DIR)/.warncheck/$(PLATFORM_NAME)/$(BUILD)
+WARN_SCRATCH_OBJ = $(WARN_SCRATCH)/obj
+WARN_SCRATCH_OUT = $(WARN_SCRATCH)/out
+WARN_LOG         = $(WARN_SCRATCH)/build.log
+WARN_BASELINE    = ../../../ci/warn_baseline_$(PLATFORM_NAME).txt
+WARN_RATCHET     = ../../../ci/warn_ratchet.py
+WARN_CHECK       = ../common/warn_check.sh
+
+warn_check:
+	@mkdir -p $(WARN_SCRATCH_OUT)
+	@sh $(WARN_CHECK) $(WARN_SCRATCH_OBJ) $(words $(OBJECTS)) $(WARN_LOG) \
+	    $(WARN_BASELINE) $(WARN_RATCHET) -- \
+	    $(MAKE) --no-print-directory BUILD=$(BUILD) FP=$(FP) \
+	      BUILD_DIR=$(WARN_SCRATCH_OBJ) OUTPUT_DIR=$(WARN_SCRATCH_OUT) \
+	      $(WARN_SCRATCH_OUT)/$(BINARY_NAME).elf
+
 # Flash using st-link
 flash: $(BIN_FILE)
 	st-flash write $< 0x8000000
@@ -273,6 +315,7 @@ clean:
 	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.dump \
 	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.map
 	rm -rf $(PLATFORM_BUILD_ROOT)
+	rm -rf $(OUTPUT_DIR)/.warncheck/$(PLATFORM_NAME)
 
 # Clean all build artifacts
 clean-all:
@@ -303,7 +346,7 @@ help:
 	@echo "  Current BUILD = $(BUILD)"
 	@echo "  Output directory = $(BUILD_DIR)"
 
-.PHONY: all clean clean-all flash flash-openocd debug help
+.PHONY: all clean clean-all flash flash-openocd debug help warn_check
 
 # Include dependencies
 -include $(BUILD_DIR)/*.d

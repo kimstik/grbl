@@ -357,6 +357,20 @@ $(BIN_FILE): $(ELF_FILE)
 $(DUMP_FILE): $(ELF_FILE)
 	$(OBJDUMP) -Sxdstr $< >$@
 
+# WARNING RATCHET (ci/warn_ratchet.py) - CONTRACTS.md
+# #warn-ratchet-build-time-wiring. NOT wired into `all` here (this template
+# is not expected to link - see the DESIGN NOTE at the top of this file),
+# but every landed port wires this exact block once it reaches zero
+# PORT_TODO_* and flips `all` to depend on $(HEX_FILE)/$(BIN_FILE)/
+# $(DUMP_FILE) - see any real port's Makefile (e.g. ch32v006, hc32f460) for
+# the working, tested version. Copy that block verbatim, adjusting the
+# ci/ and common/ path depths and (if this port grows a BOARD knob) folding
+# $(BOARD) into WARN_SCRATCH the way samd21/ch32v006/ch570/
+# dspic33ak128mc102 do.
+# PORT-TODO: create ci/warn_baseline_<platform>.txt (empty is a valid
+#            starting point - see ci/warn_ratchet.py's own docstring) and
+#            wire the warn_check target in, once this port links.
+
 # Debug with gdb
 debug: $(ELF_FILE)
 	$(GDB) $<
