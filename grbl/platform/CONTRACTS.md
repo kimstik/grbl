@@ -1376,3 +1376,48 @@ is false in GNU Make unless `.DELETE_ON_ERROR:` is set. Any future
 platform Makefile (copy-me template included) must carry this line from
 day one, not bolt it on after the first bricked artifact is found
 surviving in the wild.
+
+## 20. Vendor ISR attribute silently ignored on mainline GCC: WCH's `"WCH-Interrupt-fast"` degrades to a plain function (CH570 recon)
+
+Found while closing the QingKe V3C interrupt-entry question for the CH570
+port (PLAN.md rolling-ports queue) — before writing any handler code, not
+theoretical.
+
+WCH's own SDK (`openwch/ch570`, Apache-2.0, `CH57x_common.h`) and the
+independent `cnlohr/ch32fun` (MIT) both pair `INTSYSCR.HWSTKEN=1` with
+`__attribute__((interrupt("WCH-Interrupt-fast")))` on every ISR. That
+attribute-argument string is not a GCC RISC-V feature — it exists only in
+WCH's own forked compiler (and the xPack build derived from it).
+
+Empirically tested against the exact toolchain this project already uses
+for ch32v006 (`riscv64-unknown-elf-gcc` 13.2.0, the apt
+`gcc-riscv64-unknown-elf` package ch32v006/Makefile documents as its
+build): compiling a function with
+`__attribute__((interrupt("WCH-Interrupt-fast")))` produces only
+`warning: argument to 'interrupt' attribute is not '"user"', '"supervisor"',
+or '"machine"' [-Wattributes]` — no error, build succeeds — and the
+compiler silently treats the function as ordinary code. Disassembly
+confirms it: only `s0` is saved (the caller-used `a4`/`a5` registers get
+NO interrupt-frame save), and the function ends in a plain `ret`, not
+`mret`. `ret` pops `ra` and jumps; it does not restore `mepc`/`mstatus`.
+An ISR built this way never correctly returns from a trap.
+
+RULE for every WCH/QingKe port on this toolchain: leave `INTSYSCR` (CSR
+0x804) at its reset value 0 — explicitly write 0 as defense-in-depth,
+don't rely on reset state alone — and use the plain
+`__attribute__((interrupt))`, machine mode, GCC's own default, verified
+correct by disassembly in CONTRACTS §14 item 2 (`mret` = opcode
+`0x30200073`). NEVER adopt the vendor's `__INTERRUPT`/`WCH-Interrupt-fast`
+macro on a mainline toolchain — it is written for WCH's forked compiler
+and does not carry over to this project's apt-installed one.
+
+**General lesson beyond WCH:** when a vendor SDK's ISR macro carries a
+non-standard attribute argument, a clean compile is not evidence the
+mainline toolchain did what the vendor's compiler does — GCC accepts an
+unrecognized attribute argument with a warning, not a hard error, and
+quietly no-ops the attribute. Verify by DISASSEMBLY that the expected
+return instruction (`mret`/`reti`/`rte`, architecture-dependent) is
+actually emitted before trusting any vendor interrupt macro on a
+toolchain the vendor didn't ship. A warning is not a failure signal here,
+and the build succeeding either way is exactly what makes this trap
+silent.

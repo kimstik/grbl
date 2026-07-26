@@ -288,10 +288,30 @@ Priority order (revise as hardware/toolchain reality dictates):
       sources), wch_critical.h (mstatus/fence), wch_vectors.h (mtvec MODE 1/1).
       Friendlier chip overall: no E-quirks, no EXTI collision class, no dead
       timers. openwch/ch570 SDK is Apache-2.0 — headers vendorable (unlike CH32V
-      EVT). ⛔ BLOCKER before handlers.c: QingKe V3C may do UNCONDITIONAL hw
-      register stacking on interrupt entry (secondary source) — if so, GCC
-      __attribute__((interrupt)) double-saves/corrupts; PRIMARY datasheet TRM
-      chapter required first (403'd this session). Slot: after dsPIC Steps 3-6.
+      EVT). ✅ BLOCKER RESOLVED: QingKe V3C's HWSTKEN is CSR-gated (INTSYSCR,
+      CSR 0x804) and RESETS TO 0 — primary source CH572/CH570 Datasheet V1.1
+      §3.4.2, shipped in openwch/ch570 (Apache-2.0) — identical semantics to
+      V2C (CONTRACTS §14 item 2). NOT unconditional hw stacking; plain GCC
+      `__attribute__((interrupt))` at reset-default INTSYSCR is safe, same as
+      ch32v006. Companion trap this recon surfaced, see CONTRACTS §20: the
+      vendor's own `"WCH-Interrupt-fast"` attribute silently no-ops on this
+      toolchain — do not copy it. **CH570 is unblocked for porting.**
+      Confirmed facts for whoever writes the port: (1) PFIC register offsets
+      are byte-identical to ch32v006's verified V2C layout (CONTRACTS §14
+      item 7) — confirms the wch_pfic.h extraction plan above; mtvec
+      MODE0/MODE1 semantics identical too (confirms wch_vectors.h). (2) The
+      shareable set GREW by one item: the interrupt-entry strategy itself
+      (INTSYSCR=0 + plain `interrupt` attribute) transfers, not just the
+      register primitives. (3) Flash is materially DIFFERENT from ch32v006 —
+      4096-byte erase blocks, and write/erase go through a boot-ROM call
+      `FLASH_EEPROM_CMD()` gated by a "safe access" unlock (write 0x57 then
+      0xA8 to `R8_SAFE_ACCESS_SIG`, ~112-cycle window) plus `R8_GLOB_ROM_CFG`
+      region write-enable — NOT a KEYR-style unlock, so ch32v006's
+      flash/nvmem code is not reusable there. (4) STK (systick analog) at
+      0xE000F000: CTRL bit0 STE, bit1 STIE, bit2 STCLK, bit3 STRE, bit4
+      MODE, bit31 SWIE; SR bit0 CNTIF is write-0-to-clear — the same
+      inverted-polarity trap already flagged for ch32v006 (CONTRACTS §14
+      item 7). Slot: after dsPIC Steps 3-6.
       Side-note for docs-truth backlog: common/stm32/ARCHITECTURE.md is
       marketing-toned ("A+ 97%" self-grading, 60%/2hr claims) — needs the
       evidence-first rewrite treatment eventually.
