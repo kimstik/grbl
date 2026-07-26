@@ -2,11 +2,12 @@
   handlers.c - _template interrupt dispatch + integration glue (copy-me starting point)
   Part of Grbl
 
-  Houses everything PORTING-CHECKLIST.md Step 6 groups together: ISR vector
-  wrappers (CONTRACTS.md §2 gpio, §5 timer), and the delay primitives. No
-  platform.c in this template - HAL_CRITICAL_SECTION_BEGIN/END and sei/cli
-  are pure macros in platform.h (no state needed), so this file is the only
-  home for anything that has to be an out-of-line function.
+  Houses the ISR *vector* dispatch wrappers PORTING-CHECKLIST.md Step 6
+  groups together (CONTRACTS.md §2 gpio, §5 timer): naming/clearing/
+  forwarding glue between a real vector slot and core's ISR_STEP()-class
+  bodies. Stateful chip bring-up (delay calibration, GPIO-IRQ controller
+  arm-up) lives in platform.c instead - see its header comment for why the
+  split matches every landed port's own file boundary.
 
   Every dispatcher below is deliberately named *_irq_dispatch rather than a
   real vector name (TC3_Handler, EIC_Handler, ...) - this template does not
@@ -81,29 +82,6 @@ void gpio_irq_dispatch(void) {
   PORT_TODO_GPIO_IRQ_CLEAR_FLAGS();
   if (PORT_TODO_GPIO_IRQ_LIMIT_PENDING())   { LIMIT_INT_IRQHandler(); }
   if (PORT_TODO_GPIO_IRQ_CONTROL_PENDING()) { CONTROL_INT_IRQHandler(); }
-}
-
-// ============================================================================
-// DELAY PRIMITIVES (PORTING-CHECKLIST Step 6; reference: samd21/platform.c:169-214)
-// ============================================================================
-/*
-  Declared by common/dummy/util/delay.h (AVR <util/delay.h> compatibility -
-  core calls delay_ms()/delay_us() in nuts_bolts.c, which call these with
-  small integral arguments). "Closed: _delay_us/_delay_ms empty stubs" in
-  CONTRACTS.md §13 records why an empty body here is NOT an option even
-  though it compiles clean: it silently breaks homing debounce and spindle
-  ramp on real hardware, with no warning at build or link time. A
-  PORT_TODO call is the correct stand-in - it costs you a linker error
-  instead of a support ticket.
-*/
-void _delay_us(double __us) {
-  (void)__us;
-  PORT_TODO_DELAY_US();
-}
-
-void _delay_ms(double __ms) {
-  (void)__ms;
-  PORT_TODO_DELAY_MS();
 }
 
 // ============================================================================

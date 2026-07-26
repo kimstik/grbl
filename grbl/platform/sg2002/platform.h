@@ -133,9 +133,13 @@ void hal_serial_init(uint32_t baud_rate);
 #define HAL_SERIAL_WRITE_DATA(data)  (HAL_SERIAL_UART->RBR_THR_DLL = (data))
 #define HAL_SERIAL_READ_DATA()       (HAL_SERIAL_UART->RBR_THR_DLL)
 
-// Serial status
-#define HAL_SERIAL_RX_READY()        (HAL_SERIAL_UART->LSR & UART_LSR_DR)
-#define HAL_SERIAL_TX_READY()        (HAL_SERIAL_UART->LSR & UART_LSR_THRE)
+// HAL_SERIAL_RX_READY()/HAL_SERIAL_TX_READY() removed (cross-port
+// consistency audit, 2026-07-26): defined here and in stm32f103/f411/h523/
+// hc32f460 but called by nothing in grbl core (grep grbl/*.c) and absent
+// from CONTRACTS.md §7's serial macro table - core drives serial entirely
+// off the RX/TX ISR + INTERRUPT_ENABLE/DISABLE pair, never polls a ready
+// flag. Dead since the macros were written. Reintroduce with a real
+// caller if a future polling-mode serial path ever needs it.
 
 // Serial interrupts
 #define HAL_SERIAL_RX_INTERRUPT_ENABLE()   (HAL_SERIAL_UART->DLH_IER |= UART_IER_ERBFI)
