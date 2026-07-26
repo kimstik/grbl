@@ -1,460 +1,337 @@
 /*
-  platform.h - HC32F460 platform configuration
-  Part of Grbl HAL
+  platform.h - HC32F460 platform HAL interface
+  Part of Grbl
 
-  Copyright (c) 2025 GRBL HAL Contributors
+  Copyright (c) 2025 kimstik
+  Intelligence assisted
+  License: MIT
 
-  This file provides platform-specific definitions for HC32F460JETA.
-  ARM Cortex-M4F, 200 MHz, 512KB RAM, 512KB Flash
-  Chinese MCU from HDSC - HIGH PERFORMANCE at low cost!
+  Platform-specific HAL interface for HC32F460JETA (HDSC/Huada, ARM
+  Cortex-M4F, up to 200 MHz, up to 512KB Flash, up to 192KB SRAM).
+
+  NOTE (Phase 6 rolling port #3): the file this replaces was a
+  documentation skeleton only - marketing-comment blocks ("BEAST", "12.5x
+  faster"), `#include "hc32_ddl.h"`/`"hc32f460.h"`/`"core_cm4.h"` pointing
+  at a vendor SDK never vendored into this tree, and no Makefile/gpio.h/
+  timer.h/regs.h/startup.c/platform.c/handlers.c/script.ld anywhere in the
+  directory (`ls grbl/platform/hc32f460/` before this port: only a stub
+  `avr/io.h` and this 460-line doc-only header). It never built. Per
+  PORTING-CHECKLIST.md's "trust only builds" rule (three prior "complete"
+  claims in this tree - stm32f103, stm32h523, stm32f411 - never having
+  compiled before their real ports landed), none of its claims were
+  carried forward without re-verification; this file replaces it entirely.
+
+  Vendor-exotic disclosure: HC32F460 is HDSC/Huada silicon, not an
+  STM32/SAMD clone. Its peripheral IP (TIMER0/TIMERA, GPIO PORT model,
+  INTC event router, EFM flash, PWC/CMU clock tree) has no donor port in
+  this tree. See regs.h's file header for the full verification
+  methodology - facts are graded CONFIRMED (datasheet TOC + Klipper3d/
+  klipper's real shipped GPL-3.0 firmware, cross-checked, not copied) vs
+  UNVERIFIED placeholder (no register-level manual reachable this
+  session).
 */
 
 #ifndef PLATFORM_HC32F460_H
 #define PLATFORM_HC32F460_H
 
-// ============================================================================
-// PLATFORM IDENTIFICATION
-// ============================================================================
-
+/* hal.h pre-defines PLATFORM_NAME "HC32F460" before including this file;
+   the board-specific name below is the intended final value. */
+#undef PLATFORM_NAME
 #define PLATFORM_NAME     "HC32F460JETA"
 #define PLATFORM_CPU      "ARM Cortex-M4F"
 #define PLATFORM_ARCH     "ARM"
 
-// ============================================================================
-// PLATFORM CAPABILITIES
-// ============================================================================
+/* ============================================================================
+ * PLATFORM CAPABILITIES
+ * ==========================================================================*/
 
-#define HAL_HAS_FPU           1   // Cortex-M4F has single-precision FPU!
-#define HAL_HAS_DMA           1   // 2x DMA controllers, 16 channels total
-#define HAL_HAS_USB           1   // Full-speed USB 2.0 device
-#define HAL_HAS_HW_EEPROM     0   // No hardware EEPROM (use flash emulation)
-#define HAL_HAS_HW_MULTIPLY   1   // 32-bit hardware multiplier
-#define HAL_HAS_HW_DIVIDE     1   // Hardware divider
-#define HAL_HAS_ETHERNET      0   // No Ethernet (HC32F460 has no MAC)
-#define HAL_HAS_CAN           1   // CAN 2.0B support
+#define HAL_HAS_FPU           1   /* Cortex-M4F: single-precision FPU */
+#define HAL_HAS_DMA           1   /* 2x DMA controllers present in silicon, not wired by this port */
+#define HAL_HAS_USB           1   /* USB FS present in silicon, not wired by this port */
+#define HAL_HAS_HW_EEPROM     0   /* No hardware EEPROM - flash (EFM) emulation used */
+#define HAL_HAS_HW_MULTIPLY   1
+#define HAL_HAS_HW_DIVIDE     1
 
-// ============================================================================
-// PLATFORM SPECIFICATIONS
-// ============================================================================
+/* ============================================================================
+ * PLATFORM SPECIFICATIONS
+ * ==========================================================================*/
 
 #ifndef HAL_CPU_FREQ
-  #define HAL_CPU_FREQ        200000000UL  // 200 MHz! (12.5x faster than AVR)
+  #define HAL_CPU_FREQ        200000000UL   /* 200 MHz (Makefile CLOCK must match - Step 1 F_CPU lie trap) */
 #endif
 
-#define HAL_RAM_SIZE          524288      // 512 KB RAM (256x more than AVR!)
-#define HAL_FLASH_SIZE        524288      // 512 KB Flash
-#define HAL_EEPROM_SIZE       0           // No hardware EEPROM
+#define HAL_RAM_SIZE          131072    /* 128KB - conservative: smallest confirmed variant, see platform.md */
+#define HAL_FLASH_SIZE        524288    /* 512KB - datasheet "up to 512KB Flash" */
+#define HAL_EEPROM_SIZE       0
 
-// Timer resolution
-#define HAL_TIMER_RESOLUTION_NS   5       // 5 ns @ 200 MHz (12x better than AVR!)
+#define HAL_TIMER_RESOLUTION_NS   5     /* 5 ns @ 200 MHz */
 
-// Maximum step rate (theoretical)
-#define HAL_MAX_STEP_RATE_KHZ     200     // 200 kHz continuous (6x better than AVR)
+/* ============================================================================
+ * REGISTER DEFINITIONS (clean-room, see regs.h file header)
+ * ==========================================================================*/
 
-// ============================================================================
-// HC32F460 INCLUDES
-// ============================================================================
+#include "regs.h"
+#include "timer.h"
 
-// HC32F460 HAL (HDSC library)
-#include "hc32_ddl.h"          // DDL = Device Driver Library
-#include "hc32f460.h"
-#include "core_cm4.h"
+/* Define hal_gpio_port_t before hal_gpio.h includes it */
+typedef HC32_PORT_TypeDef* hal_gpio_port_t;
+#define HAL_GPIO_PORT_T_DEFINED
 
-// ============================================================================
-// PERFORMANCE FEATURES
-// ============================================================================
+/* ============================================================================
+ * PIN MAPPING - GPIO DEFINITIONS
+ * ============================================================================
+ *
+ * Generic reference board (no specific commercial HC32F460 CNC board is
+ * targeted - "generic" posture, same as ch32v006/boards/generic):
+ *
+ *   Step:               PA0, PA1, PA2  (X, Y, Z)
+ *   Direction:           PA3, PA4, PA5
+ *   Steppers disable:    PA6 (active low)
+ *   Spindle PWM:         PA8  (TIMERA1 channel 1)
+ *   Spindle enable/dir:  PA9, PA10
+ *   Coolant flood/mist:  PA11, PA12 (mist optional, ENABLE_M7)
+ *   Limits:              PB0, PB1, PB2 (X, Y, Z) - all bits 0-7 (section 1.3)
+ *   Control:             PB3-PB6 (reset/feed hold/cycle start/safety door)
+ *   Probe:               PB7
+ *   Serial (USART1):     PC0 (TX), PC1 (RX) - matches Klipper's documented
+ *                         alternate USART1 pin pair for this exact chip
+ *                         ("Alternate: PC0/PC1 via LCD connector")
+ *
+ * LIMIT and CONTROL deliberately share ONE port (B) at non-overlapping bit
+ * numbers 0-6, sidestepping the section 14 item 12 "EXTI/EIRQ line-number
+ * collision" class entirely regardless of whether this chip's EIRQ model
+ * turns out to be per-pin-number-shared-across-ports (STM32-style) or
+ * fully independent - a defensive choice made because the real EIRQ model
+ * is UNVERIFIED this session (regs.h).
+ * --------------------------------------------------------------------------*/
 
-/*
-  HC32F460 is a BEAST compared to AVR:
-
-  - 200 MHz vs 16 MHz (12.5x faster)
-  - 512 KB RAM vs 2 KB (256x more)
-  - 512 KB Flash vs 32 KB (16x more)
-  - Hardware FPU (single-precision floating point)
-  - DMA for zero-CPU serial/SPI/etc
-  - 16x 32-bit timers vs 3x 8/16-bit timers
-  - 12-bit ADC @ 2.5 Msps vs 10-bit @ 15 ksps
-
-  This enables:
-  ✅ 200 kHz continuous step rate (vs 30 kHz on AVR)
-  ✅ Massive planner buffer (256+ blocks vs 16)
-  ✅ Lookahead buffer depth 16x larger
-  ✅ Complex kinematics (SCARA, Delta, 6-axis)
-  ✅ Real-time trajectory optimization
-  ✅ Network control (with external ETH PHY)
-*/
-
-// ============================================================================
-// PIN MAPPING - GPIO DEFINITIONS
-// ============================================================================
-
-/*
-  HC32F460JETA (LQFP100 package) Pin Mapping for GRBL:
-
-  With 80+ I/O pins, we have PLENTY of pins for all features!
-
-  Step pins (Port A):
-    X_STEP   → PA0  (Port A, Pin 0)
-    Y_STEP   → PA1  (Port A, Pin 1)
-    Z_STEP   → PA2  (Port A, Pin 2)
-    A_STEP   → PA3  (Port A, Pin 3) - 4th axis support!
-
-  Direction pins (Port A):
-    X_DIR    → PA4  (Port A, Pin 4)
-    Y_DIR    → PA5  (Port A, Pin 5)
-    Z_DIR    → PA6  (Port A, Pin 6)
-    A_DIR    → PA7  (Port A, Pin 7) - 4th axis direction
-
-  Stepper enable (Port B):
-    ENABLE   → PB0  (Port B, Pin 0, active low)
-
-  Limit switches (Port C):
-    X_LIMIT  → PC0  (Port C, Pin 0)
-    Y_LIMIT  → PC1  (Port C, Pin 1)
-    Z_LIMIT  → PC2  (Port C, Pin 2)
-    A_LIMIT  → PC3  (Port C, Pin 3) - 4th axis limit
-
-  Control pins (Port D):
-    RESET       → PD0  (Port D, Pin 0)
-    FEED_HOLD   → PD1  (Port D, Pin 1)
-    CYCLE_START → PD2  (Port D, Pin 2)
-    SAFETY_DOOR → PD3  (Port D, Pin 3)
-
-  Spindle control (Port E):
-    SPINDLE_PWM    → PE0  (Port E, Pin 0, TIMA_0_PWM_A) - 16-bit PWM!
-    SPINDLE_ENABLE → PE1  (Port E, Pin 1)
-    SPINDLE_DIR    → PE2  (Port E, Pin 2)
-    SPINDLE_TACH   → PE3  (Port E, Pin 3) - Tachometer input (optional)
-
-  Coolant control (Port F):
-    COOLANT_FLOOD → PF0  (Port F, Pin 0)
-    COOLANT_MIST  → PF1  (Port F, Pin 1)
-
-  Probe (Port F):
-    PROBE → PF2  (Port F, Pin 2)
-
-  UART (Serial) - Using USART1:
-    TX    → PH1  (USART1_TX)
-    RX    → PH0  (USART1_RX)
-
-  SPI (for SD card, display, etc.):
-    SCK   → PI0  (SPI1_SCK)
-    MISO  → PI1  (SPI1_MISO)
-    MOSI  → PI2  (SPI1_MOSI)
-    CS    → PI3  (SPI1_CS)
-
-  I2C (for displays, sensors):
-    SCL   → PJ0  (I2C1_SCL)
-    SDA   → PJ1  (I2C1_SDA)
-
-  CAN Bus (for industrial networks):
-    CAN_TX → PK0  (CAN_TX)
-    CAN_RX → PK1  (CAN_RX)
-
-  Status LED:
-    LED   → PA8  (Built-in LED on some boards)
-*/
-
-// --------------------------------------------------------------------------
-// STEP PINS (Port A: PA0-PA3) - Supports 4 axes!
-// --------------------------------------------------------------------------
-
-#define STEP_PORT           M4_PORT1        // Port A
-#define STEP_PORT_ID        ((hal_gpio_port_t)M4_PORT1)
+#define STEP_PORT           GPIOA
+#define STEP_PORT_ID        ((hal_gpio_port_t)GPIOA)
 #define X_STEP_PIN          0
 #define Y_STEP_PIN          1
 #define Z_STEP_PIN          2
-#define A_STEP_PIN          3               // 4th axis!
 #define X_STEP_BIT          0
 #define Y_STEP_BIT          1
 #define Z_STEP_BIT          2
-#define A_STEP_BIT          3
-#define STEP_MASK           ((1<<X_STEP_PIN)|(1<<Y_STEP_PIN)|(1<<Z_STEP_PIN)|(1<<A_STEP_PIN))
+#define STEP_MASK           ((1<<X_STEP_PIN)|(1<<Y_STEP_PIN)|(1<<Z_STEP_PIN))
 
-// --------------------------------------------------------------------------
-// DIRECTION PINS (Port A: PA4-PA7) - Supports 4 axes!
-// --------------------------------------------------------------------------
+#define DIRECTION_PORT      GPIOA
+#define DIRECTION_PORT_ID   ((hal_gpio_port_t)GPIOA)
+#define X_DIRECTION_PIN     3
+#define Y_DIRECTION_PIN     4
+#define Z_DIRECTION_PIN     5
+#define X_DIRECTION_BIT     3
+#define Y_DIRECTION_BIT     4
+#define Z_DIRECTION_BIT     5
+#define DIRECTION_MASK      ((1<<X_DIRECTION_PIN)|(1<<Y_DIRECTION_PIN)|(1<<Z_DIRECTION_PIN))
 
-#define DIRECTION_PORT      M4_PORT1        // Port A
-#define DIRECTION_PORT_ID   ((hal_gpio_port_t)M4_PORT1)
-#define X_DIRECTION_PIN     4
-#define Y_DIRECTION_PIN     5
-#define Z_DIRECTION_PIN     6
-#define A_DIRECTION_PIN     7               // 4th axis!
-#define X_DIRECTION_BIT     4
-#define Y_DIRECTION_BIT     5
-#define Z_DIRECTION_BIT     6
-#define A_DIRECTION_BIT     7
-#define DIRECTION_MASK      ((1<<X_DIRECTION_PIN)|(1<<Y_DIRECTION_PIN)|(1<<Z_DIRECTION_PIN)|(1<<A_DIRECTION_PIN))
+#define STEPPERS_DISABLE_PORT     GPIOA
+#define STEPPERS_DISABLE_PORT_ID  ((hal_gpio_port_t)GPIOA)
+#define STEPPERS_DISABLE_PIN      6
+#define STEPPERS_DISABLE_BIT      6
+#define STEPPERS_DISABLE_MASK     (1<<STEPPERS_DISABLE_PIN)
 
-// --------------------------------------------------------------------------
-// STEPPER ENABLE PIN (Port B: PB0)
-// --------------------------------------------------------------------------
-
-#define STEPPERS_DISABLE_PORT   M4_PORT2    // Port B
-#define STEPPERS_DISABLE_PORT_ID ((hal_gpio_port_t)M4_PORT2)
-#define STEPPERS_DISABLE_PIN    0
-#define STEPPERS_DISABLE_BIT    0
-#define STEPPERS_DISABLE_MASK   (1<<STEPPERS_DISABLE_PIN)
-
-// --------------------------------------------------------------------------
-// LIMIT SWITCH PINS (Port C: PC0-PC3) - Supports 4 axes!
-// --------------------------------------------------------------------------
-
-#define LIMIT_PORT          M4_PORT3        // Port C
-#define LIMIT_PORT_ID       ((hal_gpio_port_t)M4_PORT3)
+#define LIMIT_PORT          GPIOB
+#define LIMIT_PORT_ID       ((hal_gpio_port_t)GPIOB)
 #define X_LIMIT_PIN         0
 #define Y_LIMIT_PIN         1
 #define Z_LIMIT_PIN         2
-#define A_LIMIT_PIN         3               // 4th axis!
 #define X_LIMIT_BIT         0
 #define Y_LIMIT_BIT         1
 #define Z_LIMIT_BIT         2
-#define A_LIMIT_BIT         3
-#define LIMIT_MASK          ((1<<X_LIMIT_PIN)|(1<<Y_LIMIT_PIN)|(1<<Z_LIMIT_PIN)|(1<<A_LIMIT_PIN))
+#define LIMIT_MASK          ((1<<X_LIMIT_PIN)|(1<<Y_LIMIT_PIN)|(1<<Z_LIMIT_PIN))
 
-// --------------------------------------------------------------------------
-// CONTROL PINS (Port D: PD0-PD3)
-// --------------------------------------------------------------------------
+/* GPIO_INT_ON/OFF plumbing: core passes (name_PCMSK, name_INT, name_MASK) to
+   HAL_GPIO_INTERRUPT_ENABLE/DISABLE; on this platform the first argument is
+   the port, the second is unused (AVR PCIE bit). */
+#define LIMIT_PCMSK         LIMIT_PORT
+#define LIMIT_INT           0
 
-#define CONTROL_PORT              M4_PORT4  // Port D
-#define CONTROL_PORT_ID           ((hal_gpio_port_t)M4_PORT4)
-#define CONTROL_RESET_PIN         0
-#define CONTROL_FEED_HOLD_PIN     1
-#define CONTROL_CYCLE_START_PIN   2
-#define CONTROL_SAFETY_DOOR_PIN   3
-#define CONTROL_RESET_BIT         0
-#define CONTROL_FEED_HOLD_BIT     1
-#define CONTROL_CYCLE_START_BIT   2
-#define CONTROL_SAFETY_DOOR_BIT   3
+#define CONTROL_PORT              GPIOB
+#define CONTROL_PORT_ID           ((hal_gpio_port_t)GPIOB)
+#define CONTROL_RESET_PIN         3
+#define CONTROL_FEED_HOLD_PIN     4
+#define CONTROL_CYCLE_START_PIN   5
+#define CONTROL_SAFETY_DOOR_PIN   6
+#define CONTROL_RESET_BIT         3
+#define CONTROL_FEED_HOLD_BIT     4
+#define CONTROL_CYCLE_START_BIT   5
+#define CONTROL_SAFETY_DOOR_BIT   6
 #define CONTROL_MASK              ((1<<CONTROL_RESET_PIN)|(1<<CONTROL_FEED_HOLD_PIN)|(1<<CONTROL_CYCLE_START_PIN)|(1<<CONTROL_SAFETY_DOOR_PIN))
 #define CONTROL_INVERT_MASK       CONTROL_MASK
 
-// --------------------------------------------------------------------------
-// PROBE PIN (Port F: PF2)
-// --------------------------------------------------------------------------
+#define CONTROL_PCMSK             CONTROL_PORT
+#define CONTROL_INT               0
 
-#define PROBE_PORT          M4_PORT6        // Port F
-#define PROBE_PORT_ID       ((hal_gpio_port_t)M4_PORT6)
-#define PROBE_PIN           2
-#define PROBE_BIT           2
+#define PROBE_PORT          GPIOB
+#define PROBE_PORT_ID       ((hal_gpio_port_t)GPIOB)
+#define PROBE_PIN           7
+#define PROBE_BIT           7
 #define PROBE_MASK          (1<<PROBE_PIN)
 
-// --------------------------------------------------------------------------
-// SPINDLE PINS (Port E)
-// --------------------------------------------------------------------------
+/* --------------------------------------------------------------------------
+ * SPINDLE PINS
+ * ------------------------------------------------------------------------*/
 
-// Spindle PWM (PE0, TIMA_0_PWM_A) - 16-bit PWM!
-#define SPINDLE_PWM_PORT        M4_PORT5    // Port E
-#define SPINDLE_PWM_PIN         0
-#define SPINDLE_PWM_BIT         0
-#define SPINDLE_PWM_TIMER       M4_TMRA_1   // Timer A unit 1
-#define SPINDLE_PWM_CHANNEL     TimeraCh1   // Channel 1
+#define SPINDLE_PWM_PORT        GPIOA
+#define SPINDLE_PWM_PIN         8
+#define SPINDLE_PWM_BIT         8
 
-// Spindle enable/direction/tachometer
-#define SPINDLE_ENABLE_PORT     M4_PORT5    // Port E
-#define SPINDLE_ENABLE_PIN      1
-#define SPINDLE_ENABLE_BIT      1
+#define SPINDLE_ENABLE_PORT     GPIOA
+#define SPINDLE_ENABLE_PIN      9
+#define SPINDLE_ENABLE_BIT      9
+#define SPINDLE_DIRECTION_PORT  GPIOA
+#define SPINDLE_DIRECTION_PIN   10
+#define SPINDLE_DIRECTION_BIT   10
 
-#define SPINDLE_DIRECTION_PORT  M4_PORT5    // Port E
-#define SPINDLE_DIRECTION_PIN   2
-#define SPINDLE_DIRECTION_BIT   2
+/* PWM duty domain: core plumbs duty as uint8_t end-to-end
+   (spindle_control.c:122, CONTRACTS.md section 6.2) - full scale MUST fit
+   uint8_t. SINGLE canon: config.h below must not redefine this macro
+   (the "duty-cap twins" bug class that hit two prior ports). */
+#define SPINDLE_PWM_MAX_VALUE     255
+#define SPINDLE_PWM_MIN_VALUE     1
+#define SPINDLE_PWM_OFF_VALUE     0
+#define SPINDLE_PWM_RANGE         (SPINDLE_PWM_MAX_VALUE - SPINDLE_PWM_MIN_VALUE)
 
-#define SPINDLE_TACH_PORT       M4_PORT5    // Port E (optional)
-#define SPINDLE_TACH_PIN        3
-#define SPINDLE_TACH_BIT        3
-
-// PWM resolution (16-bit timer)
-#ifdef VARIABLE_SPINDLE
-  #define SPINDLE_PWM_MAX_VALUE     65535   // Full 16-bit resolution!
-  #define SPINDLE_PWM_MIN_VALUE     1
-  #define SPINDLE_PWM_OFF_VALUE     0
-  #define SPINDLE_PWM_RANGE         (SPINDLE_PWM_MAX_VALUE - SPINDLE_PWM_MIN_VALUE)
-#endif
-
-// --------------------------------------------------------------------------
-// COOLANT PINS (Port F)
-// --------------------------------------------------------------------------
-
-#define COOLANT_FLOOD_PORT      M4_PORT6    // Port F
-#define COOLANT_FLOOD_PIN       0
-#define COOLANT_FLOOD_BIT       0
+#define COOLANT_FLOOD_PORT      GPIOA
+#define COOLANT_FLOOD_PIN       11
+#define COOLANT_FLOOD_BIT       11
 
 #ifdef ENABLE_M7
-  #define COOLANT_MIST_PORT     M4_PORT6    // Port F
-  #define COOLANT_MIST_PIN      1
-  #define COOLANT_MIST_BIT      1
+  #define COOLANT_MIST_PORT     GPIOA
+  #define COOLANT_MIST_PIN      12
+  #define COOLANT_MIST_BIT      12
 #endif
 
-// --------------------------------------------------------------------------
-// STATUS LED
-// --------------------------------------------------------------------------
+/* ============================================================================
+ * TIMER MAPPING (see timer.h)
+ * ==========================================================================*/
 
-#define LED_PORT                M4_PORT1    // Port A
-#define LED_PIN                 8
-#define LED_BIT                 8
+#define STEPPER_TIMER_IRQn        Int000_IRQn
+#define PULSE_TIMER_IRQn          Int001_IRQn
 
-// ============================================================================
-// TIMER MAPPING
-// ============================================================================
+/* ============================================================================
+ * SERIAL/UART MAPPING
+ * ==========================================================================*/
 
-/*
-  HC32F460 has 16x 32-bit timers! We have plenty to choose from.
+#define GRBL_USART              USART1
+#define USART1_RX_IRQn          Int002_IRQn
+#define USART1_TX_IRQn          Int003_IRQn
 
-  - Timer0: 4x channels for stepper, pulse reset, etc.
-  - TimerA: 12x units for PWM, delays, etc.
-  - Timer6: 3x units for advanced PWM
+/* ============================================================================
+ * FLASH EMULATION FOR EEPROM (EFM)
+ * ============================================================================
+ * Logical NVMEM window: a small flat window in the last flash page/sector
+ * this port's linker script reserves - separate implementation from every
+ * STM32 port (no common/stm32 code shared, different flash controller
+ * entirely). See nvmem.c.
+ * --------------------------------------------------------------------------*/
 
-  We'll use:
-  - Timer0 Unit 1 Channel 1: Stepper interrupt (highest priority)
-  - Timer0 Unit 1 Channel 2: Step pulse reset
-  - TimerA Unit 1: Spindle PWM
-*/
+#define HAL_NVMEM_FLASH_START     0x0007F800UL   /* last 2KB page of a 512KB image (UNVERIFIED page size - EFM erase granularity not confirmed this session, see nvmem.c) */
+#define HAL_NVMEM_FLASH_SIZE      2048
+#define HAL_NVMEM_FLASH_PAGE_SIZE 2048
 
-// Stepper timer: Timer0 Unit 1 Channel 1
-#define STEPPER_TIMER           M4_TMR01
-#define STEPPER_TIMER_UNIT      M4_TMR0_1
-#define STEPPER_TIMER_CH        Tim0_ChannelA
-#define STEPPER_TIMER_IRQn      INT_TMR01_GCMA_IRQn
-#define STEPPER_TIMER_IRQHandler TMR01_GCMA_IRQHandler
+/* ============================================================================
+ * HAL GPIO MACROS
+ * ==========================================================================*/
 
-// Step pulse reset timer: Timer0 Unit 1 Channel 2
-#define PULSE_TIMER             M4_TMR01
-#define PULSE_TIMER_UNIT        M4_TMR0_1
-#define PULSE_TIMER_CH          Tim0_ChannelB
-#define PULSE_TIMER_IRQn        INT_TMR01_GCMB_IRQn
-#define PULSE_TIMER_IRQHandler  TMR01_GCMB_IRQHandler
+#define HAL_GPIO_SET_BITS(port, mask)           ((port)->POSR = (mask))
+#define HAL_GPIO_CLEAR_BITS(port, mask)         ((port)->PORR = (mask))
+#define HAL_GPIO_WRITE_PORT(port, mask, value)  ((port)->PODR = ((port)->PODR & ~(mask)) | ((value) & (mask)))
+#define HAL_GPIO_READ_PORT(port, mask)          ((port)->PODR & (mask))
+#define HAL_GPIO_READ_PIN(pin, mask)            ((pin)->PIDR & (mask))
+#define HAL_GPIO_WRITE_DIRECT(port, value)      ((port)->PODR = (value))
 
-// Spindle PWM timer: TimerA Unit 1
-// Already defined above
+void hal_gpio_set_output(HC32_PORT_TypeDef* port, uint32_t mask);
+void hal_gpio_set_input(HC32_PORT_TypeDef* port, uint32_t mask);
 
-// ============================================================================
-// SERIAL/UART MAPPING
-// ============================================================================
+#define HAL_GPIO_SET_OUTPUT(port, mask)         hal_gpio_set_output((port), (mask))
+#define HAL_GPIO_SET_INPUT(port, mask)          hal_gpio_set_input((port), (mask))
 
-// Using USART1 (can support up to 10 Mbaud at 200 MHz!)
-#define GRBL_USART              M4_USART1
-#define GRBL_USART_IRQn         INT_USART1_RI_IRQn
-#define GRBL_USART_RX_IRQHandler USART1_RI_IRQHandler
-#define GRBL_USART_TX_IRQHandler USART1_TI_IRQHandler
+void hal_gpio_pullup_enable(HC32_PORT_TypeDef* port, uint32_t mask);
+void hal_gpio_pullup_disable(HC32_PORT_TypeDef* port, uint32_t mask);
 
-// Optional: Use DMA for serial (zero CPU overhead)
-#ifdef HAL_SERIAL_USE_DMA
-  #define GRBL_USART_DMA_UNIT   M4_DMA1
-  #define GRBL_USART_DMA_RX_CH  DmaCh0
-  #define GRBL_USART_DMA_TX_CH  DmaCh1
-#endif
+#define HAL_GPIO_PULLUP_ENABLE(port, mask)      hal_gpio_pullup_enable((port), (mask))
+#define HAL_GPIO_PULLUP_DISABLE(port, mask)     hal_gpio_pullup_disable((port), (mask))
 
-// ============================================================================
-// FLASH EMULATION FOR EEPROM
-// ============================================================================
+void hal_gpio_interrupt_enable(HC32_PORT_TypeDef* port, uint32_t mask);
+void hal_gpio_interrupt_disable(HC32_PORT_TypeDef* port, uint32_t mask);
 
-// Use last 4KB of flash for EEPROM emulation
-#define HAL_NVMEM_FLASH_START   (0x00000000 + HAL_FLASH_SIZE - 4096)
-#define HAL_NVMEM_FLASH_SIZE    4096
-#define HAL_NVMEM_FLASH_PAGE_SIZE 512  // HC32F460 has 512-byte sectors
+#define HAL_GPIO_INTERRUPT_ENABLE(port, pcie, mask)   hal_gpio_interrupt_enable((port), (mask))
+#define HAL_GPIO_INTERRUPT_DISABLE(port, pcie, mask)  hal_gpio_interrupt_disable((port), (mask))
 
-// ============================================================================
-// ADVANCED FEATURES (Enabled by abundant resources)
-// ============================================================================
+/* ============================================================================
+ * HAL SERIAL/UART MACROS
+ * ==========================================================================*/
 
-// Larger buffers due to massive RAM
-#define HC32F460_LARGE_BUFFERS  1
+#define HAL_SERIAL_RX_BUFFER_SIZE               128
+#define HAL_SERIAL_TX_BUFFER_SIZE               64
 
-#ifdef HC32F460_LARGE_BUFFERS
-  #undef RX_BUFFER_SIZE
-  #undef TX_BUFFER_SIZE
-  #define RX_BUFFER_SIZE    512   // 4x larger than AVR
-  #define TX_BUFFER_SIZE    512   // 4x larger than AVR
+/* RX and TX are SEPARATE interrupt sources on this chip (CONFIRMED via
+   Klipper's serial.c: distinct RI/TI event ids) - unlike every STM32 donor
+   in this tree, which share one combined USART vector. Two real vectors,
+   not one dispatcher. */
+#define HAL_SERIAL_RX_ISR()                     void hc32_usart1_rx_handler(void)
+#define HAL_SERIAL_TX_ISR()                     void hc32_usart1_tx_handler(void)
 
-  // Massive planner buffer for ultra-smooth motion
-  #define BLOCK_BUFFER_SIZE_OVERRIDE   128  // 8x larger than AVR!
-  #define SEGMENT_BUFFER_SIZE_OVERRIDE 32   // 5x larger than AVR!
-#endif
+void hal_serial_init(uint32_t baud_rate);
+#define HAL_SERIAL_INIT()                       hal_serial_init(BAUD_RATE)
 
-// Enable advanced features
-#define HAL_ENABLE_4TH_AXIS     1   // Support A axis (rotary)
-#define HAL_ENABLE_BACKLASH     1   // Backlash compensation
-#define HAL_ENABLE_TOOL_CHANGER 1   // Automatic tool changer
-#define HAL_ENABLE_SPINDLE_SYNC 1   // Spindle synchronization (threading)
-#define HAL_ENABLE_LASER_MODE   1   // Laser engraving mode
+#define HAL_SERIAL_WRITE_DATA(data)             (USART1->DR = (data))
+#define HAL_SERIAL_READ_DATA()                  (USART1->DR)
 
-// USB CDC virtual COM port (optional)
-#ifdef HAL_USE_USB_CDC
-  #define HAL_USB_CDC_ENABLED   1
-#endif
+#define HAL_SERIAL_TX_INTERRUPT_ENABLE()        (USART1->CR1 |= USART_CR1_TIE)
+#define HAL_SERIAL_TX_INTERRUPT_DISABLE()       (USART1->CR1 &= ~USART_CR1_TIE)
 
-// CAN bus support (optional)
-#ifdef HAL_USE_CAN
-  #define HAL_CAN_ENABLED       1
-  #define GRBL_CAN_UNIT         M4_CAN
-  #define GRBL_CAN_BITRATE      500000  // 500 kbps
-#endif
+#define HAL_SERIAL_RX_READY()                   (USART1->SR & USART_SR_RXNE)
+#define HAL_SERIAL_TX_READY()                   (USART1->SR & USART_SR_TXE)
 
-// ============================================================================
-// PLATFORM-SPECIFIC FUNCTIONS
-// ============================================================================
+/* ============================================================================
+ * HAL SYSTEM MACROS
+ * ==========================================================================*/
 
-// Platform initialization
-void hal_system_init(void);
+#define HAL_ENABLE_INTERRUPTS()                 __enable_irq()
+#define HAL_DISABLE_INTERRUPTS()                __disable_irq()
 
-// Clock configuration (200 MHz from PLL)
-void hal_clock_config(void);
+/* Critical section (save/restore, ISR-safe: CONTRACTS.md section 8.2) */
+#define HAL_CRITICAL_SECTION_BEGIN()            uint32_t __primask = __get_PRIMASK(); __disable_irq()
+#define HAL_CRITICAL_SECTION_END()               __set_PRIMASK(__primask)
 
-// GPIO initialization
-void hal_gpio_init(void);
+void hal_delay_ms(uint32_t ms);
+void hal_delay_us(uint32_t us);
 
-// Timer functions
+#define HAL_DELAY_MS(ms)                        hal_delay_ms(ms)
+#define HAL_DELAY_US(us)                        hal_delay_us(us)
+
 uint32_t hal_millis(void);
 uint64_t hal_micros(void);
 
-// DMA helpers (optional)
-#ifdef HAL_SERIAL_USE_DMA
-void hal_dma_init(void);
-#endif
+#define HAL_MILLIS()                            hal_millis()
+#define HAL_MICROS()                            hal_micros()
 
-// ============================================================================
-// PERFORMANCE NOTES
-// ============================================================================
+void hal_watchdog_refresh(void);
+#define HAL_WATCHDOG_REFRESH()                  hal_watchdog_refresh()
 
-/*
-  HC32F460 Performance Advantages for GRBL:
+/* ============================================================================
+ * HAL NVMEM MACROS (EFM flash emulation, nvmem.c - TU replacement, core
+ * nvmem.c excluded from the build, CONTRACTS.md section 10)
+ * ==========================================================================*/
 
-  1. **12.5x Faster CPU**: 200 MHz vs 16 MHz
-     - Stepper ISR can handle complex calculations
-     - Real-time trajectory optimization possible
-     - Support for complex kinematics (SCARA, Delta)
+unsigned char hal_nvmem_read_byte(unsigned int addr);
+void hal_nvmem_write_byte(unsigned int addr, unsigned char data);
 
-  2. **256x More RAM**: 512 KB vs 2 KB
-     - Planner buffer: 128 blocks vs 16 blocks (8x lookahead)
-     - Massive segment buffer for ultra-smooth motion
-     - Room for advanced features (backlash, tool offset DB)
+#define eeprom_get_char(addr)                   hal_nvmem_read_byte(addr)
+#define eeprom_put_char(addr, data)              hal_nvmem_write_byte(addr, data)
 
-  3. **Hardware FPU**: Single-precision floating point
-     - Fast trigonometry for arc interpolation
-     - Real-time kinematics calculations
-     - Smooth acceleration profiles
+/* ============================================================================
+ * PLATFORM-SPECIFIC FUNCTIONS
+ * ==========================================================================*/
 
-  4. **DMA Support**: Zero-CPU serial/SPI transfers
-     - Serial communication doesn't interrupt motion
-     - SD card streaming at full speed
-     - Display updates don't affect timing
+void hal_system_init(void);
+void hal_clock_config(void);
+void hal_gpio_init(void);
 
-  5. **16-bit PWM**: 65536 levels vs 256 levels
-     - Precise spindle speed control
-     - Laser power modulation
-     - Silent stepper microstepping
+void hal_nvmem_init(void);
+void hal_nvmem_flush(void);
 
-  6. **Advanced Timers**: 16x 32-bit timers vs 3x 8/16-bit
-     - 4+ axis support
-     - Multiple spindles
-     - Synchronized operations
-
-  **Real-world improvements**:
-  - Step rate: 30 kHz → 200 kHz (6.7x improvement)
-  - Lookahead: 16 blocks → 128 blocks (8x improvement)
-  - Response time: 5-10 μs → <1 μs (10x improvement)
-  - Jerk-free motion with massive buffer
-*/
-
-#endif // PLATFORM_HC32F460_H
+#endif /* PLATFORM_HC32F460_H */

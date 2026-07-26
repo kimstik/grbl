@@ -1487,3 +1487,164 @@ become fully known (after the relevant `#define`s, before first use) — no
 new validation machinery, no runtime cost, zero bytes in any built image
 (verified: every port's RELEASE size is byte-identical to the CANONICAL
 RELEASE SIZE TABLE before and after this batch).
+## 22. Gaps found porting HC32F460 (Phase 6 rolling port #3 — first
+HDSC/Huada vendor-exotic chip, and the first port where NO donor in this
+tree shares peripheral IP at all)
+
+Every prior ARM port in this tree (samd21, stm32f103/h523/f411) is either
+an Atmel/Microchip or ST part; all of them share enough peripheral-IP
+family resemblance that CONTRACTS.md sections 14/15 could talk about
+"reuse the donor's shape, re-derive the addresses". HC32F460 (HDSC/XHSC,
+formerly Huada Semiconductor) breaks that assumption completely: TIMER0/
+TIMERA, the GPIO PORT model, the INTC interrupt router, EFM flash, and the
+PWC/CMU clock tree all have zero donor-port precedent. Found empirically
+this session with real `arm-none-eabi-gcc` 13.2.1 builds
+(`grbl/platform/hc32f460/`, both `BUILD=DEBUG` and `BUILD=RELEASE` compile
+every object and LINK with **zero `PORT_TODO_*`** and zero undefined
+symbols — `nm -u` on both finished ELFs is empty).
+
+1. **No permissively-licensed vendor SDK could be confirmed this
+   session — the opposite of the dsPIC33AK/ch32v006 precedent, and
+   PORTING-CHECKLIST's own ordering answered correctly**: HDSC's
+   `hc32f4a0_ddl` Device Driver Library exists and is publicly mirrored
+   (github.com/Mmatsnev/hc32f4a0), but no LICENSE file or SPDX header was
+   found anywhere in it this session — only a bare "(C) HDSC" copyright
+   footer. This is the OPPOSITE of CONTRACTS.md section 16 item 11 (dsPIC33AK
+   DFP, Apache-2.0, confirmed) and section 14 item 7 (ch32v006's Zephyr dtsi
+   cross-check, Apache-2.0, confirmed) — those two precedents both found
+   permissive licenses and used the vendor material as a source of truth.
+   Here, the honest answer was "not confirmed permissive", so this port did
+   NOT vendor or transcribe the HDSC DDL, per PORTING-CHECKLIST's own
+   stated ordering ("vendor SDK only if permissively licensed; clean-room
+   is the fallback, not a last resort" — this is the first port where that
+   fallback branch was actually exercised for the reason it names, not
+   skipped past). Lesson for the loop: "a vendor SDK exists" and "a vendor
+   SDK is usable" are different questions, and the second one can come back
+   negative — don't assume every future vendor-exotic chip gets a dsPIC-class
+   green light.
+2. **Klipper3d/klipper's real shipped firmware is a legitimate cross-check
+   class this file did not have a name for yet**: neither "vendor SDK"
+   (section 14 item 7 precedent) nor "device family pack" (section 16 item
+   11 precedent) — a THIRD source class: independent, real, GPL-3.0
+   firmware actually running on physical HC32F460 hardware in the field
+   (Voxelab Aquila 3D printers, `src/hc32f460/*` in Klipper mainline).
+   GPL-3.0 is license-compatible with this GPLv3 grbl core, so even direct
+   reuse would have been legally available — this port still chose
+   clean-room (facts cross-checked, no code copied) per the file-header
+   discipline every other clean-room port in this tree follows. Lesson:
+   when a vendor's own SDK license is murky, check whether ANY real
+   downstream open-source firmware for the same chip exists before
+   defaulting straight to blind clean-room guessing — it materially
+   changed how much could be CONFIRMED vs UNVERIFIED in `regs.h` (GPIO
+   data-path register names, the INTC mechanism, TIMERA's role as the real
+   PWM peripheral, and even a working PLL/clock bootstrap sequence with
+   real addresses, all came from this source, not from guesswork).
+3. **A chip can lack a fixed per-peripheral NVIC vector table entirely —
+   a fourth interrupt-architecture family after ARM-hardware-fetch (samd21/
+   stm32*), RISC-V mtvec/PFIC (ch32v006), and linker-synthesized IVT
+   (dsPIC33A, section 16 item 1)**: HC32F460's INTC is an event ROUTER —
+   every peripheral interrupt source (compare-match timers, USART RX/TI,
+   external pin EIRQ, …) is assigned at runtime to one of a small shared
+   pool of identically-named vector slots (`Int000_IRQn`..`Int031_IRQn`,
+   confirmed via Klipper's real `interrupts.c`: `M4_INTC->SEL[irqType]
+   .INTSEL = irqSrc` then ordinary `NVIC_SetPriority`/`NVIC_EnableIRQ`).
+   This means the vector TABLE itself (`hc32f460/startup.c`) is generic and
+   stable across any board/pin-map variant of this port — what changes
+   per-board is only which `intc_route(vector, source)` calls a platform.c
+   makes at init time, not the table layout. Checklist lesson: PORTING-
+   CHECKLIST Step 3's "audit IRQ capability before allocating" question now
+   has a THIRD possible answer beyond "yes, fixed vector" (STM32/SAMD) and
+   "no, this peripheral has no interrupt line at all" (CONTRACTS section 14
+   item 11): "yes, but the vector number is a runtime choice, not a
+   compile-time fact" — a future porter must not assume Int000_IRQn means
+   anything in particular without reading `platform.c`'s `intc_route()`
+   calls.
+4. **USART RX and TX are separate interrupt sources on this chip, unlike
+   every prior USART-bearing port in this tree**: samd21/stm32f103/
+   stm32h523/stm32f411 all combine RX and TX (and often error/idle) onto
+   ONE physical vector, dispatched by reading a status register inside the
+   handler. Klipper's real `serial.c` confirms this chip instead exposes
+   `INT_USART1_RI` (RX) and `INT_USART1_TI` (TX) as independently routable
+   INTC sources (plus separate error/TC sources this port does not use).
+   `hc32f460/handlers.c` therefore has two trivial one-line vectors
+   (`Int002_IRQHandler`/`Int003_IRQHandler`) instead of one dispatcher —
+   simpler than every STM32 donor's SR-flag `if`/`if` shape, and a reminder
+   that "the donor's shared-vector USART pattern is universal" (an implicit
+   assumption baked into every prior port) is not actually universal.
+5. **GPIO direction/pull-up is a per-pin configuration WORD, not a
+   per-port bitfield register** — same shape-class as stm32f411/h523's
+   MODER/PUPDR (CONTRACTS section 14 item 5's "4-bit packed config
+   register" lesson) but a further generalization: here it is not even a
+   shared per-port register with N bits per pin, but (per this port's
+   best-effort model, since the real PCONR sub-layout was not reachable
+   this session) one config register PER PIN, indexed by a global pin
+   number. `hc32f460/gpio.h` implements direction/pull-up as function calls
+   over an array of per-pin registers (`hc32_pconr()`, `regs.h`) rather
+   than any bit-op macro, for the same reason ch32v006/stm32f103 made the
+   same call on their own packed-register shapes. Checklist lesson,
+   sharpened again: before allocating a `GPIO_DREG`/`GPIO_PREG` bit-op
+   macro on ANY new vendor, check not just "is it packed 2+ bits per pin"
+   (section 14 item 5) but "is direction/pull config even a per-PORT
+   register at all, or could it be per-PIN" — the answer changes the
+   addressing math, not just the bit width.
+6. **Struct-shaped best-effort register layouts are worse than absent ones
+   UNLESS FLAGGED, and this port is the first to flag EVERY SINGLE ONE
+   at its point of definition, not just in a file-header disclaimer**:
+   CONTRACTS section 14 item 7 stated this lesson (dsPIC's PFIC placeholder
+   struct had wrong offsets that "compiled fine and read plausibly"). This
+   port goes one step further as a methodology: every base address, bit
+   position, and field name in `regs.h` that could not be sourced from
+   either the datasheet's feature-list TOC or Klipper's real firmware is
+   commented `UNVERIFIED` at its own definition site (not just summarized
+   once at the top of the file), so a future reader auditing any single
+   register write can immediately tell, without cross-referencing the file
+   header, whether that specific fact is load-bearing or a placeholder.
+   The build gates that matter for THIS session (compiles, links, zero
+   PORT_TODO_*, boot-integrity, FP=SINGLE assert) do not require the
+   placeholder values to be electrically correct — only hardware bring-up
+   does, and this port is explicitly NOT claiming that gate. Checklist
+   addition: a vendor-exotic port with no reachable register manual should
+   still reach "links with zero PORT_TODO_*" (the linker-as-checklist
+   mechanism doesn't care whether addresses are real), but must not claim
+   "ready for hardware validation" in the same unqualified way a
+   fully-verified port does — PLATFORM_ROADMAP.md's entry for this port
+   says so explicitly.
+7. **FPU verdict matches the stm32f411/stm32h523 precedent exactly, third
+   time confirming the mechanism generalizes**: `-mfpu=fpv4-sp-d16
+   -mfloat-abi=hard`, `FP=SINGLE` default. Disassembly of the RELEASE ELF:
+   `vsqrt.f32` present (1 occurrence — `sqrtf()` compiling to the single
+   real FPU instruction), 82 `vmul.f32` / 161 combined `vadd/vsub/vdiv.f32`
+   — the identical `vmul.f32` count stm32f411 measured after its own
+   `FP=SINGLE` rollout (CONTRACTS section 17.7), unsurprising since it is
+   the same compiler/core-code/FPU-class combination. Zero `__aeabi_d*` or
+   generic DP soft-float symbols anywhere in the image (`nm | grep -iE
+   "aeabi|df2"` empty) — cleaner than stm32f411's own result, which
+   tolerated exactly one surviving `__aeabi_d2f` narrowing conversion at
+   its `_delay_ms(double)` boundary; this port's equivalent boundary
+   apparently optimizes away entirely under LTO. `assert_no_double.sh`
+   PASSED on both DEBUG and RELEASE without needing the `delay_us_f()`
+   float-worker fix samd21/ch32v006 both needed (this port's
+   `_delay_ms`/`_delay_us` were written SysTick-integer-native from the
+   start, with no double-typed remainder arithmetic to leak in the first
+   place — the fix was designed in, not retrofitted).
+8. **Boot-integrity and vector-table-under-LTO mechanics (CONTRACTS section
+   18) transfer unmodified**: `SCB->VTOR = (uint32_t)vector_table` in
+   `Reset_Handler`, `__attribute__((used))` on the table, `KEEP(*(.isr_vector))`
+   plus `. = ALIGN(256)` in `script.ld` (48 vectors × 4 bytes = 192, next
+   power of two = 256 — the same architectural VTOR-alignment rule as
+   every other ARMv7-M port here), and `common/boot_check.sh` wired into
+   the Makefile identically to every STM32/samd21 port. `boot_check.sh`
+   reported OK on both flavors this session. Nothing new here — worth
+   recording only as confirmation that this mechanism is genuinely
+   ARM-architectural, not STM32-family-specific, exactly as section 18
+   already claimed.
+9. **Gates re-run (not just inspected) this session**: golden AVR
+   `make -C grbl/platform/atmega328p validate` **PASSED** (MD5
+   `79af184e67b27defd27a39309ac53563`, text 30640, unchanged); samd21
+   (`BOARD=megarm`) RELEASE **31952/296** (exact); stm32f103 RELEASE
+   **28700/80**; stm32h523 RELEASE **25132/388**; stm32f411 RELEASE
+   **25796/80**; ch32v006 (`BOARD=generic`) RELEASE **41072/0** — all six
+   siblings byte-identical to their pre-existing state, confirming this
+   port touched only `grbl/platform/hc32f460/`, `grbl/platform/CONTRACTS.md`,
+   `grbl/platform/PLAN.md`, `grbl/platform/PLATFORM_ROADMAP.md`,
+   `ci/warn_baseline_hc32f460.txt`, and `.github/workflows/ci.yml`.

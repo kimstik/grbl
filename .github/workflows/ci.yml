@@ -65,6 +65,12 @@ jobs:
             board: generic
             build: RELEASE
             toolchain-packages: gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
+          - platform: hc32f460
+            build: DEBUG
+            toolchain-packages: gcc-arm-none-eabi libnewlib-arm-none-eabi
+          - platform: hc32f460
+            build: RELEASE
+            toolchain-packages: gcc-arm-none-eabi libnewlib-arm-none-eabi
     steps:
       - uses: actions/checkout@v4
 
