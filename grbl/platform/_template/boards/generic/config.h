@@ -1,21 +1,6 @@
 /*
   config.h - Generic _template board configuration (copy-me starting point)
   Part of Grbl
-
-  Placeholder pin map so the template compiles standalone. Every *_PORT
-  value below is just an index into the PORT_TODO_GPIO_* arrays in
-  ../../gpio.h - it has no hardware meaning until gpio.h's accessors are
-  replaced with real registers. Copy this directory (boards/generic ->
-  boards/yourboard) and replace every value with your real wiring; the
-  *_BIT numbers only need to stay distinct within their own group and
-  (for LIMIT/CONTROL/PROBE) inside bits 0-7 (CONTRACTS.md §1.3 - core
-  truncates input-group reads to uint8_t; SAMD21's megarm board got this
-  wrong for CONTROL, see CONTRACTS.md §13).
-
-  PORT_TODO_GPIO_* is unset-length (extern volatile uint32_t foo[];), so
-  nothing here needs to know how many logical "ports" exist - just keep
-  distinct groups on distinct indices so one group's mask writes never
-  disturb another's bits when GPIO_MWO does a real read-modify-write.
 */
 
 #ifndef BOARD_GENERIC_TEMPLATE_CONFIG_H
@@ -23,25 +8,19 @@
 
 #warning "PORT-TODO: boards/generic/config.h"
 
-// ============================================================================
 // BOARD IDENTIFICATION
-// ============================================================================
 
 #define BOARD_NAME "Generic _template board"
 #define BOARD_MCU  "PORT-TODO: your chip part number"
 #define BOARD_URL  ""
 
-// ============================================================================
 // LOGICAL PORT INDICES (into PORT_TODO_GPIO_* arrays - see ../../gpio.h)
-// ============================================================================
 
 #define TEMPLATE_PORT_OUTPUTS   0   // STEP / DIRECTION / STEPPERS_DISABLE
 #define TEMPLATE_PORT_INPUTS    1   // LIMIT / CONTROL / PROBE
 #define TEMPLATE_PORT_AUX       2   // SPINDLE_* / COOLANT_*
 
-// ============================================================================
 // STEP / DIRECTION / STEPPERS_DISABLE (outputs)
-// ============================================================================
 
 #define X_STEP_PORT         TEMPLATE_PORT_OUTPUTS
 #define X_STEP_PIN           0
@@ -85,9 +64,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define STEPPERS_DISABLE_BIT     6
 #define STEPPERS_DISABLE_MASK    (1UL<<STEPPERS_DISABLE_BIT)
 
-// ============================================================================
 // LIMIT / CONTROL / PROBE (inputs - MUST stay within bits 0-7, CONTRACTS.md §1.3)
-// ============================================================================
 
 #define X_LIMIT_PORT        TEMPLATE_PORT_INPUTS
 #define X_LIMIT_PIN          0
@@ -127,9 +104,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define PROBE_BIT             6
 #define PROBE_MASK            (1UL<<PROBE_BIT)
 
-// ============================================================================
 // SPINDLE (VARIABLE_SPINDLE PWM must be <= uint8_t range - CONTRACTS.md §6.2)
-// ============================================================================
 
 #define SPINDLE_PWM_PORT        TEMPLATE_PORT_AUX
 #define SPINDLE_PWM_PIN          0
@@ -156,9 +131,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 _Static_assert(SPINDLE_PWM_MAX_VALUE <= 255,
                "SPINDLE_PWM_MAX_VALUE must fit core's uint8_t duty domain (CONTRACTS.md #6.2, duty-cap-twins class)");
 
-// ============================================================================
 // COOLANT
-// ============================================================================
 
 #define COOLANT_FLOOD_PORT      TEMPLATE_PORT_AUX
 #define COOLANT_FLOOD_PIN        3

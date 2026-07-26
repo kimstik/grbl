@@ -5,27 +5,12 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Real IRQ vectors for the timers (TIMER0 units 1/2), USART1 RX/TX, and the
-  PORT EIRQ channels (limit switches + control pins), all routed through
-  this chip's INTC event router onto the shared Int0xx_IRQn vector pool
-  (regs.h) - a materially different shape from every donor port in this
-  tree, which hard-wire one physical IRQ number per peripheral.
-
-  Each wrapper clears the peripheral interrupt flag FIRST, then calls the
-  core-supplied ISR body - clearing after would lose edges/updates that
-  arrive during the body (CONTRACTS.md sections 2.3 and 5.1). USART RX/TX
-  are the one exception noted below: reading/writing DR is itself what
-  clears RXNE/TXE on this class of UART, mirroring every other port in
-  this tree's USART handling.
 */
 
 #include "platform.h"
 #include "regs.h"
 
-/* ============================================================================
- * STEPPER / PULSE-RESET TIMER ISRs
- * ============================================================================
+/* STEPPER / PULSE-RESET TIMER ISRs
  * __isr_step_impl / __isr_step_reset_impl are the named bodies stepper.c
  * defines via ISR_STEP()/ISR_STEP_RESET() (timer.h).
  */
@@ -58,11 +43,9 @@ void Int001_IRQHandler(void) {
   }
 #endif
 
-/* ============================================================================
- * SERIAL (USART1 RX / TX - SEPARATE interrupt sources on this chip,
- * CONFIRMED via Klipper's serial.c: distinct RI/TI event ids, unlike every
- * STM32 donor's shared SR-flag-dispatch vector)
- * ==========================================================================*/
+/* SERIAL (USART1 RX / TX - SEPARATE interrupt sources on this chip,
+   CONFIRMED via Klipper's serial.c: distinct RI/TI event ids, unlike every
+   STM32 donor's shared SR-flag-dispatch vector) */
 
 extern void hc32_usart1_rx_handler(void);
 extern void hc32_usart1_tx_handler(void);
@@ -80,9 +63,7 @@ void Int003_IRQHandler(void) {
   hc32_usart1_tx_handler();
 }
 
-/* ============================================================================
- * GPIO INTERRUPTS (PORT EIRQ - limit switches and control pins)
- * ============================================================================
+/* GPIO INTERRUPTS (PORT EIRQ - limit switches and control pins)
  * LIMIT_INT_IRQHandler()/CONTROL_INT_IRQHandler() are the core-supplied
  * bodies (limits.c via HAL_GPIO_IRQ_HANDLER(LIMIT_INT), system.c via
  * HAL_GPIO_IRQ_HANDLER(CONTROL_INT)) - CONTRACTS.md section 2. Channel

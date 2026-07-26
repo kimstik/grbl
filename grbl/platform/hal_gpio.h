@@ -14,9 +14,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// ============================================================================
 // GPIO MACROS - Platform-specific implementations
-// ============================================================================
 
 /*
   For AVR: These macros expand to original GRBL code - ZERO overhead!
@@ -31,9 +29,7 @@
 */
 
 #ifndef __AVR__  // For non-AVR platforms only - AVR uses atmega328p/platform.h
-  // ============================================================================
   // OTHER PLATFORMS - Function-based or inline implementations
-  // ============================================================================
 
   // Port/pin types
   #ifndef HAL_GPIO_PORT_T_DEFINED
@@ -102,9 +98,7 @@
 
 #endif
 
-// ============================================================================
 // GPIO INTERRUPTS (External Interrupts / Pin Change Interrupts)
-// ============================================================================
 
 // Interrupt trigger modes
 typedef enum {
@@ -141,9 +135,7 @@ typedef enum {
   #endif
 #endif
 
-// ============================================================================
 // PIN MAPPING
-// ============================================================================
 
 /*
   Pin mapping is defined in platform.h for each platform.
@@ -169,16 +161,12 @@ typedef enum {
     #define Z_STEP_PIN      2
 */
 
-// ============================================================================
 // GPIO HELPER MACROS
-// ============================================================================
 
 // Helper macro for pin definition (concatenates PORT and BIT as two separate args)
 //#define PIN(name)  name##_PORT, name##_BIT
 
-// ============================================================================
 // GPIO INTERRUPT MACROS (AVR-specific)
-// ============================================================================
 
 // GPIO interrupt shortcuts
 #define GPIO_INT_ON(pcmsk, int_flag, mask)   HAL_GPIO_INTERRUPT_ENABLE(pcmsk, int_flag, mask)

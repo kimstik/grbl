@@ -3,13 +3,6 @@
   Part of Grbl HAL
 
   Copyright (c) 2025 GRBL HAL Contributors
-
-  Board: MegARM
-  MCU: ATSAMC21E18A-MZ
-  Description: Arduino Mega pin-compatible replacement board
-  Reference: https://github.com/kimstik/MegARM
-
-  Pin mapping based on MegARM layout - ATmega328P to ATSAMC21E18A-MZ
 */
 
 #ifndef BOARD_MEGARM_CONFIG_H
@@ -17,17 +10,13 @@
 
 //	notation - specified in platform\samd21\gpio.h 
 
-// ============================================================================
 // BOARD IDENTIFICATION
-// ============================================================================
 
 #define BOARD_NAME "MegARM"
 #define BOARD_MCU  "ATSAMC21E18A-MZ"
 #define BOARD_URL  "https://github.com/kimstik/MegARM"
 
-// ============================================================================
 // STEP PINS (D2, D3, D4 on Arduino Mega pinout)
-// ============================================================================
 
 // LOGICAL PORT-IMAGE CONTRACT (BUG #17, PLAN.md Phase 3 / CONTRACTS.md #1):
 // core packs step_outbits/dir_outbits/axislock into a uint8_t and derives
@@ -74,9 +63,7 @@
 #define STEP_MASK_A         ((1UL<<X_STEP_BIT)|(1UL<<Y_STEP_BIT)|(1UL<<Z_STEP_BIT))
 #define STEP_MASK_B         0
 
-// ============================================================================
 // DIRECTION PINS (D5, D6, D7)
-// ============================================================================
 // Real silicon pins (PA0/1/2) already sit at bits 0..2, so logical ==
 // physical here - DIRECTION_L2P/P2L are identity. Kept explicit (rather
 // than skipping the override) so gpio.h's dispatch is uniform across groups
@@ -111,9 +98,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
                X_DIRECTION_BIT <= 7 && Y_DIRECTION_BIT <= 7 && Z_DIRECTION_BIT <= 7,
                "STEP/DIRECTION logical bits must fit core's uint8_t port image (BUG #17 class, CONTRACTS.md #1)");
 
-// ============================================================================
 // STEPPER ENABLE PIN (B0)
-// ============================================================================
 
 #define STEPPERS_DISABLE_PORT   PORT_GROUPA
 #define STEPPERS_DISABLE_BIT    3    // PA3 (B0)
@@ -121,9 +106,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define STEPPERS_DISABLE_MASK_A (1UL<<STEPPERS_DISABLE_BIT)
 #define STEPPERS_DISABLE_MASK_B 0
 
-// ============================================================================
 // LIMIT SWITCH PINS (B1, B2, B4)
-// ============================================================================
 
 #define X_LIMIT_PORT        PORT_GROUPA
 #define X_LIMIT_BIT         4    // PA4 (B1)
@@ -138,9 +121,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define LIMIT_MASK_A        ((1UL<<X_LIMIT_BIT)|(1UL<<Y_LIMIT_BIT)|(1UL<<Z_LIMIT_BIT))
 #define LIMIT_MASK_B        0
 
-// ============================================================================
 // CONTROL PINS (C0, C1, C2)
-// ============================================================================
 
 #define CONTROL_RESET_PORT      PORT_GROUPA
 #define CONTROL_RESET_BIT       14   // PA14 (C0)
@@ -160,9 +141,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 
 #define CONTROL_INVERT_MASK CONTROL_MASK_A
 
-// ============================================================================
 // PROBE PIN (C5)
-// ============================================================================
 
 #define PROBE_PORT          PORT_GROUPA
 #define PROBE_BIT           19   // PA19 (C5)
@@ -170,9 +149,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define PROBE_MASK_A        (1UL<<PROBE_BIT)
 #define PROBE_MASK_B        0
 
-// ============================================================================
 // SPINDLE CONTROL PINS (B3, B5)
-// ============================================================================
 
 #define SPINDLE_PWM_PORT       PORT_GROUPA
 #define SPINDLE_PWM_BIT        6    // PA6 (B3) - TCC0/WO[0]
@@ -214,9 +191,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 _Static_assert(SPINDLE_PWM_MAX_VALUE <= 255,
                "SPINDLE_PWM_MAX_VALUE must fit core's uint8_t duty domain (CONTRACTS.md #6.2, duty-cap-twins class)");
 
-// ============================================================================
 // COOLANT CONTROL PINS (C3, C4)
-// ============================================================================
 
 #define COOLANT_FLOOD_PORT     PORT_GROUPA
 #define COOLANT_FLOOD_BIT      17   // PA17 (C3)
@@ -226,9 +201,7 @@ _Static_assert(SPINDLE_PWM_MAX_VALUE <= 255,
   #define COOLANT_MIST_BIT     18   // PA18 (C4)
 #endif
 
-// ============================================================================
 // UART PINS (D0, D1)
-// ============================================================================
 
 #define UART_RX_PORT           PORT_GROUPA
 #define UART_RX_BIT            23   // PA23 (D0) - SERCOM3 PAD[1]
@@ -242,9 +215,7 @@ _Static_assert(SPINDLE_PWM_MAX_VALUE <= 255,
 #define UART_SERCOM            SERCOM3
 #define UART_SERCOM_PMUX       0x2  // Function C
 
-// ============================================================================
 // PERIPHERAL ASSIGNMENTS
-// ============================================================================
 
 // Timers
 #define STEPPER_TIMER          TC3
@@ -261,9 +232,7 @@ _Static_assert(SPINDLE_PWM_MAX_VALUE <= 255,
 #define SPINDLE_PWM_GCLK_ID    GCLK_CLKCTRL_ID_TCC0_TCC1
 #define UART_GCLK_ID           GCLK_CLKCTRL_ID_SERCOM3_CORE
 
-// ============================================================================
 // SINGLE-PORT ALIASES (for gpio.h compatibility)
-// ============================================================================
 // MegARM uses single port (PORT A), so map _MASK to _MASK_A
 
 #define STEP_MASK               STEP_MASK_A

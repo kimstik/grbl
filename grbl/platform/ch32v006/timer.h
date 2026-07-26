@@ -1,20 +1,6 @@
 /*
   timer.h - CH32V006 stepper/pulse/PWM timer primitives
   Part of Grbl
-
-  PORTING-CHECKLIST Step 3, real implementations (Phase 4 Steps 3-6
-  batch). Timer allotment on this chip:
-
-    stepper timer  = TIM2 (general purpose, IRQ 38)     - CONTRACTS.md #3
-    pulse reset    = STK  (QingKe SysTick, IRQ 12)      - CONTRACTS.md #4
-    spindle PWM    = TIM1 CH1 (advanced, BDTR.MOE gate) - CONTRACTS.md #6
-
-  WHY SysTick and not TIM3: CH32V006's TIM3 is a "streamlined" compare-
-  only timer with NO interrupt output (RM 13 - it exists to pace TIM1/ADC
-  and feed DMA). The STK is the only remaining interrupt-capable counter,
-  and it happens to have a hardware HCLK/8 tick option (STCLK=0) - which
-  is EXACTLY the AVR Timer0 F_CPU/8 prescale the CONTRACTS.md #4 pulse
-  math assumes: no rescaling of the core's `>>3` arithmetic needed.
 */
 
 #ifndef TIMER_CH32V006_H
@@ -22,18 +8,14 @@
 
 #include "ch32v006.h"
 
-// ============================================================================
 // ISR DEFINITION MACROS (CONTRACTS.md #5) - core defines the bodies as
 // plain named functions; the real PFIC vectors live in handlers.c and
 // clear the peripheral flag FIRST, then call these.
-// ============================================================================
 #define ISR_STEP()          void __isr_step_impl(void)
 #define ISR_STEP_RESET()    void __isr_step_reset_impl(void)
 #define ISR_STEP_DELAY()    void __isr_step_delay_impl(void)
 
-// ============================================================================
 // STEPPER TIMER (TIM2 - CONTRACTS.md #3)
-// ============================================================================
 // hal_timer_stepper_init() (platform.c) leaves the counter running at /1
 // with the update interrupt masked at the peripheral (UIE=0) and the PFIC
 // channel enabled; INIT + STP_TMR_PRESCALER_RESET() therefore yield the
@@ -55,9 +37,7 @@ void hal_timer_stepper_init(void);
 #define STP_TMR_PRESCALER_SET(v)        (TIM2->PSC = ((v) == 1 ? 0u : ((v) == 2 ? 7u : 63u)))
 #define STP_TMR_PRESCALER_RESET()       (TIM2->PSC = 0)
 
-// ============================================================================
 // PULSE RESET TIMER (STK - CONTRACTS.md #4)
-// ============================================================================
 // 8-bit overflow horizon contract: core hands a uint8_t two's-complement
 // negative count; the ISR must fire after (256 - val) ticks of F_CPU/8.
 // STK setup (hal_timer_pulse_reset_init): STCLK=0 -> HCLK/8 tick, STIE=1,
@@ -82,9 +62,7 @@ void hal_timer_pulse_reset_init(void);
   #error "STEP_PULSE_DELAY is not supported on CH32V006 (single-compare STK pulse timer; TIM3 has no interrupt - see timer.h)"
 #endif
 
-// ============================================================================
 // SPINDLE PWM TIMER (TIM1 CH1 on PA3 via TIM1_RM=0100 - CONTRACTS.md #6)
-// ============================================================================
 // hal_timer_spindle_pwm_init() (platform.c) configures PWM mode 1 with
 // ATRLR = SPINDLE_PWM_MAX_VALUE (255), PSC for an AVR-comparable base
 // frequency, BDTR.MOE set (advanced-timer master output gate), and

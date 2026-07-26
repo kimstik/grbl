@@ -1,26 +1,6 @@
 /*
   prelude.h - build prelude for CH570 / generic board
   Part of Grbl
-
-  ONE header the platform Makefile injects into every translation unit
-  via `-include boards/$(BOARD)/prelude.h` (CONTRACTS.md #0). Order is
-  load-bearing:
-
-    1. ../../gpio.h              CH570 register accessors. MUST come
-                                  first: ../../../common/gpio.h only
-                                  supplies AVR-style defaults for
-                                  accessors not already defined.
-    2. ../../../common/gpio.h    Generic GPIO bit-op helpers built on
-                                  top of the accessors from step 1.
-    3. config.h                  Board pin map (this directory).
-    4. ../../platform.h          Chip-specific HAL: sei/cli, critical
-                                  sections, GPIO interrupt macros. Must
-                                  be injected before grbl.h so that
-                                  common/dummy/avr/io.h sees sei/cli
-                                  already defined.
-
-  GRBL_PRELUDE is the marker grbl/platform/hal.h checks to fail loudly
-  when a non-AVR translation unit is compiled without this injection.
 */
 
 #ifndef GRBL_PRELUDE_CH570_GENERIC_H

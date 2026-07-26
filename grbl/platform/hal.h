@@ -1,5 +1,5 @@
 /*
-  grbl_hal.h - Hardware Abstraction Layer for GRBL
+  hal.h - platform-independent hardware abstraction layer for GRBL
   Part of Grbl
 
   Copyright (c) 2025 GRBL HAL Contributors
@@ -18,28 +18,13 @@
   along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-/*
-  GRBL Hardware Abstraction Layer (HAL)
-
-  This HAL provides platform-independent interface for:
-  - AVR ATmega328p (original, zero-overhead macros)
-  - STM32F103 (ARM Cortex-M3, Blue Pill)
-  - STM32F411 (ARM Cortex-M4F, Black Pill)
-  - STM32H523 (ARM Cortex-M33, 250MHz!)
-  - SAMD21 (ARM Cortex-M0+)
-  - CH32V006 (RISC-V)
-  - HC32F460 (ARM Cortex-M4F, 200MHz!)
-
-  For AVR: All HAL macros expand to original code - ZERO overhead!
-  For other platforms: HAL provides abstraction layer.
-*/
+// On AVR every HAL macro expands to the original code - zero overhead.
+// Supported ports and the abstraction's shape: see ARCHITECTURE.md.
 
 #ifndef GRBL_HAL_H
 #define GRBL_HAL_H
 
-// ============================================================================
 // BUILD PRELUDE CHECK (non-AVR platforms)
-// ============================================================================
 // Every non-AVR platform Makefile injects a build prelude into each
 // translation unit via `-include <board>/prelude.h` (samd21) or
 // `-include prelude.h` (stm32f103, stm32h523, sg2002); the prelude defines
@@ -50,9 +35,7 @@
   #error "No build prelude injected - build via the platform Makefile (it passes -include <board>/prelude.h); see grbl/platform/ARCHITECTURE.md"
 #endif
 
-// ============================================================================
 // STANDARD LIBRARY INCLUDES (platform-specific)
-// ============================================================================
 
 #if defined(PLATFORM_STM32F103) || defined(PLATFORM_STM32H523) || defined(PLATFORM_RP2040) || defined(PLATFORM_RP2350)
   // ARM platforms: Include only standard C libraries
@@ -94,9 +77,7 @@
   #include <stdbool.h>
 #endif
 
-// ============================================================================
 // PLATFORM AUTO-DETECTION
-// ============================================================================
 
 // Platform can be specified via -DPLATFORM_xxx in Makefile
 // Or auto-detected from compiler defines
@@ -175,9 +156,7 @@
   #error "Unknown platform! Define PLATFORM_xxx in Makefile"
 #endif
 
-// ============================================================================
 // PLATFORM-SPECIFIC INCLUDES
-// ============================================================================
 
 #if defined(PLATFORM_AVR_ATMEGA328P)
   #include "atmega328p/platform.h"
@@ -213,9 +192,7 @@
   #include "ch570/platform.h"
 #endif
 
-// ============================================================================
 // HAL COMPONENT HEADERS
-// ============================================================================
 
 #if !defined(__AVR_ATmega328P__)
 // HAL component headers (all platforms)
@@ -227,9 +204,7 @@
 //#include "hal_nvmem.h"
 #include "hal_gpio.h"
 
-// ============================================================================
 // PLATFORM CAPABILITIES (for compile-time feature detection)
-// ============================================================================
 
 // These are defined by platform headers
 // #define HAL_HAS_FPU          0/1

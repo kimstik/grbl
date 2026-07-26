@@ -5,15 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Interrupt vector table and reset handler for STM32F411CEU6. ARM Cortex-M
-  hardware-vector-fetch model (PORTING-CHECKLIST.md's non-ARM warning does
-  not apply here). IRQ numbering verified this session against the published
-  STM32F411 CMSIS vector table for every slot this port actually enables
-  (EXTI0-4, EXTI9_5, EXTI15_10, TIM2, TIM3, USART1) - see regs.h header
-  comment. Slots for peripherals absent on F411 silicon (CAN, USART3, TIM6/7/
-  8, FSMC, UART4/5, DAC - this is ST's cost-reduced "Cat.1 access line", not
-  the full F405/407 family) are left as 0 (reserved) rather than guessed.
 */
 
 #include <stdint.h>

@@ -5,21 +5,12 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Real IRQ vectors for the timers (TIM2/TIM3) and external interrupts
-  (EXTI, limit switches + control pins). Each wrapper clears the peripheral
-  interrupt flag FIRST, then calls the core-supplied ISR body - clearing
-  after would lose edges/updates that arrive during the body, and for
-  ISR_STEP_RESET specifically would ghost the final overflow after the
-  timer is stopped (CONTRACTS.md sections 2.3 and 5.1).
 */
 
 #include "platform.h"
 #include "regs.h"
 
-// ============================================================================
 // STEPPER / PULSE-RESET TIMER ISRs
-// ============================================================================
 // __isr_step_impl / __isr_step_reset_impl / __isr_step_delay_impl are the
 // named bodies stepper.c defines via ISR_STEP()/ISR_STEP_RESET()/
 // ISR_STEP_DELAY() (timer.h). startup.c's vector table requires TIM2_IRQHandler
@@ -51,9 +42,7 @@ void TIM3_IRQHandler(void) {
   }
 #endif
 
-// ============================================================================
 // GPIO INTERRUPTS (EXTI - limit switches and control pins)
-// ============================================================================
 // LIMIT_INT_IRQHandler()/CONTROL_INT_IRQHandler() are the core-supplied
 // bodies (limits.c via HAL_GPIO_IRQ_HANDLER(LIMIT_INT), system.c via
 // HAL_GPIO_IRQ_HANDLER(CONTROL_INT)) - CONTRACTS.md section 2.

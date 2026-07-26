@@ -5,8 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Interrupt handlers for UART, GPIO, and timers
 */
 
 #include "platform.h"

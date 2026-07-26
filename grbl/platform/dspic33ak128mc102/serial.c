@@ -1,41 +1,6 @@
 /*
   serial.c - dsPIC33AK128MC102 serial port driver (TU-replacement route)
   Part of Grbl
-
-  PORTING-CHECKLIST Step 4, CONTRACTS.md #7. This is the NEWER dsPIC33A
-  UART peripheral - register names are U1CON/U1STAT/U1BRG/U1RXB/U1TXB
-  (p33AK128MC102.h), NOT the classic UxMODE/UxSTA/UxTXREG/UxRXREG shape
-  used on 16-bit dsPIC33F/E - a fresh register set was mined this session,
-  not reused from any donor port (there is no donor: this is the third
-  ISA family and the first UART for it).
-
-  Ring-buffer bookkeeping (head/tail math, the BUG #12 ordering
-  discipline) is chip-agnostic and unchanged from the M1-M3 skeleton
-  (itself lifted from the proven samd21/serial.c pattern); only the
-  UART1 register touches below are new.
-
-  REALTIME INTERCEPTION (BUG #19): the dispatch switch below is
-  UNCHANGED from the M1-M3 skeleton, which already mirrors core
-  grbl/serial.c's HAL_SERIAL_RX_ISR() (serial.c:137-188) verbatim,
-  case-for-case - re-verified line-by-line this session. Do not "clean
-  this up" - the exact case list, ordering and #ifdef guards (DEBUG,
-  ENABLE_M7) are the contract.
-
-  BAUD (BUG #4 class): U1BRG is a 20-bit register (not the classic 16-bit
-  UxBRG) with a BRGS "high speed" mode bit (/4 divisor vs /16 - assumed
-  meaning, U_CON__BRGS atdf value-group only names enabled/disabled, not
-  the divisor arithmetic itself - RM-only). BRGS=1 (/4) is used for finer
-  granularity at high Fp. Formula: BRG = round(Fp/(4*baud)) - 1. Fp
-  (UART1's peripheral clock) is ASSUMED == F_CPU (platform.h, UNVERIFIED -
-  CONTRACTS.md #16.10); at F_CPU=200MHz/115200 baud this gives BRG=433,
-  actual baud 115207.4 (+0.006%) - the arithmetic is sound, the Fp
-  assumption is the open hardware-bring-up risk.
-
-  PPS: U1RX input mux (RPINR9.U1RXR) IS fully verified - the field is
-  literally the source RPn's own pin number (standard PPS input-mux
-  convention). U1TX output mux (RPOR12.RP52R) uses an UNVERIFIED
-  function-select code (platform.h PPS_RPOR_FN_U1TX_UNVERIFIED) - no
-  value-group for any RPORx field exists in the vendored .atdf.
 */
 
 #include <stdint.h>
@@ -116,10 +81,8 @@ void serial_write(uint8_t data) {
 // serial.c:96-108) must be preserved.
 #include "../common/serial_ring_accessors.h"
 
-// ============================================================================
 // UART INTERRUPT DISPATCH (called from _U1RXInterrupt/_U1TXInterrupt in
 // handlers.c - real vectors, synthesized IVT; see platform.c banner)
-// ============================================================================
 // REALTIME-COMMAND INTERCEPTION mirrors core serial.c:127-145 verbatim
 // (BUG #19: a port whose RX ISR buffers these bytes as data has dead
 // status polling and dead feed-hold/reset - safety-relevant). U1STAT.RXBF

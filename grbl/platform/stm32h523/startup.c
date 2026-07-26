@@ -5,8 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Interrupt vector table and reset handler for STM32H523C8T6.
 */
 
 #include <stdint.h>
@@ -145,9 +143,7 @@ extern void TIM2_IRQHandler(void);  // Stepper ISR
 extern void TIM3_IRQHandler(void);  // Pulse reset ISR
 extern void USART1_IRQHandler(void); // Serial ISR
 
-// ============================================================================
 // STM32H523 INTERRUPT HANDLERS
-// ============================================================================
 // All STM32H523-specific peripheral interrupt handlers
 // Handlers not explicitly defined will use weak alias to Default_Handler
 
@@ -219,9 +215,7 @@ void LPUART1_IRQHandler(void)       __attribute__((weak, alias("Default_Handler"
 // Low-power timer
 void LPTIM1_IRQHandler(void)        __attribute__((weak, alias("Default_Handler")));
 
-// ============================================================================
 // STM32H523 VECTOR TABLE
-// ============================================================================
 // Correct vector table for STM32H523 (Cortex-M33) with all peripheral IRQs
 // Interrupt numbers match the IRQn_Type enum defined in regs.h
 
@@ -229,9 +223,7 @@ void LPTIM1_IRQHandler(void)        __attribute__((weak, alias("Default_Handler"
 // live even though nothing in C reads its elements (BUG #21, CONTRACTS.md S18).
 __attribute__((section(".isr_vector"), used))
 const void *vector_table[] = {
-  // ============================================================================
   // Cortex-M33 core interrupts (positions 0-15)
-  // ============================================================================
   &_estack,                    // 0:  Initial stack pointer
   Reset_Handler,               // 1:  Reset handler
   NMI_Handler,                 // 2:  NMI handler
@@ -249,9 +241,7 @@ const void *vector_table[] = {
   PendSV_Handler,              // 14: PendSV handler
   SysTick_Handler,             // 15: SysTick handler
 
-  // ============================================================================
   // STM32H523 peripheral interrupts (IRQ 0-60+)
-  // ============================================================================
   WWDG_IRQHandler,             // 16: IRQ 0  - Window watchdog
   PVD_AVD_IRQHandler,          // 17: IRQ 1  - PVD/AVD detector
   RTC_IRQHandler,              // 18: IRQ 2  - RTC global interrupt

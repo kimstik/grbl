@@ -1,29 +1,6 @@
 /*
   platform.h - dsPIC33AK128MC102 chip-specific HAL
   Part of Grbl
-
-  THE THIRD ISA FAMILY: dsPIC33A 32-bit DSC core (Microchip) - neither ARM
-  nor RISC-V. 200 MHz, dual-precision hardware FPU, hardware multiply/
-  divide. Phase 6 rolling port #2: M1-M3 (identification, clock, GPIO,
-  interrupt-global-control, critical sections) plus Steps 3-6 (timers,
-  serial, NVMEM, GPIO-interrupt arming, handlers) are now ALL real -
-  zero PORT_TODO_* remain at link (see Makefile `make link` / CONTRACTS.md
-  #16 new items for the Step 3-6 register facts and what is still
-  UNVERIFIED pending real hardware - no dsPIC33A emulator exists).
-
-  Chip facts in this file come from the Apache-2.0 DFP
-  (Microchip.dsPIC33AK-MC_DFP 1.5.263: p33AK128MC102.h SFR set,
-  p33AK128MC102.gld memory map, dsPIC33AK128MC102.atdf value-groups) and
-  from toolchain-disassembly/link evidence gathered this session;
-  anything not verifiable from those is marked UNVERIFIED loudly. Two
-  specific gaps the DFP does NOT resolve (grepped exhaustively, see
-  CONTRACTS.md #16 for the full writeup): the SCCP MOD/CLKSEL/TMRPS field
-  encodings (no value-group in the .atdf) and the RPn PPS OUTPUT
-  function-select codes (ditto) - both are RM-only tables. This file picks
-  defensible, clearly-flagged placeholder values for those so the port
-  builds and links against real hardware behavior *shapes*; hardware
-  bring-up must confirm/correct them from the datasheet before trusting
-  UART TX or spindle PWM output electrically.
 */
 
 #ifndef PLATFORM_DSPIC33AK128MC102_H
@@ -33,9 +10,7 @@
 #include <stdint.h>
 #include "timer.h"
 
-// ============================================================================
 // PPS OUTPUT FUNCTION-SELECT CODES - UNVERIFIED (CONTRACTS.md #16 new item)
-// ============================================================================
 // RPn INPUT muxing (RPINRx) is fully verified: the field IS the target
 // RPn's own pin number (standard PPS input-mux convention, unchanged for
 // decades of PIC24/dsPIC33). RPn OUTPUT muxing (RPORx) is the opposite
@@ -50,9 +25,7 @@
 #define PPS_RPOR_FN_U1TX_UNVERIFIED   1
 #define PPS_RPOR_FN_CCP2_UNVERIFIED   2
 
-// ============================================================================
 // PLATFORM IDENTIFICATION
-// ============================================================================
 
 // hal.h pre-defines PLATFORM_NAME before including this file; refine it
 // here the same way stm32f103/ch32v006 do.
@@ -61,9 +34,7 @@
 #define PLATFORM_CPU      "dsPIC33A 32-bit DSC (DP-FPU)"
 #define PLATFORM_ARCH     "dsPIC33A"
 
-// ============================================================================
 // PLATFORM CAPABILITIES
-// ============================================================================
 
 #define PLATFORM_HAS_FPU           1   // dual-precision hardware FPU (first port with one that is not ARM)
 #define PLATFORM_HAS_DMA           1   // 6-channel DMA (unused by this port)
@@ -72,9 +43,7 @@
 #define PLATFORM_HAS_HW_MULTIPLY   1
 #define PLATFORM_HAS_HW_DIVIDE     1
 
-// ============================================================================
 // PLATFORM SPECIFICATIONS
-// ============================================================================
 
 // F_CPU feeds TICKS_PER_MICROSECOND (nuts_bolts.h) and all stepper timing
 // math (PORTING-CHECKLIST Step 1). Clock path: FRC 8 MHz -> PLL1
@@ -117,9 +86,7 @@ _Static_assert(F_CPU > 0, "F_CPU must be a real, verified clock frequency in Hz"
 #define HAL_NVMEM_FLASH_ROW_SIZE    256u    // row-program granularity (atdf-derived)
 #define HAL_NVMEM_FLASH_START       0x81F800UL   // last page of program flash (0x800004+0x1FFFC region)
 
-// ============================================================================
 // TYPE DEFINITIONS (must be before hal_gpio.h include)
-// ============================================================================
 
 // Port index (A=0..D=3) for the hal_gpio_* helpers - dsPIC33A GPIO
 // registers are individual SFR symbols (LATA, LATB, ...), not struct
@@ -129,9 +96,7 @@ _Static_assert(F_CPU > 0, "F_CPU must be a real, verified clock frequency in Hz"
 typedef uint32_t hal_gpio_port_t;
 #define HAL_GPIO_PORT_T_DEFINED
 
-// ============================================================================
 // GPIO INTERRUPTS (CONTRACTS.md #2) - Step 6, real implementation.
-// ============================================================================
 // dsPIC33AK Change Notification, per-port: CNEN0x/CNEN1x arm per-pin
 // (edge-style, both registers together = any-change trigger, #2.6),
 // CNCONx.ON+CNSTYLE gate the port, vectors _CNAInterrupt (CONTROL) /
@@ -154,9 +119,7 @@ void hal_gpio_cn_disable(uint32_t port_idx, uint32_t mask);
 // its single owner (CONTRACTS.md #2.2); a platform-local redefinition
 // would be silently shadowed in every core TU.
 
-// ============================================================================
 // CRITICAL SECTIONS (CONTRACTS.md #8) - save/restore via XC-DSC builtins.
-// ============================================================================
 /*
   __builtin_get_isr_state() / __builtin_set_isr_state() /
   __builtin_disable_interrupts() are the vendor-blessed primitives;
@@ -182,9 +145,7 @@ void hal_gpio_cn_disable(uint32_t port_idx, uint32_t mask);
   __asm__ volatile ("" ::: "memory"); \
   __builtin_set_isr_state(__hal_isr_state_save)
 
-// ============================================================================
 // INTERRUPT GLOBAL CONTROL (CONTRACTS.md #11)
-// ============================================================================
 // INTCON1.GIE, set/cleared by single interrupt-atomic bset/bclr via the
 // builtins (verified by disassembly). Memory-clobber asm on the correct
 // side of each transition: stores must not float below a cli() or above
@@ -192,9 +153,7 @@ void hal_gpio_cn_disable(uint32_t port_idx, uint32_t mask);
 #define sei()  do { __asm__ volatile ("" ::: "memory"); __builtin_enable_interrupts(); } while (0)
 #define cli()  do { __builtin_disable_interrupts(); __asm__ volatile ("" ::: "memory"); } while (0)
 
-// ============================================================================
 // MEMORY BARRIERS (CONTRACTS.md #12) - dsPIC33A memory model
-// ============================================================================
 /*
   What barriers exist on this ISA: NONE. The dsPIC33A instruction set has
   no fence/DSB/DMB-class instruction at all (checked the DFP toolchain's
@@ -216,9 +175,7 @@ void hal_gpio_cn_disable(uint32_t port_idx, uint32_t mask);
 #define __DSB() __asm__ volatile ("" ::: "memory")
 #define __DMB() __asm__ volatile ("" ::: "memory")
 
-// ============================================================================
 // WATCHDOG (CONTRACTS.md #9)
-// ============================================================================
 // Deliberately UNDEFINED (only compiled under ENABLE_SOFTWARE_DEBOUNCE,
 // default off) - a no-op here is ILLEGAL per contract when that option is
 // on; leaving the macros absent gives a loud compile failure instead.

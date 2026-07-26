@@ -5,9 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Minimal stub header for ARM Cortex-M0+ core
-  TODO: Replace with official CMSIS core headers from ARM
 */
 
 #ifndef CORE_CM0PLUS_H
@@ -15,9 +12,7 @@
 
 #include <stdint.h>
 
-// ============================================================================
 // COMPILER INTRINSICS
-// ============================================================================
 
 #define __ASM            __asm
 #define __INLINE         inline
@@ -54,9 +49,7 @@ __STATIC_INLINE void __disable_irq(void) {
   __ASM volatile ("cpsid i" : : : "memory");
 }
 
-// ============================================================================
 // NVIC - Nested Vectored Interrupt Controller
-// ============================================================================
 
 typedef struct {
   volatile uint32_t ISER[1];        // Interrupt Set Enable Register
@@ -99,9 +92,7 @@ __STATIC_INLINE uint32_t NVIC_GetPriority(IRQn_Type IRQn) {
   return (NVIC->IP[(uint32_t)(IRQn)] >> 6);
 }
 
-// ============================================================================
 // SysTick
-// ============================================================================
 
 typedef struct {
   volatile uint32_t CTRL;           // Control and Status Register
@@ -146,9 +137,7 @@ __STATIC_INLINE uint32_t SysTick_Config(uint32_t ticks) {
   return (0);
 }
 
-// ============================================================================
 // SCB - System Control Block
-// ============================================================================
 
 typedef struct {
   volatile const uint32_t CPUID;    // CPUID Base Register

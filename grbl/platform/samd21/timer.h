@@ -32,9 +32,7 @@ STP_TMR_PRESCALER_RESET();
 
 #include "samd21.h"
 
-// ============================================================================
 // ISR DEFINITIONS
-// ============================================================================
 // SAMD21 ISR wrappers that auto-clear interrupt flags
 // ARM Cortex-M requires manual clearing of peripheral INTFLAG registers
 //
@@ -46,9 +44,7 @@ STP_TMR_PRESCALER_RESET();
 #define ISR_STEP_RESET()    void __isr_step_reset_impl(void)
 #define ISR_STEP_DELAY()    void __isr_step_delay_impl(void)
 
-// ============================================================================
 // STEPPER TIMER (TC3 - 16-bit timer/counter)
-// ============================================================================
 
 // TC3 initialization for CTC mode
 #define STP_TMR_INIT() \
@@ -68,9 +64,7 @@ STP_TMR_PRESCALER_RESET();
 #define STP_TMR_PRESCALER_SET(prescaler) /* SAMD21: Prescaler set in INIT, dynamic change requires reconfiguration */
 #define STP_TMR_PRESCALER_RESET()       /* Not needed on SAMD21 */
 
-// ============================================================================
 // PULSE RESET TIMER (TC4 - 16-bit timer/counter)
-// ============================================================================
 
 #define STP_PULSE_RESET_INIT() \
   do { \
@@ -93,9 +87,7 @@ STP_TMR_PRESCALER_RESET();
   #define STP_PULSE_DELAY_INIT()        (TC5->INTENSET = TC_INTFLAG_MC0)
 #endif
 
-// ============================================================================
 // PWM TIMER (TCC0 - Timer/Counter for Control)
-// ============================================================================
 
 #define PWM_INIT() \
   do { \

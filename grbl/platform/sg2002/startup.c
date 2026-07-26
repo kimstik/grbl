@@ -5,8 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  RISC-V C906 startup and exception vectors
 */
 
 #include <stdint.h>

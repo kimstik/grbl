@@ -5,8 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Defines all STM32F103-specific parameters for the common code.
 */
 
 #ifndef STM32F103_CONFIG_H
@@ -14,9 +12,7 @@
 
 #include "../common/stm32/stm32_platform.h"
 
-// ============================================================================
 // STM32F103 PLATFORM CONFIGURATION
-// ============================================================================
 
 // Clock frequencies (72 MHz CPU, APB1=36MHz, APB2=72MHz)
 #define STM32F103_CPU_FREQ      72000000UL
@@ -37,9 +33,7 @@
 #define STM32F103_HAS_32BIT_TIMERS  false   // Only 16-bit TIM2/TIM3/TIM4
 #define STM32F103_GPIO_MODEL        1       // F1 family uses CRL/CRH registers
 
-// ============================================================================
 // PIN MAPPING (can be customized per project)
-// ============================================================================
 
 // Stepper motors (GPIOA)
 #define X_STEP_PIN          0   // PA0
@@ -80,9 +74,7 @@
 // Probe
 #define PROBE_PIN           15  // PC15
 
-// ============================================================================
 // BITMASKS FOR GPIO OPERATIONS
-// ============================================================================
 
 #define STEP_MASK           ((1 << X_STEP_PIN) | (1 << Y_STEP_PIN) | (1 << Z_STEP_PIN))
 #define DIRECTION_MASK      ((1 << X_DIRECTION_PIN) | (1 << Y_DIRECTION_PIN) | (1 << Z_DIRECTION_PIN))
@@ -91,9 +83,7 @@
 #define CONTROL_MASK        ((1 << RESET_PIN) | (1 << FEED_HOLD_PIN) | (1 << CYCLE_START_PIN) | (1 << SAFETY_DOOR_PIN))
 #define PROBE_MASK          (1 << PROBE_PIN)
 
-// ============================================================================
 // TIMER CONFIGURATION
-// ============================================================================
 
 // Stepper timer: TIM2 (16-bit on F103)
 #define STEPPER_TIMER_IRQn  TIM2_IRQn
@@ -109,9 +99,7 @@
 // to 1000 while CCR1 was only ever driven up to 255 - capping real spindle
 // duty at 25.5% of commanded. Do not reintroduce this definition here.
 
-// ============================================================================
 // SERIAL CONFIGURATION
-// ============================================================================
 
 #define SERIAL_BAUD_RATE    115200
 

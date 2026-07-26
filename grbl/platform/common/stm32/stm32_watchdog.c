@@ -30,9 +30,7 @@
 #define IWDG_PRESCALER_128  5  // 312.5 Hz counter (max timeout: 13.1s)
 #define IWDG_PRESCALER_256  6  // 156.25 Hz counter (max timeout: 26.2s)
 
-// ============================================================================
 // PUBLIC FUNCTIONS
-// ============================================================================
 
 stm32_status_t stm32_watchdog_init(uint32_t timeout_ms) {
   // Validate timeout range

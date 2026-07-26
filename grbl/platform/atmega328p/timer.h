@@ -29,9 +29,7 @@ STP_TMR_PRESCALER_RESET();   		    <- HAL_TIMER_STEPPER_RESET_PRESCALER();
 #include <avr/io.h>
 #include <avr/interrupt.h>
 
-// ============================================================================
 // NEW SHORT NAMES (for migrated code)
-// ============================================================================
 
 // ISR definitions
 #define ISR_STEP()          ISR(TIMER1_COMPA_vect)

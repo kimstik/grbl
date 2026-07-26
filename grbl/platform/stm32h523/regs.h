@@ -5,9 +5,6 @@
   Copyright (c) 2025 kimstik
   Intelligence assisted
   License: MIT
-
-  Minimal register definitions for STM32H523.
-  For production use, recommend using official CMSIS headers.
 */
 
 #ifndef STM32H523_REGS_H
@@ -16,9 +13,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// ============================================================================
 // GPIO
-// ============================================================================
 
 typedef struct {
   volatile uint32_t MODER;    // Mode register
@@ -40,9 +35,7 @@ typedef struct {
 #define GPIOB   ((GPIO_TypeDef*)GPIOB_BASE)
 #define GPIOC   ((GPIO_TypeDef*)GPIOC_BASE)
 
-// ============================================================================
 // FLASH
-// ============================================================================
 
 typedef struct {
   volatile uint32_t ACR;      // Access control register
@@ -69,9 +62,7 @@ typedef struct {
 #define FLASH_SR_PGSERR     (1 << 5)
 #define FLASH_SR_EOP        (1 << 16)
 
-// ============================================================================
 // RCC (Reset and Clock Control)
-// ============================================================================
 
 typedef struct {
   volatile uint32_t CR;         // Clock control register
@@ -142,9 +133,7 @@ typedef struct {
 #define RCC_CR_PLL1ON   (1 << 24)  // PLL1 enable
 #define RCC_CR_PLL1RDY  (1 << 25)  // PLL1 ready
 
-// ============================================================================
 // EXTI (External Interrupts)
-// ============================================================================
 // Note: STM32H5 uses EXTI_CxIMR1/2 model (C1 = CPU1)
 
 typedef struct {
@@ -182,9 +171,7 @@ typedef struct {
 #define EXTI_LINE_6   (1 << 6)
 #define EXTI_LINE_10  (1 << 10)
 
-// ============================================================================
 // SYSCFG (System Configuration)
-// ============================================================================
 // Needed for GPIO to EXTI line mapping
 
 typedef struct {
@@ -212,13 +199,9 @@ typedef struct {
 #define SYSCFG_EXTICR_PB  0x1
 #define SYSCFG_EXTICR_PC  0x2
 
-// ============================================================================
 // NVIC (Nested Vectored Interrupt Controller)
-// ============================================================================
 
-// ============================================================================
 // SCB (System Control Block) - only the registers startup.c needs
-// ============================================================================
 // VTOR is what makes the vector table a *referenced* object: without a real
 // code reference GCC's LTO deletes vector_table[] before codegen and the
 // linker's KEEP(*(.isr_vector)) then matches nothing (see CONTRACTS.md S18).
@@ -253,9 +236,7 @@ typedef struct {
 #define NVIC_EnableIRQ(IRQn)   (NVIC->ISER[(uint32_t)IRQn >> 5] = (1 << ((uint32_t)IRQn & 0x1F)))
 #define NVIC_DisableIRQ(IRQn)  (NVIC->ICER[(uint32_t)IRQn >> 5] = (1 << ((uint32_t)IRQn & 0x1F)))
 
-// ============================================================================
 // TIM (Timers)
-// ============================================================================
 
 typedef struct {
   volatile uint32_t CR1;        // Control register 1
@@ -318,9 +299,7 @@ typedef struct {
                                     // OCx outputs stay disconnected even with
                                     // CCER.CC1E set (RM0481 advanced timer ch.)
 
-// ============================================================================
 // USART
-// ============================================================================
 
 typedef struct {
   volatile uint32_t CR1;        // Control register 1
@@ -358,9 +337,7 @@ typedef struct {
 #define USART_ISR_TC     (1 << 6)   // Transmission complete
 #define USART_ISR_TXE    (1 << 7)   // Transmit data register empty
 
-// ============================================================================
 // IRQ Numbers for STM32H523
-// ============================================================================
 
 typedef enum {
   WWDG_IRQn              = 0,
@@ -420,9 +397,7 @@ typedef enum {
   TIM4_IRQn              = 60
 } IRQn_Type;
 
-// ============================================================================
 // Core M33 Functions
-// ============================================================================
 // Macros (not static inline functions): common/stm32/stm32_platform.h
 // #ifndef-guards these same names for its own fallback definitions, and an
 // #ifndef only sees prior MACRO definitions, not function declarations - a
@@ -434,9 +409,7 @@ typedef enum {
 #define __get_PRIMASK()   ({ uint32_t primask; __asm__ volatile ("mrs %0, primask" : "=r" (primask)); primask; })
 #define __set_PRIMASK(x)  __asm__ volatile ("msr primask, %0" : : "r" (x) : "memory")
 
-// ============================================================================
 // COMMON MACROS
-// ============================================================================
 
 #define __IO volatile
 #define __NOP() __asm__ volatile ("nop")

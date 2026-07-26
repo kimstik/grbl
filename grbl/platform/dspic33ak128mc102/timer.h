@@ -1,30 +1,6 @@
 /*
   timer.h - dsPIC33AK128MC102 stepper/pulse/PWM timer primitives
   Part of Grbl
-
-  PORTING-CHECKLIST Step 3 - real implementations, CONTRACTS.md #3/#4/#5/#6.
-  IRQ-capability audited before allocation (the #14.11 lesson - "general
-  purpose timer" does not imply an interrupt line): all three candidates
-  below have a REAL vector confirmed against the DFP's own vector table
-  doc (xc16/docs/vector_docs/PIC33AK128MC102.html):
-
-    - Stepper timer:     Timer1  (T1CON/_T1Interrupt,   IRQ 48)
-    - Pulse-reset timer: SCCP1   (CCP1CON1/_CCT1Interrupt, IRQ 49)
-    - Spindle PWM:       SCCP2   (CCP2CON1, PWM output only - no ISR needed)
-
-  Register field FACTS below (bit widths, which SFR pairs with which flag/
-  enable/priority bit) come from the DFP header (p33AK128MC102.h) and are
-  solid. Two specific field ENCODINGS are NOT resolvable from the vendored
-  DFP/.atdf at all (grepped exhaustively - no value-group exists for
-  either, unlike e.g. NVMCON_CON__NVMOP which does) and are RM-only
-  tables: the SCCP CCPxCON1.MOD/CLKSEL/TMRPS mode-select encoding, and the
-  RPn PPS OUTPUT function-select codes (platform.h). Both are given
-  defensible, clearly-flagged placeholder values so the port builds and
-  the STRUCTURE is real; hardware bring-up must confirm the exact values
-  from Microchip's dsPIC33A family reference manual (not vendored here -
-  no dsPIC33A emulator exists either, so this whole port's runtime
-  behavior is provisionally UNVERIFIED pending real silicon, same status
-  the M1-M3 clock sequence already carries).
 */
 
 #ifndef TIMER_DSPIC33AK128MC102_H
@@ -33,9 +9,7 @@
 #include <xc.h>
 #include <stdint.h>
 
-// ============================================================================
 // ISR DEFINITION MACROS (CONTRACTS.md #5) - naming only, no chip content.
-// ============================================================================
 // Core supplies the ISR bodies (stepper.c:326,496,511) as plain named
 // functions; handlers.c declares them `extern` and calls them from the
 // real dsPIC ISR vectors (__attribute__((interrupt)) _T1Interrupt etc.),
@@ -44,9 +18,7 @@
 #define ISR_STEP_RESET()    void __isr_step_reset_impl(void)
 #define ISR_STEP_DELAY()    void __isr_step_delay_impl(void)
 
-// ============================================================================
 // STEPPER TIMER (CONTRACTS.md #3) - Timer1, semantic origin AVR Timer1 CTC.
-// ============================================================================
 // hal_timer_stepper_init() (platform.c): T1CON cleared, TMR1=0, PR1 set to
 // a safe default, TCKPS=0 (/1), counter STARTED (T1CONbits.ON=1) with the
 // compare interrupt masked (_T1IE=0) - INIT+RESET together yield the
@@ -74,9 +46,7 @@ void hal_timer_stepper_init(void);
 #define STP_TMR_PRESCALER_SET(prescaler)  (T1CONbits.TCKPS = ((prescaler) == 1 ? 0u : ((prescaler) == 2 ? 1u : 2u)))
 #define STP_TMR_PRESCALER_RESET()         (T1CONbits.TCKPS = 0)
 
-// ============================================================================
 // PULSE-RESET TIMER (CONTRACTS.md #4) - SCCP1 in 16-bit Timer mode.
-// ============================================================================
 // The 8-bit overflow-horizon contract (core hands a uint8_t two's-
 // complement negative count; the real AVR hardware free-runs an 8-bit
 // counter from that preload to its natural 256-count overflow) is
@@ -115,9 +85,7 @@ static inline void hal_timer_pulse_count_set(uint8_t val) {
   #error "STEP_PULSE_DELAY is not supported on dsPIC33AK128MC102 (CCP1RB dual-compare scheme not implemented/verified - see timer.h)"
 #endif
 
-// ============================================================================
 // SPINDLE PWM (CONTRACTS.md #6) - SCCP2, only compiled under VARIABLE_SPINDLE.
-// ============================================================================
 // SPINDLE_PWM_MAX_VALUE is 255 (boards/generic/config.h) - core plumbs
 // duty as uint8_t end-to-end (#6.2); CCP2PR is fixed at 255 for full
 // 8-bit duty resolution, never touched again after init.

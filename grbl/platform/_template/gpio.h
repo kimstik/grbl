@@ -1,30 +1,6 @@
 /*
   gpio.h - _template GPIO register accessors (copy-me starting point)
   Part of Grbl
-
-  CONTRACTS.md §1: GPIO_OREG/IREG/DREG/PREG are the four register accessors
-  common/gpio.h's GPIO_M* and GPIO_B* families compose on top of
-  (name##_PORT picks the register set, name##_BIT/_MASK picks the bits
-  within it). This
-  file must be included BEFORE ../common/gpio.h (see
-  boards/generic/prelude.h) - common/gpio.h only supplies AVR-style
-  defaults for accessors that are not already defined.
-
-  DESIGN: GPIO_OREG is used both as an rvalue (GPIO_MRD, GPIO_BSET, ...) AND
-  as a raw lvalue (`GPIO_OREG(STEP) = st.step_bits` under STEP_PULSE_DELAY,
-  stepper.c:513) - a call expression cannot serve as an lvalue, so the usual
-  "call to undeclared PORT_TODO_<name>()" shape does not fit here. Instead
-  each accessor indexes into an extern array that is declared but never
-  DEFINED anywhere in this template: it compiles (arrays decay to valid
-  lvalues/rvalues at any index), and it fails at LINK time with an
-  undefined reference to the array's name - same "linker enumerates the gap
-  by name" contract as every other PORT_TODO_* in this port, just shaped to
-  stay assignable.
-
-  Once you have real per-chip port registers, replace all four #defines
-  below with direct register-struct member access (see samd21/gpio.h:15-18
-  for the pattern: `PORT->Group[name##_PORT].OUT` etc.) and delete the
-  PORT_TODO_GPIO_* array declarations.
 */
 
 #ifndef GPIO_TEMPLATE_H
