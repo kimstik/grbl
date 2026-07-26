@@ -103,6 +103,14 @@
 #define DIRECTION_MASK_A    ((1UL<<X_DIRECTION_BIT)|(1UL<<Y_DIRECTION_BIT)|(1UL<<Z_DIRECTION_BIT))
 #define DIRECTION_MASK_B    0
 
+// PLAN.md Phase 2 static-assert sweep (2026-07-26): the BUG #17 fix above
+// made X/Y/Z_STEP_BIT/X/Y/Z_DIRECTION_BIT logical-by-construction; this
+// codifies the invariant so a future edit to this board's bit numbers
+// cannot silently regress into the exact truncation BUG #17 was.
+_Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
+               X_DIRECTION_BIT <= 7 && Y_DIRECTION_BIT <= 7 && Z_DIRECTION_BIT <= 7,
+               "STEP/DIRECTION logical bits must fit core's uint8_t port image (BUG #17 class, CONTRACTS.md #1)");
+
 // ============================================================================
 // STEPPER ENABLE PIN (B0)
 // ============================================================================
@@ -181,6 +189,19 @@
 #define SPINDLE_PWM_MIN_VALUE  1      // Must be > 0 to avoid floating
 #define SPINDLE_PWM_OFF_VALUE  0
 #define SPINDLE_PWM_RANGE      (SPINDLE_PWM_MAX_VALUE - SPINDLE_PWM_MIN_VALUE)
+
+// NOT guarded by a `SPINDLE_PWM_MAX_VALUE <= 255` _Static_assert (unlike
+// the stm32/ch32v006/dsPIC/_template ports, PLAN.md Phase 2 static-assert
+// sweep, 2026-07-26): this board is the DOCUMENTED, PRE-EXISTING violation
+// CONTRACTS.md #6.2 already names ("SAMD21 megarm declares 65535 ... both
+// sides of that are contract violations ... Known gap"). Core plumbs duty
+// as uint8_t end-to-end (spindle_control.c:122), so 65535 here silently
+// truncates - a real, tracked bug, not a documentation gap. Adding the
+// assert here would just turn a known runtime bug into a build break for
+// this one static-assert-sweep batch, which is not the batch that owns
+// fixing spindle PWM range (that needs its own Renode-verified change, not
+// a config edit slipped in alongside an unrelated contracts sweep). Land
+// the assert here in the SAME commit that fixes the PWM range, not before.
 
 // ============================================================================
 // COOLANT CONTROL PINS (C3, C4)

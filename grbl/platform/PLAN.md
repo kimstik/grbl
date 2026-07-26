@@ -74,11 +74,79 @@ config error (SPINDLE_PWM_MIN_VALUE must be > 0).
 - [x] BUILD_DIR flavor contamination FIXED repo-wide (two-strike rule after 3rd
       bite): BUILD_DIR/$(BUILD) in samd21, stm32 common.mk, ch32v006, sg2002,
       _template; no-clean flavor-switch proof landed; CI/smoke/compdb unaffected
-- [ ] Resolve dual-canon: `-include` becomes THE mechanism; eliminate redefinition warnings
-      (currently: `HAL_GPIO_IRQ_HANDLER` redefined, `EEPROM_SIZE` redefined)
-- [ ] Loud-failure guard: `#error` in hal.h if prelude marker missing
-- [ ] Roll prelude pattern to stm32f103 / stm32h523 / atmega328p
-- [ ] Finish naming migration: one canon for IRQ handler macros (HAL_GPIO_* vs new short names)
+- [x] **Resolve dual-canon — VERIFIED STALE, closed on evidence (2026-07-26).**
+      Re-checked from scratch rather than trusted: `grep -rn
+      "HAL_GPIO_IRQ_HANDLER|EEPROM_SIZE" ci/warn_baseline_*.txt` — zero hits
+      in any of the 6 baselines (samd21's baseline even carries its own
+      comment noting both redefinition classes died with the Phase-1 prelude
+      canon). Then a FRESH clean build of all 7 ports, both flavors where
+      applicable (atmega328p `validate`; stm32f103/h523/f411, samd21
+      megarm+generic, ch32v006 DEBUG+RELEASE; dspic33ak128mc102 DEBUG+RELEASE
+      via the real `xc-dsc-gcc` toolchain at `/opt/xc-dsc`) — grepping all 13
+      resulting logs for either string: zero matches. `EEPROM_SIZE` today is
+      owned once per port inside that port's own `nvmem.c` (single-owner
+      comment at samd21/nvmem.c:19-20); `platform.h` files only ever define
+      the differently-named `HAL_EEPROM_SIZE` capability flag — no collision
+      possible by construction. `HAL_GPIO_IRQ_HANDLER` is `#ifndef`-guarded
+      once in hal_gpio.h:139-140 (CONTRACTS.md #2.2) and every port's
+      platform.h explicitly comments "deliberately NOT defined here". The
+      checkbox was stale, not aspirational: the work landed in Phase 1
+      (22aa27c) and nobody ticked it. All 7 ports' warning ratchets stayed
+      green (`ci/warn_ratchet.py` against every `ci/warn_baseline_*.txt`,
+      0 new warnings anywhere) and AVR golden `make validate` PASSED
+      (MD5 79af184e67b27defd27a39309ac53563) throughout.
+- [x] **Loud-failure guard — ALREADY LANDED (Phase 1, 22aa27c), PROVEN LIVE
+      this session.** `hal.h:49-51`: `#if !defined(__AVR__) &&
+      !defined(GRBL_PRELUDE)` / `#error "No build prelude injected - build
+      via the platform Makefile..."`. AVR is excluded by the `__AVR__` guard
+      (its own injection is the root Makefile's single `-include
+      grbl/platform/common/gpio.h`, no prelude — see the AVR-exemption
+      Decision Log entry below) so this cannot break the golden build.
+      Every one of the 7 non-AVR ports' `prelude.h` defines `GRBL_PRELUDE`
+      (grep across `grbl/platform/*/prelude.h`, `grbl/platform/*/boards/*/
+      prelude.h` — 7/7). PROVEN, not just inspected: temporarily deleted
+      ` -include prelude.h` from `stm32f103/Makefile`'s `CFLAGS_EXTRA`,
+      rebuilt — first TU fails with
+      `hal.h:50:4: error: "No build prelude injected - build via the
+      platform Makefile (it passes -include <board>/prelude.h); see
+      grbl/platform/ARCHITECTURE.md"`, `make` exit 2. Restored the flag,
+      rebuilt clean (`BOOT INTEGRITY: OK`, ratchet OK). `git diff` on the
+      Makefile is empty after restore — no residue.
+- [x] **Roll prelude pattern to stm32f103 / stm32h523 / atmega328p — ALREADY
+      ROLLED to every non-AVR port, atmega328p DECIDED EXEMPT.** Verified
+      live via `grep -rn -- '-include' grbl/platform/*/Makefile`: stm32f103,
+      stm32h523, stm32f411, sg2002 each have exactly one
+      `-include prelude.h`; samd21, ch32v006, dspic33ak128mc102, `_template`
+      each have exactly one `-include $(BOARD_DIR)/prelude.h` — no port has
+      a second `-include` flag anywhere. atmega328p: the canon does NOT
+      apply, by deliberate decision, not oversight — see the new Decision
+      Log entry "AVR prelude-canon exemption" below (single already-minimal
+      `-include`, zero redefinition hazard on that path, and the golden-MD5
+      gate makes touching it a pure liability). ARCHITECTURE.md's own
+      "Build Prelude" section had gone stale (listed only samd21/stm32f103/
+      stm32h523/sg2002, missing stm32f411/ch32v006/dspic33ak128mc102/
+      `_template`, all of which had already landed the identical shape in
+      earlier batches) — corrected in this batch along with the explicit
+      AVR-exemption rationale.
+- [x] **Finish naming migration: IRQ handler macro canon — HAL_GPIO_IRQ_HANDLER
+      confirmed as THE canon, two genuinely dead "short name" aliases
+      removed.** CONTRACTS.md #2 and every core use site (grbl/limits.c,
+      grbl/system.c) and every landed port's platform.h/handlers.c comments
+      already spelled `HAL_GPIO_IRQ_HANDLER` consistently — that was never
+      in doubt. What was NOT resolved: two alternate "short name" macro sets
+      sitting unused since they were written. Grepped core + all 7 ports for
+      call sites of each — zero, in both cases:
+      (1) `GPIO_ISR(name)` in hal_gpio.h (an alias to `HAL_GPIO_IRQ_HANDLER`
+      that nothing ever called); (2) `GPIO_INT_ENA`/`GPIO_INT_DIS`/
+      `IRQ_HANDLER` in atmega328p/platform.h, explicitly commented "for
+      future use - not yet in base code" since they were added — that future
+      never arrived. Removed both (not kept as "compatibility aliases":
+      nothing is compatible with a name it never used), each replaced with a
+      comment explaining what was removed and why, and an invitation to
+      reintroduce with a real caller if one ever appears. atmega328p's edit
+      is inside a macro-only, AVR-only header with no expansion anywhere in
+      the golden build — confirmed with a rebuild: `make -C
+      grbl/platform/atmega328p validate` still PASSED, MD5 unchanged.
 - [ ] Truth-update PLATFORM_ROADMAP.md (currently claims SAMD21 at 40% — it is ~95%)
 
 **Exit criterion**: zero warnings in platform layer; one injection mechanism; docs match reality.
@@ -94,8 +162,46 @@ assumptions); BUG #4 (baud arithmetic) — none catchable without stated contrac
       BUG #12/#13 lessons codified, ISR-hot budgets, TU-replacement route documented
 - [x] PORTING-CHECKLIST.md landed (157 lines): ordered bring-up with per-step exit
       tests, weak-memory checklist, definition of done incl. golden MD5 + ratchet
-- [ ] `_Static_assert` where contracts are expressible in code (CPU_FREQ one landed;
-      sweep for more as _template work proceeds)
+- [x] **`_Static_assert` sweep (2026-07-26)**: beyond the landed CPU_FREQ example,
+      four more contract classes now fail the build instead of the field:
+      (1) **SPINDLE_PWM_MAX_VALUE <= 255** (duty-cap-twins class, CONTRACTS.md
+      #6.2 — the exact bug h523 and f103 both shipped: PWM_MAX=1000 against a
+      uint8_t core duty) added to stm32f103/h523/f411, ch32v006, dspic33ak128mc102,
+      `_template` (6 ports). samd21 (megarm+generic) DELIBERATELY EXCLUDED — it
+      is the one port that still genuinely violates this (65535, a documented
+      pre-existing gap, CONTRACTS.md #6.2), so adding the assert there would
+      convert a known runtime bug into an unrelated build break; a comment at
+      each board's config.h says so and the actual PWM-range fix is left for
+      its own Renode-verified batch. (2) **NVMEM window <= cache size**
+      (BUG #20 class) already existed on stm32h523/stm32f411; stm32f103 was
+      missing it (never violated it — 1024×2=2048 <= the 4096 default — but
+      had no guard against a future regression) — added, matching the
+      existing two ports' wording. samd21/ch32v006/dspic33ak128mc102 don't
+      need the equivalent: their staging buffers are sized directly from the
+      same macro as the erase unit (`page_buffer[NVMEM_PAGE_SIZE]` etc, no
+      independent Makefile-supplied override to drift against) — checked, not
+      assumed. (3) **STEP/DIR logical bits <= 7** (BUG #17 class,
+      CONTRACTS.md #1) added to all 7 non-AVR ports' bit-map headers/configs
+      (stm32f103/h523/f411, ch32v006, dspic33ak128mc102, samd21 megarm+generic,
+      `_template`) — codifies the exact invariant BUG #17's fix established so
+      a future re-pin can't silently regress into the same truncation.
+      atmega328p/grbl/cpu_map.h intentionally untouched (core file, golden
+      byte gate, out of the port-code review scope). (4) **RX/TX buffer size
+      vs uint8_t ring index** (BUG #12 class) added to the three TU-replacement
+      `serial.c` files (samd21, ch32v006, dspic33ak128mc102) whose head/tail
+      are `uint8_t` and wrap via plain `+1` — `RX_BUFFER_SIZE`/`TX_BUFFER_SIZE`
+      must be <= 255 or the ring math overruns the index type; codifies the
+      `(1-254)` limit `grbl/config.h`'s own commented-out override already
+      states in prose. All are one-line `_Static_assert`s at the point the
+      contract's inputs become known, no new machinery. GATES: all 7 ports
+      rebuilt both flavors where applicable clean (0 assert failures except
+      the deliberately-excluded samd21 PWM case, which was never attempted);
+      sizes byte-identical to the canonical table (f103 28700/80, h523
+      25132/388, f411 25796/80, ch32v006 41072/0, samd21 megarm 31952/296);
+      all warning ratchets stayed green (0 new warnings, verified per-port
+      via `ci/warn_ratchet.py` against every `ci/warn_baseline_*.txt`); AVR
+      golden `make validate` PASSED throughout (untouched by this batch —
+      no platform/atmega328p or grbl/ core file in this sweep).
 - [x] **`_template` platform LANDED — mechanism PROVEN**: 37 distinct PORT_TODO_*
       undefined symbols enumerate all work by name, zero foreign undefineds; all
       .c compile immediately (#warning sea = progress meter); GPIO accessors stay
@@ -405,6 +511,24 @@ markers in the tree instead of a silent no-op.
 
 ## Decision Log
 
+- 2026-07-26 **AVR prelude-canon exemption** (Phase 1 "roll prelude pattern"
+  closure): atmega328p does NOT get a `prelude.h` and never will, by decision,
+  not oversight. Reasoning: (1) it already has exactly one `-include`
+  (`grbl/platform/common/gpio.h`, root Makefile) — the multi-`-include`
+  disease the prelude canon was invented to cure never existed on this port;
+  (2) it has zero of the redefinition hazards the canon closes elsewhere
+  (`HAL_GPIO_IRQ_HANDLER`/`EEPROM_SIZE` dual-canon) — confirmed empirically,
+  not assumed, by a fresh build + baseline grep this session; (3) the golden
+  MD5 gate makes any speculative refactor of this path a pure liability: it
+  can only ever cost bytes (if it changes anything) or nothing (if it
+  doesn't), with no possible upside, since there is no bug here to fix. The
+  `#error` guard in hal.h (`#if !defined(__AVR__) && !defined(GRBL_PRELUDE)`)
+  encodes this exemption directly in the mechanism it partially bypasses,
+  rather than as a side-channel special case — AVR is excluded from the
+  check by the same condition that would otherwise demand a marker it has no
+  reason to define. Revisit only if AVR ever needs a second `-include` (it
+  hasn't in the project's whole history) or gains a redefinition class of its
+  own (none found).
 - 2025-11: `-include` injection is THE canon; obviousness restored via single prelude.h
   per platform + compile_commands.json, not by abandoning virtualization
 - 2025-11: no architectural redesign — three surgical corrections only (prelude canon,
@@ -585,6 +709,52 @@ markers in the tree instead of a silent no-op.
   always check `git status` after, use `--3way`, never `head`-truncate its output.
 
 ## Current State (update each session)
+
+- **[x] PHASE 1/2 CLOSURE BATCH (2026-07-26)** — closed the 4 remaining Phase 1
+  checkboxes + the Phase 2 `_Static_assert` sweep. Verdict per item: (1)
+  dual-canon resolve = STALE, already fixed in Phase 1 (22aa27c) — verified
+  by fresh build + baseline grep across all 7 ports, zero hits; (2)
+  loud-failure guard = ALREADY LANDED, proven live this session (dropped
+  stm32f103's `-include prelude.h`, reproduced the `#error`, restored,
+  rebuilt clean); (3) prelude rollout = ALREADY DONE on all non-AVR ports
+  (verified: exactly one `-include .../prelude.h` per Makefile, no
+  stragglers), atmega328p DECIDED EXEMPT (Decision Log); ARCHITECTURE.md's
+  stale port list corrected. (4) naming migration = HAL_GPIO_IRQ_HANDLER
+  confirmed canon (matches CONTRACTS.md #2 and every port); two dead "short
+  name" alias sets removed (`GPIO_ISR` in hal_gpio.h, `GPIO_INT_ENA`/
+  `GPIO_INT_DIS`/`IRQ_HANDLER` in atmega328p/platform.h) — zero call sites
+  for either, ever, confirmed by grep across core + all 7 ports. (5) static
+  assert sweep: 4 new contract classes codified (SPINDLE_PWM_MAX_VALUE<=255
+  duty-cap-twins on 6 ports, samd21 deliberately excluded with a documented
+  reason; NVMEM window<=cache on the one stm32 sibling missing it; STEP/DIR
+  logical bits<=7 on all 7 non-AVR ports; RX/TX buffer size vs uint8_t index
+  on the 3 TU-replacement serial.c files) — all one-liners at the point each
+  contract's inputs are known.
+  GATES (all re-run this session, not inspected): AVR golden `make -C
+  grbl/platform/atmega328p validate` PASSED (MD5
+  `79af184e67b27defd27a39309ac53563`, unchanged) after every edit batch;
+  all 7 ports rebuilt both flavors where applicable (atmega328p single-flavor;
+  stm32f103/h523/f411 D+R; samd21 megarm+generic D+R; ch32v006 D+R;
+  dspic33ak128mc102 D+R via the real `/opt/xc-dsc` toolchain) — 0 failures;
+  every `ci/warn_baseline_*.txt` ratchet re-run against the fresh logs — 0
+  new warnings anywhere; sizes byte-identical to the CANONICAL RELEASE SIZE
+  TABLE (f103 28700/80, h523 25132/388, f411 25796/80, ch32v006 41072/0,
+  samd21 megarm 31952/296) — the `_Static_assert`/doc-only edits added zero
+  bytes, as expected. Touched files: `grbl/platform/hal_gpio.h`,
+  `grbl/platform/atmega328p/platform.h` (macro removal only, golden-safe —
+  re-validated), `grbl/platform/ARCHITECTURE.md`, `grbl/platform/stm32f103/
+  {platform.c,platform.h}`, `grbl/platform/stm32h523/platform.h`,
+  `grbl/platform/stm32f411/platform.h`, `grbl/platform/ch32v006/boards/
+  generic/config.h`, `grbl/platform/dspic33ak128mc102/boards/generic/
+  config.h`, `grbl/platform/_template/boards/generic/config.h`,
+  `grbl/platform/samd21/{megarm,generic}/config.h`, `grbl/platform/{samd21,
+  ch32v006,dspic33ak128mc102}/serial.c`, this file, and CONTRACTS.md (no
+  core `grbl/*.c`/`grbl/*.h` file touched). Not closed (out of scope for
+  this batch, left for their own owners): PLATFORM_ROADMAP.md truth-update
+  (Phase 1's 5th checkbox — a docs-only item unrelated to the 4 requested);
+  samd21's actual SPINDLE_PWM_MAX_VALUE=65535 bug (CONTRACTS.md #6.2 —
+  needs its own Renode-verified fix, not a config edit riding along with an
+  unrelated contracts sweep).
 
 - **[x] GUARD HARDENING (2026-07-26) — adversarial review of §17/§18's guards
   found both weaker than they looked, with WORKING exploits. All four
