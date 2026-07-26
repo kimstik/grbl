@@ -133,7 +133,14 @@ void (* const vector_table[])(void) = {
 // SYSTEM INITIALIZATION (Clock configuration)
 // ============================================================================
 
-void SystemInit(void) {
+// GRBL_BOOT_INIT (== noinline) - with a single call site (Reset_Handler
+// below) LTO used to inline this whole function away, leaving no symbol in
+// the RELEASE ELF: byte-for-byte the same `nm` output as a port whose
+// clock init is never called at all (BUG #23). Keeping it out-of-line is
+// what lets common/init_check.sh prove post-link that the bring-up is
+// really in the image. See common/boot_init.h for why this is noinline
+// and NOT `used`.
+GRBL_BOOT_INIT void SystemInit(void) {
   // Configure NVM wait states for 48 MHz operation (1 wait state required)
   NVMCTRL->CTRLB = (NVMCTRL->CTRLB & ~(0xF << 1)) | (1 << 1);
 

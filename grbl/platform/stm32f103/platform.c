@@ -40,7 +40,7 @@ uint64_t hal_micros(void) {
 // CLOCK CONFIGURATION
 // ============================================================================
 
-void hal_clock_config(void) {
+GRBL_BOOT_INIT void hal_clock_config(void) {
   // Enable HSE (8 MHz external crystal on Blue Pill)
   RCC->CR |= RCC_CR_HSEON;
   while (!(RCC->CR & RCC_CR_HSERDY));
@@ -164,7 +164,7 @@ void hal_gpio_interrupt_disable(GPIO_TypeDef* port, uint32_t mask) {
   }
 }
 
-void hal_gpio_init(void) {
+GRBL_BOOT_INIT void hal_gpio_init(void) {
   // Enable GPIO clocks
   RCC->APB2ENR |= RCC_APB2ENR_IOPAEN | RCC_APB2ENR_IOPBEN |
                   RCC_APB2ENR_IOPCEN | RCC_APB2ENR_AFIOEN;
@@ -479,7 +479,7 @@ void hal_watchdog_refresh(void) {
 // SYSTEM INITIALIZATION
 // ============================================================================
 
-void hal_system_init(void) {
+GRBL_BOOT_INIT void hal_system_init(void) {
   // Configure system clock
   hal_clock_config();
 

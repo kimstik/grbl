@@ -61,7 +61,7 @@ _Static_assert(STM32F411_FLASH_PAGE_SIZE * STM32F411_FLASH_NUM_PAGES <= NVMEM_WI
 // widely-used stock configuration for the 25MHz-HSE Black Pill (also yields
 // 48MHz on PLLQ=4 for USB, not wired up by this port but left correct in
 // case a future USB CDC port wants it).
-void hal_clock_config(void) {
+GRBL_BOOT_INIT void hal_clock_config(void) {
   // 1. Enable HSE and wait for ready.
   RCC->CR |= RCC_CR_HSEON;
   while (!(RCC->CR & RCC_CR_HSERDY));
@@ -197,7 +197,7 @@ void hal_gpio_interrupt_disable(GPIO_TypeDef* port, uint32_t mask) {
   }
 }
 
-void hal_gpio_init(void) {
+GRBL_BOOT_INIT void hal_gpio_init(void) {
   RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN | RCC_AHB1ENR_GPIOBEN | RCC_AHB1ENR_GPIOCEN;
   __NOP(); __NOP(); __NOP();
 
@@ -383,7 +383,7 @@ void hal_watchdog_refresh(void) {
 // SYSTEM INITIALIZATION
 // ============================================================================
 
-void hal_system_init(void) {
+GRBL_BOOT_INIT void hal_system_init(void) {
   hal_clock_config();
 
   stm32_timing_init();

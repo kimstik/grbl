@@ -83,7 +83,7 @@ void hal_gpio_interrupt_disable(uint32_t mask) {
 // hardware-validation item, same posture as every RISC-V port in this
 // tree so far).
 // ============================================================================
-void SystemClock_Config(void) {
+GRBL_BOOT_INIT void SystemClock_Config(void) {
   // 1. Bring up the external 32MHz crystal (X32M) if not already running
   //    - the vendor's own "warm nudge" sequence (brief over-drive pulse
   //    then restore tuning), SAM-gated throughout.

@@ -20,6 +20,11 @@ extern uint32_t _sbss, _ebss;
 // Main function
 extern int main(void);
 
+// hal_system_init() (platform.c, declared in platform.h): clock -> flash
+// wait states -> DWT -> watchdog -> GPIO -> NVMEM. Reset_Handler calls it
+// before main(); core grbl/main.c is the golden gate and never will.
+// See BUG #23 in Reset_Handler below.
+
 // Interrupt vector table (defined at the bottom of this file). Forward-declared
 // here so Reset_Handler can take its address. KEEP() in script.ld runs at
 // link time, but LTO's whole-program IPA deletes an unreferenced vector_table[]
@@ -85,6 +90,38 @@ void Reset_Handler(void) {
   while (dst < &_ebss) {
     *dst++ = 0;
   }
+
+  // BUG #23: bring the chip up BEFORE main().
+  //
+  // hal_system_init() -> hal_clock_config() (HSE -> PLL 72MHz, flash
+  // latency set before the switch) + hal_gpio_init() (port clocks, pin
+  // directions, pull-ups) was written, reviewed and documented - and
+  // called from NOWHERE. main.c is the golden gate and does not call
+  // platform init, so under -flto the entire chain was unreachable and
+  // GCC's IPA deleted it: the RELEASE image defined none of the three
+  // symbols and the chip ran on the 8MHz HSI reset default with
+  // unconfigured GPIO. Same class as BUG #21 (LTO deleted the vector
+  // table because nothing referenced it), one level up.
+  //
+  // Placed HERE, in the platform's own Reset_Handler, matching samd21's
+  // SystemInit()/SysTick_Config() precedent - the established way this
+  // tree runs pre-main platform code without touching core.
+  //
+  // Ordering is load-bearing and must not be reshuffled:
+  //   .data/.bss first  - hal_gpio_init and the NVMEM cache write
+  //                       initialized statics; running before the copy
+  //                       loop would have them overwritten.
+  //   clock (+ its own flash wait states) before anything timing-
+  //                       dependent - hal_clock_config raises FLASH->ACR
+  //                       latency BEFORE selecting the PLL, then starts
+  //                       SysTick from the new frequency.
+  //   GPIO after clock  - the RCC APB2 port-clock enables it writes are
+  //                       meaningless until the bus clocks are settled.
+  //   main() last       - core's serial_init()/settings_init() need the
+  //                       final clock and the NVMEM cache already up.
+  // VTOR is already set above, so an IRQ raised during bring-up vectors
+  // into this image.
+  hal_system_init();
 
   // Call main
   main();

@@ -75,6 +75,9 @@ typedef uint32_t hal_gpio_port_t;
 #include "samd21.h"
 #include "core_cm0plus.h"
 
+// GRBL_BOOT_INIT - the anchor attribute on the pre-main init chain (BUG #23)
+#include "common/boot_init.h"
+
 // ============================================================================
 // BOARD CONFIGURATION
 // ============================================================================
@@ -187,8 +190,25 @@ typedef uint32_t hal_gpio_port_t;
 // PLATFORM-SPECIFIC FUNCTIONS
 // ============================================================================
 
-// Clock configuration (48 MHz from DFLL48M)
-void hal_clock_config(void);
+// BOOT INIT (BUG #23). This port's 48MHz DFLL bring-up lives in
+// startup.c::SystemInit() and is called from Reset_Handler before main() -
+// core grbl/main.c is the golden gate and never calls platform init. That
+// call is why samd21 was never hit by BUG #23 the way f103/f411/h523/
+// hc32f460 were, and it is the precedent those four now follow.
+//
+// GRBL_BOOT_INIT (== noinline, common/boot_init.h) keeps SystemInit a real
+// out-of-line symbol: with a single call site LTO used to inline it into
+// Reset_Handler and drop the symbol entirely, so `nm` on the RELEASE ELF
+// showed nothing - indistinguishable from the BUG #23 signature and
+// unverifiable by common/init_check.sh. Must stay in sync with
+// INIT_SYMBOLS in this port's Makefile.
+//
+// NOTE: platform.c used to ALSO carry a hal_clock_config() - a second,
+// slightly different copy of this same DFLL sequence that nothing called.
+// It was pure BUG #23 bait (defined, unreachable, LTO-stripped, free to
+// drift out of sync with the copy that actually runs) and was deleted;
+// SystemInit() below is the one and only clock bring-up on this port.
+GRBL_BOOT_INIT void SystemInit(void);
 
 // GPIO interrupt initialization (EIC setup for limits/control/probe)
 void hal_gpio_interrupt_init(void);

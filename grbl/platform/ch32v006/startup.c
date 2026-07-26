@@ -115,9 +115,16 @@ static void (* const PFIC_Vector[PFIC_VECTOR_COUNT])(void) = {
 // ============================================================================
 // SYSTEM CLOCK BRING-UP (PORTING-CHECKLIST Step 1)
 // ============================================================================
-extern void SystemClock_Config(void);
+GRBL_BOOT_INIT void SystemClock_Config(void);
 
-void SystemInit(void) {
+// GRBL_BOOT_INIT (== noinline) on both SystemInit and SystemClock_Config:
+// each has exactly one call site, so LTO used to inline them away and
+// leave no symbol in the RELEASE ELF - byte-for-byte the same `nm` output
+// as a port whose clock init is never called at all (BUG #23, which hit
+// stm32f103/f411/h523 and hc32f460 for real). Out-of-line is what lets
+// common/init_check.sh prove post-link that the bring-up is in the image.
+// Deliberately noinline and NOT `used` - see common/boot_init.h.
+GRBL_BOOT_INIT void SystemInit(void) {
   SystemClock_Config();
 }
 

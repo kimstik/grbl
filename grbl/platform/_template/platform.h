@@ -23,6 +23,12 @@
 #include <stdint.h>
 #include "timer.h"
 
+// GRBL_BOOT_INIT - the anchor attribute on the pre-main init chain. Tag
+// every function named in your Makefile's INIT_SYMBOLS with it, at both
+// declaration and definition (BUG #23, CONTRACTS.md
+// #boot-init-unreachable).
+#include "common/boot_init.h"
+
 // ============================================================================
 // PLATFORM IDENTIFICATION - PORT-TODO: replace with your chip's real strings
 // ============================================================================
