@@ -136,9 +136,9 @@ typedef GPIO_TypeDef* hal_gpio_port_t;
 #define Z_DIRECTION_BIT     5
 #define DIRECTION_MASK      ((1<<X_DIRECTION_PIN)|(1<<Y_DIRECTION_PIN)|(1<<Z_DIRECTION_PIN))
 
-// PLAN.md Phase 2 static-assert sweep (2026-07-26): core packs
-// step_outbits/dir_outbits/axislock into a uint8_t (BUG #17, CONTRACTS.md
-// #1) - every *_STEP_BIT/*_DIRECTION_BIT must fit that byte. This port's
+// core packs step_outbits/dir_outbits/axislock into a uint8_t (BUG #17,
+// CONTRACTS.md #1) - every *_STEP_BIT/*_DIRECTION_BIT must fit that byte.
+// This port's
 // bits already do (physical == logical here, no L2P/P2L translation
 // needed); the assert makes sure a future pin-map edit cannot silently
 // regress into the samd21-class truncation.
@@ -236,7 +236,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define SPINDLE_PWM_OFF_VALUE     0
 #define SPINDLE_PWM_RANGE         (SPINDLE_PWM_MAX_VALUE - SPINDLE_PWM_MIN_VALUE)
 
-// PLAN.md Phase 2 static-assert sweep (2026-07-26): codify the CONTRACTS.md
+// Codify the CONTRACTS.md
 // #6.2 duty-domain contract in code, not just comments - this port was
 // itself half of the "duty-cap-twins" bug (h523+f103 both shipped
 // SPINDLE_PWM_MAX_VALUE=1000 against a uint8_t core duty; REVIEW #3 caught

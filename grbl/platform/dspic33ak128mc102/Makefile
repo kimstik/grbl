@@ -1,46 +1,14 @@
 #  Makefile for GRBL on dsPIC33AK128MC102 (dsPIC33A 32-bit DSC core)
 #  Part of Grbl
 #
-#  Phase 6 rolling port #2 - THE THIRD ISA FAMILY (neither ARM nor RISC-V).
-#  Modeled on grbl/platform/ch32v006/Makefile (the newest non-ARM port);
-#  see _template/README.md for the general copy/rename/fill-in order.
-#
-#  TOOLCHAIN (PLAN.md Decision Log recipe, re-verified end-to-end this
-#  session - xc-dsc-gcc 8.3.1 / XC-DSC v3.30, EULA approved by owner
-#  2026-07-24):
-#
-#    1. Download (83 MB, SHA-256
-#       0df20c1a552bf0ce08aa139b9cb1efd71bf65b9d9f37e3982763f4f8738bfa11):
-#       https://ww1.microchip.com/downloads/aemDocuments/documents/DEV/ProductDocuments/SoftwareTools/xc-dsc-v3.30-full-install-linux64-installer.run
-#    2. Unattended install (the trailing --netservername "" is REQUIRED
-#       though undocumented - installer hangs/fails without it):
-#       ./xc-dsc-v3.30-full-install-linux64-installer.run --mode unattended \
-#         --unattendedmodeui none --prefix /opt/xc-dsc --LicenseType FreeMode \
-#         --ModifyAll 0 --netservername ""
-#       FreeMode is the INSTALLER'S OWN DEFAULT, not a restrictive choice made
-#       here - the alternatives (WorkstationMode/NetworkMode) need an
-#       account-bound activated license file, not a flag, so no install-recipe
-#       change avoids what FreeMode does below. Settled by codegen comparison
-#       (PLAN.md Decision Log 2026-07-26): FreeMode silently substitutes -O2
-#       codegen for -O3/-Os ("Options have been disabled due to restricted
-#       license" printed, no functional effect on -O0/-O1/-O2 which already
-#       compile at their own level) - RELEASE below is -O2-equivalent, not
-#       true -Os, but its byte count is exact and reproducible (proven via a
-#       byte-identical whole-firmware rebuild with an explicit -O2).
-#    3. Device Family Pack (SEPARATE download, Apache-2.0 licensed - see
-#       gpio.h header for why this port uses DFP headers instead of the
-#       samd21 clean-room route):
-#       https://packs.download.microchip.com/Microchip.dsPIC33AK-MC_DFP.1.5.263.atpack
-#       unzip into $(DFP_PATH) (an .atpack is a plain zip).
+#  THE THIRD ISA FAMILY (neither ARM nor RISC-V). Toolchain install recipe
+#  (xc-dsc-gcc 8.3.1 / XC-DSC v3.30), DFP source, the FreeMode -Os->-O2
+#  codegen substitution, and CI status: see platform.md.
 #
 #  COMPILE PATTERN (Decision Log, verified): -mcpu=33AK128MC102
 #  -mdfp=$(DFP_PATH)/xc16 AND an explicit -Wl,--script=<dfp .gld> - the
 #  toolchain's built-in default linker script is 30F-era and does not fit
 #  this device.
-#
-#  NOT IN CI YET: unattended toolchain fetch in CI is a separate ledger
-#  item (PLAN.md Phase 6) - this Makefile is CI-shaped (all knowledge here,
-#  thin-invoker compatible) but no .github/workflows/ci.yml row exists.
 
 # A failed recipe must not leave a half-built target on disk for the next
 # `make` to mistake for up to date (skipping objcopy/the FP+boot guards).
@@ -112,7 +80,7 @@ GRBL_SOURCES = main.c motion_control.c gcode.c spindle_control.c coolant_control
 
 # Platform-specific sources. NO startup.c: unlike every ARM/RISC-V port,
 # the XC-DSC toolchain's own crt0 is used deliberately (verified by
-# disassembly this session: __reset sets W15/SPLIM/IVTBASE, runs __data_init
+# disassembly: __reset sets W15/SPLIM/IVTBASE, runs __data_init
 # over .dinit, then calls __user_init-marked functions, then main -
 # platform.c's hal_clock_config carries __attribute__((user_init))).
 # See platform.c's "startup model" banner for the full writeup.
@@ -155,31 +123,10 @@ CFLAGS += -Wall -Wextra
 # units' comp_dir fixed).
 CFLAGS += -ffile-prefix-map=$(CURDIR)=/grbl-src
 
-# ----------------------------------------------------------------------------
-# FP PRECISION KNOB (CONTRACTS.md #17) - THIS PORT'S DECLARED DEFAULT IS
-# DOUBLE, the opposite default of every prior port (samd21/ch32v006 both
-# default SINGLE, template-faithful AVR double==float semantics).
-#
-# WHY: dsPIC33AK128MC102 has a NATIVE hardware DOUBLE-PRECISION FPU
-# (platform.h PLATFORM_HAS_FPU, DFP-confirmed dual-precision FPU) - the
-# first port in this tree where 64-bit float arithmetic is a few cycles
-# in silicon rather than either (a) free because it's identical to
-# single (AVR) or (b) tens of software soft-float instructions per op
-# (every M0+/rv32ec port so far). §17.3's own framing: "FP=DOUBLE ... is
-# intended for ports with a native DP FPU (dsPIC33AK class) where DP costs
-# cycles, not kilobytes. The M0+/rv32ec class is exactly who should never
-# use it." This chip is exactly who SHOULD: DOUBLE is MORE PRECISE than
-# the AVR-template SINGLE semantics (a conscious upgrade, not a template
-# violation - §17.3 requires it be declared as a port property, which
-# this comment + CONTRACTS.md #16/#17 do), and costs nothing extra in
-# code size or cycles versus SINGLE on this hardware (the FPU does 32-bit
-# and 64-bit ops at comparable cost - unlike every soft-float port where
-# DOUBLE measurably grows .text by ~25%, CONTRACTS.md #17.2).
-#
-# FP=SINGLE remains available (the knob still works both ways - a future
-# board/use-case that wants AVR-bit-exact arc/junction math could ask for
-# it) but is NOT this port's default and has not been exercised this
-# session (no Renode/emulator exists for dsPIC33A - CONTRACTS.md #16).
+# FP PRECISION KNOB (CONTRACTS.md #17) - this port's declared default is
+# DOUBLE, not SINGLE: native DP FPU (platform.h PLATFORM_HAS_FPU) makes
+# 64-bit float arithmetic cost the same as single here, unlike every
+# soft-float port where DOUBLE costs ~25% more .text (see #17 point 7).
 FP ?= DOUBLE
 # BOOT-INIT REACHABILITY KNOB (BUG #23, CONTRACTS.md #boot-init-unreachable).
 # Post-link proof that this port's pre-main bring-up is still REACHABLE.
@@ -234,7 +181,7 @@ else
   # -O0, NOT -Og: xc-dsc-gcc 8.3.1 ICEs ("insn does not satisfy its
   # constraints ... movfpsf_32 ... during RTL pass: postreload",
   # gcode.c:1133) at -Og AND -O1 - an FPU float-store-to-static pattern.
-  # Probed empirically this session: -O0/-O2/-O3/-Os all clean, only
+  # Probed empirically: -O0/-O2/-O3/-Os all clean, only
   # -O1/-Og trip it. 128 KB flash absorbs -O0 (no ch32-class squeeze).
   # Logged in CONTRACTS.md #16.
   CFLAGS += -O0 -g3
@@ -379,7 +326,7 @@ clean-all:
 
 # Help
 help:
-	@echo "GRBL $(PLATFORM_NAME) Build System (Phase 6 rolling #2 - Steps 3-6 complete)"
+	@echo "GRBL $(PLATFORM_NAME) Build System"
 	@echo ""
 	@echo "Usage:"
 	@echo "  make               - Build full ELF+hex (DEBUG, default)"

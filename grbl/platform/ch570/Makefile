@@ -1,8 +1,8 @@
 #  Makefile for GRBL on CH570 (RISC-V RV32IMC, QingKe V3C)
 #  Part of Grbl
 #
-#  PLAN.md Phase 6 rolling #4 Part B. Modeled on ch32v006/Makefile (same
-#  toolchain family) with the CH570-specific deltas: full I+M (real hw
+#  Modeled on ch32v006/Makefile (same toolchain family) with the
+#  CH570-specific deltas: full I+M (real hw
 #  multiply/divide, no rv32e register-file reduction), -mabi=ilp32 (not
 #  ilp32e), and the vendor flash-algorithm object linked in (nvmem.c).
 #
@@ -132,7 +132,7 @@ CFLAGS += $(CFLAGS_EXTRA) -I$(PLATFORM_DIR) -I$(GRBL_DIR)/platform -I$(GRBL_DIR)
 # LTO: RELEASE only (house style, matches samd21/stm32*/hc32f460/sg2002/
 # ch32v006). DEBUG stays plain -Og for debuggability.
 #
-# LTO-PROOFING (CONTRACTS.md gap log, this batch): same fix as ch32v006 -
+# LTO-PROOFING (CONTRACTS.md gap log): same fix as ch32v006 -
 # Reset_Handler is called only from _start's raw inline asm (invisible to
 # LTO's IPA) and gets deleted by naive -flto, failing the link with
 # "undefined reference to Reset_Handler" (BUG #21's mechanism, this ISA).
@@ -151,7 +151,7 @@ endif
 
 # --gc-sections is safe from the start on this port (unlike ch32v006's
 # M1-M3 era): every vector is wired to a real handler from the first
-# working build in this batch, so there is no PORT_TODO_*-reachability
+# working build, so there is no PORT_TODO_*-reachability
 # window where a stray --gc-sections could hide an incomplete linker-as-
 # checklist result (CONTRACTS.md §14 item 3's lifecycle rule - the flip
 # only matters if there WAS a bare-stub phase; this port never had one).

@@ -74,9 +74,9 @@
 // data registers and FlashROM control registers" - §4.3/4.4) and directs
 // callers to the vendor's own subprograms instead - the actual program/
 // erase algorithm lives in vendor/ISP572.o (FLASH_EEPROM_CMD, a normal
-// linked function, NOT a boot-ROM call - see that file's header,
-// corrected this batch after an adversarial review caught the earlier
-// "boot-ROM" mischaracterization). This port only ever writes
+// linked function, NOT a boot-ROM call - see that file's header for the
+// correction of an earlier "boot-ROM" mischaracterization). This port
+// only ever writes
 // R8_FLASH_CFG per the vendor's own documented SetSysClock() sequence
 // when raising the clock, and R8_GLOB_ROM_CFG (above) to gate write/erase
 // permission before calling FLASH_EEPROM_CMD - never the registers in

@@ -105,8 +105,8 @@ static inline void NVIC_SetPriority(IRQn_Type IRQn, uint32_t priority) {
 }
 
 /* INTC - HC32-specific interrupt EVENT ROUTER. UNVERIFIED base address
-   (INTC_BASE below is a placeholder - no register-level manual reachable
-   this session; the ROUTING MECHANISM itself - one SEL register per shared
+   (INTC_BASE below is a placeholder - no register-level manual reachable;
+   the ROUTING MECHANISM itself - one SEL register per shared
    vector, written with a peripheral event-source id - is confirmed real via
    Klipper's interrupts.c, quoted in the file header). Each SEL register is
    modeled as 32-bit with the source id in the low byte; the real field
@@ -121,7 +121,7 @@ typedef struct {
 #define INTC_SEL  ((INTC_SEL_TypeDef*)INTC_SEL_BASE)   /* array of HC32_NUM_SHARED_IRQ, indexed by IRQn_Type (Klipper: "4u * irqType" byte stride) */
 
 /* Peripheral event-source ids consumed by INTC_SEL[n].SEL. Real HDSC
-   numbering is NOT available this session (no register manual reached);
+   numbering is NOT available (no register manual reached);
    these are internally-consistent placeholder values assigned by this port
    in the order the peripherals are wired up, NOT the vendor's real
    numbering - functionally irrelevant to the routing MECHANISM (any code
@@ -166,11 +166,11 @@ typedef struct {
 #define PWC_BASE  0x40054000UL   /* UNVERIFIED placeholder - same peripheral block region as CMU per Klipper's addresses below */
 #define PWC   ((PWC_TypeDef*)PWC_BASE)
 
-#define PWC_FPRC_UNLOCK_CODE   0xA5U   /* UNVERIFIED exact value for this device - HDSC F4-family convention cited in community sources, not confirmed against the HC32F460 manual this session */
+#define PWC_FPRC_UNLOCK_CODE   0xA5U   /* UNVERIFIED exact value for this device - HDSC F4-family convention cited in community sources, not confirmed against the HC32F460 manual */
 #define PWC_FPRC_LOCK_CODE     0x00U
 
 /* CMU (Clock control) - the three sub-register addresses below ARE
-   confirmed this session: quoted from a real Voxelab Aquila HC32F460
+   CONFIRMED: quoted from a real Voxelab Aquila HC32F460
    bootloader (see file header). They are absolute addresses, not struct
    fields, deliberately: CMU's real register map is sparse (many independent
    clock-domain sub-blocks at non-uniform spacing per the "6 independent
@@ -194,7 +194,7 @@ typedef struct {
 #define CMU_PLLCR_PLLRDY      (1U << 4)   /* UNVERIFIED bit position */
 
 /* PLLCFGR field positions - UNVERIFIED placeholder layout. The one real
-   decoded example this session (Klipper bootloader, targeting a 168MHz
+   decoded example (Klipper bootloader, targeting a 168MHz
    configuration from an 8MHz XTAL): raw value 0x11102900 -> "MPLLN = 0x029
    (41 decimal), divide-by-1, multiply x42 / div2" per the file header -
    that decode does not cleanly resolve to the field positions below

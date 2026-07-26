@@ -46,9 +46,8 @@
 #define DIRECTION_PORT      C
 #define DIRECTION_MASK      ((1UL<<X_DIRECTION_BIT)|(1UL<<Y_DIRECTION_BIT)|(1UL<<Z_DIRECTION_BIT))
 
-// PLAN.md Phase 2 static-assert sweep (2026-07-26): core packs
-// step_outbits/dir_outbits/axislock into a uint8_t (BUG #17, CONTRACTS.md
-// #1) - every *_STEP_BIT/*_DIRECTION_BIT must fit that byte.
+// core packs step_outbits/dir_outbits/axislock into a uint8_t (BUG #17,
+// CONTRACTS.md #1) - every *_STEP_BIT/*_DIRECTION_BIT must fit that byte.
 _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
                X_DIRECTION_BIT <= 7 && Y_DIRECTION_BIT <= 7 && Z_DIRECTION_BIT <= 7,
                "STEP/DIRECTION logical bits must fit core's uint8_t port image (BUG #17 class, CONTRACTS.md #1)");
@@ -153,7 +152,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define SPINDLE_PWM_OFF_VALUE   0
 #define SPINDLE_PWM_RANGE       (SPINDLE_PWM_MAX_VALUE - SPINDLE_PWM_MIN_VALUE)
 
-// PLAN.md Phase 2 static-assert sweep (2026-07-26): codify the CONTRACTS.md
+// Codify the CONTRACTS.md
 // #6.2 duty-domain contract in code - the STM32 "duty-cap-twins" bug
 // (SPINDLE_PWM_MAX_VALUE=1000 against a uint8_t core duty) showed a comment
 // alone does not stop the regression.

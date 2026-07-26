@@ -18,7 +18,7 @@
 
 // STEP PINS (D2, D3, D4 on Arduino Mega pinout)
 
-// LOGICAL PORT-IMAGE CONTRACT (BUG #17, PLAN.md Phase 3 / CONTRACTS.md #1):
+// LOGICAL PORT-IMAGE CONTRACT (BUG #17, CONTRACTS.md #1):
 // core packs step_outbits/dir_outbits/axislock into a uint8_t and derives
 // per-axis bits as `1<<X_STEP_BIT` (stepper.c get_step_pin_mask(), limits.c:342
 // `STEP_MASK & axislock`). X/Y/Z_STEP_BIT MUST be logical bits 0..2 on every
@@ -90,7 +90,7 @@
 #define DIRECTION_MASK_A    ((1UL<<X_DIRECTION_BIT)|(1UL<<Y_DIRECTION_BIT)|(1UL<<Z_DIRECTION_BIT))
 #define DIRECTION_MASK_B    0
 
-// PLAN.md Phase 2 static-assert sweep (2026-07-26): the BUG #17 fix above
+// The BUG #17 fix above
 // made X/Y/Z_STEP_BIT/X/Y/Z_DIRECTION_BIT logical-by-construction; this
 // codifies the invariant so a future edit to this board's bit numbers
 // cannot silently regress into the exact truncation BUG #17 was.
@@ -172,8 +172,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define SPINDLE_PWM_OFF_VALUE  0
 #define SPINDLE_PWM_RANGE      (SPINDLE_PWM_MAX_VALUE - SPINDLE_PWM_MIN_VALUE)
 
-// PLAN.md Phase 2 static-assert sweep (2026-07-26) closure (2026-07-26):
-// this board was the one deliberately-excluded, tracked violation of the
+// This board was the one deliberately-excluded, tracked violation of the
 // duty-cap-twins class (CONTRACTS.md static-assert-sweep slug) - it shipped
 // SPINDLE_PWM_MAX_VALUE=65535 while TCC0's PER=0xFF and core's duty is
 // uint8_t. BUG #22 (reclassified 2026-07-26, was wrongly called cosmetic):

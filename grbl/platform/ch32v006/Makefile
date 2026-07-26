@@ -1,16 +1,15 @@
 #  Makefile for GRBL on CH32V006 (RISC-V RV32EC, QingKe V2C)
 #  Part of Grbl
 #
-#  Phase 4 "first battle test of _template" - modeled directly on
-#  grbl/platform/_template/Makefile, adapted from ARM to RISC-V. See
-#  README.md's copy/rename/fill-in order for the general pattern; the
-#  RISC-V-specific deltas are called out below.
+#  Modeled directly on grbl/platform/_template/Makefile, adapted from ARM
+#  to RISC-V. See README.md's copy/rename/fill-in order for the general
+#  pattern; the RISC-V-specific deltas are called out below.
 #
-#  TOOLCHAIN (PLAN.md Decision Log, verified live this session):
+#  TOOLCHAIN (PLAN.md Decision Log):
 #    sudo apt-get install -y gcc-riscv64-unknown-elf picolibc-riscv64-unknown-elf
 #  gives riscv64-unknown-elf-gcc 13.2.0 with rv32e multilibs + picolibc.
 #
-#  ARCHFLAGS GAP found empirically this session: the Decision Log's
+#  ARCHFLAGS GAP found empirically: the Decision Log's
 #  recorded recipe (`-march=rv32ec -mabi=ilp32e`) is INSUFFICIENT on this
 #  toolchain - any `csr*` instruction (interrupt enable/disable, critical
 #  sections - i.e. most of platform.h) fails to assemble with
@@ -37,7 +36,7 @@ DEVICE         = CH32V006
 ARCH           = rv32ec_zicsr
 ABI            = ilp32e
 # Verified system clock in Hz - feeds F_CPU (PORTING-CHECKLIST Step 1).
-# UNVERIFIED end-to-end on real hardware this session - see platform.c's
+# UNVERIFIED end-to-end on real hardware - see platform.c's
 # SystemClock_Config() comment (HSI x2 PLL assumption).
 CLOCK          = 48000000
 
@@ -117,20 +116,9 @@ CFLAGS += -ffunction-sections -fdata-sections
 # artifacts/ch32v006 hashes), DEBUG becomes checkout-path-independent.
 CFLAGS += -ffile-prefix-map=$(CURDIR)=/grbl-src
 
-# FP PRECISION KNOB (CONTRACTS.md #17: "FP precision is a declared port
-# property"). Landed pattern from samd21/Makefile - see that file for the
-# full rationale (avr-gcc double==float template semantics; unsuffixed
-# double literals/libm calls in core were always single precision on the
-# origin AVR). This is the chip the original probe measured the leak on:
-# ~13.5KB of DP soft-float/libm text with the knob absent (rv32ec has no
-# FPU at all, so double is fully soft-float here too).
-#   FP=SINGLE (default): -fsingle-precision-constant keeps unsuffixed FP
-#     literals float; GRBL_FP_SINGLE arms the board prelude's SP libm
-#     call-site mapping; post-link tools/assert_no_double.sh FAILS the
-#     build listing offenders if any DP machinery still linked in.
-#   FP=DOUBLE: conscious opt-in deviation, must be declared in port docs.
-# Applied to BOTH build flavors - it is a semantics pin, not an
-# optimization.
+# FP PRECISION KNOB (CONTRACTS.md #17). This is the chip the original probe
+# measured the leak on: ~13.5KB of DP soft-float/libm .text with the knob
+# absent (rv32ec has no FPU, so double is fully soft-float here too).
 FP ?= SINGLE
 ifeq ($(FP),SINGLE)
   CFLAGS += -fsingle-precision-constant -DGRBL_FP_SINGLE
@@ -174,8 +162,8 @@ CFLAGS += $(CFLAGS_EXTRA) -I$(PLATFORM_DIR) -I$(GRBL_DIR)/platform -I$(GRBL_DIR)
 # makes single-stepping/variable-inspection unreliable, and DEBUG has no
 # size pressure -Og doesn't already relieve).
 #
-# LTO-PROOFING (CONTRACTS.md gap log, this batch - BUG #21's mechanism on
-# this ISA): naive -flto silently deletes Reset_Handler, whose only caller
+# LTO-PROOFING (CONTRACTS.md gap log - BUG #21's mechanism on this ISA):
+# naive -flto silently deletes Reset_Handler, whose only caller
 # is _start's raw inline asm (invisible to LTO's IPA), and the link fails
 # with "undefined reference to Reset_Handler". Fixed at the source
 # (startup.c: `__attribute__((used))` on Reset_Handler) rather than here -
@@ -195,44 +183,11 @@ else
   CFLAGS += -DDEBUG
 endif
 
-# Linker flags.
-#
-# --gc-sections LIFECYCLE (CONTRACTS.md #14.3): during porting, this
-# Makefile carried an explicit -Wl,--no-gc-sections COUNTERING
-# `-specs=picolibc.specs`'s own unconditional `--gc-sections` append
-# (see `riscv64-unknown-elf-gcc ... -dumpspecs`'s `*link:` rule) - not
-# merely "omitted" the way _template's (non-picolibc) Makefile gets away
-# with. Reason at the time: with gc-sections live, handlers.c's
-# stepper_timer_irq_dispatch / pulse_reset_timer_irq_dispatch /
-# gpio_irq_dispatch (and _delay_us) were unreached from main()'s call
-# graph (nothing wired them into a vector yet - pre Step 3), so the
-# linker's reachability pass dropped their sections BEFORE checking
-# whether their PORT_TODO_* calls resolved - `__keep_alive[]`
-# (`__attribute__((used))`, _template's stated insurance against exactly
-# this) was NOT sufficient by itself on this toolchain/version to keep
-# them reachable. Confirmed via `nm -u` on handlers.o (6 undefined
-# PORT_TODO_* symbols present in the object) vs. `make link`'s reported
-# list (those 6 silently absent) before --no-gc-sections was added.
-#
-# Port is now COMPLETE (zero PORT_TODO_* at link, every handler wired
-# into PFIC_Vector) - the reachability hazard that motivated
-# --no-gc-sections no longer applies, and --gc-sections is now a real
-# size win (dead/unreached code no longer gets a free pass). Re-enabled
-# below. Vector table survives this because it's protected independently
-# of reachability: PFIC_Vector is `__attribute__((used, section(".vectors")))`
-# and script.ld KEEP()s `.vectors`/`.init` explicitly (see script.ld
-# header comment) - verified post-flip via `nm`/`readelf` (IVT symbols
-# and .init/.vectors sections identical before/after). The NVMEM window
-# is untouched by either setting - it's addressed directly by physical
-# address (nvmem.c), not placed via a linker section.
-#
-# General rule for any picolibc-based port (folded into CONTRACTS.md
-# #14.3): --no-gc-sections while PORT_TODO_* is non-empty (so the
-# linker-as-checklist mechanism can't be defeated by silent section
-# discard), switch to --gc-sections once the port reaches zero
-# PORT_TODO_* (so the release binary isn't paying rent on dead code
-# forever). Do the flip in ONE place, not per-BUILD-flavor: DEBUG has no
-# reason to retain unreached code once the same completeness holds.
+# Linker flags. --gc-sections LIFECYCLE (CONTRACTS.md #14.3): needed an
+# explicit -Wl,--no-gc-sections during porting (picolibc's specs silently
+# re-enable it, defeating the PORT_TODO_* linker checklist); now RE-ENABLED
+# below - port reached zero PORT_TODO_* and the vector table is KEEP()'d
+# independently of reachability (script.ld, PFIC_Vector's used attribute).
 LDFLAGS  = $(ARCHFLAGS) -nostartfiles -specs=picolibc.specs
 LDFLAGS += -Wl,--gc-sections
 LDFLAGS += -Wl,-Map=$(MAP_FILE)
@@ -332,19 +287,10 @@ $(HEX_FILE): $(ELF_FILE)
 	$(OBJCOPY) -O ihex $< $@
 
 # Create binary file
-#
-# BOOT INTEGRITY (BUG #21 ratchet, CONTRACTS.md S18).
-# The ARM form of this check (../common/boot_check.sh) is N/A here: RISC-V has
-# no SP-in-word0 convention. A QingKe RV32EC does not autoload SP/PC from a
-# table - it just starts executing at the flash base, and _start (naked, in
-# .init) sets SP itself. So word0 of the .bin is an instruction by design, and
-# testing it for 0x2xxxxxxx would be meaningless.
-#
-# The failure the ARM check exists to catch is still possible here, though:
-# -flto can delete an unreferenced table/entry stub before codegen and leave
-# KEEP() nothing to match. The equivalent assertion for this architecture is
-# "the reset entry is where the hardware will look for it", i.e. _start must be
-# linked at the flash base. That is what is checked below.
+# BOOT INTEGRITY (BUG #21, CONTRACTS.md S18) - RISC-V has no SP-in-word0
+# convention (see common/boot_check.sh for the ARM mechanism this replaces),
+# so the equivalent assertion here is "_start is linked at the flash base" -
+# checked below.
 BOOT_ENTRY_ADDR = 00000000
 
 $(BIN_FILE): $(ELF_FILE)
@@ -393,7 +339,7 @@ clean-all:
 
 # Help
 help:
-	@echo "GRBL $(PLATFORM_NAME) Build System (Phase 4 - Steps 0-6 complete)"
+	@echo "GRBL $(PLATFORM_NAME) Build System"
 	@echo ""
 	@echo "Usage:"
 	@echo "  make              - Full build: ELF + hex + bin (DEBUG, default)"
