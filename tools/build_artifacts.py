@@ -121,6 +121,9 @@ UNITS = [
     dict(key="dspic33ak128mc102", kind="std",
          dir="grbl/platform/dspic33ak128mc102",
          binary="grbl_dspic33ak128mc102", nm="/opt/xc-dsc/bin/xc-dsc-nm",
+         # objdump fallback for the `nm --print-size` defect below -
+         # xc-dsc-objdump ships alongside xc-dsc-nm in the same prefix.
+         objdump="/opt/xc-dsc/bin/xc-dsc-objdump",
          extra_args={"BOARD": "generic",
                      "TOOLCHAIN_PATH": "/opt/xc-dsc/bin",
                      "DFP_PATH": "/opt/Microchip.dsPIC33AK-MC_DFP.1.5.263"},
@@ -155,6 +158,7 @@ for _u in UNITS:
     _u.setdefault("nondeterministic_elf", False)
     _u.setdefault("has_debug", True)
     _u.setdefault("optional", False)
+    _u.setdefault("objdump", None)
 
 
 def unit_by_key(key):
@@ -257,13 +261,169 @@ def build_avr_unit():
     return {"elf": dst_elf, "hex": dst_hex, "bin": dst_bin}, log + log2
 
 
-def gen_symbol_map(nm_bin, elf_path):
+_OBJDUMP_SECTION_HDR_RE = re.compile(
+    r"^\s*\d+\s+(\S+)\s+([0-9a-fA-F]+)\s+([0-9a-fA-F]+)\s+([0-9a-fA-F]+)\s+([0-9a-fA-F]+)")
+_OBJDUMP_ADDR_RE = re.compile(r"^[0-9a-fA-F]{8}$")
+
+
+def _objdump_code_ranges(objdump_bin, elf_path):
+    """Parse `objdump -h` and return [(start, end, name), ...] for every
+    section flagged CODE (the loadable, executable regions - dsPIC33A links
+    several of these at disjoint addresses instead of one contiguous .text,
+    see platform.md)."""
+    rc, out = run([objdump_bin, "-h", elf_path])
+    if rc != 0:
+        raise BuildError("{} -h failed on {}:\n{}".format(objdump_bin, elf_path, out))
+    ranges = []
+    lines = out.splitlines()
+    for i, line in enumerate(lines):
+        m = _OBJDUMP_SECTION_HDR_RE.match(line)
+        if not m:
+            continue
+        _name, size_s, vma_s, _lma_s, _off_s = m.groups()
+        flags_line = lines[i + 1] if i + 1 < len(lines) else ""
+        if "CODE" not in flags_line:
+            continue
+        start = int(vma_s, 16)
+        size = int(size_s, 16)
+        ranges.append((start, start + size, _name))
+    ranges.sort()
+    return ranges
+
+
+def _objdump_symtab(objdump_bin, elf_path):
+    """Parse `objdump -t` into (addr, section, flags, size, name) tuples.
+    Entries with no `.size` info print with no size field at all (2 or 3
+    space-separated tokens before the tab instead of the 4 a properly-sized
+    entry has) - that omission, not a printed 0, is the actual shape of the
+    xc-dsc-nm defect this whole fallback works around."""
+    rc, out = run([objdump_bin, "-t", elf_path])
+    if rc != 0:
+        raise BuildError("{} -t failed on {}:\n{}".format(objdump_bin, elf_path, out))
+    recs = []
+    for line in out.splitlines():
+        if "\t" not in line:
+            continue
+        left, right = line.split("\t", 1)
+        lparts = left.split()
+        if len(lparts) < 2 or not _OBJDUMP_ADDR_RE.match(lparts[0]):
+            continue
+        addr = int(lparts[0], 16)
+        section = lparts[-1]
+        flags = "".join(lparts[1:-1])
+        rparts = right.split(None, 1)
+        if len(rparts) < 2:
+            continue
+        size_s, name = rparts
+        try:
+            size = int(size_s, 16)
+        except ValueError:
+            continue
+        recs.append((addr, section, flags, size, name))
+    return recs
+
+
+def _estimate_code_symbols(code_ranges, symtab):
+    """Recover a (addr, size, name, estimated) row per real function inside
+    `code_ranges`, using the compiler's own declared size where present and
+    an address-delta-to-next-symbol estimate (capped at the containing
+    section's end) everywhere else. Compiler-internal labels (`.L123`,
+    `.CS87`, per-TU scratch section names starting with `/`) are excluded
+    from the anchor set - they sit INSIDE a real function's byte range, not
+    between two functions, so treating them as boundaries would understate
+    real sizes."""
+    def in_code(addr):
+        for start, end, _name in code_ranges:
+            if start <= addr < end:
+                return start, end
+        return None
+
+    def is_real_name(name):
+        return bool(name) and not name.startswith(".") and not name.startswith("/")
+
+    best_size = {}  # (addr, name) -> max declared size seen
+    for addr, _section, _flags, size, name in symtab:
+        if not is_real_name(name) or in_code(addr) is None:
+            continue
+        key = (addr, name)
+        if size > best_size.get(key, -1):
+            best_size[key] = size
+
+    by_addr = {}
+    for (addr, name), size in best_size.items():
+        by_addr.setdefault(addr, []).append((name, size))
+
+    addrs = sorted(by_addr.keys())
+    rows = []
+    for i, addr in enumerate(addrs):
+        entries = by_addr[addr]
+        name, declared = max(entries, key=lambda e: e[1])
+        if declared > 0:
+            rows.append((addr, declared, name, False))
+            continue
+        _start, end = in_code(addr)
+        nxt = addrs[i + 1] if i + 1 < len(addrs) else end
+        size = min(nxt, end) - addr
+        rows.append((addr, size, name, True))
+    return rows
+
+
+def gen_symbol_map(nm_bin, elf_path, objdump_bin=None):
     if not os.path.isabs(nm_bin) and shutil.which(nm_bin) is None:
         raise BuildError("nm binary not found: {}".format(nm_bin))
     rc, out = run([nm_bin, "--print-size", "--size-sort", "--demangle", elf_path])
     if rc != 0:
         raise BuildError("{} failed on {}:\n{}".format(nm_bin, elf_path, out))
-    return out
+    if objdump_bin is None:
+        return out
+
+    # objdump fallback path (dsPIC33A only, see UNITS table comment): nm's
+    # own output is trustworthy for everything OUTSIDE the executable code
+    # ranges (bss/data/reserved-flash symbols all size correctly - spot-
+    # checked against the linker map) but silently drops most FUNCTIONS
+    # inside those ranges. Keep nm's non-code lines verbatim, replace its
+    # code-range coverage with the objdump-reconstructed table.
+    if not os.path.isabs(objdump_bin) and shutil.which(objdump_bin) is None:
+        raise BuildError("objdump binary not found: {}".format(objdump_bin))
+    code_ranges = _objdump_code_ranges(objdump_bin, elf_path)
+    symtab = _objdump_symtab(objdump_bin, elf_path)
+    code_rows = _estimate_code_symbols(code_ranges, symtab)
+
+    def addr_in_code(addr):
+        for start, end, _name in code_ranges:
+            if start <= addr < end:
+                return True
+        return False
+
+    kept_nm_lines = []
+    for line in out.splitlines():
+        parts = line.split(None, 3)
+        if len(parts) >= 2 and _OBJDUMP_ADDR_RE.match(parts[0]):
+            try:
+                addr = int(parts[0], 16)
+            except ValueError:
+                addr = None
+            if addr is not None and addr_in_code(addr):
+                continue  # superseded by the objdump-reconstructed row below
+        kept_nm_lines.append((None, line))  # sort key filled in below
+
+    def line_size(line):
+        parts = line.split(None, 3)
+        if len(parts) >= 2:
+            try:
+                return int(parts[1], 16)
+            except ValueError:
+                pass
+        return -1
+
+    merged = [(line_size(line), line) for _unused, line in kept_nm_lines]
+    for addr, size, name, estimated in code_rows:
+        suffix = "  # objdump addr-delta estimate (xc-dsc-nm --print-size " \
+                 "drops this symbol, see platform.md)" if estimated else ""
+        merged.append((size, "{:08x} {:08x} T {}{}".format(addr, size, name, suffix)))
+
+    merged.sort(key=lambda t: t[0])
+    return "\n".join(line for _size, line in merged) + "\n"
 
 
 def sha256_file(path):
@@ -456,7 +616,7 @@ def do_build(units, skip_debug, include_elf=False, quiet=False):
             nm_bin = shutil.which("avr-nm")
         else:
             nm_bin = unit["nm"]
-        syms = gen_symbol_map(nm_bin, paths["elf"])
+        syms = gen_symbol_map(nm_bin, paths["elf"], objdump_bin=unit["objdump"])
         syms_path = os.path.join(out_dir, unit["binary"] + ".syms")
         header = ("# {}.syms - `{} --print-size --size-sort --demangle` "
                   "on the committed RELEASE .elf.\n"
@@ -465,6 +625,22 @@ def do_build(units, skip_debug, include_elf=False, quiet=False):
                   "# not just that the binary changed. Regenerate with "
                   "`python3 tools/build_artifacts.py build --platforms {}`.\n"
                   .format(unit["binary"], os.path.basename(nm_bin) if not os.path.isabs(nm_bin) else nm_bin, key))
+        if unit["objdump"]:
+            header += (
+                "# TOOLCHAIN DEFECT WORKAROUND: `{nm} --print-size` only\n"
+                "# populates the size field for ~10% of this port's function\n"
+                "# symbols and, combined with --size-sort, silently DROPS every\n"
+                "# symbol it can't size instead of printing it with a 0/blank\n"
+                "# size (verified: `{nm} --print-size --demangle` with no sort\n"
+                "# still omits the size field for the same symbols - this is\n"
+                "# nm's sizing, not the sort). Rows below tagged 'objdump\n"
+                "# addr-delta estimate' were recovered via `{od} -t`/`-h`\n"
+                "# (address-delta to the next function, capped at the\n"
+                "# containing code section's end) instead - see platform.md\n"
+                "# 'known toolchain defects' and tools/build_artifacts.py\n"
+                "# gen_symbol_map()/_estimate_code_symbols().\n"
+                .format(nm=os.path.basename(nm_bin) if not os.path.isabs(nm_bin) else nm_bin,
+                        od=os.path.basename(unit["objdump"])))
         with open(syms_path, "w") as f:
             f.write(header)
             f.write(syms)
@@ -543,7 +719,7 @@ def do_check(units, skip_debug):
             nm_bin = shutil.which("avr-nm")
         else:
             nm_bin = unit["nm"]
-        fresh_syms = gen_symbol_map(nm_bin, paths["elf"])
+        fresh_syms = gen_symbol_map(nm_bin, paths["elf"], objdump_bin=unit["objdump"])
 
         # nondeterministic_elf (dsPIC33AK only): the ELF's differing bytes
         # are embedded compiler-tempfile SECTION NAMES (/tmp/ccXXXXXX.s.scnN,
