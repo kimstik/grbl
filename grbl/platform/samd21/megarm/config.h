@@ -122,32 +122,71 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 #define LIMIT_MASK_B        0
 
 // CONTROL PINS (C0, C1, C2)
+//
+// LOGICAL PORT-IMAGE CONTRACT, extended from STEP/DIRECTION above (BUG #17
+// class, CONTRACTS.md #limit-bit-width-second-consumer): core narrows
+// `GPIO_MRD(CONTROL, IREG)` to a uint8_t in system.c:43. Real silicon
+// PA14/15/16 don't fit that byte - `system_control_get_state()` truncated to
+// a constant 0 on this board as shipped (control-pin input dead, the exact
+// class BUG #26 found on stm32's LIMIT group, one input group over; this was
+// CONTRACTS.md's own documented "known gap" for megarm, now closed). Real
+// pins move to *_PIN; *_BIT is LOGICAL. Physical bits 14/15/16 are
+// contiguous, so CONTROL_L2P/P2L collapse to a pure shift (samd21/gpio.h's
+// GPIO_MRD_CONTROL/GPIO_MDIR_INP_CONTROL/GPIO_MPULLUP_EN/DIS_CONTROL consume
+// the _PHYS mask; core only ever sees the logical one).
 
 #define CONTROL_RESET_PORT      PORT_GROUPA
-#define CONTROL_RESET_BIT       14   // PA14 (C0)
+#define CONTROL_RESET_PIN       14   // PA14 (C0) - real silicon pin
+#define CONTROL_RESET_BIT       0    // LOGICAL
 
 #define CONTROL_FEED_HOLD_PORT  PORT_GROUPA
-#define CONTROL_FEED_HOLD_BIT   15   // PA15 (C1)
+#define CONTROL_FEED_HOLD_PIN   15   // PA15 (C1)
+#define CONTROL_FEED_HOLD_BIT   1
 
 #define CONTROL_CYCLE_START_PORT   PORT_GROUPA
-#define CONTROL_CYCLE_START_BIT    16   // PA16 (C2)
+#define CONTROL_CYCLE_START_PIN    16   // PA16 (C2)
+#define CONTROL_CYCLE_START_BIT    2
 
 #define CONTROL_SAFETY_DOOR_PORT   PORT_GROUPA
-#define CONTROL_SAFETY_DOOR_BIT    15   // PA15 (C1 - shared with FEED_HOLD)
+#define CONTROL_SAFETY_DOOR_PIN    15   // PA15 (C1 - shared with FEED_HOLD)
+#define CONTROL_SAFETY_DOOR_BIT    1    // shares FEED_HOLD's logical bit, same as physical
 
-// Combined control mask (all on PORT A)
-#define CONTROL_MASK_A      ((1UL<<CONTROL_RESET_BIT)|(1UL<<CONTROL_FEED_HOLD_BIT)|(1UL<<CONTROL_CYCLE_START_BIT))
-#define CONTROL_MASK_B      0
+#define CONTROL_MASK_PHYS    ((1UL<<CONTROL_RESET_PIN)|(1UL<<CONTROL_FEED_HOLD_PIN)|(1UL<<CONTROL_CYCLE_START_PIN))
+// Physical bits 14/15/16 are contiguous - pure shift by the RESET pin's offset.
+#define CONTROL_L2P(v)        ((uint32_t)(v) << CONTROL_RESET_PIN)
+#define CONTROL_P2L(v)        ((uint32_t)(v) >> CONTROL_RESET_PIN)
+
+// Combined control mask (all on PORT A) - LOGICAL, this is the core-visible
+// CONTROL_MASK (system.c:43's `GPIO_MRD(CONTROL,IREG) ^ CONTROL_MASK`)
+#define CONTROL_MASK_A       ((1UL<<CONTROL_RESET_BIT)|(1UL<<CONTROL_FEED_HOLD_BIT)|(1UL<<CONTROL_CYCLE_START_BIT))
+#define CONTROL_MASK_B       0
 
 #define CONTROL_INVERT_MASK CONTROL_MASK_A
 
+_Static_assert(CONTROL_RESET_BIT <= 7 && CONTROL_FEED_HOLD_BIT <= 7 &&
+               CONTROL_CYCLE_START_BIT <= 7 && CONTROL_SAFETY_DOOR_BIT <= 7,
+               "CONTROL logical bits must fit core's uint8_t group read (BUG #17 class, CONTRACTS.md #limit-bit-width-second-consumer)");
+
 // PROBE PIN (C5)
+//
+// Same class as CONTROL above: probe.c:54 narrows `GPIO_MRD(PROBE, IREG)`
+// to a uint8_t return. Real silicon PA19 (bit 19) truncated to a constant 0
+// as shipped - probe input dead on this board, not previously called out as
+// its own gap (CONTROL's was; this one wasn't, found during the same audit).
 
-#define PROBE_PORT          PORT_GROUPA
-#define PROBE_BIT           19   // PA19 (C5)
+#define PROBE_PORT           PORT_GROUPA
+#define PROBE_PIN            19   // PA19 (C5) - real silicon pin
+#define PROBE_BIT             0   // LOGICAL
 
-#define PROBE_MASK_A        (1UL<<PROBE_BIT)
-#define PROBE_MASK_B        0
+#define PROBE_MASK_PHYS      (1UL<<PROBE_PIN)
+#define PROBE_L2P(v)         ((uint32_t)(v) << PROBE_PIN)
+#define PROBE_P2L(v)         ((uint32_t)(v) >> PROBE_PIN)
+
+#define PROBE_MASK_A         (1UL<<PROBE_BIT)
+#define PROBE_MASK_B         0
+
+_Static_assert(PROBE_BIT <= 7,
+               "PROBE logical bit must fit core's uint8_t group read (BUG #17 class, CONTRACTS.md #limit-bit-width-second-consumer)");
 
 // SPINDLE CONTROL PINS (B3, B5)
 

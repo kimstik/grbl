@@ -160,10 +160,14 @@ Contracts:
 3. **Width truncation**: core stores `GPIO_MRD(name, IREG)` into `uint8_t`
    (limits.c:77, system.c:43, probe.c:54) and tests it against `name##_MASK`
    and `(1<<name##_*_BIT)`. **Input-group bits must land in bits 0-7** (or the
-   platform must remap in its accessors). SAMD21 megarm CONTROL bits are 14/15/16
-   (megarm/config.h:97-103) — truncated to zero at system.c:43: control-pin
-   input is dead on that port as written. Known gap; a port is not done while
-   such a mismatch exists.
+   platform must remap in its accessors). **CLOSED** (2026-07-26, see
+   [§logical-contract-vs-constraint-cure](#logical-contract-vs-constraint-cure)
+   for the full audit): SAMD21 megarm CONTROL bits were 14/15/16 and PROBE
+   was 19 — both truncated to a constant 0 at system.c:43/probe.c:54 as
+   shipped; SAMD21 generic's CONTROL (partially) and PROBE were the same,
+   previously undocumented. Both boards now translate CONTROL/PROBE through
+   the same logical-port-image dispatch STEP/DIRECTION already used
+   (BUG #17), promoted to `common/gpio_logical.h`.
    **A THIRD consumer of this exact contract, easy to miss because it isn't
    a `GPIO_MRD` call site**: `grbl/settings.c`'s `get_limit_pin_mask(uint8_t
    axis_idx)` returns `(1<<Z_LIMIT_BIT)` (etc.) from a function declared to
@@ -528,10 +532,15 @@ origin needed none of it, so nothing in core will remind you:
 
 The SAMD21 port is the ARM *adaptation reference*, not a compliance gold
 standard. Open violations, all cited above: prescaler silent no-op ([§3](#stepper-timer)),
-empty critical sections ([§8](#critical-sections)), CONTROL input bits above bit 7 ([§1.3](#gpio-data)),
+empty critical sections ([§8](#critical-sections)),
 pull-up accessor mapped to PORT CTRL ([§1.4](#gpio-data)), pulse-width 16-bit overflow
 horizon ([§4](#pulse-reset-timer)), EIC arming never called ([§2.1](#gpio-interrupts)). Each is a
 Phase-3 closure item; each future port must clear this whole file instead.
+
+Closed: CONTROL/PROBE input bits above bit 7 on both boards ([§1.3](#gpio-data),
+[§logical-contract-vs-constraint-cure](#logical-contract-vs-constraint-cure)) —
+2026-07-26, same logical-port-image dispatch STEP/DIRECTION already used for
+BUG #17, now covering all five truncation-risk groups on both samd21 boards.
 
 Closed: PWM range 65535 vs `PER=0xFF` vs core `uint8_t`, BUG #22
 ([§6.2](#spindle-pwm)) — both boards now declare `SPINDLE_PWM_MAX_VALUE 255`,
@@ -3691,3 +3700,144 @@ solvable, correctly, one layer up). A rule that must be reconsidered per
 finding is a rule with a two-strike class already waiting (PLAN.md working
 rule 3); stating it in advance, once, removes the temptation to
 reconsider it under the pressure of a red CI run.
+
+<a id="logical-contract-vs-constraint-cure"></a>
+## §NEW. Two cures for one disease: when to promote the logical port-image contract vs. keep the `<=7` constraint (cite the slug, not a number, from elsewhere)
+
+[§limit-bit-width-second-consumer](#limit-bit-width-second-consumer) closed
+BUG #26 on stm32f103/f411/h523 by moving `Z_LIMIT_BIT` back under 8 and
+adding a `_Static_assert`. That fix is correct for those three ports today,
+but it does not generalize: a board whose LIMIT/CONTROL/PROBE pins are
+dictated by an existing header layout (samd21 megarm mirrors the Arduino
+Mega pinout on purpose) cannot always free up a low bit by moving a pin.
+[§gpio-data](#gpio-data) already names the two cures by name — "the contract
+cure" (samd21's `L2P`/`P2L` logical<->physical dispatch, BUG #17) and "the
+constraint cure" (a compile-time assert) — this section is the audit that
+decided, per group and per port, which one applies, and the extraction that
+makes the contract cure available to any port without reinventing it.
+
+**Survey: every truncation-risk group, every port.** Core narrows exactly
+five groups to a `uint8_t` (STEP/DIRECTION via the ISR port image;
+LIMIT/CONTROL/PROBE via `GPIO_MRD(name, IREG)` into a local, per
+limits.c:77, system.c:43, probe.c:54 — plus `settings.c`'s
+`get_limit_pin_mask()` as [§limit-bit-width-second-consumer](#limit-bit-width-second-consumer)
+already documents for LIMIT specifically). SPINDLE/COOLANT/STEPPERS_DISABLE
+are NOT in this risk class: every core use site is a single-bit `GPIO_BSET/
+BCLR/BGETOUT` operating on the native register width, never narrowed
+(spindle_control.c, coolant_control.c — checked, not assumed). atmega328p is
+the *reason* the contract exists, not a port that needs auditing: AVR's
+`PORTx`/`PINx` registers are genuinely 8 bits wide, so physical == logical
+by hardware construction and `grbl/cpu_map.h` (core, frozen) never has a bit
+above 7 to begin with — that hardware fact is *why* core's port image is
+`uint8_t` in the first place.
+
+| Port / board | STEP | DIRECTION | LIMIT | CONTROL | PROBE | Live bug found this audit? |
+|---|---|---|---|---|---|---|
+| atmega328p | 0-2 (HW) | 0-2 (HW) | 0-2 (HW) | 0-2 (HW) | n/a | no — 8-bit HW port, origin case |
+| samd21 megarm | 0-2 (L2P, phys 25/27/28) | 0-2 (phys=log) | 4,5,7 | **14,15,16 (fixed this batch)** | **19 (fixed this batch)** | yes — CONTROL was a documented gap; PROBE was not |
+| samd21 generic | 0-2 (L2P, phys 16-18) | 0-2 (L2P, phys 19-21) | 4-6 | **7,8,9 (fixed this batch)** | **10 (fixed this batch)** | yes — neither was previously documented |
+| stm32f103/f411/h523 | 0-2 | 3-5 | 0-2 (BUG #26 fix) | 3-6 | **15 (fixed this batch)** | yes — same class as BUG #26, one group over, never `-Woverflow`-visible (see below) |
+| hc32f460 | 0-2 | 3-5 | 0-2 | 3-6 | 7 | no live bug — but zero asserts existed (fixed this batch) |
+| ch32v006 | 0-2 (L2P) | 0-2 (L2P) | 0-2 | 3-5 | 0 | no — asserts added this batch for completeness |
+| ch570 generic | 0-2 (L2P, phys 8-10) | 0-2 (L2P, phys 11-13) | 0,1,5 | **15,16,17 (fixed this batch)** | 6 | yes — CONTROL undocumented; interrupt-arm path also needed a real fix, not just the read (see below) |
+| dspic33ak128mc102 | 0-2 | 0-2 | 0-2 | 0-2 | 3 | no — asserts added this batch for completeness |
+| `_template` | 0-2 | 3-5 | 0-2 | 3-5 | 6 | no — asserts added this batch (LIMIT/CONTROL/PROBE assert lines were missing even though the header comment already said "MUST stay within bits 0-7") |
+| sg2002 | — | — | — | — | — | not implemented (design-only, PLAN.md Phase 6 deferral) — nothing to audit |
+
+**A second class this audit found, distinct from width**: gcc's `-Woverflow`
+(the mechanism that caught BUG #26) only fires on a *compile-time constant*
+narrowing conversion. `settings.c`'s `return((1<<Z_LIMIT_BIT))` is one; the
+stm32 PROBE truncation (`GPIO_IREG(PROBE) & PROBE_MASK`, a **runtime** AND
+between a register read and a mask, narrowed only at the enclosing
+`uint8_t` return) is not — the compiler has no constant to reason about.
+This defect was not sitting in a warning baseline as accepted debt (checked:
+`grep -i "overflow\|conversion" ci/warn_baseline_*.txt` has no probe.c/
+system.c hits anywhere); it was invisible to the entire warning-ratchet
+mechanism, silently, on all three STM32 ports, until this audit's manual
+call-site enumeration (the exact discipline
+[§limit-bit-width-second-consumer](#limit-bit-width-second-consumer)
+prescribes: grep every core file for the constant, not just the one call
+site already traced). No other baseline entry was found masking a width or
+truncation defect in this pass — the `stepper.c` `-Woverflow` lines in
+hc32f460/stm32f103/f411/h523's baselines are a pre-existing, unrelated
+integer-arithmetic class (AMASS prescaler math), not a pin-width symptom.
+
+**Design decision.** Promote the *dispatch mechanism* — not the translation
+formulas, which are inherently per-board — to
+`grbl/platform/common/gpio_logical.h`: six `GPIO_LOGICAL_DISPATCH_*` macros
+that fan `GPIO_MWO/MRD/MDIR_OUT/MDIR_INP/MPULLUP_EN/MPULLUP_DIS` out per
+NAME, plus four `GPIO_LOGICAL_PASSTHRU_*` bodies for the common case where a
+NAME needs no translation. A board opts a specific group into translation by
+defining that group's `_L2P`/`_P2L`/`_MASK_PHYS` and a `GPIO_..._<NAME>()`
+override; every other group keeps costing nothing. Applied to:
+- **samd21 (both boards)**: extended the *already-landed* BUG #17 dispatch
+  (previously STEP/DIRECTION only) to CONTROL and PROBE, closing the
+  documented megarm CONTROL gap and the *undocumented* generic-board
+  CONTROL/PROBE truncation found this session. `GPIO_INT_ON`'s `CONTROL_MASK`
+  argument is currently inert on this port (`GPIO_INT_ON`/`OFF` are empty
+  no-ops, [§gpio-interrupts](#gpio-interrupts) item 1) — a comment flags that
+  whoever closes that gap must reach for `CONTROL_L2P(CONTROL_MASK)`, not
+  the bare logical value, at that call site.
+- **ch570**: same promotion, but `GPIO_INT_ON` is NOT inert here — it is a
+  real, hardware-backed interrupt arm (`hal_gpio_interrupt_enable()`, a
+  physical-register write). Redefining `CONTROL_MASK` as logical without
+  more would have silently armed the wrong physical pins (0/1/2 — which are
+  LIMIT/SERIAL_RX on this chip) the moment the fix landed, a live regression
+  worse than the bug it fixed. Resolved by repurposing this port's
+  previously-unused `name_PCMSK` argument slot (documented as "unused
+  placeholder" before this batch) to carry the real physical arm mask
+  (`CONTROL_PCMSK` = `CONTROL_MASK_PHYS`; `LIMIT_PCMSK` = `LIMIT_MASK`,
+  unchanged in effect since LIMIT is still physical==logical there), and
+  `HAL_GPIO_INTERRUPT_ENABLE/DISABLE` now read that slot instead of the
+  logical `mask` argument. `handlers.c`'s own dispatch test
+  (`pending & CONTROL_MASK`, testing a raw physical interrupt-flag register)
+  needed the same correction to `CONTROL_MASK_PHYS` — found by tracing every
+  consumer of the constant per the [§limit-bit-width-second-consumer](#limit-bit-width-second-consumer)
+  discipline, not by inspection alone.
+- **stm32f103/f411/h523**: kept the constraint cure. PROBE moved from PC15
+  to PC0 (free bit, confirmed by grepping GPIOC users first — same method
+  BUG #26 used for `Z_LIMIT_PIN`), plus the matching `_Static_assert`. No
+  hardware was ever wired to PC15 for any of these three ports
+  (platform.md/README: "never run on real hardware"), so a pin move is
+  strictly simpler and lower-risk than reproducing the logical-dispatch
+  machinery for a single input bit — **this is the honest case for keeping
+  the constraint cure**: the donor pin map already fits under 8 once PROBE
+  moves, a uniform "always use the logical contract" policy would add
+  translation machinery this port does not need, and CONTRACTS itself
+  states a worse-but-uniform design is not the goal. The dead second copy
+  of `PROBE_PIN` in each port's `config.h` (the pre-existing dual-pin-map
+  debt already on record — see the "config.h vs platform.h" note near
+  [§boundary-wiring](#boundary-wiring)) was updated to match in the same
+  commit; leaving it stale would have tripped a real
+  `"PROBE_PIN" redefined` warning once the two copies disagreed (caught by
+  a full rebuild against `ci/warn_baseline_stm32f103.txt`, not asserted).
+- **hc32f460, ch32v006, dspic33ak128mc102, `_template`**: all pin maps
+  already fit under 8 for every group; added the missing LIMIT/CONTROL/
+  PROBE `_Static_assert`s (STEP/DIRECTION already had them from the
+  [§static-assert-sweep](#static-assert-sweep) batch) so the guarantee is
+  uniform. Zero-cost, confirmed by byte-identical RELEASE `.bin` against the
+  committed `artifacts/` blob on every one of these ports.
+
+**Why not promote every port to the logical contract uniformly?** Measured
+cost of the alternative: on samd21 generic, where physical pins are
+contiguous, the translation collapses to a pure shift (confirmed by
+disassembly — `system_control_get_state()`'s `GPIO_MRD_CONTROL` compiles to
+one `lsrs r3, r3, #7` plus a mask, not a branch or a multi-instruction
+gather). The mechanism is cheap *when a port needs it*. But four ports in
+this tree have every group already under 8 bits with no scattering at all;
+forcing them through `L2P`/`P2L` indirection would add a header include, an
+opt-in per group, and a translation formula that is always the identity —
+pure cost for zero benefit, and exactly the "uniform design that is worse"
+CONTRACTS warns against. The right unit of decision is the **group**, not
+the port: a port can (and samd21/ch570 now do) mix constraint-satisfied
+groups with logically-translated ones in the same board.
+
+**Guarantee after this batch, per port**: every LIMIT/CONTROL/PROBE/STEP/
+DIRECTION group on every implemented port (atmega328p excepted — hardware
+guarantees it) now has either (a) a `_Static_assert(<= 7)` tied to the exact
+constant core reads, or (b) a logical/physical dispatch through
+`common/gpio_logical.h` that makes the physical pin number irrelevant to
+core's width. A future re-pin that violates (a) fails the build; a future
+re-pin under (b) cannot violate the contract because core never sees the
+physical bit number at all. sg2002 has no code yet, so nothing to guarantee
+there — the same audit applies the day it lands.
