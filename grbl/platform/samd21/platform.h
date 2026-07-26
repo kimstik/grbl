@@ -222,6 +222,18 @@ uint64_t hal_micros(void);
 #define LIMIT_INT     0      // DUMMY: Not used on ARM (INT is for AVR only)
 #undef LIMIT_PIN
 #define LIMIT_PIN     PORT_GROUPA  // Used for reading limit switches (redefine as PORT)
+// CONTRACTS.md #gpio-pin-map-single-owner (BUG #25 class): this #undef was
+// missing (found by an independent macro-overlap sweep, 2026-07-26) even
+// though board config.h already defines the same name (LIMIT_MASK_A in
+// both files today, so no compiler redefinition warning ever fired and
+// nothing broke) - the exact silent-shadow mechanism this contract exists
+// to catch, just with values that happened to agree. Added to match every
+// other repurposed name on this page (LIMIT_PIN/CONTROL_PIN/CONTROL_MASK/
+// PROBE_PIN/PROBE_MASK immediately above/below): the #undef is the only
+// thing that turns "board config.h's value gets silently shadowed" into
+// "platform.h visibly, deliberately re-announces this name," per this
+// port's own single-owner discipline for CONTROL_MASK one page down.
+#undef LIMIT_MASK
 #define LIMIT_MASK    LIMIT_MASK_A // Combined mask for all limit pins
 
 // Control pins (AVR compatibility - DDR/PCMSK/INT only)

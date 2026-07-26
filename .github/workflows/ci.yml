@@ -21,6 +21,15 @@ jobs:
       - uses: actions/checkout@v4
       - name: CONTRACTS.md numbering/cross-reference check
         run: python3 tools/check_contracts_numbering.py
+      # config.h/platform.h single-owner macro guard (BUG #25 class,
+      # CONTRACTS.md #gpio-pin-map-single-owner). Added 2026-07-26 after an
+      # independent sweep found samd21's LIMIT_MASK defined in both files
+      # with no preceding #undef - the exact silent-shadow mechanism this
+      # contract exists to catch, undetected until an audit went looking.
+      # No toolchain needed (pure text/regex over the tree), so it lives
+      # here rather than in a per-port build job.
+      - name: config.h/platform.h macro single-owner check
+        run: python3 ci/pinmap_overlap_check.py
       # Pure-logic unit tests for the sixth ratchet's manifest-format/hash-
       # compare machinery (no compiler invoked - same "no toolchain needed"
       # shape as the numbering check above, so it lives in this job rather
@@ -49,6 +58,8 @@ jobs:
         run: sh tools/assert_no_double.sh --selftest
       - name: Warning ratchet selftest
         run: python3 ci/warn_ratchet.py --selftest
+      - name: Macro single-owner check selftest (BUG #25 class)
+        run: python3 ci/pinmap_overlap_check.py --selftest
       - name: Artifact tooling selftest
         run: make -C grbl/platform artifacts-selftest
 
