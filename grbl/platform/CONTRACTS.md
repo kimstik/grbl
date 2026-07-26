@@ -2146,9 +2146,12 @@ twice, diff the two local files); a size drift discovered a week later had
 nothing upstream to diff against. That gap is closed by `artifacts/` (repo
 root) + `tools/build_artifacts.py`.
 
-**What's committed** — per port, `artifacts/<port>/grbl_<port>.{elf,bin,hex}`
+**What's committed** — per port, `artifacts/<port>/grbl_<port>.{bin,hex}`
 (RELEASE only) plus `grbl_<port>.syms` (`nm --print-size --size-sort
---demangle` on that same `.elf`, plain sorted text). `samd21` gets two
+--demangle` on the RELEASE `.elf`, plain sorted text) — **every refresh**.
+`grbl_<port>.elf` itself is tracked ONLY at release-tag time ("Эльф на
+тегах" owner directive, this batch — see the dedicated subsection below);
+it is NOT part of the ordinary refresh cadence. `samd21` gets two
 directories (`samd21-megarm/`, `samd21-generic/`) because the toolchain
 names both boards' ELF identically — `BINARY_NAME` in
 `grbl/platform/samd21/Makefile` does not encode `BOARD`, only the directory
@@ -2174,15 +2177,76 @@ surprised by repo size**: measured on this tree, `.bin` 25-95KB (dsPIC's
 `.bin` is disproportionately large — `elf32-pic30`'s packed-instruction-word
 layout expands under a raw `objcopy -O binary`, not a bug in this tooling),
 `.hex` 72-116KB, `.elf` 48-166KB, per port/board. Ten units, one full
-snapshot: ~2.7MB. **Git does not delta binaries usefully across
+snapshot (all four extensions, the policy in force when this number was
+first measured): ~2.7MB (exact figure that batch landed with: 2,612,919
+bytes / 42 tracked files). **Git does not delta binaries usefully across
 recompiles** — a source edit that moves one function by 40 bytes typically
 re-links every address after it, so the *entire* blob differs and git
 stores a new, separately-compressed copy; nothing tracks "99% identical to
-the last commit's blob" for binary content the way it does for text. Every
-subsequent *content* refresh (see the refresh policy below) costs roughly
-this much again, for whichever ports changed. This is the accepted price of
-the observability the owner asked for, not a defect — see
-`artifacts/README.md`'s "Growth cost" section for the full table.
+the last commit's blob" for binary content the way it does for text. A
+single ordinary refresh under that original always-track-everything policy
+was observed to grow the repo's `.git` from 12MB to 14MB. This is the
+accepted price of the observability the owner asked for, not a defect — but
+see "ELF is tracked ONLY at release tags" immediately below for how this
+batch cut that recurring cost roughly in half by no longer paying `.elf`'s
+share (the single largest class) on every refresh. Full table:
+`artifacts/README.md`'s "Growth cost" section.
+
+**ELF is tracked ONLY at release tags, not on every refresh** ("Эльф на
+тегах" owner directive, follow-up batch to the one above, same day):
+`.elf` is the single largest artifact class (48-166KB/unit vs. `.bin`
+25-95KB, `.hex` 72-116KB, `.syms` a few KB) and, like every binary here, is
+not delta-compressible across recompiles — tracking it on every refresh, as
+the original policy did, meant `.elf`'s bytes alone accounted for roughly
+46-58% of any given unit's tracked size, i.e. routine refreshes were paying
+close to double what `.bin`/`.hex`/`.syms` observability actually required.
+`.bin`/`.hex`/`.syms` are unaffected and remain tracked every refresh
+exactly as before.
+
+- **Mechanism**: `tools/build_artifacts.py build` (the default) no longer
+  copies `.elf` into `artifacts/<port>/`, and actively deletes any stale
+  `.elf` left over from a prior tag build in that directory (so a plain
+  refresh can never leave a mismatched, un-regenerated ELF sitting next to
+  fresh `bin`/`hex`/`syms`). `tools/build_artifacts.py build --with-elf` is
+  the explicit, tag-time-only mode that DOES copy `.elf` and record its
+  hash in `MANIFEST.sha256`. `check` requires `bin`/`hex`/`syms` exactly as
+  before but verifies `.elf` **only if it is present** in the tree — its
+  absence between tags is the expected state, not a staleness failure; if
+  it IS present (post-tag), it is still hash-gated for real drift like
+  every other tracked file.
+- **`.gitignore` mechanism, chosen to not repeat a trap that has already
+  bitten this tree three times** (`tools/README.md`, `ch570/vendor/ISP572.o`,
+  and this very `artifacts/*.elf|hex` pair under the OLD always-track
+  policy — all three were blanket ignore rules silently dropping an
+  intentionally-tracked file from `git add -A`): the fix for those three
+  was a `!path` negation exception so `-A` "just works". Reversing the
+  policy for `.elf` (now ignorable-by-default, addable only at tag time)
+  makes negation the WRONG tool — a negation would make `.elf` permanently
+  un-ignorable, exactly what this batch is trying to stop. So the
+  `!artifacts/**/*.elf` negation is REMOVED from `.gitignore`, leaving
+  `.elf` under artifacts/ covered by the pre-existing blanket `*.elf` rule
+  ON PURPOSE. The corresponding risk — `git add -A`/`git add .` silently
+  skip ignored paths with zero output, the identical failure class as the
+  three prior traps, just pointed the other direction — is closed by NOT
+  using `-A` at tag time: the documented tag-time command force-adds the
+  ELFs by explicit path (`git add -f artifacts/*/*.elf`), which either
+  succeeds or fails LOUDLY (no matching files), never silently. `!artifacts/**/*.hex`
+  (and the pre-existing `!artifacts/README.md`) are unaffected and remain in
+  `.gitignore` — only the `.elf` negation was removed.
+- **Proof required after this change (and after any future edit to this
+  rule)**: `git check-ignore -v artifacts/<port>/grbl_<port>.elf` must
+  report the blanket `*.elf` line as the matching rule in the default
+  (between-tags) state, regardless of whether the file is physically
+  present in the working tree; `git add -f` on that same path must succeed
+  once `build --with-elf` has produced it (tag-time state). Both were
+  re-verified when this batch landed.
+- **Numbers this batch measured, landing from the prior batch's 2.6MB/42-file
+  snapshot**: removing the 10 tracked `.elf` files (1,221,872 bytes, ~1.19MB)
+  dropped the tracked tree to 1,389,988 bytes / 32 files (~1.39MB, ~47%
+  smaller). Every subsequent full-tree refresh now costs at most ~1.37MB
+  (all ten units touched, the worst case) instead of ~2.6-2.7MB — and
+  proportionally less for the common case of one or two ports changing,
+  since `.elf` was the majority of most units' tracked bytes.
 
 **dsPIC33AK128MC102 is tracked but not hash-gated** (new fact this batch
 surfaced, not previously documented anywhere in this tree): `xc-dsc-gcc`'s
@@ -2197,8 +2261,11 @@ function addresses/sizes don't move, only some padding/layout bytes do), so
 the staleness checker still hash-gates `grbl_dspic33ak128mc102.syms` for
 real drift and simply skips the elf/hex/bin comparison for this one unit
 (flagged via `nondeterministic_binary=True` in `tools/build_artifacts.py`'s
-`UNITS` table) rather than producing a permanent false positive. The
-binaries are still committed for archival/manual inspection.
+`UNITS` table) rather than producing a permanent false positive. `bin`/`hex`
+are committed every refresh like every other port; `.elf` follows the same
+tag-time-only policy as every other port (see the subsection above) —
+when present, still useful for archival/manual inspection, just not part
+of the automated freshness gate for this one unit specifically.
 
 **The mechanism**: `tools/build_artifacts.py` (subcommands `build`/`check`,
 plus a bare `--selftest` matching `ci/warn_ratchet.py`/
@@ -2207,16 +2274,18 @@ pure manifest-format/hash-compare logic, no compiler invoked) is the sole
 orchestrator; it shells out to each port's own Makefile for the actual
 compile (thin invoker, same division of labor as
 `.github/actions/build-platform` — build truth stays in the Makefiles).
-`grbl/platform/Makefile` gains `make artifacts` / `make artifacts-check` /
-`make artifacts-selftest` as the documented entry points (placed there, not
+`grbl/platform/Makefile` gains `make artifacts` / `make artifacts-tag`
+(`--with-elf`, tag-time only) / `make artifacts-check` / `make
+artifacts-selftest` as the documented entry points (placed there, not
 per-platform or in the golden-gated AVR root Makefile, because it's already
 the one file that knows about every non-AVR platform as a unit, and driving
 AVR from the same script needed one entry point, not ten near-identical
 copies). `check` rebuilds fresh into the ordinary scratch `build/`
 directory — never touching `artifacts/` — and fails, naming every drifted
 or missing file, if a commit landed without refreshing its port's
-artifacts. This is the **sixth ratchet** in this project, after golden MD5,
-warn baseline, boot integrity, no-DP assert, and docs integrity/CONTRACTS
+artifacts (`.elf` exempted from the missing-file case, per above). This is
+the **sixth ratchet** in this project, after golden MD5, warn baseline,
+boot integrity, no-DP assert, and docs integrity/CONTRACTS
 numbering.
 
 **A real bug this batch found and fixed while building the tool itself**
@@ -2236,10 +2305,13 @@ committed RELEASE directories. Regression-guarded in
 `tools/build_artifacts.py --selftest` (asserts the two boards' labels
 differ) rather than only in a one-off manual repro.
 
-**Refresh policy**: refresh-and-commit whenever a port's *content* changes
-(part of finishing that port's change, per `PORTING-CHECKLIST.md`'s
-Definition-of-Done item 8 and its own "Refresh policy" section); do **not**
-refresh on every push (most pushes are docs/ledger and move zero bytes of
-any port's binary). The checker enforces this rather than leaving it to
-memory — see `PORTING-CHECKLIST.md` and `artifacts/README.md` for the
-full contributor-facing statement of the rule.
+**Refresh policy**: refresh-and-commit `bin`/`hex`/`syms` whenever a port's
+*content* changes (part of finishing that port's change, per
+`PORTING-CHECKLIST.md`'s Definition-of-Done item 8 and its own "Refresh
+policy" section); do **not** refresh on every push (most pushes are
+docs/ledger and move zero bytes of any port's binary). `.elf` is NOT part
+of this cadence — it is tag-time only (`build --with-elf` +
+`git add -f artifacts/*/*.elf`, see above). The checker enforces the
+`bin`/`hex`/`syms` cadence rather than leaving it to memory — see
+`PORTING-CHECKLIST.md` and `artifacts/README.md` for the full
+contributor-facing statement of the rule.

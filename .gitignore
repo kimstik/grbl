@@ -50,18 +50,46 @@ README.md
 !grbl/platform/ch570/vendor/ISP572.o
 
 # SAME CLASS OF TRAP again (PLAN.md "build artifacts tracked in git for
-# observability" batch, owner directive): artifacts/<port>/*.elf and
-# *.hex are deliberately TRACKED - RELEASE elf/bin/hex + a plain-text
-# symbol-size map (.syms) per buildable port, so every port's CURRENT
-# byte-level state is diffable over time (git log -p / git diff), not
-# just AVR's golden MD5. Line 1's blanket `*.hex` and line 3's blanket
-# `*.elf` would otherwise silently drop every one of them from `git add
-# -A`, exactly like the README.md and ch570-vendor-.o exceptions above.
-# .bin/.syms/MANIFEST.sha256 need no exception - no blanket rule above
-# matches those extensions. See tools/build_artifacts.py and
-# artifacts/README.md for what generates this tree and the refresh
+# observability" batch, owner directive): artifacts/<port>/*.hex is
+# deliberately TRACKED - RELEASE bin/hex + a plain-text symbol-size map
+# (.syms) per buildable port, so every port's CURRENT byte-level state is
+# diffable over time (git log -p / git diff), not just AVR's golden MD5.
+# Line 1's blanket `*.hex` would otherwise silently drop every one of them
+# from `git add -A`, exactly like the README.md and ch570-vendor-.o
+# exceptions above. .bin/.syms/MANIFEST.sha256 need no exception - no
+# blanket rule above matches those extensions. See tools/build_artifacts.py
+# and artifacts/README.md for what generates this tree and the refresh
 # policy. Verify with `git check-ignore -v` after ANY future .gitignore
 # edit - a silent re-swallow here breaks observability for every port at
 # once, not just one.
-!artifacts/**/*.elf
 !artifacts/**/*.hex
+
+# artifacts/<port>/*.elf is the ONE exception to the "un-ignore what's
+# tracked" pattern above, and DELIBERATELY SO ("Эльф на тегах" owner
+# directive, PLAN.md): unlike bin/hex/syms, ELF is tracked ONLY at
+# release-tag time, not on every refresh - it is the largest artifact
+# class (48-166KB/unit vs. bin 25-95KB, hex 72-116KB, syms a few KB) and
+# git cannot delta binaries across recompiles, so tracking it on every
+# refresh cost a full ~2.6MB snapshot again each time (measured: one
+# refresh grew .git from 12MB to 14MB). So *.elf under artifacts/ is left
+# covered by line 3's blanket `*.elf` rule ON PURPOSE - no negation here.
+#
+# This means the usual "just `git add -A`" tag-time flow does NOT work for
+# ELF: `git add -A`/`git add .` silently SKIP ignored paths with zero
+# output, which is exactly the failure mode that bit tools/README.md,
+# ISP572.o, and (in the old, now-reverted, always-tracked policy)
+# artifacts/*.elf|hex THREE times before - a real file quietly missing
+# from a commit, discovered later, not now. A fourth blanket-ignore
+# surprise is not acceptable, so tag time must NOT rely on `-A` for these
+# files: it force-adds them BY EXPLICIT PATH instead -
+#   python3 tools/build_artifacts.py build --with-elf
+#   git add -f artifacts/*/*.elf
+#   git commit -m "artifacts: tag vX.Y.Z ELF snapshot"
+# `git add -f` on an already-ignored path either adds it (success) or, if
+# the path is wrong/missing, errors LOUDLY ("did not match any files") -
+# there is no silent-skip code path when `-f` + an explicit glob is used,
+# unlike `-A`. Proof required after ANY future .gitignore edit touching
+# this rule: `git check-ignore -v artifacts/<port>/grbl_<port>.elf` must
+# report line 3 (`*.elf`) as the matching rule with no committed file
+# present (default state), and `git add -f` on that same path must
+# succeed once `build --with-elf` has produced it (tag-time state).

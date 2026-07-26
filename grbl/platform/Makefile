@@ -61,8 +61,21 @@ check:	#TODO: compile base AVR port and check hash of generated images by /commo
 # division of labor as .github/actions/build-platform).
 # ============================================================================
 
+# Ordinary refresh: bin/hex/syms only. .elf is deliberately EXCLUDED here
+# ("Эльф на тегах" owner directive - ELF tracked only at release-tag time,
+# see artifacts/README.md's "Tagging a release" section) - it's the
+# largest artifact class and git can't delta binaries, so tracking it on
+# every refresh (as this used to) roughly doubled the growth cost of
+# every push that touched a port for a file most refreshes don't need.
 artifacts:
 	python3 ../../tools/build_artifacts.py build
+
+# Tag-time only: same as `artifacts` but ALSO copies+hashes .elf. Follow
+# with `git add -f artifacts/*/*.elf` (NOT `git add -A` - .elf is
+# deliberately .gitignore'd between tags, and -A silently skips ignored
+# paths; see artifacts/README.md).
+artifacts-tag:
+	python3 ../../tools/build_artifacts.py build --with-elf
 
 artifacts-check:
 	python3 ../../tools/build_artifacts.py check

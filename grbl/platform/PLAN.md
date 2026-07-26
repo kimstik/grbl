@@ -1252,6 +1252,79 @@ identity to integration time.
   `-I elf32-pic30` since this toolchain's ELF variant isn't one plain
   objcopy autodetects); zero other port's Makefile touched.
 
+- **[x] ELF TRACKED ONLY AT RELEASE TAGS, NOT EVERY REFRESH (2026-07-26,
+  owner directive — "Эльф на тегах") — same-day follow-up to the batch
+  above.** Reason: measured cost. The batch above's snapshot was 2.6MB
+  (2,612,919 bytes, 42 tracked files); a subsequent ordinary artifact
+  refresh (the "regenerate against current HEAD" commit) grew the repo's
+  `.git` from 12MB to 14MB in one step — git does not delta binaries, so
+  every refresh pays close to the full snapshot cost again. `.elf` is the
+  largest artifact class (48-166KB/unit) vs. `.bin` (25-95KB), `.hex`
+  (72-116KB), `.syms` (a few KB) — routinely 46-58% of a unit's tracked
+  bytes. `bin`/`hex`/`syms` stay tracked continuously exactly as before;
+  only `.elf`'s cadence changed.
+  **`tools/build_artifacts.py`**: default `build` no longer copies `.elf`
+  into `artifacts/<port>/` and actively deletes any stale `.elf` left over
+  from a prior tag build (so a plain refresh can't leave a mismatched ELF
+  sitting next to fresh bin/hex/syms); new `build --with-elf` flag is the
+  explicit, tag-time-only mode that does copy+hash it. `check` requires
+  `bin`/`hex`/`syms` as before but verifies `.elf` only when present — its
+  absence between tags is expected, not a failure. `release_extensions()`
+  factored out as the single source of truth for which extensions a build
+  copies, covered by `--selftest` (now 26 checks, up from prior count: new
+  assertions on `release_extensions(True/False)` and on `build_arg_parser()`
+  parsing `--with-elf` and defaulting it to `False`).
+  **10 currently-tracked `.elf` files removed** (`git rm`) — one per unit
+  (atmega328p, stm32f103, stm32h523, stm32f411, samd21×2, ch32v006, ch570,
+  hc32f460, dspic33ak128mc102); `MANIFEST.sha256` regenerated via a full
+  `build` (no `--with-elf`) afterward, 30 RELEASE + 24 DEBUG entries, no
+  `.elf` lines.
+  **`.gitignore`**: the `!artifacts/**/*.elf` negation exception added by
+  the prior batch is REMOVED — deliberately, not an oversight. That prior
+  batch needed the negation because ELF was tracked continuously and a
+  blanket ignore would have silently dropped it from `git add -A` (the
+  same trap already hit twice before, on `tools/README.md` and
+  `ch570/vendor/ISP572.o`). This batch reverses the policy, so the
+  negation is now the wrong tool — leaving `.elf` under `artifacts/`
+  covered by the pre-existing blanket `*.elf` rule is what makes it
+  "ignorable by default" again. The corresponding risk (`git add -A`
+  silently skipping an ignored file — same trap, opposite direction) is
+  closed by the tag-time procedure never using `-A`: `git add -f
+  artifacts/*/*.elf` by explicit path either succeeds or fails loudly,
+  never silently. `!artifacts/**/*.hex` and `!artifacts/README.md` are
+  untouched. Proven with `git check-ignore -v
+  artifacts/<port>/grbl_<port>.elf` in both states: reports the blanket
+  `*.elf` rule as the match regardless of whether the file is currently
+  committed (default/between-tags state); `git add -f` on the same path
+  succeeds once `build --with-elf` has produced it (tag-time state).
+  **Docs**: `artifacts/README.md` (file-table annotated per-extension with
+  refresh cadence, new "Tagging a release" section with the exact
+  `--with-elf` + `git add -f` command, Growth cost table gained a
+  "tracked" column and before/after numbers), CONTRACTS.md
+  [§build-artifacts-tracked](CONTRACTS.md#build-artifacts-tracked) (new
+  subsection spelling out the mechanism/`.gitignore` reasoning/numbers,
+  dsPIC33AK subsection corrected — it no longer says elf/hex/bin are
+  "still committed" continuously), `PORTING-CHECKLIST.md` (Definition-of-
+  Done item 8 now says bin/hex/syms only; new "ELF is tag-time only, not
+  part of this cadence" subsection under Refresh policy), and this entry.
+  **Numbers after this change**: `artifacts/` dropped from 2,612,919 bytes
+  / 42 tracked files to **1,389,988 bytes / 32 tracked files** (~47%
+  smaller; 10 files / 1,221,872 bytes removed). Every subsequent full
+  10-unit refresh now costs **at most ~1.37MB** (worst case, all units
+  touched) instead of ~2.6-2.7MB; a partial refresh (the common case) is
+  proportionally cheaper since `.elf` was the majority of most units'
+  tracked bytes.
+  **GATES** (all re-run, not inspected): golden AVR `make validate` PASSED
+  (MD5 `79af184e67b27defd27a39309ac53563`, unchanged from the batch above);
+  all 10 units rebuilt clean via a full `build` (no `--with-elf`) after the
+  `git rm`, confirming `bin`/`hex`/`syms`/`MANIFEST.sha256` describe HEAD
+  with `.elf` correctly absent; `python3 tools/build_artifacts.py check`
+  clean (52 files verified across 10 units, `.elf` absence caused no
+  failure); `python3 tools/build_artifacts.py --selftest` PASS (26 checks);
+  `python3 tools/check_contracts_numbering.py` OK (26 sections/slugs, 10
+  cross-file links, unchanged count — no new section added, only prose
+  inside the existing §25).
+
 - **[x] RELEASE-READINESS TRUTH AUDIT (2026-07-26)** — Phase 5's last item prep (tag v0.x).
   Fresh clean builds of every buildable port re-verified against this file's own canonical size
   table: all match exactly (atmega328p golden MD5 unchanged; stm32f103/h523/f411, samd21

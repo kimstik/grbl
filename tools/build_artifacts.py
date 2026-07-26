@@ -33,18 +33,36 @@ for, not a defect to optimize away.
 USAGE
   tools/build_artifacts.py build [--platforms p1,p2,...] [--skip-debug]
       Rebuild every port (DEBUG then RELEASE by default), copy RELEASE
-      elf/bin/hex + a generated symbol-size map into artifacts/<port>/, and
+      bin/hex + a generated symbol-size map into artifacts/<port>/, and
       (re)write artifacts/MANIFEST.sha256 covering every artifact of every
       port AND flavor (DEBUG hashes are recorded even though DEBUG binaries
-      are not committed - see the manifest's own header).
+      are not committed - see the manifest's own header). Does NOT copy
+      .elf ("Эльф на тегах" owner directive - ELF is tracked ONLY at
+      release-tag time, see --with-elf below); any stale .elf left over
+      in artifacts/<port>/ from a prior --with-elf run is removed so a
+      plain refresh can't leave a mismatched ELF sitting in the tree.
+
+  tools/build_artifacts.py build --with-elf [--platforms p1,p2,...] [--skip-debug]
+      Same as plain `build`, but ALSO copies RELEASE .elf into
+      artifacts/<port>/ and records its hash in MANIFEST.sha256. Intended
+      to be run ONLY at release-tag time - ELF is the largest artifact
+      class (48-166KB/unit vs. bin 25-95KB, hex 72-116KB, syms a few KB)
+      and git cannot delta binaries across recompiles, so tracking it on
+      every refresh (as this tool used to) roughly doubled the growth
+      cost of every port-content change for a file most refreshes don't
+      need byte-for-byte. See artifacts/README.md's "Growth cost" section
+      and PORTING-CHECKLIST.md's refresh policy for the full rule and
+      measured numbers.
 
   tools/build_artifacts.py check [--platforms p1,p2,...] [--skip-debug]
       Rebuild fresh (into the ordinary build/ scratch dir, never touching
       artifacts/) and compare hashes against the committed artifacts/ tree
       (RELEASE) and the recorded manifest (DEBUG). Exits 1 and prints every
       drifted/missing file if the committed artifacts are stale relative to
-      a fresh build. This is the sixth ratchet (after golden MD5, warn
-      baseline, boot integrity, no-DP assert, docs integrity).
+      a fresh build. bin/hex/syms are always required; .elf is verified
+      ONLY if present (absence is expected between tags, not a failure -
+      see --with-elf above). This is the sixth ratchet (after golden MD5,
+      warn baseline, boot integrity, no-DP assert, docs integrity).
 
   tools/build_artifacts.py --selftest
       Pure-logic unit tests (manifest line parsing/formatting, hash
@@ -310,7 +328,21 @@ def select_units(platforms_arg):
     return [unit_by_key(k) for k in keys]
 
 
-def do_build(units, skip_debug, quiet=False):
+def release_extensions(include_elf):
+    """Which RELEASE extensions `build` copies into artifacts/<port>/.
+
+    ELF is tracked ONLY at release-tag time ("Эльф на тегах" owner
+    directive) - it is the largest artifact class (48-166KB/unit) and git
+    cannot delta binaries across recompiles, so including it on every
+    ordinary content refresh (as this tool used to, unconditionally)
+    roughly doubles the growth cost of every refresh for a file most
+    refreshes don't need byte-for-byte. bin/hex are always tracked; the
+    caller adds the .syms map separately (it isn't a build-produced
+    extension, see gen_symbol_map)."""
+    return ("elf", "hex", "bin") if include_elf else ("hex", "bin")
+
+
+def do_build(units, skip_debug, include_elf=False, quiet=False):
     os.makedirs(BUILD_DIR, exist_ok=True)
     os.makedirs(ARTIFACTS_DIR, exist_ok=True)
     release_entries = []
@@ -358,14 +390,30 @@ def do_build(units, skip_debug, quiet=False):
                       "table comment)".format(key))
             paths, _log = build_std_unit(unit, "RELEASE")
 
-        # Copy RELEASE artifacts into the tracked artifacts/ tree.
+        # Copy RELEASE artifacts into the tracked artifacts/ tree. ELF is
+        # copied only in --with-elf (tag-time) mode - see release_extensions().
         out_dir = os.path.join(ARTIFACTS_DIR, unit["artifact_dir"])
         os.makedirs(out_dir, exist_ok=True)
-        for ext in ("elf", "hex", "bin"):
+        for ext in release_extensions(include_elf):
             dst = os.path.join(out_dir, unit["binary"] + "." + ext)
             shutil.copyfile(paths[ext], dst)
             rel = os.path.relpath(dst, REPO_ROOT)
             release_entries.append((rel, sha256_file(dst)))
+
+        if not include_elf:
+            # Not tag time: ELF must NOT persist in the tracked tree (owner
+            # directive - "tracked ONLY at release tags"). Remove any stale
+            # .elf left over from a prior --with-elf run so a plain refresh
+            # can't silently leave a mismatched, un-regenerated ELF sitting
+            # in artifacts/ next to fresh bin/hex/syms (which WOULD then
+            # make `check` fail, correctly - see do_check).
+            stale_elf = os.path.join(out_dir, unit["binary"] + ".elf")
+            if os.path.isfile(stale_elf):
+                os.remove(stale_elf)
+                if not quiet:
+                    print("   (removed stale {} - ELF is tracked only at "
+                          "tag time, see build --with-elf)".format(
+                              os.path.relpath(stale_elf, REPO_ROOT)))
 
         if unit["kind"] == "avr":
             nm_bin = shutil.which("avr-nm")
@@ -387,15 +435,18 @@ def do_build(units, skip_debug, quiet=False):
         release_entries.append((rel, sha256_file(syms_path)))
 
         if not quiet:
-            print("   -> {} (RELEASE elf/hex/bin/syms copied to {})".format(
-                key, os.path.relpath(out_dir, REPO_ROOT)))
+            print("   -> {} (RELEASE {}/syms copied to {})".format(
+                key, "elf/hex/bin" if include_elf else "hex/bin",
+                os.path.relpath(out_dir, REPO_ROOT)))
 
     manifest_text = format_manifest(sorted(release_entries), debug_entries)
     with open(MANIFEST_PATH, "w") as f:
         f.write(manifest_text)
-    print("Wrote {} ({} release files, {} debug hashes, {} skipped)".format(
+    print("Wrote {} ({} release files, {} debug hashes, {} skipped{})".format(
         os.path.relpath(MANIFEST_PATH, REPO_ROOT), len(release_entries),
-        len(debug_entries), len(skipped)))
+        len(debug_entries), len(skipped),
+        ", --with-elf: .elf included (tag-time mode)" if include_elf else
+        ", .elf excluded (tracked only at tag time - see --with-elf)"))
     return 0
 
 
@@ -464,6 +515,12 @@ def do_check(units, skip_debug):
         else:
             for ext in ("elf", "hex", "bin"):
                 committed = os.path.join(out_dir, unit["binary"] + "." + ext)
+                if ext == "elf" and not os.path.isfile(committed):
+                    # ELF is tracked ONLY at release-tag time (owner
+                    # directive, see build --with-elf) - its absence
+                    # between tags is the expected state, not a failure.
+                    # bin/hex/syms are still required below/elsewhere.
+                    continue
                 checked += 1
                 if not os.path.isfile(committed):
                     problems.append("{}: committed {} is MISSING".format(
@@ -598,6 +655,30 @@ def selftest():
     check([u["key"] for u in select_units("ch32v006,ch570")] ==
           ["ch32v006", "ch570"], "comma-separated filter preserves order")
 
+    # --- ELF-tracked-only-at-tag-time ("Эльф на тегах" owner directive) ------
+    # release_extensions() is the single source of truth do_build/do_check
+    # consult for whether .elf belongs in artifacts/ - exercise it directly,
+    # pure logic, no compiler/filesystem involved.
+    check(release_extensions(False) == ("hex", "bin"),
+          "default (non-tag) build excludes .elf")
+    check(release_extensions(True) == ("elf", "hex", "bin"),
+          "--with-elf (tag-time) build includes .elf")
+    check("elf" not in release_extensions(False),
+          "plain refresh never re-introduces .elf (regression guard for "
+          "the owner directive - ELF grew the repo 12MB->14MB in one "
+          "refresh before this change)")
+
+    # CLI must parse --with-elf on 'build' and default it to False so an
+    # ordinary `build` invocation (CI, a contributor's refresh) can never
+    # silently start tracking ELF again just because the flag was forgotten.
+    cli = build_arg_parser()
+    parsed_default = cli.parse_args(["build"])
+    check(parsed_default.with_elf is False,
+          "build defaults to --with-elf=False (ELF opt-in, not opt-out)")
+    parsed_tag = cli.parse_args(["build", "--with-elf"])
+    check(parsed_tag.with_elf is True,
+          "build --with-elf parses and sets the flag")
+
     # --- the core drift-detection comparison, without any build ------------
     # This is the logic 'check' runs per-file; exercise it directly with
     # synthetic hashes so the comparison itself is proven correct
@@ -618,7 +699,10 @@ def selftest():
 # CLI
 # ---------------------------------------------------------------------------
 
-def main(argv=None):
+def build_arg_parser():
+    """Separated from main() so --selftest can exercise real argparse
+    parsing (e.g. --with-elf defaulting/round-tripping) as pure logic,
+    without invoking a compiler or touching argv."""
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--selftest", action="store_true", help="run unit checks, no compiler invoked")
     sub = p.add_subparsers(dest="cmd")
@@ -626,11 +710,21 @@ def main(argv=None):
     b = sub.add_parser("build", help="build and commit RELEASE artifacts + MANIFEST.sha256")
     b.add_argument("--platforms", help="comma-separated unit keys (default: all)")
     b.add_argument("--skip-debug", action="store_true", help="skip DEBUG builds (manifest DEBUG section omitted for skipped units)")
+    b.add_argument("--with-elf", action="store_true",
+                   help="also copy RELEASE .elf into artifacts/ (tag-time "
+                        "only - 'Эльф на тегах' owner directive; see the "
+                        "module docstring and PORTING-CHECKLIST.md's "
+                        "refresh policy)")
 
     c = sub.add_parser("check", help="rebuild fresh and fail if committed artifacts are stale")
     c.add_argument("--platforms", help="comma-separated unit keys (default: all)")
     c.add_argument("--skip-debug", action="store_true", help="skip DEBUG freshness check")
 
+    return p
+
+
+def main(argv=None):
+    p = build_arg_parser()
     a = p.parse_args(argv)
 
     if a.selftest:
@@ -642,7 +736,7 @@ def main(argv=None):
         except KeyError as e:
             p.error(str(e))
         try:
-            return do_build(units, a.skip_debug)
+            return do_build(units, a.skip_debug, include_elf=a.with_elf)
         except BuildError as e:
             print("build: FAIL - {}".format(e))
             return 1
