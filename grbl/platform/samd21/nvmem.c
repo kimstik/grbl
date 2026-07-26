@@ -154,22 +154,12 @@ void memcpy_to_nvmem_with_checksum(unsigned int destination, char *source, unsig
   eeprom_put_char(destination + size, checksum);
 }
 
-// Bulk read with checksum verification
-int memcpy_from_nvmem_with_checksum(char *destination, unsigned int source, unsigned int size) {
-  uint8_t checksum = 0;
-
-  for (unsigned int i = 0; i < size; i++) {
-    destination[i] = eeprom_get_char(source + i);
-    checksum = (checksum << 1) | (checksum >> 7);
-    checksum += destination[i];
-  }
-
-  // Verify checksum
-  uint8_t stored_checksum = eeprom_get_char(source + size);
-
-  if (checksum == stored_checksum) {
-    return 1; // Success
-  } else {
-    return 0; // Checksum mismatch
-  }
-}
+// Bulk read with checksum verification: shared verbatim with every other
+// non-AVR TU-replacement port. GRBL_NVMEM_HAS_WRITE_RANGE is deliberately
+// NOT defined here - this port has no nvmem_write_range, its
+// eeprom_put_char does a page read-modify-write per byte, so its write
+// wrapper above stays local and interleaved. See that header for the
+// CONTRACTS.md #10.4 boundary (bitwise `|` here; core grbl/nvmem.c's
+// logical `||` AVR form must never be "fixed") and for what unifying the
+// write half would actually require.
+#include "../common/nvmem_checksum.h"
