@@ -4175,3 +4175,93 @@ mechanism and deserve their own work items.
     corrections only, no new section, no renumbering). No `grbl/` core
     file touched, no compiler flag affecting codegen changed anywhere in
     this entry.
+
+## `make validate` was never calling `chk.py` - the tiered scheme existed but wasn't the gate (2026-07-27)
+
+Owner pointed out `grbl/platform/common/chk.py`'s `known_hashes` table is a
+**tiered** design (official gnea/grbl v1.1h release, kimstik vanilla-master
+gcc 7.3.0+LTO, a gcc-15.2 entry, the gcc 7.3.0 no-LTO "working horse") - but
+the root `Makefile`'s `validate` target hardcoded
+`EXPECTED_MD5=79af184e67b27defd27a39309ac53563` inline and compared with
+plain `md5sum`, never calling `chk.py` at all. Every "golden MD5" line in
+this project's docs (mine included, in earlier entries above) described
+that hardcoded string, not the tiered scheme actually sitting unused in
+`chk.py`.
+
+- **Rewired**: root `Makefile`'s `validate` recipe now runs `python3
+  grbl/platform/common/chk.py --require-canonical grbl.hex`. `chk.py`
+  gained a `'tier'` field per entry (`canonical`/`known`/`unreproducible`) -
+  exactly one hex + one bin entry (the gcc 7.3.0 no-LTO build) are
+  `canonical`; everything else is recognised but not the gate. A build
+  matching a `known` entry (e.g. a different toolchain's hash) now prints
+  distinctly (yellow `RECOGNISED (non-canonical)`) from a canonical PASS
+  (green `OK (canonical)`) and, under `--require-canonical`, still FAILS -
+  verified live with a gcc 16.1.0 build (recognised, still fails the gate)
+  and a hand-corrupted file (red `FAIL`, unrecognised) - three visibly
+  different outcomes, not two that could be confused.
+- **Byte-neutrality proved, not assumed**: only the `validate` recipe
+  changed, not the compile/link recipe. `grbl.hex` MD5 measured before and
+  after: `79af184e67b27defd27a39309ac53563` both times, 86188 bytes,
+  `.text`=30640.
+- **The `7f14441d024bb6af43b547e435e598b8` ("gcc 15.2") entry investigated,
+  not reproduced.** Tried 8 combinations: {this repo's HAL `grbl/` source,
+  the pre-HAL vanilla `kimstik/grbl` commit eefe2bb source} x {`-flto`
+  on/off} x {avr-gcc 15.2.0, 16.1.0, both ZakKemble/avr-gcc-build releases,
+  `/opt/avr-gcc-15`/`/opt/avr-gcc-16`}. None matched. Marked
+  `unreproducible` in place (not deleted), with the 8 measured hashes and
+  the likely explanation (a different avr-gcc 15.2 build/patch level than
+  what's installed here) recorded in `chk.py`'s own comment and in
+  CONTRACTS.md's [§chk-py-tiers](CONTRACTS.md#chk-py-tiers).
+- **New reproducible entries added**: avr-gcc 15.2.0
+  (`72b8300e1ace62cd751c56a7422fd430`, 87195B, text=30994, +1.2% vs
+  canonical) and 16.1.0 (`e7c81dd66c8d5c36bc7c48ec97ee991c`, 85738B,
+  text=30480, -0.5%), both `/opt/avr-gcc-*`, `make AVR_GCC_PATH=<path>/bin
+  grbl.hex` - plus `.bin` for each, matching the table's existing
+  hex+bin convention.
+- **The gcc 9 claim, checked.** `ZakKemble/avr-gcc-build` (the source for
+  15.2.0/16.1.0) does not appear to publish a gcc-9 release under any
+  guessable tag/asset name (its API/HTML paths 403 in this sandbox, and
+  several direct-asset-URL guesses 404'd). Found and used a second
+  prebuilt-AVR-GCC project instead, `modm-io/avr-gcc`, tag `v9.2.0`, asset
+  `avr-gcc.tar.bz2` (confirmed present via its `releases.atom` feed, which
+  is not gated the way the HTML/API paths are) - downloaded to a scratch
+  dir only, never committed (~220MB tarball). Needed `COMPILER_PATH`
+  pointed at `avr-binutils/avr/bin` (this tarball ships avr-gcc and
+  avr-binutils as separate trees; avr-gcc's driver looks for a plain
+  `as`/`ld` it doesn't bundle itself). Built clean, confirming "built fine
+  on gcc 9" in the compiles-and-links sense - but `.text`=36132 vs the
+  canonical 30640, **+17.9%**, confirmed reproducible on two independent
+  clean rebuilds. A real, measured AVR gcc 8/9/10-era code-density
+  regression (15.2.0/16.1.0 do not show it), recorded as its own `known`
+  entry (`bfc564e2f69ef9cfd3ddfb09f5bf9cb5` hex / `157cea9c6acc3f62d74202fc4660cbef`
+  bin) rather than conflated with the canonical claim.
+- **Docs corrected** where they described the gate mechanism itself (not
+  just the hash value) as a single hardcoded string:
+  `PLATFORM_ROADMAP.md`'s "Golden gate (BLOCKING)" line and
+  `docs/REVIEW-SESSION-CLAIMS.md`'s ratchet-#1 row both now note `validate`
+  calls `chk.py`'s tiered table. Every other "golden MD5" reference project-
+  wide (PLAN.md's own earlier entries, `PORTING-CHECKLIST.md`,
+  `docs/TOOLCHAIN-AXIS.md`, `docs/TOOLCHAIN-VERSIONS.md` - the latter two
+  owned by a concurrent session, read but not edited) only ever used the
+  phrase to mean the hash value, which is still accurate, so those were
+  left alone.
+- **New CONTRACTS.md section**: [§chk-py-tiers](CONTRACTS.md#chk-py-tiers)
+  (`## §NEW.`, unnumbered per the file's own numbering discipline) has the
+  full writeup - tier definitions, the gate table, both investigations,
+  and the corrected-docs list.
+- **Coordination**: touched only `Makefile` (the `validate` recipe only -
+  no compile/link line changed) and files under `grbl/platform/` (`chk.py`,
+  `CONTRACTS.md`, `PLAN.md`, `PLATFORM_ROADMAP.md`,
+  `docs/REVIEW-SESSION-CLAIMS.md`). Did not touch
+  `docs/TOOLCHAIN-VERSIONS.md` or `docs/TOOLCHAIN-AXIS.md` (owned by the
+  concurrent compiler-size-matrix session) or any compiler flag affecting
+  codegen. Nothing downloaded (the gcc-9.2.0 tarball) was committed.
+  **Gates**: golden AVR `make -C grbl/platform/atmega328p validate`
+  PASSED (`79af184e67b27defd27a39309ac53563`) before and after, plus the
+  three-way distinct behavior proved above (canonical PASS / recognised-
+  non-canonical FAIL / unrecognised FAIL). `python3
+  tools/build_artifacts.py check`: OK, 62 files, 11 units. `python3
+  ci/pinmap_overlap_check.py`: OK, 11 pairs, 8 overlaps, all guarded.
+  `python3 tools/check_contracts_numbering.py`: OK, 40 sections, 41 slugs
+  (one new anchor for the `§NEW` section, section count unchanged since it
+  isn't numbered yet), 45 cross-file links.
