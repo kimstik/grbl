@@ -4175,3 +4175,58 @@ mechanism and deserve their own work items.
     corrections only, no new section, no renumbering). No `grbl/` core
     file touched, no compiler flag affecting codegen changed anywhere in
     this entry.
+
+## Toolchain size matrix: clang vs gcc-16-class, every buildable platform (2026-07-27)
+
+Owner's question ("clang vs gcc 16, by size, for every platform we can
+build") answered with real measured numbers — full table, exact commands,
+per-cell why-empty notes: **`docs/TOOLCHAIN-VERSIONS.md` §8**. Highlights,
+not a substitute for that section:
+
+- **Toolchains acquired**: ARM GNU Toolchain 15.2.Rel1 (`/opt/arm-gnu-15.2`,
+  newest that exists — 16.x confirmed 404 upstream), RISC-V xpack
+  15.2.0-1 and 14.2.0-3 (`/opt/riscv-xpack-15.2`, `/opt/riscv-xpack-14.2`,
+  newest that exists — 16.x confirmed 404). All three needed RISC-V
+  multilibs (`rv32ec/ilp32e`, `rv32imc/ilp32`, `rv64imafc.../lp64f`)
+  verified present before use. Real gcc-16 exists only for AVR
+  (`/opt/avr-gcc-16`, prior session).
+- **`atmega328p`×clang corrected** (§8.3 of the doc): a same-session claim
+  that clang-AVR is simply disqualified, and a correction claiming it
+  isn't, were both incomplete. Measured: GRBL's actual PROGMEM mechanism
+  (avr-libc's `__attribute__((progmem))`, not the `__flash` keyword clang
+  does support) is silently ignored by clang and the data lands in real
+  `.data` (confirmed by linking and reading `avr-nm`) — a genuine 71-byte
+  SRAM overflow on the unmodified 18-file core, not hypothetical. A second,
+  unrelated, unconditional gap: clang-AVR has no `__builtin_avr_delay_cycles`
+  at all (`error: use of unknown builtin`), needed by core `nuts_bolts.c`'s
+  real dwell path. Two separate verdicts recorded: not a runnable/shippable
+  image, but genuinely usable as a second static-analysis front end over
+  frozen core (compiles clean with two flags-layer bypasses, no core edit).
+  `docs/TOOLCHAIN-AXIS.md`'s per-port table carries the same correction,
+  dated, not silently rewritten.
+- **First full end-to-end RISC-V clang link this project has done**
+  (ch32v006 — `docs/TOOLCHAIN-AXIS.md` had only ever proven this at the
+  object/symbol level for RISC-V). ch570/sg2002 partially: ch570's `-Oz
+  -flto=thin` `.bin` is unmeasurable (a `.sdata` orphan-section lld bug,
+  distinct from the already-fixed `(NOLOAD)` class); sg2002 links under
+  clang only with LTO off (a genuine lld+LTO `la gp`/`__global_pointer$`
+  relocation-range failure, confirmed LTO-specific by a clean non-LTO
+  build).
+- **`script.ld` `(NOLOAD)` fix extended to `hc32f460` and `samd21`** this
+  session (both were flagged, not forgotten, in the toolchain-axis reopening
+  — `ch32v006`/`ch570`/`stm32*`/`_template` already had it). Verified
+  zero-cost under gcc: fresh RELEASE rebuild's `.bin` is `md5sum`-identical
+  to the committed `artifacts/` file for hc32f460 and both samd21 boards
+  (megarm, generic).
+- **Clang loses on every ARM/RISC-V unit except one**: samd21
+  (Cortex-M0+, no FPU) is smaller under clang (−0.58%) than gcc; every
+  FPU-bearing Cortex-M and every RISC-V unit is larger under clang, +4.3%
+  to +9.1% at `-Oz -flto=full` (clang's real size-optimize level — its
+  `-Os` is not one, costing another 17–28% on top if used by mistake).
+- **A real, small, non-monotonic case for moving stm32-family's canonical
+  to gcc 15** (−1.2% to −1.5%, zero ratchet regressions, `TOOLCHAIN_PATH`
+  swap only) — evidence presented in the doc, no canonical changed here;
+  the owner's call per the canonical-toolchain rule (§5).
+- Nothing under `artifacts/` was touched; golden AVR `make -C
+  grbl/platform/atmega328p validate` re-verified unchanged
+  (`79af184e67b27defd27a39309ac53563`) before and after.
