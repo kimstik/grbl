@@ -79,6 +79,17 @@ The single highest-leverage phase. Converts manual review marathons into automat
       regeneration item (already done, never ticked) and the hc32f460 queue
       placeholder (port landed months of ledger-lines ago, placeholder
       never removed).
+      **STATUS UPDATE (2026-07-27): `sg2002` is no longer excluded — it is
+      the concurrent session's rewrite of the port that made it off-limits
+      here has since landed, and `sg2002` now has its own
+      `ci/warn_baseline_sg2002.txt` (already seeded from a real build log)
+      and the identical `warn_check.sh` wiring as every other port.
+      Verified this session: fresh `make BUILD=RELEASE` on `sg2002` reports
+      `warn_ratchet: OK - 4 distinct warning(s), all in baseline`; a
+      break/restore cycle (remove a baseline line -> `warn_ratchet: FAIL`,
+      exit 2 -> restore -> pass, exit 0, `git status` clean) reproduces the
+      same soundness proof this bullet already ran on the other 9 ports.
+      Coverage is now 10/10, not 9/10.**
 
 **Exit criterion**: green pipeline on push — CONFIRMED RUNNING 2026-07-26 (see Current State):
 `github.com/kimstik/grbl/actions` shows 78 CI runs + 67 Smoke runs on this branch, one per push,
@@ -1518,6 +1529,8 @@ identity to integration time.
   samd21 warn-baseline item (the actual fix had already landed elsewhere in
   this file) and a leftover hc32f460 queue placeholder (the port landed
   many ledger-lines ago).
+  **STATUS UPDATE (2026-07-27): `sg2002` wired too, coverage now 10/10 -
+  see the matching correction on this same bullet in Phase 0, above.**
 
 - **[x] Toolchain axis (`TC=gcc|clang`) REOPENED and PARTIALLY LANDED
   (2026-07-26, third pass on the same day).** The first recon session
@@ -1539,6 +1552,23 @@ identity to integration time.
   this session was allowed to touch (`_template`, `ch32v006`, `ch570`,
   `stm32f103`, `stm32f411`, `stm32h523` — `hc32f460`/`samd21`/`sg2002` were
   owned by concurrent sessions, still need the identical one-line fix).
+  **STATUS UPDATE (2026-07-27): `hc32f460`/`samd21` landed — `.bss`/
+  `.stack` (`samd21`, no `.heap` section exists there) and `.bss`/
+  `.stack`/`.heap` (`hc32f460`) all got `(NOLOAD)`, same form as the six
+  already-fixed scripts. Re-surveyed `sg2002/script.ld` while at it: its
+  `.bss`/`.stack` already carry `(NOLOAD)` — written that way from
+  authoring, never actually missing despite this entry's framing.
+  `stm32h523` re-checked too: it has no `.stack`/`.heap` OUTPUT SECTION at
+  all (`_estack` is a bare location-counter assignment, not a section
+  with a body), so `(NOLOAD)` does not apply there — nothing to fix,
+  contrary to a naive read of this entry's "still need the identical
+  fix" framing. Proof, both ways, per port: (a) GNU `ld` RELEASE `.bin`
+  `md5sum`-identical to the committed `artifacts/` blob (samd21 both
+  boards, hc32f460); (b) linked the same objects with `clang`+`lld`
+  (mirroring this entry's own stm32f411 methodology, since `ld.lld`
+  cannot consume gcc's LTO IR) before/after the fix — samd21
+  536,876,864B -> 35,016B, hc32f460 537,000,960B -> 33,104B. No compiler
+  flag touched.**
   Landed `common/toolchain/family/{gcc,clang}.mk` +
   `common/toolchain/profiles/*.mk` (canonical: avr-gcc-7.3, arm-gcc-13.2,
   riscv-gcc-13.2; verification-only: avr-gcc-15/16, arm-gcc-14.2,
@@ -1548,7 +1578,25 @@ identity to integration time.
   this session, since a concurrently-live agent was auditing ratchet
   invocation across those exact files; every existing build path is
   therefore byte-identical by construction (grep confirms zero Makefile
-  references the new files yet), not just re-measured. AVR re-confirmed
+  references the new files yet), not just re-measured.
+  **STATUS UPDATE (2026-07-27): now wired.** `TC ?= <canonical-profile>`
+  + `include .../profiles/$(TC).mk` landed in `samd21/Makefile`,
+  `hc32f460/Makefile`, `common/stm32/common.mk` (covers stm32f103/f411/
+  h523), `ch32v006/Makefile`, `ch570/Makefile`, `sg2002/Makefile` — 9 of
+  the 10 real ports (`arm-gcc-13.2` default for the 6 ARM units,
+  `riscv-gcc-13.2` for the 3 RISC-V units). `atmega328p` deliberately
+  left un-wired: its real link lives in the golden-MD5-gated root
+  Makefile (byte-untouched by design) and the shim Makefile never itself
+  invokes a compiler, so there is no attachment point for `TC` there —
+  not half-wired, not attempted. `dspic33ak128mc102` also left un-wired:
+  no toolchain profile exists for its XC-DSC compiler (only gcc/clang
+  families are modeled). Byte-identity gate (absolute, per the reopening
+  brief): with `TC` at its default, every one of the 11 units' RELEASE
+  `.bin` is `md5sum`-identical to the committed `artifacts/` blob —
+  verified per unit, and confirmed whole-tree via `python3
+  tools/build_artifacts.py check`: `artifacts check: OK - 62 file(s)
+  verified fresh across 11 unit(s)`. No compiler flag touched.**
+  AVR re-confirmed
   gcc-only forever (wdt.h hard error at `-Os` explicitly, PROGMEM silently
   RAM-copies string constants — both independently re-verified, not
   re-quoted). Full account, with every corrected claim marked in place
@@ -3986,6 +4034,16 @@ mechanism and deserve their own work items.
     IMPLEMENTATION-DEFERRED", no toolchain decision made), so there is
     nothing to rebuild yet. Flagged here rather than silently assumed
     working.
+    **STATUS UPDATE (2026-07-27): stale — sg2002 has since been built out
+    for real** (a concurrent session's port rewrite landed after this
+    entry was written): it has a working `riscv64-unknown-elf-gcc`
+    build, its own `artifacts/sg2002/` entry, is one of the 11 units
+    `tools/build_artifacts.py check` covers, and its warn ratchet is now
+    wired (see the Phase 0/Current State correction above). Re-verified
+    this session: `clock_width.h`'s guard fires cleanly on a fresh
+    `make BUILD=RELEASE` (`warn_ratchet: OK`, `assert_no_double.sh`
+    PASSED), and the RELEASE `.bin` md5sum-matches
+    `artifacts/sg2002/grbl_sg2002.bin` exactly.
   - **Docs**: CONTRACTS.md
     [§clock-constant-width](CONTRACTS.md#clock-constant-width) extended in
     place (not renumbered — still §36) with the guard's mechanism, the
@@ -4001,3 +4059,119 @@ mechanism and deserve their own work items.
     `grbl/platform/common/clock_width.h` (new), 11×`prelude.h`,
     `samd21/Makefile`, `ch32v006/Makefile`, `ch570/Makefile`, CONTRACTS.md,
     PLAN.md (this entry), PORTING-CHECKLIST.md, `artifacts/` refresh.
+
+- **[x] Four leftovers closed (2026-07-27): `script.ld` `(NOLOAD)` on the
+  last two real ports, `sg2002` warn-ratchet wiring (10/10), `TC`
+  toolchain-profile selection wired into 9/10 ports, ledger truth pass.**
+  Coordination: one other agent was live this session measuring a
+  compiler size matrix and owns `docs/TOOLCHAIN-VERSIONS.md`/
+  `docs/TOOLCHAIN-AXIS.md` - neither file touched, and no compiler flag
+  affecting codegen was changed anywhere in this entry.
+  1. **`(NOLOAD)` gap, closed for the two remaining real ports.**
+     `samd21/script.ld` (`.bss`, `.stack` - no `.heap` section exists
+     there) and `hc32f460/script.ld` (`.bss`, `.stack`, `.heap`) all got
+     `(NOLOAD)`, same form as the six scripts already fixed. Re-surveyed
+     rather than trusting the incoming table: `sg2002/script.ld` already
+     had `(NOLOAD)` on both `.bss`/`.stack` from authoring - never
+     actually broken, despite the toolchain-axis entry's framing above.
+     `stm32h523/script.ld` has no `.stack`/`.heap` OUTPUT SECTION at all
+     (`_estack` is a bare location-counter assignment, no section body) -
+     `(NOLOAD)` doesn't apply, nothing to fix. `dspic33ak128mc102` has no
+     custom `script.ld` (XC-DSC's own default). Proof, both ways, per
+     port: (a) GNU `ld` RELEASE `.bin` `md5sum`-identical to the
+     committed `artifacts/` blob - samd21 megarm `491ffd90f0f9ccbf9d00a0630148e154`,
+     samd21 generic `3f28eebf53f8a6d0816e3e5617b241ff`, hc32f460
+     `601a05380fc04f632558290197738d7d` (all match `artifacts/`
+     byte-for-byte); (b) linked the SAME objects with `clang`+`lld`
+     (docs/TOOLCHAIN-AXIS.md's own stm32f411 methodology - `ld.lld`
+     cannot consume gcc's LTO IR, so this is the apples-to-apples way to
+     drive lld against real port sources) before/after the fix: samd21
+     536,876,864B -> 35,016B; hc32f460 537,000,960B -> 33,104B.
+  2. **`sg2002` warn-ratchet wiring, the last of 10 ports.** Same
+     `common/warn_check.sh` mechanism as every other port - `ci/warn_baseline_sg2002.txt`
+     already existed, seeded from a real build log (its own header says
+     so), so no baseline was authored here. Break/restore verified:
+     removed a line -> `make BUILD=RELEASE` failed with `warn_ratchet:
+     FAIL - 1 new warning(s)`, exit 2 -> restored -> `warn_ratchet: OK -
+     4 distinct warning(s), all in baseline`, exit 0 -> `git status`
+     clean throughout. RELEASE `.bin` still md5sum-matches
+     `artifacts/sg2002/grbl_sg2002.bin` (`90f270aea622f29848f59575d3affee5`)
+     - the ratchet only rebuilds into its own scratch dir, never touches
+     the real output.
+  3. **`TC` toolchain-profile selection wired into 9 of 10 real ports.**
+     `TC ?= <canonical-profile>` + `include .../toolchain/profiles/$(TC).mk`
+     landed in `samd21/Makefile`, `hc32f460/Makefile`,
+     `common/stm32/common.mk` (covers stm32f103/f411/h523),
+     `ch32v006/Makefile`, `ch570/Makefile`, `sg2002/Makefile` - CC/NM/
+     OBJCOPY/OBJDUMP/SIZE/GDB and the `-Os`/`-flto`/`-fno-fat-lto-objects`/
+     `-fsingle-precision-constant` flags now come from
+     `TC_PREFIX`/`TC_OPT_FLAG`/`TC_LTO_CFLAGS`/`TC_LTO_LDFLAGS`/
+     `TC_FP_SINGLE_CFLAGS` instead of being hardcoded, so a non-default
+     `TC` (e.g. `arm-clang-18`) gets the dialect-correct spelling of each
+     instead of a gcc-only flag clang would reject. Default `TC` is
+     `arm-gcc-13.2` (6 ARM units) / `riscv-gcc-13.2` (3 RISC-V units) -
+     the two canonical profiles that already owned every real build's
+     flags before this landed, so selecting the default is a no-op by
+     construction. **`atmega328p` deliberately left un-wired**: its real
+     link lives in the golden-MD5-gated root Makefile (must stay
+     byte-untouched) and the shim Makefile never itself invokes a
+     compiler - there is no attachment point for `TC` there, so nothing
+     was half-wired. **`dspic33ak128mc102` also un-wired**: no toolchain
+     profile exists for its XC-DSC compiler (only gcc/clang families are
+     modeled) - not this session's to invent. `TOOLCHAIN_PATH` keeps its
+     existing meaning (a directory prefix ahead of the resolved tool
+     name); `warn_check`'s scratch rebuild threads `TC=$(TC)` through on
+     every wired port. **Byte-identity gate (absolute, per the reopening
+     brief): with `TC` at its default, every RELEASE binary is
+     `md5sum`-identical to the committed `artifacts/` blob for all 11
+     units** - verified per unit (stm32f103 `8d4641fa49e5129dedf795e4e87805e9`,
+     stm32f411 `8028897a8a2c1a976d6980c50d7e8fcb`, stm32h523
+     `a41505d934a48ed1945c47ee0c27d9b5`, ch32v006
+     `a265693d67506eb212b7f7b737fbe429`, ch570
+     `01297786e91227f08b5a4f2969853116`, plus the samd21/hc32f460/sg2002
+     hashes above) and whole-tree via `python3 tools/build_artifacts.py
+     check`: `artifacts check: OK - 62 file(s) verified fresh across 11
+     unit(s)`. Also corrected the stale "NOT wired into any port Makefile
+     yet" header comments in `family/gcc.mk`/`family/clang.mk` and every
+     profile file this touched (marked in place, not deleted, per this
+     project's convention) - `family/clang.mk`'s correction is explicit
+     that `TC=arm-clang-18`/`TC=riscv-clang-18` now reach the file for
+     real but still can't complete a real link through the Makefile path,
+     since every gcc-family Makefile still hardcodes
+     `-specs=nano.specs -specs=nosys.specs` (gcc-only spec files clang
+     cannot parse) - a real gap, not glossed over, and out of scope for
+     this session's byte-identity gate (verification-only profiles never
+     owned `artifacts/`).
+  4. **Ledger truth pass.** Corrected in place (marked, not deleted) every
+     claim this session's own work falsified: the Phase 0 and Current
+     State duplicate bullets claiming `ci/warn_ratchet.py` coverage was
+     "9/10, `sg2002` out of scope"; the toolchain-axis entry's "hc32f460/
+     samd21/sg2002 still need the identical one-line fix" and "deliberately
+     NOT wired into any port Makefile"; a much older entry claiming
+     `sg2002` "has no C-source build wired into `tools/build_artifacts.py`
+     ... nothing to rebuild yet" (stale since a concurrent session's port
+     rewrite landed - `sg2002` is now one of the 11 units `build_artifacts.py`
+     tracks); and CONTRACTS.md [§39](CONTRACTS.md#warn-ratchet-build-time-wiring)'s
+     coverage table and Coordination note, both of which described
+     `sg2002` as design-only/no-ratchets when its Makefile (measured
+     directly, not assumed) already carries `assert_no_double.sh`/
+     `init_check.sh`/an inline boot-integrity check, plus this session's
+     `warn_ratchet.py` wiring - all four ratchets are 10/10 now, not the
+     table's stale per-row fractions. Did NOT find or fix a
+     `dspic33ak128mc102`-style "marked FIXED while still broken" defect
+     this pass - the BUG #18 clock-width entry earlier in this file
+     already correctly documents that port's real fix (`UL` -> `ULL`,
+     measured byte deltas included) and its Makefile currently carries
+     `ULL` (re-checked directly), so that specific historical example is
+     not itself live debt today.
+  - **Gates**: golden AVR `make -C grbl/platform/atmega328p validate`
+    PASSED (`79af184e67b27defd27a39309ac53563`) throughout, root Makefile
+    untouched. `python3 tools/build_artifacts.py check`: OK, 62 files,
+    11 units (re-run after every item, not just once at the end).
+    `python3 ci/pinmap_overlap_check.py`: OK, 11 config.h/platform.h
+    pairs, 8 overlapping names, all guarded. `python3
+    tools/check_contracts_numbering.py`: OK, 40 sections/slugs, 44
+    cross-file links, unchanged section count (CONTRACTS.md got in-place
+    corrections only, no new section, no renumbering). No `grbl/` core
+    file touched, no compiler flag affecting codegen changed anywhere in
+    this entry.
