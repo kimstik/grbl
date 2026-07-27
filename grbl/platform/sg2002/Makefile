@@ -260,7 +260,7 @@ MAP_FILE  = $(OUTPUT_DIR)/$(BINARY_NAME).map
 # TARGETS
 # ============================================================================
 
-all: $(BUILD_DIR) $(OUTPUT_DIR) $(HEX_FILE) $(BIN_FILE)
+all: $(BUILD_DIR) $(OUTPUT_DIR) $(HEX_FILE) $(BIN_FILE) warn_check
 
 objects: $(BUILD_DIR) $(OUTPUT_DIR) $(OBJECTS)
 
@@ -333,6 +333,39 @@ $(BIN_FILE): $(ELF_FILE)
 $(DUMP_FILE): $(ELF_FILE)
 	$(OBJDUMP) -Sxdstr $< >$@
 
+# WARNING RATCHET (ci/warn_ratchet.py) wired at build time - CONTRACTS.md
+# #warn-ratchet-build-time-wiring. See common/warn_check.sh's header for the
+# full soundness rationale: forces its own from-scratch build in a scratch
+# directory (never the developer's own $(BUILD_DIR)) so the captured log
+# can never be an incomplete/incremental one, and proves that happened
+# (object-count check) rather than trusting it.
+#
+# The recursive $(MAKE) targets the scratch ELF path directly (never `all`/
+# `warn_check`) to avoid a `warn_check -> rebuild -> all -> warn_check ->
+# ...` infinite recursion, since `all` above lists `warn_check` as its own
+# prerequisite. BUILD_DIR/OUTPUT_DIR are overridden to two DISTINCT scratch
+# subdirectories (obj/ vs out/) - overriding both to the same path collides
+# this Makefile's own directory-creation rules ("overriding recipe for
+# target", a real warning the ratchet then correctly fails on). This port
+# has no vendored pre-built object (unlike ch570's vendor/ISP572.o), so
+# $(words $(OBJECTS)) (every compiled source) is exactly the right count.
+WARN_SCRATCH     = $(OUTPUT_DIR)/.warncheck/$(PLATFORM_NAME)/$(BOARD)/$(BUILD)
+WARN_SCRATCH_OBJ = $(WARN_SCRATCH)/obj
+WARN_SCRATCH_OUT = $(WARN_SCRATCH)/out
+WARN_LOG         = $(WARN_SCRATCH)/build.log
+WARN_BASELINE    = ../../../ci/warn_baseline_$(PLATFORM_NAME).txt
+WARN_RATCHET     = ../../../ci/warn_ratchet.py
+WARN_CHECK       = ../common/warn_check.sh
+
+warn_check:
+	@mkdir -p $(WARN_SCRATCH_OBJ) $(WARN_SCRATCH_OUT)
+	@sh $(WARN_CHECK) $(WARN_SCRATCH_OBJ) $(words $(OBJECTS)) $(WARN_LOG) \
+	    $(WARN_BASELINE) $(WARN_RATCHET) -- \
+	    $(MAKE) --no-print-directory BUILD=$(BUILD) BOARD=$(BOARD) FP=$(FP) \
+	      SHM_COHERENCY=$(SHM_COHERENCY) PLIC_CONTEXT=$(PLIC_CONTEXT) \
+	      BUILD_DIR=$(WARN_SCRATCH_OBJ) OUTPUT_DIR=$(WARN_SCRATCH_OUT) \
+	      $(WARN_SCRATCH_OUT)/$(BINARY_NAME).elf
+
 debug: $(ELF_FILE)
 	$(GDB) $<
 
@@ -346,6 +379,7 @@ clean:
 	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.dump \
 	      $(OUTPUT_DIR)/grbl_$(PLATFORM_NAME)*.map
 	rm -rf $(BUILD_DIR)
+	rm -rf $(OUTPUT_DIR)/.warncheck/$(PLATFORM_NAME)
 
 clean-all:
 	rm -rf $(OUTPUT_DIR)
@@ -376,6 +410,6 @@ help:
 	@echo "  Current BUILD = $(BUILD)"
 	@echo "  Output dir    = $(BUILD_DIR)"
 
-.PHONY: all objects link clean clean-all debug help compdb
+.PHONY: all objects link clean clean-all debug help compdb warn_check
 
 -include $(BUILD_DIR)/*.d
