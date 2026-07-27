@@ -80,8 +80,18 @@ SECTIONS
   /* Address in Flash where .data is stored */
   _sidata = LOADADDR(.data);
 
-  /* Uninitialized data (zero-initialized at startup) */
-  .bss :
+  /* Uninitialized data (zero-initialized at startup). (NOLOAD): pure
+   * location-counter advance / zero-init, no real file content assigned.
+   * GNU ld infers SHT_NOBITS for such a section; ld.lld does NOT and emits
+   * real file-backed SHT_PROGBITS instead, which turns `objcopy -O binary`
+   * into a multi-hundred-MB .bin (see TOOLCHAIN-AXIS.md, same bug already
+   * fixed on stm32f103/f411/h523/hc32f460/ch32v006/ch570/_template - this
+   * port was flagged there as still needing it, fixed here 2026-07-27
+   * during the toolchain size-matrix session). Verified zero-cost under
+   * GNU ld/gcc: fresh RELEASE rebuild's .bin is byte-identical to the
+   * committed artifacts/samd21-generic and samd21-megarm grbl_samd21.bin
+   * for both boards. */
+  .bss (NOLOAD) :
   {
     . = ALIGN(4);
     _sbss = .;              /* Start of .bss */
@@ -93,7 +103,7 @@ SECTIONS
   } > RAM
 
   /* Stack (grows downward from end of RAM) */
-  .stack :
+  .stack (NOLOAD) :
   {
     . = ALIGN(8);
     _sstack = .;
