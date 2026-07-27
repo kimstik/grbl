@@ -4586,6 +4586,33 @@ it):
 | `common/boot_check.sh` **or an architecture-equivalent boot-integrity check** | 7/10 - missing on `atmega328p`, `dspic33ak128mc102`, `sg2002` (see below; **not** ch570 - corrected) |
 | `ci/warn_ratchet.py` | 0/10 before this entry; 9/10 after (all but `sg2002`, out of scope - see Coordination note) |
 
+**STATUS UPDATE (2026-07-27): this whole table is stale for `sg2002` - it
+is no longer the design-only/no-functional-code port this table's
+`sg2002` cells describe.** A concurrent session's rewrite of the port
+landed after this entry: `sg2002/Makefile` now has real
+`platform.c`/`startup.c`/`handlers.c`/`serial.c`/`nvmem.c`, a real
+RELEASE/DEBUG build (`riscv64-unknown-elf-gcc`, rv64imafc_zicsr/lp64f),
+and, measured directly from the current Makefile rather than assumed:
+`ASSERT_FP` (`tools/assert_no_double.sh`) and `INIT_CHECK`
+(`common/init_check.sh`) already wired at its `$(ELF_FILE)` link recipe,
+and its own RISC-V-shaped inline boot-integrity check (`_start` must
+link at `script.ld`'s `MEMORY{CODE}` origin - same shape as
+`ch32v006`/`ch570`) in its `$(BIN_FILE)` recipe. This session (separate
+from the one that wrote this table) wired `ci/warn_ratchet.py` in too,
+the same `warn_check.sh` mechanism as every other port, seeded from a
+real build log already present at `ci/warn_baseline_sg2002.txt` -
+verified with a break/restore cycle (remove a baseline line ->
+`warn_ratchet: FAIL`, exit 2 -> restore -> pass, exit 0, `git status`
+clean). Corrected coverage: **all four ratchets are now 10/10** (counting
+`atmega328p`/`dspic33ak128mc102`'s documented architectural exemptions
+above as already-satisfied, per this table's own existing per-port
+reasoning) - `sg2002` no longer belongs in any "missing" cell in this
+table, and the "9/10, out of scope" framing on the `ci/warn_ratchet.py`
+row is the one piece of this correction with fresh, this-session
+evidence; the other three rows' `sg2002` coverage was not independently
+re-verified beyond reading the Makefile, since this session's scope was
+the warning ratchet specifically.
+
 The `boot_check.sh` row needed correcting, not just reporting. `ch32v006`
 and `ch570` do **not** call `common/boot_check.sh` - the script says so
 itself ("Not applicable to RISC-V: see the note in ch32v006/Makefile") -
@@ -4753,3 +4780,7 @@ unmodified, and every `ci/warn_baseline_*.txt` file is unchanged from HEAD
 byte-for-byte - confirmed via `git diff` showing no residue). A concurrent
 session stress-testing this session's claims should see identical guard
 behavior before and after this entry.
+
+**STATUS UPDATE (2026-07-27): stale, see the table correction above** -
+`sg2002` has real platform code now and its own four ratchets, including
+`ci/warn_ratchet.py` as of this later session.
