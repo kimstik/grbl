@@ -18,10 +18,17 @@
 #  not know this layout, so a profile using this file must still point at
 #  it explicitly - see the axis doc's exact -L/-sysroot invocation).
 #
-#  NOT wired into any port Makefile yet - see family/gcc.mk's header
-#  comment (deferred this session to avoid a collision with a concurrent
-#  ratchet-invocation audit). Proven correct out-of-tree instead (axis
-#  doc has the full command transcript).
+#  REACHABLE (2026-07-27) but link-incomplete through the Makefile path:
+#  samd21/hc32f460/common/stm32/common.mk's `TC ?= arm-gcc-13.2` + `include
+#  .../profiles/$(TC).mk` wiring means `make TC=arm-clang-18 BUILD=RELEASE`
+#  now really selects this profile (CC/NM/OBJCOPY/OBJDUMP/SIZE and the
+#  OPT/LTO/FP_SINGLE flags all come from this file), but every one of
+#  those Makefiles still hardcodes `-specs=nano.specs -specs=nosys.specs`
+#  (gcc-only spec files clang cannot parse), so a real link will fail
+#  until that gets a per-TC_FAMILY answer - out of scope for the
+#  byte-identity gate this session was held to. Proven correct
+#  out-of-tree instead (axis doc has the full command transcript, working
+#  around exactly this gap by hand with explicit -L/-lc_nano/-lnosys).
 
 CLANG_TARGET := arm-none-eabi
 TC_SYSROOT   := /usr/lib/arm-none-eabi

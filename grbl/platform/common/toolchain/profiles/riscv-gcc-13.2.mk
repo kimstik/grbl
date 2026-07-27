@@ -10,9 +10,13 @@
 #  three ISA variants the same way arm-gcc-13.2.mk serves four ARM ports
 #  with differing -mcpu/-mfpu.
 #
-#  NOT wired into any port Makefile yet - see family/gcc.mk's header
-#  comment (deferred this session to avoid a collision with a concurrent
-#  ratchet-invocation audit).
+#  WIRED (2026-07-27): ch32v006/Makefile, ch570/Makefile, and
+#  sg2002/Makefile all now have `TC ?= riscv-gcc-13.2` + `include
+#  .../profiles/$(TC).mk` at the top - this is their default TC.
+#  TOOLCHAIN_PATH keeps its existing meaning (a directory prefix ahead of
+#  the resolved tool name). Byte-identity verified: RELEASE .bin
+#  md5sum-identical to committed artifacts/ for all 3 units this profile
+#  owns - see PLAN.md.
 
 TC_PREFIX := riscv64-unknown-elf-
 TC_VER    := 13.2
