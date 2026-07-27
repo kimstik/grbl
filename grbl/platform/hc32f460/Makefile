@@ -35,17 +35,41 @@ FLASH_LENGTH   = 524288
 
 BUILD ?= DEBUG
 
+# Toolchain profile (Layer 2/3, common/toolchain/) - TC selects a profile;
+# default is this port's canonical one (arm-gcc-13.2 - docs/TOOLCHAIN-
+# VERSIONS.md #5's canonical-toolchain rule, owns artifacts/hc32f460 and
+# every ratchet here). Selecting the default is a no-op by construction:
+# TC_PREFIX/TC_OPT_FLAG/TC_LTO_CFLAGS/TC_FP_SINGLE_CFLAGS below resolve to
+# the exact literal strings this Makefile hardcoded before this wiring
+# landed (verified: RELEASE .bin md5sum-identical to committed artifacts/
+# - PLAN.md). TOOLCHAIN_PATH is unchanged - still a directory prefix
+# applied ahead of whichever profile's tool name TC resolves to, gcc-
+# family only (see common/toolchain/profiles/*-clang-*.mk - no
+# TOOLCHAIN_PATH knob exists for the one apt clang this tree measures).
+TC ?= arm-gcc-13.2
+include $(dir $(lastword $(MAKEFILE_LIST)))../common/toolchain/profiles/$(TC).mk
+
 TOOLCHAIN_PATH ?=
-ifdef TOOLCHAIN_PATH
-  PREFIX     = $(TOOLCHAIN_PATH)/arm-none-eabi-
+ifeq ($(TC_FAMILY),gcc)
+  ifdef TOOLCHAIN_PATH
+    PREFIX   = $(TOOLCHAIN_PATH)/$(TC_PREFIX)
+  else
+    PREFIX   = $(TC_PREFIX)
+  endif
+  CC       = $(PREFIX)gcc
+  NM       = $(PREFIX)nm
+  OBJCOPY  = $(PREFIX)objcopy
+  OBJDUMP  = $(PREFIX)objdump
+  SIZE     = $(PREFIX)size
+  GDB      = $(PREFIX)gdb
 else
-  PREFIX     = arm-none-eabi-
+  CC       = $(TC_CC)
+  NM       = $(TC_NM)
+  OBJCOPY  = $(TC_OBJCOPY)
+  OBJDUMP  = $(TC_OBJDUMP)
+  SIZE     = $(TC_SIZE)
+  GDB      = gdb
 endif
-CC         = $(PREFIX)gcc
-OBJCOPY    = $(PREFIX)objcopy
-OBJDUMP    = $(PREFIX)objdump
-SIZE       = $(PREFIX)size
-GDB        = $(PREFIX)gdb
 
 GRBL_DIR   = ../..
 # Keyed by BUILD flavor: DEBUG/RELEASE object dirs never alias (landed
@@ -104,8 +128,8 @@ CFLAGS += -ffile-prefix-map=$(CURDIR)=/grbl-src
 # platform.md).
 FP ?= SINGLE
 ifeq ($(FP),SINGLE)
-  CFLAGS += -fsingle-precision-constant -DGRBL_FP_SINGLE
-  ASSERT_FP = ../../../tools/assert_no_double.sh $(PREFIX)nm $(ELF_FILE)
+  CFLAGS += $(TC_FP_SINGLE_CFLAGS) -DGRBL_FP_SINGLE
+  ASSERT_FP = ../../../tools/assert_no_double.sh $(NM) $(ELF_FILE)
 else ifeq ($(FP),DOUBLE)
   ASSERT_FP = @echo "FP=DOUBLE: declared-double port build, no-DP assert disarmed"
 else
@@ -128,8 +152,8 @@ CFLAGS_EXTRA = -I. -I../common/dummy -include prelude.h
 CFLAGS += $(CFLAGS_EXTRA) -I$(PLATFORM_DIR) -I$(GRBL_DIR)/platform -I$(GRBL_DIR)
 
 ifeq ($(BUILD),RELEASE)
-  CFLAGS += -Os -g0
-  CFLAGS += -flto -fno-fat-lto-objects
+  CFLAGS += $(TC_OPT_FLAG) -g0
+  CFLAGS += $(TC_LTO_CFLAGS)
 else
   CFLAGS += -O0 -g3
   CFLAGS += -DDEBUG
@@ -142,7 +166,7 @@ LDFLAGS += -specs=nano.specs -specs=nosys.specs
 LDFLAGS += -T script.ld
 
 ifeq ($(BUILD),RELEASE)
-  LDFLAGS += -flto -Os
+  LDFLAGS += $(TC_LTO_LDFLAGS) $(TC_OPT_FLAG)
 endif
 
 LIBS = -lm
@@ -186,7 +210,7 @@ $(ELF_FILE): $(OBJECTS)
 	$(CC) $(LDFLAGS) -o $@ $(OBJECTS) $(LIBS)
 	$(SIZE) --format=berkeley $@
 	$(ASSERT_FP)
-	@sh $(INIT_CHECK) $(PREFIX)nm $@ $(INIT_SYMBOLS)
+	@sh $(INIT_CHECK) $(NM) $@ $(INIT_SYMBOLS)
 
 $(HEX_FILE): $(ELF_FILE)
 	$(OBJCOPY) -O ihex $< $@
@@ -227,7 +251,7 @@ warn_check:
 	@mkdir -p $(WARN_SCRATCH_OUT)
 	@sh $(WARN_CHECK) $(WARN_SCRATCH_OBJ) $(words $(OBJECTS)) $(WARN_LOG) \
 	    $(WARN_BASELINE) $(WARN_RATCHET) -- \
-	    $(MAKE) --no-print-directory BUILD=$(BUILD) FP=$(FP) \
+	    $(MAKE) --no-print-directory BUILD=$(BUILD) FP=$(FP) TC=$(TC) \
 	      BUILD_DIR=$(WARN_SCRATCH_OBJ) OUTPUT_DIR=$(WARN_SCRATCH_OUT) \
 	      $(WARN_SCRATCH_OUT)/$(BINARY_NAME).elf
 
