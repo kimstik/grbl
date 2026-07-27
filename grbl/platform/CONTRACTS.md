@@ -2285,7 +2285,9 @@ hardware-proven.
 buildable port, not as an end-of-project deliverable but so the *current*
 state of every port is inspectable and diffable over time. Before this
 batch, `atmega328p` was the only port with any byte-level build history —
-the golden MD5 in `grbl/platform/Makefile`'s `validate` target. Every other
+the canonical MD5 gated by the root `Makefile`'s `validate` target (now via
+`grbl/platform/common/chk.py`'s tiered table, [§chk-py-tiers](#chk-py-tiers)
+- it was a hardcoded string here at the time this entry was written). Every other
 port could only be compared "now vs now" inside a single session (rebuild
 twice, diff the two local files); a size drift discovered a week later had
 nothing upstream to diff against. That gap is closed by `artifacts/` (repo
@@ -4784,3 +4786,174 @@ behavior before and after this entry.
 **STATUS UPDATE (2026-07-27): stale, see the table correction above** -
 `sg2002` has real platform code now and its own four ratchets, including
 `ci/warn_ratchet.py` as of this later session.
+
+---
+
+<a id="chk-py-tiers"></a>
+## 40. What the tiers in `chk.py` mean, and which one gates
+
+**The gap this closes.** `grbl/platform/common/chk.py` has always carried a
+`known_hashes` table with entries at clearly different levels of authority -
+the official upstream gnea/grbl v1.1h release image (a different project's
+artifact, kept only for comparison), the pre-HAL "vanilla master" build
+(kimstik/grbl commit eefe2bb, gcc 7.3.0+LTO), assorted other-toolchain
+builds, and the gcc 7.3.0 no-LTO "working horse" - the one every other doc
+in this repo calls "the golden MD5". Despite that tiered table existing,
+the root `Makefile`'s `validate` target never called `chk.py` at all: it
+hardcoded `EXPECTED_MD5=79af184e67b27defd27a39309ac53563` inline and did a
+plain `md5sum`/string compare. The table was real design; the gate was a
+copy of one row of it, disconnected from the file that was supposed to own
+the decision. Every "golden MD5" statement elsewhere in this project's
+docs (PLATFORM_ROADMAP.md, PLAN.md, PORTING-CHECKLIST.md,
+docs/TOOLCHAIN-AXIS.md, docs/TOOLCHAIN-VERSIONS.md,
+docs/REVIEW-SESSION-CLAIMS.md - all cross-checked this session) describes
+that hardcoded string, not the tiered scheme actually sitting in `chk.py`.
+
+**The tiers, precisely** (see `known_hashes`'s own `'tier'` field, the
+authoritative source - this is a description of it, not a second copy that
+can drift):
+
+- **`canonical`** - the byte-exact reference this project gates on. Exactly
+  one `grbl.hex` entry and one `grbl.bin` entry carry this tier: the
+  gcc 7.3.0, no-LTO "working horse" build (`79af184e67b27defd27a39309ac53563`
+  / `6134ac924a80e22a31ffb83643b5add1`). Nothing else may ever be tagged
+  `canonical` without the owner changing the canonical toolchain (same rule
+  as the canonical-toolchain rule elsewhere in this project, §5) - this is
+  the AVR analogue of it.
+- **`known`** - recognised and reproducible: a documented toolchain/flag
+  combination reliably produces this hash, but it is not the reference.
+  Includes the gnea/grbl upstream images, the vanilla-master build, and
+  every other-toolchain build this session added (avr-gcc 9.2.0, 15.2.0,
+  16.1.0 - see below).
+- **`unreproducible`** - recorded historically, but a real reproduction
+  attempt this session failed. Kept in the table (not deleted), explicitly
+  tagged, with the attempted reproduction recipe in the same comment, so
+  the gap stays visible instead of quietly reading as verified - the same
+  discipline §37 (baseline-entry honesty) already requires of
+  `ci/warn_baseline_*.txt` entries, applied to this table too.
+
+**Which one gates.** The root `Makefile`'s `validate` target now runs
+`python3 grbl/platform/common/chk.py --require-canonical grbl.hex` instead
+of the inline string compare. `chk.py` owns both the table and the
+pass/fail decision:
+
+| build matches | plain `chk.py file` | `chk.py --require-canonical file` (what `validate` uses) |
+|---|---|---|
+| `canonical` tier | green `OK (canonical)`, exit 0 | green `OK (canonical)`, exit 0 |
+| `known` tier | yellow `RECOGNISED (non-canonical)`, exit 0 | yellow `RECOGNISED (non-canonical)`, exit **2** |
+| `unreproducible` tier (matched anyway) | yellow, exit 0 | yellow, exit **2** |
+| no entry matches | red `FAIL`, exit 1 | red `FAIL`, exit 1 |
+
+A build that matches the gcc 16.1.0 `known` entry is *recognised* - `chk.py`
+says so in the log - but it is not the golden reference, and it FAILS
+`make validate` exactly like a corrupted image does (verified: built with
+`AVR_GCC_PATH=/opt/avr-gcc-16/bin`, `make validate` printed the yellow
+`RECOGNISED (non-canonical)` line and exited non-zero, distinct from both
+the canonical PASS and a red `FAIL` on an actually-corrupted file). The two
+non-canonical states were a deliberate design requirement here, not an
+afterthought: a recognised-but-wrong toolchain must never look identical to
+the golden gate passing.
+
+**Byte-neutrality proof.** Only the `validate` recipe changed - the
+compile/link recipe (`COMPILE`, `grbl.hex`, `$(BUILDDIR)/main.elf` targets)
+is untouched. `grbl.hex` MD5 measured before this change and after:
+`79af184e67b27defd27a39309ac53563` both times, 86188 bytes, `.text`=30640 -
+identical. `make -C grbl/platform/atmega328p validate` PASSED before and
+after (init_check + warn_ratchet both green throughout).
+
+**The unreproducible entry, investigated.** `7f14441d024bb6af43b547e435e598b8`
+("grbl.hex - gcc 15.2") predates this session and, unlike every other row,
+was recorded with no byte count and no flag set - itself evidence it was
+never captured with full provenance. This session tried reproducing it
+with avr-gcc 15.2.0 and 16.1.0 (ZakKemble/avr-gcc-build releases
+`v15.2.0-1`/`v16.1.0-1`, `/opt/avr-gcc-15`/`/opt/avr-gcc-16`) across 8
+combinations: {this repo's HAL `grbl/` source, the pre-HAL vanilla
+`kimstik/grbl` commit eefe2bb source} x {`-flto` on, off} x {15.2.0,
+16.1.0}. None produced this hash (the 8 measured hashes are listed in
+`chk.py`'s own comment above the entry). Most likely explanation: the
+original build used a different avr-gcc 15.2 distribution/patch level than
+the one available on this machine, and/or an undocumented flag set. Left
+in the table, tagged `unreproducible`, not deleted.
+
+**New reproducible entries added this session** (exact commands in
+`chk.py`'s comments, repeated here for convenience):
+
+| toolchain | source | `grbl.hex` MD5 | bytes | `.text` | vs canonical |
+|---|---|---|---|---|---|
+| gcc 7.3.0, no LTO (**canonical**) | HAL | `79af184e67b27defd27a39309ac53563` | 86188 | 30640 | - |
+| gcc 15.2.0 (`/opt/avr-gcc-15`, ZakKemble v15.2.0-1) | HAL | `72b8300e1ace62cd751c56a7422fd430` | 87195 | 30994 | +1.2% |
+| gcc 16.1.0 (`/opt/avr-gcc-16`, ZakKemble v16.1.0-1) | HAL | `e7c81dd66c8d5c36bc7c48ec97ee991c` | 85738 | 30480 | -0.5% |
+| gcc 9.2.0 (modm-io/avr-gcc v9.2.0) | HAL | `bfc564e2f69ef9cfd3ddfb09f5bf9cb5` | 101644 | 36132 | **+17.9%** |
+
+Reproduce any HAL/15.2.0/16.1.0 row with `make AVR_GCC_PATH=<toolchain>/bin
+grbl.hex` from the repo root (no LTO - the root `Makefile`'s own default
+flags). The gcc 9.2.0 row needs a download (see below) since no gcc-9 AVR
+toolchain was pre-installed on this machine.
+
+**The gcc 9 claim, checked, not assumed.** The owner said this project
+"also built fine on gcc 9." avr-gcc 9 was not preinstalled here (only
+7.3.0, 15.2.0, 16.1.0 were). `ZakKemble/avr-gcc-build`'s own GitHub
+releases were tried first (the same source that provided 15.2.0/16.1.0)
+but that repository does not appear to publish a gcc-9 release asset under
+a guessable tag/filename (`api.github.com` and the HTML releases page both
+403 in this sandbox - "GitHub access to this repository is not enabled for
+this session" - and direct-asset-URL guesses against several plausible
+`v9.x.x-N`/`avr-gcc-9.x.x-x64-linux.tar.*` combinations all 404'd).
+Fell back to a second, independently-maintained prebuilt-AVR-GCC project,
+`modm-io/avr-gcc` (confirmed to have a `v9.2.0` tag via its releases.atom
+feed, which is not gated the way the HTML page and API are), asset
+`avr-gcc.tar.bz2` at
+`github.com/modm-io/avr-gcc/releases/download/v9.2.0/avr-gcc.tar.bz2` - a
+direct `/releases/download/` path, same class of URL the brief noted works
+even when the API/HTML paths don't. Downloaded to a scratch directory only
+(never committed - the tarball is ~220MB and is not part of this repo).
+
+Building with it needed one adjustment beyond `AVR_GCC_PATH`: this
+tarball ships `avr-gcc` and `avr-binutils` as two separate directory
+trees, and `avr-gcc`'s internal driver looks for a plain-named `as`/`ld`
+it does not bundle in its own `bin/` (the `avr/` directory next to its
+`bin/` is avr-libc only, not binutils). Setting
+`COMPILER_PATH=<...>/avr-binutils/avr/bin` (where the plain-named
+`as`/`ld` actually live) fixed it; `AVR_GCC_PATH` itself pointed at a
+directory of symlinks merging both trees' `bin/` (for `avr-gcc`,
+`avr-objcopy`, `avr-size`, which the root Makefile calls directly by
+name). The exact reproduction command is in `chk.py`'s comment above the
+gcc-9.2.0 entries.
+
+Result: it compiles and links with zero errors - confirming "built fine"
+in the sense of "the toolchain accepts this source" - but produces
+`.text`=36132 against the canonical 30640, **+17.9%**, confirmed
+reproducible across two independent clean rebuilds (identical hash both
+times). This is a real, measured AVR-target code-density regression in the
+gcc 8/9/10 era relative to 7.3.0 that the wider avr-gcc community has
+documented before; 15.2.0 and 16.1.0 do **not** show it (both stay within
+~1.2% of the canonical size), so "the project built fine on gcc 9" and
+"gcc 9 is size-comparable to the canonical build" are different claims -
+the tiered scheme is exactly what lets both be true and recorded
+separately, instead of one hash table entry silently standing in for both.
+
+**"The golden MD5" wording, corrected where it implied a single hardcoded
+value was the design.** `PLATFORM_ROADMAP.md`'s "Golden gate (BLOCKING)"
+paragraph and `docs/REVIEW-SESSION-CLAIMS.md`'s row on the same subject
+both described the *previous* mechanism (a hardcoded string inside
+`Makefile`'s `validate` recipe) as if that string were the design instead
+of an implementation gap; both now note `validate` calls `chk.py`. Every
+other "golden MD5" reference in this project (PLAN.md, CONTRACTS.md's own
+earlier sections, `PORTING-CHECKLIST.md`, `docs/TOOLCHAIN-AXIS.md`,
+`docs/TOOLCHAIN-VERSIONS.md`) already only ever used the phrase to mean
+"the canonical hash value" (`79af184e67b27defd27a39309ac53563`), which
+remains completely accurate under the tiered scheme - that value is still
+the (only) canonical entry - so those references were left as-is; only the
+two describing the *gate mechanism itself* needed correcting.
+
+**Gates.** `make -C grbl/platform/atmega328p validate` PASSED throughout
+(`79af184e67b27defd27a39309ac53563`), root `Makefile`'s compile/link
+recipe untouched. All 8 ratchets re-verified green after this entry:
+golden AVR validate + `init_check.sh` + `warn_ratchet.py` (bundled into the
+same shim invocation), `tools/build_artifacts.py check`, `ci/
+pinmap_overlap_check.py`, `tools/check_contracts_numbering.py`
+(`assert_no_double.sh`/`boot_check.sh` on other ports untouched - no file
+outside `grbl/platform/common/chk.py` and the root `Makefile`'s `validate`
+recipe was edited). Nothing downloaded (the gcc-9.2.0 toolchain tarball)
+was committed - confirmed via `git status` showing no new file outside the
+two touched above.
