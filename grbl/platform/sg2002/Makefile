@@ -100,18 +100,41 @@ BOARD_DIR      = boards/$(BOARD)
 CFLAGS_EXTRA   = -I. -I../common/dummy -I$(BOARD_DIR)
 CFLAGS_EXTRA  += -include $(BOARD_DIR)/prelude.h
 
+# Toolchain profile (Layer 2/3, common/toolchain/) - TC selects a profile;
+# default is this port's canonical one (riscv-gcc-13.2 - docs/TOOLCHAIN-
+# VERSIONS.md #5's canonical-toolchain rule, owns artifacts/sg2002 and
+# every ratchet here). Selecting the default is a no-op by construction:
+# TC_PREFIX/TC_OPT_FLAG/TC_LTO_CFLAGS/TC_FP_SINGLE_CFLAGS below resolve to
+# the exact literal strings this Makefile hardcoded before this wiring
+# landed (verified: RELEASE .bin md5sum-identical to committed artifacts/
+# - PLAN.md). TOOLCHAIN_PATH is unchanged - still a directory prefix
+# applied ahead of whichever profile's tool name TC resolves to, gcc-
+# family only (see common/toolchain/profiles/*-clang-*.mk - no
+# TOOLCHAIN_PATH knob exists for the one apt clang this tree measures).
+TC ?= riscv-gcc-13.2
+include $(dir $(lastword $(MAKEFILE_LIST)))../common/toolchain/profiles/$(TC).mk
+
 TOOLCHAIN_PATH ?=
-ifdef TOOLCHAIN_PATH
-  PREFIX     = $(TOOLCHAIN_PATH)/riscv64-unknown-elf-
+ifeq ($(TC_FAMILY),gcc)
+  ifdef TOOLCHAIN_PATH
+    PREFIX   = $(TOOLCHAIN_PATH)/$(TC_PREFIX)
+  else
+    PREFIX   = $(TC_PREFIX)
+  endif
+  CC       = $(PREFIX)gcc
+  NM       = $(PREFIX)nm
+  OBJCOPY  = $(PREFIX)objcopy
+  OBJDUMP  = $(PREFIX)objdump
+  SIZE     = $(PREFIX)size
+  GDB      = $(PREFIX)gdb
 else
-  PREFIX     = riscv64-unknown-elf-
+  CC       = $(TC_CC)
+  NM       = $(TC_NM)
+  OBJCOPY  = $(TC_OBJCOPY)
+  OBJDUMP  = $(TC_OBJDUMP)
+  SIZE     = $(TC_SIZE)
+  GDB      = gdb
 endif
-CC         = $(PREFIX)gcc
-OBJCOPY    = $(PREFIX)objcopy
-OBJDUMP    = $(PREFIX)objdump
-SIZE       = $(PREFIX)size
-NM         = $(PREFIX)nm
-GDB        = $(PREFIX)gdb
 
 GRBL_DIR   = ../..
 BUILD_DIR  = ../../../build/$(PLATFORM_NAME)/$(BUILD)
@@ -179,7 +202,7 @@ endif
 # ---------------------------------------------------------------------------
 FP ?= SINGLE
 ifeq ($(FP),SINGLE)
-  CFLAGS += -fsingle-precision-constant -DGRBL_FP_SINGLE
+  CFLAGS += $(TC_FP_SINGLE_CFLAGS) -DGRBL_FP_SINGLE
   ASSERT_FP = ../../../tools/assert_no_double.sh $(NM) $(ELF_FILE)
 else ifeq ($(FP),DOUBLE)
   ASSERT_FP = @echo "FP=DOUBLE: declared-double port build, no-DP assert disarmed"
@@ -206,7 +229,7 @@ CFLAGS += $(CFLAGS_EXTRA) -I$(PLATFORM_DIR) -I$(GRBL_DIR)/platform -I$(GRBL_DIR)
 
 BUILD ?= DEBUG
 ifeq ($(BUILD),RELEASE)
-  CFLAGS += -Os -g0
+  CFLAGS += $(TC_OPT_FLAG) -g0
   # LTO: RELEASE only (house style, matches samd21/stm32*/hc32f460/ch32v006/
   # ch570). DEBUG stays plain -Og for debuggability. `_start` needs no `used`
   # (unlike Reset_Handler): it is this image's linker ENTRY() point, which ld
@@ -216,7 +239,7 @@ ifeq ($(BUILD),RELEASE)
   # neither of which carries `used` either. Reset_Handler/SystemClock_Config/
   # sg2002_plic_init DO need it/GRBL_BOOT_INIT - see the INIT_SYMBOLS comment
   # above - and init_check.sh proves it below, not just by assertion.
-  CFLAGS += -flto -fno-fat-lto-objects
+  CFLAGS += $(TC_LTO_CFLAGS)
 else
   CFLAGS += -Og -g3
   CFLAGS += -DDEBUG
@@ -239,7 +262,7 @@ LDFLAGS += -T script.ld
 # hc32f460): -flto must be present at link time too, not just in CFLAGS,
 # for the linker's LTO plugin to drive the whole-program IR.
 ifeq ($(BUILD),RELEASE)
-  LDFLAGS += -flto -Os
+  LDFLAGS += $(TC_LTO_LDFLAGS) $(TC_OPT_FLAG)
 endif
 
 LIBS = -lm
@@ -361,7 +384,7 @@ warn_check:
 	@mkdir -p $(WARN_SCRATCH_OBJ) $(WARN_SCRATCH_OUT)
 	@sh $(WARN_CHECK) $(WARN_SCRATCH_OBJ) $(words $(OBJECTS)) $(WARN_LOG) \
 	    $(WARN_BASELINE) $(WARN_RATCHET) -- \
-	    $(MAKE) --no-print-directory BUILD=$(BUILD) BOARD=$(BOARD) FP=$(FP) \
+	    $(MAKE) --no-print-directory BUILD=$(BUILD) BOARD=$(BOARD) FP=$(FP) TC=$(TC) \
 	      SHM_COHERENCY=$(SHM_COHERENCY) PLIC_CONTEXT=$(PLIC_CONTEXT) \
 	      BUILD_DIR=$(WARN_SCRATCH_OBJ) OUTPUT_DIR=$(WARN_SCRATCH_OUT) \
 	      $(WARN_SCRATCH_OUT)/$(BINARY_NAME).elf

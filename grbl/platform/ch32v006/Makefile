@@ -54,18 +54,41 @@ CFLAGS_EXTRA   = -I. -I../common/dummy -I$(BOARD_DIR)
 # Build prelude: ONE injected header per board (CONTRACTS.md #0).
 CFLAGS_EXTRA  += -include $(BOARD_DIR)/prelude.h
 
-# Toolchain
+# Toolchain profile (Layer 2/3, common/toolchain/) - TC selects a profile;
+# default is this port's canonical one (riscv-gcc-13.2 - docs/TOOLCHAIN-
+# VERSIONS.md #5's canonical-toolchain rule, owns artifacts/ch32v006 and
+# every ratchet here). Selecting the default is a no-op by construction:
+# TC_PREFIX/TC_OPT_FLAG/TC_LTO_CFLAGS/TC_FP_SINGLE_CFLAGS below resolve to
+# the exact literal strings this Makefile hardcoded before this wiring
+# landed (verified: RELEASE .bin md5sum-identical to committed artifacts/
+# - PLAN.md). TOOLCHAIN_PATH is unchanged - still a directory prefix
+# applied ahead of whichever profile's tool name TC resolves to, gcc-
+# family only (see common/toolchain/profiles/*-clang-*.mk - no
+# TOOLCHAIN_PATH knob exists for the one apt clang this tree measures).
+TC ?= riscv-gcc-13.2
+include $(dir $(lastword $(MAKEFILE_LIST)))../common/toolchain/profiles/$(TC).mk
+
 TOOLCHAIN_PATH ?=
-ifdef TOOLCHAIN_PATH
-  PREFIX     = $(TOOLCHAIN_PATH)/riscv64-unknown-elf-
+ifeq ($(TC_FAMILY),gcc)
+  ifdef TOOLCHAIN_PATH
+    PREFIX   = $(TOOLCHAIN_PATH)/$(TC_PREFIX)
+  else
+    PREFIX   = $(TC_PREFIX)
+  endif
+  CC       = $(PREFIX)gcc
+  NM       = $(PREFIX)nm
+  OBJCOPY  = $(PREFIX)objcopy
+  OBJDUMP  = $(PREFIX)objdump
+  SIZE     = $(PREFIX)size
+  GDB      = $(PREFIX)gdb
 else
-  PREFIX     = riscv64-unknown-elf-
+  CC       = $(TC_CC)
+  NM       = $(TC_NM)
+  OBJCOPY  = $(TC_OBJCOPY)
+  OBJDUMP  = $(TC_OBJDUMP)
+  SIZE     = $(TC_SIZE)
+  GDB      = gdb
 endif
-CC         = $(PREFIX)gcc
-OBJCOPY    = $(PREFIX)objcopy
-OBJDUMP    = $(PREFIX)objdump
-SIZE       = $(PREFIX)size
-GDB        = $(PREFIX)gdb
 
 # Paths
 GRBL_DIR   = ../..
@@ -142,8 +165,8 @@ CFLAGS += -ffile-prefix-map=$(CURDIR)=/grbl-src
 # absent (rv32ec has no FPU, so double is fully soft-float here too).
 FP ?= SINGLE
 ifeq ($(FP),SINGLE)
-  CFLAGS += -fsingle-precision-constant -DGRBL_FP_SINGLE
-  ASSERT_FP = ../../../tools/assert_no_double.sh $(PREFIX)nm $(ELF_FILE)
+  CFLAGS += $(TC_FP_SINGLE_CFLAGS) -DGRBL_FP_SINGLE
+  ASSERT_FP = ../../../tools/assert_no_double.sh $(NM) $(ELF_FILE)
 else ifeq ($(FP),DOUBLE)
   ASSERT_FP = @echo "FP=DOUBLE: declared-double port build, no-DP assert disarmed"
 else
@@ -193,8 +216,8 @@ CFLAGS += $(CFLAGS_EXTRA) -I$(PLATFORM_DIR) -I$(GRBL_DIR)/platform -I$(GRBL_DIR)
 # already `used`/address-taken since the M1-M3 --gc-sections lifecycle
 # fix, CONTRACTS.md #14.3).
 ifeq ($(BUILD),RELEASE)
-  CFLAGS += -Os -g0
-  CFLAGS += -flto -fno-fat-lto-objects
+  CFLAGS += $(TC_OPT_FLAG) -g0
+  CFLAGS += $(TC_LTO_CFLAGS)
 else
   # -Og, not -O0: soft-float rv32ec grbl at -O0 is ~77KB of .text and the
   # chip has 62KB (61K after the NVMEM window). -Og keeps single-stepping
@@ -218,7 +241,7 @@ LDFLAGS += -T script.ld
 # link step re-invokes the compiler driver, which re-runs LTO codegen over
 # the whole-program IR - -flto must be present here too, not just in CFLAGS).
 ifeq ($(BUILD),RELEASE)
-  LDFLAGS += -flto -Os
+  LDFLAGS += $(TC_LTO_LDFLAGS) $(TC_OPT_FLAG)
 endif
 
 # Libraries (must come after objects in link command)
@@ -301,7 +324,7 @@ $(ELF_FILE): objects $(BOARD_STAMP)
 	$(CC) $(LDFLAGS) -o $(ELF_FILE) $(OBJECTS) $(LIBS)
 	$(SIZE) --format=berkeley $(ELF_FILE)
 	$(ASSERT_FP)
-	@sh $(INIT_CHECK) $(PREFIX)nm $@ $(INIT_SYMBOLS)
+	@sh $(INIT_CHECK) $(NM) $@ $(INIT_SYMBOLS)
 
 # Create hex file
 $(HEX_FILE): $(ELF_FILE)
@@ -316,7 +339,7 @@ BOOT_ENTRY_ADDR = 00000000
 
 $(BIN_FILE): $(ELF_FILE)
 	$(OBJCOPY) -O binary $< $@
-	@start=$$($(PREFIX)nm $(ELF_FILE) | grep ' _start$$' | cut -d' ' -f1); \
+	@start=$$($(NM) $(ELF_FILE) | grep ' _start$$' | cut -d' ' -f1); \
 	 if [ "$$start" != "$(BOOT_ENTRY_ADDR)" ]; then \
 	   echo ""; \
 	   echo "====================================================================="; \
@@ -364,7 +387,7 @@ warn_check:
 	@mkdir -p $(WARN_SCRATCH_OBJ) $(WARN_SCRATCH_OUT)
 	@sh $(WARN_CHECK) $(WARN_SCRATCH_OBJ) $(words $(OBJECTS)) $(WARN_LOG) \
 	    $(WARN_BASELINE) $(WARN_RATCHET) -- \
-	    $(MAKE) --no-print-directory BUILD=$(BUILD) BOARD=$(BOARD) FP=$(FP) \
+	    $(MAKE) --no-print-directory BUILD=$(BUILD) BOARD=$(BOARD) FP=$(FP) TC=$(TC) \
 	      BUILD_DIR=$(WARN_SCRATCH_OBJ) OUTPUT_DIR=$(WARN_SCRATCH_OUT) \
 	      $(WARN_SCRATCH_OUT)/$(BINARY_NAME).elf
 
