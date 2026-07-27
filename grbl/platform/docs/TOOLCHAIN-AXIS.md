@@ -120,6 +120,58 @@ session per the reopening brief; their status:
   copied flash→RAM at boot on a 2KB-RAM chip. AVR stays gcc-only forever,
   independent of the golden-MD5 argument, which alone would already
   settle it.
+
+  **CORRECTION (2026-07-27, toolchain size-matrix session): "gcc-only,
+  forever" for the *canonical build* still stands (golden MD5 settles that
+  alone), but the *mechanism* above needs a fix, and the flat "PROGMEM
+  unsupported" framing was one claim too broad. Re-verified end-to-end,
+  not re-quoted:**
+  1. **`const __flash char x[]` — the GNU named-address-space keyword —
+     is NOT the same finding as `PROGMEM`/`PSTR()`, and this document's
+     own §3 table (below, "worse than PROGMEM: fares worse, no diagnostic
+     at all, same wrong placement") is WRONG about it.** Re-tested this
+     session: `const __flash char msg[] = "hello flash";`, compiled with
+     `clang --target=avr -mmcu=atmega328p -Wall -Os -c`, produces **zero**
+     diagnostics and lands correctly in `.progmem.data`
+     (`llvm-objdump -h`: `.progmem.data  0000000e`, matching the 14-byte
+     string exactly) — clang genuinely implements `__flash` correctly.
+  2. **What does NOT work — confirmed, not merely re-asserted — is
+     avr-libc's actual `PROGMEM`/`PSTR()` mechanism**
+     (`__attribute__((__progmem__))`, a different spelling from `__flash`):
+     compiling real `grbl/report.c` (52 real `PSTR()` sites) reproduces
+     `warning: unknown attribute '__progmem__' ignored` on every one, and
+     linking a minimal repro through `avr-gcc` (real crt0/libc) places the
+     string at **VMA `0x800100`, type `D`** — genuine `.data`, confirmed
+     with `avr-nm`, not inferred from the warning text.
+  3. **Measured on the real 18-file core this session (`-D_AVR_WDT_H_`
+     applied)**: `.data` grows 0→486 bytes (all `report.c` `PSTR()`
+     strings, confirmed by symbol dump). Real SRAM is 2048 bytes,
+     `.bss`=1633 → `1633+486=2119`, a genuine **71-byte overflow**,
+     reproduced as an actual linker region error, not estimated.
+  4. **A second, independent, unconditional blocker found this session,
+     not previously recorded here**: core `nuts_bolts.c`'s real
+     `delay_ms`/`delay_us`/`delay_sec` (dwell path, not dead code) need
+     avr-libc's `<util/delay.h>`, which needs `__builtin_avr_delay_cycles`
+     — a GCC-only intrinsic clang-AVR does not implement at all
+     (`error: use of unknown builtin '__builtin_avr_delay_cycles'
+     [-Wimplicit-function-declaration]`; confirmed no fallback symbol in
+     `libgcc.a`/`libm.a` either). No flags-layer bypass exists for this
+     one, unlike `wdt.h`'s.
+  5. **Two verdicts, not one — the distinction this document's original
+     "gcc-only, forever" table entry (§6) collapsed into a single line**:
+     clang-AVR cannot produce a runnable/shippable image (items 2–4 above
+     are all real, hardware-fatal or link-fatal), but clang-AVR compiles
+     all 18 real core files cleanly as a **second static-analysis front
+     end** with exactly two flags-layer additions
+     (`-D_AVR_WDT_H_`, `-fno-builtin-floor -fno-builtin-ceil
+     -fno-builtin-trunc -fno-builtin-round` — the last four newly found
+     this session: clang's libcall-shrink pass rewrites `floor`/`ceil`/
+     `trunc`/`round` calls on `float` to the `*f`-suffixed names because
+     AVR's `double`==`float` ABI triggers the heuristic, but avr-libc's
+     `libm.a` only ships the unsuffixed symbols). §3's diagnostic
+     catalogue below remains valid on that basis.
+  Full measured numbers, exact commands, and the complete matrix across
+  every platform: `docs/TOOLCHAIN-VERSIONS.md` §8.3.
 - **ThinLTO differential (§4): re-run for real, still negative (no new
   regression), now on a genuinely FP=SINGLE clang image.** The original
   run's conclusion was correct but was measured on a DP-contaminated
@@ -353,7 +405,7 @@ plus `-D_AVR_WDT_H_` — see below for why)
 | File:line | Diagnostic | Judgement |
 |---|---|---|
 | `grbl.h:32` → `<avr/wdt.h>` | **HARD ERROR**, not a warning: `value '64' out of range for constraint 'I'` (×2, inside `wdt_enable`/`wdt_disable`) | **Headline finding for AVR — re-confirmed independently 2026-07-26 (later session), incl. at `-Os` explicitly.** avr-libc's `wdt.h` selects between an I/O-space inline-asm form (`"I"` constraint, 0–63) and a memory-mapped form via a **runtime** `if (_SFR_IO_REG_P(...))` — a compile-time-constant condition GCC folds and dead-code-eliminates before ever validating the untaken branch's asm constraints. clang validates inline-asm operand constraints in both branches before/independent of that dead-branch elimination, so the untaken branch (which targets I/O space registers, not applicable to `WDTCSR`'s actual address on atmega328p) fails to compile even though it can never execute. **Confirmed this is unconditional, not an `-Os`-only artifact**: re-ran at `-Os` explicitly (the hypothesis in the original brief) — identical failure, ruling out "only broken with optimization off." **Nothing in `grbl/` or `grbl/platform/atmega328p/` calls any `wdt_*` function** (grepped `grbl/*.c grbl/*.h` outside `platform/` — zero hits; the ONE reference anywhere is `atmega328p/platform.h`'s `HAL_WATCHDOG_RESET()` macro, itself never invoked by anything — CONTRACTS.md §9 already states "no platform implements this family"), so the remedy is a flags-layer one: `-D_AVR_WDT_H_` pre-defines avr-libc's own include guard, skipping the header's body entirely before `grbl.h`'s unconditional `#include <avr/wdt.h>` is reached. Verified: with that one define, all 18 core `.c` files pass `-fsyntax-only` with **zero errors**. This is exactly the kind of flags-layer-only, core-file-untouched remedy CONTRACTS.md's core-purity rule ([§32](CONTRACTS.md#core-purity-under-a-second-toolchain)) requires. |
-| `report.c` (55 lines) | `-Wunknown-attributes`: `unknown attribute '__progmem__' ignored` (`PSTR()` macro → avr-libc's `PROGMEM` → `__attribute__((__progmem__))`) | **Headline finding, functionally severe, not cosmetic — re-confirmed independently 2026-07-26.** Verified directly (small isolated test file, not just the warning text): `const char PROGMEM msg[] = "hi"` compiled with clang for AVR lands `msg` as an ordinary `R` (rodata) symbol with an **undefined reference to `__do_copy_data`** pulled in — i.e., clang silently drops the attribute and the object falls back to avr-gcc's ordinary Harvard-architecture behavior for `const`: copied from flash to RAM at startup by crt0's data-init loop, not left resident in flash and read back via `LPM`. The GNU named-address-space spelling (`const __flash char x[]`) fares **worse**: it compiles with **no diagnostic at all** and the same wrong placement — clang accepts the syntax and silently discards its meaning. Consequence for a real Tier-1 AVR build: `report.c`'s ~50 status/error `PSTR()` strings plus `settings.c`'s entire default-settings table (`const __flash settings_t defaults`) would all get copied into SRAM at boot instead of staying in flash — on a chip with **2 KB total RAM**, this does not merely waste space, it is very likely a silent RAM overflow with no link-time error (AVR linkers here have no `script.ld`-style `MEMORY{}`/`ASSERT` region enforcement the way the ARM ports do) — exactly the "compiles, links, boots wrong" class this project exists to catch, except the failure mode here is baked into the target's language-extension support, not LTO. This alone is close to disqualifying for AVR (see §11) — combined with the golden-MD5 argument (which by itself already settles it), AVR is gcc-only forever, full stop. |
+| `report.c` (55 lines) | `-Wunknown-attributes`: `unknown attribute '__progmem__' ignored` (`PSTR()` macro → avr-libc's `PROGMEM` → `__attribute__((__progmem__))`) | **Headline finding, functionally severe, not cosmetic — re-confirmed independently 2026-07-26.** Verified directly (small isolated test file, not just the warning text): `const char PROGMEM msg[] = "hi"` compiled with clang for AVR lands `msg` as an ordinary `R` (rodata) symbol with an **undefined reference to `__do_copy_data`** pulled in — i.e., clang silently drops the attribute and the object falls back to avr-gcc's ordinary Harvard-architecture behavior for `const`: copied from flash to RAM at startup by crt0's data-init loop, not left resident in flash and read back via `LPM`. The GNU named-address-space spelling (`const __flash char x[]`) fares **worse**: it compiles with **no diagnostic at all** and the same wrong placement — clang accepts the syntax and silently discards its meaning. Consequence for a real Tier-1 AVR build: `report.c`'s ~50 status/error `PSTR()` strings plus `settings.c`'s entire default-settings table (`const __flash settings_t defaults`) would all get copied into SRAM at boot instead of staying in flash — on a chip with **2 KB total RAM**, this does not merely waste space, it is very likely a silent RAM overflow with no link-time error (AVR linkers here have no `script.ld`-style `MEMORY{}`/`ASSERT` region enforcement the way the ARM ports do) — exactly the "compiles, links, boots wrong" class this project exists to catch, except the failure mode here is baked into the target's language-extension support, not LTO. This alone is close to disqualifying for AVR (see §11) — combined with the golden-MD5 argument (which by itself already settles it), AVR is gcc-only forever, full stop. **CORRECTED (2026-07-27): the `__flash` claim in this row is WRONG — re-tested, `const __flash char x[]` compiles clean with zero diagnostics and lands correctly in `.progmem.data`. The `PSTR()`/`PROGMEM` finding (this row's main claim) is re-confirmed and measured further (real .data placement via link+`nm`, a genuine 71-byte SRAM overflow on the real 18-file core) — see the correction block after this document's AVR bullet above, and `docs/TOOLCHAIN-VERSIONS.md` §8.3, for the full, corrected picture and the two-verdicts distinction (not-runnable vs. usable-as-analysis-front-end).** |
 | `stepper.c:326,496`, `serial.c:94,130`, `system.c:64`, `limits.c:107` | `-Wunknown-attributes`: `unknown attribute 'externally_visible' ignored` (ISR macro's `__INTR_ATTRS`) | **Checked, confirmed noise, not a defect.** `externally_visible` is a GCC whole-program-optimization visibility hint; separately verified that the co-occurring `signal` attribute (the one that actually matters — it controls whether the AVR backend emits interrupt-correct prologue/epilogue and `reti` instead of `ret`) **is** recognized by clang: compiled an isolated `ISR(...)` body and inspected the emitted assembly directly — full register/SREG save-restore and a trailing `reti`, byte-for-byte the shape an AVR ISR needs. `externally_visible` being silently ignored has no calling-convention consequence. |
 | **Hard errors on core code, unconditional (not `-Os`-dependent), other than `wdt.h`** | **none found** | All 18 core `.c` files pass `-fsyntax-only` once the one wdt.h workaround is applied — re-confirmed with a fresh, independent sweep this session (`clang --target=avr -mmcu=atmega328p -Os -D_AVR_WDT_H_ ...` over every `grbl/*.c`, zero non-zero exits). |
 
@@ -459,7 +511,7 @@ original text struck through where superseded, kept for the record:**
 
 | Port | `TOOLCHAINS_SUPPORTED` | Why |
 |---|---|---|
-| `atmega328p` | **gcc only, forever** (unchanged) | Golden MD5 is *defined* by avr-gcc 7.3.0's exact codegen — there is no "clang matches" question to ask, byte-identity to a specific compiler's output IS the spec. Independent of that: clang's AVR target has a hard compile error in avr-libc's `wdt.h` (unconditional, §3) and — more seriously — no working PROGMEM/`__flash` support at all (§3), which for an 18-string-plus-a-settings-table 2 KB-RAM target is close to disqualifying even ignoring the golden-MD5 question. **Re-confirmed independently this session, unchanged conclusion.** |
+| `atmega328p` | **gcc only, forever, for the canonical/shippable build** (corrected 2026-07-27 — see below) | Golden MD5 is *defined* by avr-gcc 7.3.0's exact codegen — there is no "clang matches" question to ask, byte-identity to a specific compiler's output IS the spec, independent of anything else in this row. Separately: clang-AVR cannot produce a runnable image — avr-libc's `PROGMEM`/`PSTR()` (not `__flash`, which clang supports correctly, correcting this row's earlier claim) is silently ignored, measured to genuinely overflow real SRAM by 71 bytes on the unmodified core, and `__builtin_avr_delay_cycles` (needed by core `nuts_bolts.c`'s real dwell path) has no clang-AVR implementation at all, confirmed via `-Wimplicit-function-declaration`, with no flags-layer bypass. **But clang-AVR DOES compile all 18 real core files cleanly as a second static-analysis front end** (two flags-layer bypasses, no core edit) — this is a real, usable capability this row's flat "gcc only, forever" undersold. Full measured numbers and the two-verdicts distinction: `docs/TOOLCHAIN-VERSIONS.md` §8.3. |
 | `dspic33ak128mc102` | **XC-DSC only** (unchanged) | Different ISA family entirely (dsPIC33A), no LLVM backend exists for it. Not a clang candidate under any flag combination. |
 | ~~`stm32f103`/`stm32f411`/`stm32h523`/`hc32f460` (ARM Cortex-M, FP=SINGLE) — gcc only, until §2 finding 1 has an answer~~ **CORRECTED: gcc + clang, FP=SINGLE holds under both.** | Compiles, links, and now genuinely satisfies FP=SINGLE under clang: `-cl-single-precision-constant` closes finding 1 (see the correction at the top of this document). `assert_no_double.sh`/`init_check.sh`/`boot_check.sh` all PASS on a real end-to-end stm32f411 build (this session). `stm32f103`/`stm32h523` share the identical `common/stm32/common.mk` flag shape and the identical M3/M33 symbol-level result (§ correction table) — not independently linked end-to-end this session, but the mechanism-level evidence is as strong as stm32f411's was before its own end-to-end proof. `hc32f460` was out of scope this session (concurrent work) — Cortex-M4 symbol-level result (identical to stm32f411's own M4 case) applies, but this port specifically was not independently tested. |
 | `dspic33ak128mc102`-adjacent native-DOUBLE ports (none landed yet) | n/a | A future FP=DOUBLE-by-design ARM/RISC-V port would not hit finding 1 at all — worth remembering this blocker is FP=SINGLE-specific, not universal. (Now moot for FP=SINGLE ports too, but the observation stands.) |

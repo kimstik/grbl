@@ -52,7 +52,18 @@ SECTIONS
 
   _sidata = LOADADDR(.data);
 
-  .bss :
+  /* (NOLOAD): pure location-counter advance / zero-init sections, no input
+   * sections with real file content assigned. GNU ld infers SHT_NOBITS for
+   * such an output section; ld.lld does NOT make the same inference and
+   * emits real file-backed SHT_PROGBITS instead, which turns a following
+   * `objcopy -O binary` into a multi-hundred-MB .bin (the flash-to-RAM
+   * address gap gets padded as if it were real content). (NOLOAD) is a
+   * standards-compliant directive both linkers honor identically; verified
+   * zero-cost under GNU ld/gcc (see TOOLCHAIN-AXIS.md, TOOLCHAIN-VERSIONS.md
+   * toolchain-matrix session, 2026-07-27 - this port was flagged there as
+   * still needing the fix already landed on stm32f103/f411/h523/ch32v006/
+   * ch570/_template). */
+  .bss (NOLOAD) :
   {
     . = ALIGN(4);
     _sbss = .;
@@ -63,7 +74,7 @@ SECTIONS
     _ebss = .;
   } > RAM
 
-  .stack :
+  .stack (NOLOAD) :
   {
     . = ALIGN(8);
     . = . + _stack_size;
@@ -71,7 +82,7 @@ SECTIONS
     _estack = .;
   } > RAM
 
-  .heap :
+  .heap (NOLOAD) :
   {
     . = ALIGN(4);
     _sheap = .;
