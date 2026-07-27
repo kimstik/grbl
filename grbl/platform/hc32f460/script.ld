@@ -52,7 +52,12 @@ SECTIONS
 
   _sidata = LOADADDR(.data);
 
-  .bss :
+  /* (NOLOAD): this section carries real input sections so GNU ld/lld both
+   * infer SHT_NOBITS from them today, but an explicit marker doesn't
+   * depend on that inference holding for every object - same
+   * defense-in-depth as stm32f103/f411/stm32h523's fix (docs/
+   * TOOLCHAIN-AXIS.md). */
+  .bss (NOLOAD) :
   {
     . = ALIGN(4);
     _sbss = .;
@@ -63,7 +68,15 @@ SECTIONS
     _ebss = .;
   } > RAM
 
-  .stack :
+  /* (NOLOAD): this section is pure location-counter advance, no input
+   * sections assigned. GNU ld infers SHT_NOBITS for that shape by
+   * convention; ld.lld does NOT and emits real file-backed SHT_PROGBITS,
+   * which turns `objcopy -O binary` into a multi-hundred-MB .bin padding
+   * the gap between FLASH and this RAM section (measured on stm32f411:
+   * 402MB, docs/TOOLCHAIN-AXIS.md). (NOLOAD) is a standards-compliant
+   * directive both linkers honor identically - zero effect under GNU ld,
+   * and this is the fix under lld. */
+  .stack (NOLOAD) :
   {
     . = ALIGN(8);
     . = . + _stack_size;
@@ -71,7 +84,8 @@ SECTIONS
     _estack = .;
   } > RAM
 
-  .heap :
+  /* Heap (if needed). (NOLOAD): same reasoning as .stack above. */
+  .heap (NOLOAD) :
   {
     . = ALIGN(4);
     _sheap = .;
