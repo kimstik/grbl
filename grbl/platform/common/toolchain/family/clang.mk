@@ -11,12 +11,22 @@
 #  canonical build (docs/TOOLCHAIN-AXIS.md §NEW "artifacts stays keyed to
 #  one canonical toolchain").
 #
-#  NOT wired into any port Makefile yet (2026-07-26) - see family/gcc.mk's
-#  header comment for why. Proven correct by a real out-of-tree build
-#  (compile all of stm32f411's real sources + link with lld + run the
-#  real assert_no_double.sh/init_check.sh/boot_check.sh against the
-#  resulting ELF - all three PASS) - see the axis doc for the exact
-#  commands. Ready to be included the moment a port opts in.
+#  REACHABLE (2026-07-27): every gcc-family port now has `TC ?=
+#  <canonical>` + `include .../profiles/$(TC).mk` wiring (see
+#  family/gcc.mk's header), so `make TC=arm-clang-18` (or
+#  TC=riscv-clang-18) on those ports DOES route CC/NM/OBJCOPY/OBJDUMP/
+#  SIZE and the OPT/LTO/FP_SINGLE flags through this file for real now -
+#  the include mechanism itself is no longer out-of-tree-only. What
+#  remains unverified through the Makefile path specifically (as opposed
+#  to the axis doc's manual out-of-tree build, which DID prove it end-to-
+#  end for stm32f411): the -specs=nano.specs/-specs=nosys.specs library
+#  selection every gcc-family common.mk/Makefile still hardcodes is a
+#  gcc-specific spec file clang cannot parse, so a real `make
+#  TC=arm-clang-18 BUILD=RELEASE` will still fail at link time on those
+#  ports until something threads clang's -L/-lc_nano/-lnosys equivalent
+#  through per TC_FAMILY - out of scope for the byte-identity gate this
+#  session was held to (verification-only profiles never owned
+#  artifacts/, and no canonical default was touched).
 
 ifndef TC_VER
 $(error TC_VER must be set by the including profile before family/clang.mk (e.g. 18.1))

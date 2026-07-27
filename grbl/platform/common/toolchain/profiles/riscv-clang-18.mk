@@ -23,8 +23,12 @@
 #  is ISA-generic and the ISA-specific bits are only -march=/-mabi= on the
 #  compile line, not baked into the sysroot path).
 #
-#  NOT wired into any port Makefile yet - see family/gcc.mk's header
-#  comment.
+#  REACHABLE (2026-07-27): ch32v006/ch570/sg2002's `TC ?= riscv-gcc-13.2`
+#  + `include .../profiles/$(TC).mk` wiring means `make TC=riscv-clang-18
+#  CLANG_TARGET=riscv64-unknown-elf BUILD=RELEASE` (CLANG_TARGET must
+#  still be set on the command line - see this file's own note above,
+#  unchanged) now really selects this profile - not just proven correct
+#  out-of-tree at the object level.
 
 TC_SYSROOT := /usr/lib/picolibc/riscv64-unknown-elf
 TC_VER     := 18.1

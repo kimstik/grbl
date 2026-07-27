@@ -9,6 +9,12 @@
 #  baseline (one already-known false positive, settings.c:208, reproduces
 #  identically - see the doc). Set TOOLCHAIN_PATH=/opt/arm-gnu-14.2 before
 #  using this profile.
+#
+#  REACHABLE (2026-07-27): samd21/hc32f460/common/stm32/common.mk's `TC ?=
+#  arm-gcc-13.2` + `include .../profiles/$(TC).mk` wiring means `make
+#  TC=arm-gcc-14.2 TOOLCHAIN_PATH=/opt/arm-gnu-14.2 BUILD=RELEASE` on any
+#  of those ports now really selects this profile - not just proven
+#  correct out-of-tree.
 
 TC_PREFIX := arm-none-eabi-
 TC_VER    := 14.2

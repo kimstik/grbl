@@ -10,14 +10,17 @@
 #  consumes: TC_CC, TC_NM, TC_OBJCOPY, TC_OBJDUMP, TC_SIZE, TC_OPT_FLAG,
 #  TC_LTO_CFLAGS, TC_LTO_LDFLAGS, TC_FP_SINGLE_CFLAGS.
 #
-#  NOT wired into any port Makefile yet (2026-07-26) - see the toolchain-
-#  axis doc's landing note for why (a concurrent session was auditing
-#  ratchet invocation across every port Makefile at the same time this
-#  landed; wiring this in was deferred one session rather than risk a
-#  collision on the exact lines that invoke assert_no_double.sh/
-#  init_check.sh/boot_check.sh). This file is complete and has been
-#  proven correct against a real end-to-end build (see the axis doc) -
-#  it is ready to be included the moment a port/common.mk opts in.
+#  WIRED (2026-07-27): every gcc-family port (atmega328p's root Makefile
+#  excepted - see the golden-MD5 gate note below) now has `TC ?=
+#  <canonical-profile>` + `include .../profiles/$(TC).mk` at the top of
+#  its Makefile (or common.mk, for the STM32 family), so this file is
+#  reached for real on every build, not just proven correct out-of-tree.
+#  Verified byte-neutral at the default TC: RELEASE .bin md5sum-identical
+#  to every committed artifacts/ blob, all 11 units (PLAN.md). atmega328p
+#  has no wiring point for TC at all - its real link lives in the
+#  golden-MD5-gated root Makefile (byte-untouched by design), and the
+#  shim at grbl/platform/atmega328p/Makefile never itself invokes a
+#  compiler, so there is nothing for TC to attach to there.
 
 ifndef TC_PREFIX
 $(error TC_PREFIX must be set by the including profile before family/gcc.mk)
