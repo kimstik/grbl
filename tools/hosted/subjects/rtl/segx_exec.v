@@ -14,12 +14,6 @@
 // intended board that is the ch32v006's 48 MHz exported on MCO, so host and
 // executor share one oscillator by construction and there is no drift term.
 //
-// One tick of work happens in ONE clock cycle: three 32-bit Bresenham adds,
-// three compares, three conditional subtracts, three position updates. That is
-// the critical path and it is stated up front because it is the thing that
-// decides whether this fits an iCE40 at 48 MHz (ice40/README.md carries the
-// measured answer, not an estimate).
-//
 // TIMING MODEL, which is half the contract:
 //   - a tick fires when the down-counter reaches 0; it is then reloaded with
 //     the CURRENT segment's cycles_per_tick, so the interval to the next tick
@@ -29,9 +23,34 @@
 //     writes the port at the top of the ISR from the previous ISR's result, so
 //     the pulse for tick k's Bresenham update physically appears at tick k+1.
 //     An executor that emits its own tick's result is one tick early on every
-//     edge of every trace. That is a one-deep register here (step_next ->
-//     step_port), which is also the right hardware: DIR gets a full tick period
-//     of setup instead of a handful of nanoseconds.
+//     edge of every trace.
+//
+// WHY THE TICK IS SPREAD OVER THREE CYCLES, measured not guessed. The obvious
+// shape - one tick, one clock, three 32-bit Bresenham lanes - was built first
+// and synthesised: nextpnr-ice40 placed it at 11.9 MHz on an iCE40UP5K and
+// 30.4 MHz on an HX8K, against a 48 MHz target. The critical path was one
+// unbroken chain: q_rd -> FIFO mux -> gen%5 -> block-store mux -> AMASS shift
+// -> 32-bit add -> 32-bit compare/subtract.
+//
+// That whole chain is unnecessary, because nothing it produces is needed until
+// the NEXT tick, which is at minimum three clocks away and in practice
+// thousands. So it is broken into pieces that each get their own clock:
+//
+//   PREFETCH (3 clocks, any time the FIFO head is not yet decoded)
+//     p1: latch the head's SEG fields (FIFO mux only)
+//     p2: gen % 5
+//     p3: read the block store, apply the AMASS shift, latch
+//   TICK EDGE (1 clock)
+//     drive the port registers, load cur_* from the prefetched h_*, reload the
+//     tick divider, decrement step_count. All register-to-register.
+//   PHASE 1 (tick+1)   sum_i = counter_i + steps_i          one carry chain
+//   PHASE 2 (tick+2)   compare/subtract, position, step bits  one carry chain
+//
+// The cost is a stated minimum: cycles_per_tick MUST be >= 3, i.e. a tick may
+// not be shorter than 4 clocks. At 48 MHz that caps the step rate at 12 MHz,
+// which is four orders of magnitude above any stepper. A segment that violates
+// it FAULTs (SEGX_FAULT_TOO_FAST) rather than silently skipping work - stock
+// has no such limit, so this is a declared divergence, and it is checked.
 
 `default_nettype none
 
@@ -101,7 +120,7 @@ module segx_exec #(
   output reg  [7:0]  credit,      // cumulative completed segments (== tail)
   output reg  [7:0]  fault,       // SEGX_FAULT_*, first one wins
   output wire        fifo_full,
-  output reg  [15:0] underrun     // drained while the host still owed work
+  output reg  [15:0] underrun     // work arriving after a drain (see below)
 );
 
   // ---- configuration registers ------------------------------------------
@@ -129,94 +148,85 @@ module segx_exec #(
   wire fifo_empty = (q_cnt == 3'd0);
   assign fifo_full = (q_cnt == FIFO_DEPTH[2:0]);
 
+  // ---- prefetched head (everything the tick edge needs, already a register)
+  reg [15:0] h_nstep, h_cpt;
+  reg [7:0]  h_gen, h_amass, h_pwm;
+  reg [2:0]  h_slot, h_dir;
+  reg [7:0]  h_flg;
+  reg [31:0] h_sec, h_s0, h_s1, h_s2;
+  reg        h_blkok;
+  reg [1:0]  pf;              // 0 idle, 1 SEG latched, 2 slot latched, 3 valid
+  wire       h_valid = (pf == 2'd3);
+
+  wire [2:0] pf_slot;
+  segx_slot u_slot_seg (.g(h_gen), .s(pf_slot));
+
+  wire [2:0] blk_slot;
+  segx_slot u_slot_blk (.g(blk_gen), .s(blk_slot));
+
   // ---- executor state ----------------------------------------------------
   reg        run;
   reg        seg_active;
   reg [15:0] tickdiv;
   reg [15:0] step_count;
   reg [31:0] cnt0, cnt1, cnt2;
+  reg [31:0] sum0, sum1, sum2;
   reg [31:0] cur_s0, cur_s1, cur_s2, cur_sec;
   reg [2:0]  cur_dir, cur_slot;
   reg [7:0]  cur_flg;
-  reg [1:0]  cur_am;
   reg        have_blk;
   reg [2:0]  step_next, dir_next;
   reg        probe_armed;
+  reg [1:0]  ph;              // 0 idle, 1 = add phase, 2 = compare phase
 
   assign tick_stb = run & (tickdiv == 16'd0) & (fault == 8'd0);
 
-  wire pop       = tick_stb & ~seg_active & ~fifo_empty;
-  wire drain_now = tick_stb & ~seg_active &  fifo_empty;
+  wire pop       = tick_stb & ~seg_active & h_valid;
+  wire drain_now = tick_stb & ~seg_active & ~h_valid & fifo_empty & (pf == 2'd0);
 
-  // Values effective for THIS tick. On a pop everything switches to the
-  // arriving segment before its own first tick executes - period, pwm, amass,
-  // the block it references, and (on a block change) the Bresenham counters.
-  wire [15:0] f_nstep = q_nstep[q_rd];
-  wire [15:0] f_cpt   = q_cpt[q_rd];
-  wire [7:0]  f_gen   = q_gen[q_rd];
-  wire [7:0]  f_amass = q_amass[q_rd];
-  wire [7:0]  f_pwm   = q_pwm[q_rd];
 
-  wire [2:0]  slot_p;
-  wire [2:0]  blk_slot;
-  segx_slot u_slot_seg (.g(f_gen),   .s(slot_p));
-  segx_slot u_slot_blk (.g(blk_gen), .s(blk_slot));
+  // A tick that arrives before the pipeline is ready. Only reachable with
+  // cycles_per_tick < 3 (or a FIFO head that has not finished decoding, which
+  // needs the same), so it is the executor's minimum-period rule made
+  // enforceable instead of assumed.
+  wire flt_fast  = tick_stb & ((ph != 2'd0) |
+                               (~seg_active & ~h_valid & ~drain_now));
+  wire flt_nstep0 = pop & (h_nstep == 16'd0);
+  wire flt_amass  = pop & (h_amass > 8'd3);
+  wire flt_noblk  = pop & ~h_blkok;
+  wire [7:0] flt_code = flt_nstep0 ? 8'd1 :      // SEGX_FAULT_NSTEP0
+                        flt_amass  ? 8'd6 :      // SEGX_FAULT_AMASS
+                        flt_noblk  ? 8'd4 :      // SEGX_FAULT_UNKNOWN_BLK
+                        flt_fast   ? 8'd8 : 8'd0;// SEGX_FAULT_TOO_FAST
+  wire flt_any = flt_nstep0 | flt_amass | flt_noblk | flt_fast;
 
-  wire [2:0]  slot_now = pop ? slot_p : cur_slot;
-  wire        blk_chg  = pop & (~have_blk | (slot_p != cur_slot));
+  // One place decides the occupancy, so a simultaneous push and pop cannot be
+  // counted by two different branches of the same always block.
+  wire do_push = seg_we & ~fifo_full;
+  wire do_pop  = pop & ~flt_any;
 
-  wire [1:0]  e_am  = pop ? f_amass[1:0] : cur_am;
-  wire [31:0] e_sec = pop ? b_sec[slot_now] : cur_sec;
-  wire [2:0]  e_dir = pop ? b_dir[slot_now] : cur_dir;
-  wire [7:0]  e_flg = pop ? b_flg[slot_now] : cur_flg;
-  wire [31:0] e_s0  = pop ? (b_s0[slot_now] >> e_am) : cur_s0;
-  wire [31:0] e_s1  = pop ? (b_s1[slot_now] >> e_am) : cur_s1;
-  wire [31:0] e_s2  = pop ? (b_s2[slot_now] >> e_am) : cur_s2;
-  wire [15:0] e_per = pop ? f_cpt : period;
+  wire [15:0] sc_now  = pop ? h_nstep : step_count;
+  wire [15:0] sc_next = sc_now - 16'd1;
+  wire        seg_done = (sc_next == 16'd0);
 
-  // Bresenham. 32-bit wrapping adds, strict > compare: stock's counters are
-  // uint32_t and stepper.c:427 is `>`, not `>=`. Both are load-bearing.
-  wire [31:0] c0_base = blk_chg ? (e_sec >> 1) : cnt0;
-  wire [31:0] c1_base = blk_chg ? (e_sec >> 1) : cnt1;
-  wire [31:0] c2_base = blk_chg ? (e_sec >> 1) : cnt2;
-  wire [31:0] sum0 = c0_base + e_s0;
-  wire [31:0] sum1 = c1_base + e_s1;
-  wire [31:0] sum2 = c2_base + e_s2;
-  wire hit0 = (sum0 > e_sec);
-  wire hit1 = (sum1 > e_sec);
-  wire hit2 = (sum2 > e_sec);
-  wire [31:0] c0_next = hit0 ? (sum0 - e_sec) : sum0;
-  wire [31:0] c1_next = hit1 ? (sum1 - e_sec) : sum1;
-  wire [31:0] c2_next = hit2 ? (sum2 - e_sec) : sum2;
+  wire blk_chg = pop & (~have_blk | (h_slot != cur_slot));
 
+  // Phase 2: compare and subtract. Stock's counters are uint32_t and
+  // stepper.c:427 is `>`, not `>=`; both are load-bearing.
+  wire hit0 = (sum0 > cur_sec);
+  wire hit1 = (sum1 > cur_sec);
+  wire hit2 = (sum2 > cur_sec);
   wire [2:0] raw_step = {hit2, hit1, hit0};
   // The homing lock gates the PULSE only, and only AFTER the counter and
   // position update: locked axes keep counting (stepper.c:463-468).
   wire [2:0] lock_step = c_homing ? (raw_step & c_homing_lock) : raw_step;
   wire [2:0] out_step  = lock_step ^ c_step_inv;
 
-  wire [15:0] sc_now  = pop ? f_nstep : step_count;
-  wire [15:0] sc_next = sc_now - 16'd1;
-  wire        seg_done = (sc_next == 16'd0);
-
   // The probe samples the pin ONCE per tick, BEFORE that tick's Bresenham
   // updates (probe_state_monitor at stepper.c:413 precedes :421). Off by one
-  // step if inverted, and one step is exactly what a probe measures.
-  wire probe_take = tick_stb & ~drain_now & probe_armed & probe_pin;
-
-  // Faults, evaluated at the pop that would have executed them.
-  wire flt_nstep0 = pop & (f_nstep == 16'd0);
-  wire flt_amass  = pop & (f_amass > 8'd3);
-  wire flt_noblk  = pop & ~b_valid[slot_p];
-  wire [7:0] flt_code = flt_nstep0 ? 8'd1 :      // SEGX_FAULT_NSTEP0
-                        flt_amass  ? 8'd6 :      // SEGX_FAULT_AMASS
-                        flt_noblk  ? 8'd4 : 8'd0;// SEGX_FAULT_UNKNOWN_BLK
-  wire flt_any = flt_nstep0 | flt_amass | flt_noblk;
-
-  // One place decides the occupancy, so a simultaneous push and pop cannot be
-  // counted by two different branches of the same always block.
-  wire do_push = seg_we & ~fifo_full;
-  wire do_pop  = pop & ~flt_any;
+  // step if inverted, and one step is exactly what a probe measures. Latching
+  // at the tick edge, before phase 2 moves the position, is that ordering.
+  wire probe_take = tick_stb & ~drain_now & ~flt_any & probe_armed & probe_pin;
 
   always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
@@ -224,11 +234,16 @@ module segx_exec #(
       c_pulse <= 16'd0; c_settle <= 16'd0; c_homing <= 1'b0;
       q_rd <= 3'd0; q_wr <= 3'd0; q_cnt <= 3'd0;
       b_valid <= {BLK_SLOTS{1'b0}};
-      run <= 1'b0; seg_active <= 1'b0; tickdiv <= 16'd0;
+      pf <= 2'd0; h_nstep <= 16'd0; h_cpt <= 16'd0; h_gen <= 8'd0;
+      h_amass <= 8'd0; h_pwm <= 8'd0; h_slot <= 3'd0; h_dir <= 3'd0;
+      h_flg <= 8'd0; h_sec <= 32'd0; h_s0 <= 32'd0; h_s1 <= 32'd0;
+      h_s2 <= 32'd0; h_blkok <= 1'b0;
+      run <= 1'b0; seg_active <= 1'b0; tickdiv <= 16'd0; ph <= 2'd0;
       step_count <= 16'd0; period <= 16'd0; pwm <= 8'd0;
       cnt0 <= 32'd0; cnt1 <= 32'd0; cnt2 <= 32'd0;
+      sum0 <= 32'd0; sum1 <= 32'd0; sum2 <= 32'd0;
       cur_s0 <= 32'd0; cur_s1 <= 32'd0; cur_s2 <= 32'd0; cur_sec <= 32'd0;
-      cur_dir <= 3'd0; cur_slot <= 3'd0; cur_flg <= 8'd0; cur_am <= 2'd0;
+      cur_dir <= 3'd0; cur_slot <= 3'd0; cur_flg <= 8'd0;
       have_blk <= 1'b0;
       step_next <= 3'd0; dir_next <= 3'd0; step_port <= 3'd0; dir_port <= 3'd0;
       pos0 <= 32'd0; pos1 <= 32'd0; pos2 <= 32'd0;
@@ -261,12 +276,12 @@ module segx_exec #(
 
       // ---- BLK store write ------------------------------------------------
       if (blk_we) begin
-        b_s0[blk_slot]  <= blk_s0;
-        b_s1[blk_slot]  <= blk_s1;
-        b_s2[blk_slot]  <= blk_s2;
-        b_sec[blk_slot] <= blk_sec;
-        b_dir[blk_slot] <= blk_dir;
-        b_flg[blk_slot] <= blk_flags;
+        b_s0[blk_slot]    <= blk_s0;
+        b_s1[blk_slot]    <= blk_s1;
+        b_s2[blk_slot]    <= blk_s2;
+        b_sec[blk_slot]   <= blk_sec;
+        b_dir[blk_slot]   <= blk_dir;
+        b_flg[blk_slot]   <= blk_flags;
         b_valid[blk_slot] <= 1'b1;
       end
 
@@ -284,6 +299,45 @@ module segx_exec #(
       end
       q_cnt <= q_cnt + (do_push ? 3'd1 : 3'd0) - (do_pop ? 3'd1 : 3'd0);
 
+      // UNDERRUN, and the shape of the counter matters. The obvious phrasing -
+      // "drained while the FIFO was not empty" - is a guard that CANNOT FIRE:
+      // a drain requires the FIFO to be empty by construction. What the
+      // executor can observe is the signature of the stutter SEGX/1 §3.5 R1
+      // warns about: it ran dry, reported DRAINED, the host saw a spurious
+      // cycle-stop - and then more work arrived without an intervening WAKE.
+      if (do_push && drained) begin underrun <= underrun + 16'd1; end
+
+      // ---- head prefetch: two clocks, off the tick's critical path ---------
+      if (do_pop) begin
+        pf <= 2'd0;
+      end else begin
+        case (pf)
+          2'd0: if (!fifo_empty) begin
+                  h_nstep <= q_nstep[q_rd];
+                  h_cpt   <= q_cpt[q_rd];
+                  h_gen   <= q_gen[q_rd];
+                  h_amass <= q_amass[q_rd];
+                  h_pwm   <= q_pwm[q_rd];
+                  pf      <= 2'd1;
+                end
+          2'd1: begin
+                  h_slot <= pf_slot;      // gen % 5 gets its own clock: at 64%
+                  pf     <= 2'd2;         // utilisation on an UP5K this net was
+                end                       // the critical path, measured
+          2'd2: begin
+                  h_sec   <= b_sec[h_slot];
+                  h_dir   <= b_dir[h_slot];
+                  h_flg   <= b_flg[h_slot];
+                  h_blkok <= b_valid[h_slot];
+                  h_s0    <= b_s0[h_slot] >> h_amass[1:0];
+                  h_s1    <= b_s1[h_slot] >> h_amass[1:0];
+                  h_s2    <= b_s2[h_slot] >> h_amass[1:0];
+                  pf      <= 2'd3;
+                end
+          default: ;
+        endcase
+      end
+
       // ---- WAKE -----------------------------------------------------------
       if (wake) begin
         run <= 1'b1;
@@ -294,7 +348,7 @@ module segx_exec #(
         have_blk <= 1'b0;
       end
 
-      // ---- one tick -------------------------------------------------------
+      // ---- tick edge ------------------------------------------------------
       if (tick_stb) begin
         if (flt_any) begin
           fault <= flt_code;
@@ -303,21 +357,24 @@ module segx_exec #(
           // pipeline: this tick's port bits are last tick's computation
           step_port <= step_next;
           dir_port  <= dir_next;
-          tickdiv   <= e_per;
-          period    <= e_per;
+          tickdiv   <= pop ? h_cpt : period;
+          period    <= pop ? h_cpt : period;
 
           if (pop) begin
             seg_active <= 1'b1;
-            pwm        <= f_pwm;
-            cur_am     <= f_amass[1:0];
-            cur_slot   <= slot_p;
+            pwm        <= h_pwm;
+            cur_slot   <= h_slot;
             have_blk   <= 1'b1;
-            cur_sec    <= e_sec;
-            cur_dir    <= e_dir;
-            cur_flg    <= e_flg;
-            cur_s0     <= e_s0; cur_s1 <= e_s1; cur_s2 <= e_s2;
-            dir_next   <= e_dir ^ c_dir_inv;
+            cur_sec    <= h_sec;
+            cur_dir    <= h_dir;
+            cur_flg    <= h_flg;
+            cur_s0     <= h_s0; cur_s1 <= h_s1; cur_s2 <= h_s2;
+            dir_next   <= h_dir ^ c_dir_inv;
             q_rd       <= (q_rd == FIFO_DEPTH[2:0]-3'd1) ? 3'd0 : q_rd + 3'd1;
+          end
+
+          if (blk_chg) begin
+            cnt0 <= h_sec >> 1; cnt1 <= h_sec >> 1; cnt2 <= h_sec >> 1;
           end
 
           if (drain_now) begin
@@ -334,32 +391,37 @@ module segx_exec #(
               probe_hit   <= 1'b1;
               probe_pos0  <= pos0; probe_pos1 <= pos1; probe_pos2 <= pos2;
             end
-
-            cnt0 <= c0_next; cnt1 <= c1_next; cnt2 <= c2_next;
-            if (hit0) begin pos0 <= e_dir[0] ? (pos0 - 32'd1) : (pos0 + 32'd1); end
-            if (hit1) begin pos1 <= e_dir[1] ? (pos1 - 32'd1) : (pos1 + 32'd1); end
-            if (hit2) begin pos2 <= e_dir[2] ? (pos2 - 32'd1) : (pos2 + 32'd1); end
-
-            step_next  <= out_step;
             step_count <= sc_next;
             if (seg_done) begin
               seg_active <= 1'b0;
               credit     <= credit + 8'd1;   // credit on COMPLETION (§3.4)
             end
+            ph <= 2'd1;
           end
         end
       end else if (run) begin
         tickdiv <= tickdiv - 16'd1;
       end
 
-      // UNDERRUN, and the shape of the counter matters. The obvious phrasing -
-      // "drained while the FIFO was not empty" - is a guard that CANNOT FIRE:
-      // drain_now is by construction `tick_stb & ~seg_active & fifo_empty`.
-      // What the executor can actually observe is the signature of the stutter
-      // SEGX/1 §3.5 R1 warns about: it ran dry, reported DRAINED, the host saw
-      // a spurious cycle-stop - and then more work arrived without an
-      // intervening WAKE. A late segment after a drain IS the underrun.
-      if (do_push && drained) begin underrun <= underrun + 16'd1; end
+      // ---- phase 1: accumulate (one carry chain) --------------------------
+      if (ph == 2'd1) begin
+        sum0 <= cnt0 + cur_s0;
+        sum1 <= cnt1 + cur_s1;
+        sum2 <= cnt2 + cur_s2;
+        ph   <= 2'd2;
+      end
+
+      // ---- phase 2: compare, subtract, step, move (one carry chain) -------
+      if (ph == 2'd2) begin
+        cnt0 <= hit0 ? (sum0 - cur_sec) : sum0;
+        cnt1 <= hit1 ? (sum1 - cur_sec) : sum1;
+        cnt2 <= hit2 ? (sum2 - cur_sec) : sum2;
+        if (hit0) begin pos0 <= cur_dir[0] ? (pos0 - 32'd1) : (pos0 + 32'd1); end
+        if (hit1) begin pos1 <= cur_dir[1] ? (pos1 - 32'd1) : (pos1 + 32'd1); end
+        if (hit2) begin pos2 <= cur_dir[2] ? (pos2 - 32'd1) : (pos2 + 32'd1); end
+        step_next <= out_step;
+        ph <= 2'd0;
+      end
     end
   end
 
@@ -394,7 +456,7 @@ module segx_exec #(
   assign phy_dir  = dir_port;
 
   // silence the unused-slice lint without hiding it in a wildcard
-  wire _unused = &{1'b0, e_flg[7:1], f_amass[7:2], 1'b0};
+  wire _unused = &{1'b0, cur_flg[7:1], h_flg[7:1], h_amass[7:2], 1'b0};
 
 endmodule
 

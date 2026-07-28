@@ -23,7 +23,8 @@ VFLAGS := --cc -Wall -Wno-DECLFILENAME --x-assign 0 --x-initial 0
 
 CXXFLAGS := -std=gnu++17 -O2 -Wall -Wextra -Werror -Wno-unused-parameter -I$(COMMON) \
             -isystem $(VROOT)/include -isystem $(VROOT)/include/vltstd \
-            -isystem $(BUILD_DIR)/obj_top -isystem $(BUILD_DIR)/obj_slot
+            -isystem $(BUILD_DIR)/obj_top -isystem $(BUILD_DIR)/obj_slot \
+            -isystem $(BUILD_DIR)/obj_crc8
 
 all: $(BIN)
 
@@ -33,6 +34,12 @@ $(BUILD_DIR)/obj_top/Vsegx_top__ALL.a: $(RTL)
 	  --prefix Vsegx_top $(RTL)
 	$(MAKE) -s -C $(BUILD_DIR)/obj_top -f Vsegx_top.mk
 
+$(BUILD_DIR)/obj_crc8/Vsegx_crc8__ALL.a: segx_crc8.v
+	@mkdir -p $(BUILD_DIR)
+	$(VERILATOR) $(VFLAGS) -Mdir $(BUILD_DIR)/obj_crc8 --top-module segx_crc8 \
+	  --prefix Vsegx_crc8 segx_crc8.v
+	$(MAKE) -s -C $(BUILD_DIR)/obj_crc8 -f Vsegx_crc8.mk
+
 $(BUILD_DIR)/obj_slot/Vsegx_slot__ALL.a: segx_slot.v
 	@mkdir -p $(BUILD_DIR)
 	$(VERILATOR) $(VFLAGS) -Mdir $(BUILD_DIR)/obj_slot --top-module segx_slot \
@@ -40,11 +47,13 @@ $(BUILD_DIR)/obj_slot/Vsegx_slot__ALL.a: segx_slot.v
 	$(MAKE) -s -C $(BUILD_DIR)/obj_slot -f Vsegx_slot.mk
 
 $(BIN): tb_segx.cpp $(BUILD_DIR)/obj_top/Vsegx_top__ALL.a \
-        $(BUILD_DIR)/obj_slot/Vsegx_slot__ALL.a $(COMMON)/segwire.h \
+        $(BUILD_DIR)/obj_slot/Vsegx_slot__ALL.a \
+        $(BUILD_DIR)/obj_crc8/Vsegx_crc8__ALL.a $(COMMON)/segwire.h \
         $(COMMON)/segframe.h
 	$(CXX) $(CXXFLAGS) -o $@ tb_segx.cpp \
 	  $(BUILD_DIR)/obj_top/Vsegx_top__ALL.a \
 	  $(BUILD_DIR)/obj_slot/Vsegx_slot__ALL.a \
+	  $(BUILD_DIR)/obj_crc8/Vsegx_crc8__ALL.a \
 	  $(VROOT)/include/verilated.cpp $(VROOT)/include/verilated_threads.cpp -lpthread
 
 clean:
