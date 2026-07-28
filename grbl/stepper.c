@@ -130,6 +130,24 @@ static volatile uint8_t segment_buffer_tail;
 static uint8_t segment_buffer_head;
 static uint8_t segment_next_head;
 
+// Extension seam - grbl/platform/docs/SEGMENT-RUNTIME-PLAN.md §1, CONTRACTS.md
+// #segment-runtime-boundary. Both defaults live HERE, in-file, so stepper.c stays
+// self-contained (the hosted oracle compiles it standalone, no -include chain).
+// An extension prelude arrives via -include, i.e. before any TU content, so its
+// definition wins these #ifndefs. Default expansions are token-identical to the
+// original text (GRBL_SEG_PUBLISH) and empty (GRBL_STEPPER_TU_EXPORTS), so a bare
+// build is byte-identical - proven per unit by tools/build_artifacts.py check.
+#ifndef GRBL_SEG_PUBLISH
+  #define GRBL_SEG_PUBLISH() segment_buffer_head = segment_next_head
+#endif
+// Expands to function definitions compiled INSIDE this TU, which is the only way
+// to reach the file-static rings and the private segment_t/st_block_t types
+// without changing any storage class. Overrides copy FIELDS into canonical frames;
+// they never mirror the struct layouts.
+#ifndef GRBL_STEPPER_TU_EXPORTS
+  #define GRBL_STEPPER_TU_EXPORTS
+#endif
+
 // Step and direction port invert masks.
 static uint8_t step_port_invert_mask;
 static uint8_t dir_port_invert_mask;
@@ -1046,7 +1064,7 @@ void st_prep_buffer()
     #endif
 
     // Segment complete! Increment segment buffer indices, so stepper ISR can immediately execute it.
-    segment_buffer_head = segment_next_head;
+    GRBL_SEG_PUBLISH();
     if ( ++segment_next_head == SEGMENT_BUFFER_SIZE ) { segment_next_head = 0; }
 
     // Update the appropriate planner and segment data.
@@ -1092,3 +1110,5 @@ float st_get_realtime_rate()
   }
   return 0.0f;
 }
+
+GRBL_STEPPER_TU_EXPORTS
