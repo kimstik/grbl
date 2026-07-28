@@ -1,0 +1,14 @@
+# gtrace/1
+V homing-lock
+C f_tick=16000000 pulse_ticks=160 step_invert=0x00 dir_invert=0x00 rest_step=0x00 rest_dir=0x00 homing=1 homing_lock=0x01
+T 1 0 999 0x00 0x00 0 1 1 1
+T 2 1000 999 0x00 0x01 0 2 2 2
+T 3 2000 999 0x00 0x01 0 3 3 3
+T 4 3000 999 0x00 0x01 0 4 4 4
+T 5 4000 999 0x00 0x01 0 5 5 5
+T 6 5000 999 0x00 0x01 0 6 6 6
+T 7 6000 999 0x00 0x01 0 7 7 7
+T 8 7000 999 0x00 0x01 0 8 8 8
+T 9 8000 999 0x00 0x01 0 8 8 8
+X 9 8000 DRAIN pwm=0 idle=1
+Z ticks=9 clk=9000 pos=8,8,8 probe=0,0,0 probe_tick=0

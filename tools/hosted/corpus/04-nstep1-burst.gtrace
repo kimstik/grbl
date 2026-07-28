@@ -1,0 +1,16 @@
+# gtrace/1
+V nstep1-burst
+C f_tick=16000000 pulse_ticks=160 step_invert=0x00 dir_invert=0x00 rest_step=0x00 rest_dir=0x00 homing=0 homing_lock=0xff
+T 1 0 99 0x00 0x00 0 1 1 1
+T 2 100 99 0x00 0x07 0 2 2 2
+T 3 200 99 0x00 0x07 0 3 3 3
+T 4 300 99 0x00 0x07 0 4 4 4
+T 5 400 99 0x00 0x07 0 5 5 5
+T 6 500 99 0x00 0x07 0 6 6 6
+T 7 600 99 0x00 0x07 0 7 7 7
+T 8 700 199 0x00 0x07 0 6 7 7
+T 9 900 199 0x07 0x01 0 5 7 7
+T 10 1100 199 0x07 0x01 0 4 7 7
+T 11 1300 199 0x07 0x01 0 4 7 7
+X 11 1300 DRAIN pwm=0 idle=1
+Z ticks=11 clk=1500 pos=4,7,7 probe=0,0,0 probe_tick=0

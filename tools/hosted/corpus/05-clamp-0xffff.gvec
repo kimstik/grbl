@@ -1,0 +1,14 @@
+# cycles_per_tick = 0xffff, the producer's minimum-speed clamp sentinel
+# (stepper.c:1044). Position stays exact, velocity fidelity is abandoned - the
+# inherited defect documented as CONTRACTS #amass-clamp-floor. Pinned here so a
+# future "fix" cannot land silently.
+gvec 1
+name clamp-0xffff
+f_tick 16000000
+pulse_ticks 160
+pos 0 0 0
+
+blk 1 80 0 0 80 0x00 0x00
+seg 3 65535 1 0 0
+seg 3 200 1 0 0
+seg 3 65535 1 0 0

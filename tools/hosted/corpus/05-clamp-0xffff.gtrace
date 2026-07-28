@@ -1,0 +1,15 @@
+# gtrace/1
+V clamp-0xffff
+C f_tick=16000000 pulse_ticks=160 step_invert=0x00 dir_invert=0x00 rest_step=0x00 rest_dir=0x00 homing=0 homing_lock=0xff
+T 1 0 65535 0x00 0x00 0 1 0 0
+T 2 65536 65535 0x00 0x01 0 2 0 0
+T 3 131072 65535 0x00 0x01 0 3 0 0
+T 4 196608 200 0x00 0x01 0 4 0 0
+T 5 196809 200 0x00 0x01 0 5 0 0
+T 6 197010 200 0x00 0x01 0 6 0 0
+T 7 197211 65535 0x00 0x01 0 7 0 0
+T 8 262747 65535 0x00 0x01 0 8 0 0
+T 9 328283 65535 0x00 0x01 0 9 0 0
+T 10 393819 65535 0x00 0x01 0 9 0 0
+X 10 393819 DRAIN pwm=0 idle=1
+Z ticks=10 clk=459355 pos=9,0,0 probe=0,0,0 probe_tick=0

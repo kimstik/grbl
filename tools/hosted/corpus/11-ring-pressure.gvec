@@ -1,0 +1,23 @@
+# More segments than the ring holds (6 slots, 5 usable), so admission actually
+# blocks and the credit/tail path is exercised for real rather than being
+# short-circuited by a stream that fits. Two blocks, so a block slot is reused.
+gvec 1
+name ring-pressure
+f_tick 16000000
+pulse_ticks 160
+pos 0 0 0
+
+blk 1 80 16 0 80 0x00 0x00
+blk 2 16 80 0 80 0x01 0x00
+seg 3 499 1 0 0
+seg 3 499 1 0 0
+seg 3 499 1 0 0
+seg 3 499 1 0 0
+seg 3 499 1 0 0
+seg 3 499 1 0 0
+seg 3 499 2 0 0
+seg 3 499 2 0 0
+seg 3 499 2 0 0
+seg 3 499 2 0 0
+seg 3 499 2 0 0
+seg 3 499 2 0 0

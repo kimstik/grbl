@@ -1,0 +1,17 @@
+# ADVERSARIAL - the producer is believed never to emit this, and SEGX/1 §3.6.1
+# makes it a FAULT for a far-side executor. This vector exists to record what
+# STOCK does instead, so the divergence is evidence-backed rather than asserted:
+# st.step_count = 0, then the unconditional post-decrement at stepper.c:471
+# wraps it to 65535 and the segment becomes a 65536-tick ghost that never
+# retires. max_ticks cuts the trace short on purpose - a segment that retired
+# would show a DRAIN instead of TICK_LIMIT, and that is the assertion.
+gvec 1
+name adversarial-nstep0
+f_tick 16000000
+pulse_ticks 160
+max_ticks 40
+pos 0 0 0
+
+blk 1 80 0 0 80 0x00 0x00
+seg 0 999 1 0 0
+seg 4 999 1 0 0

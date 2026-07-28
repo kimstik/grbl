@@ -1,0 +1,13 @@
+# Probe armed, pin trips at tick 5. The latch MUST be taken BEFORE that tick's
+# Bresenham updates (probe_state_monitor runs at stepper.c:413, ahead of :421),
+# and the executor keeps running queued segments afterwards - stock behaviour.
+# An executor that samples after the update is off by exactly one step.
+gvec 1
+name probe-trigger
+f_tick 16000000
+pulse_ticks 160
+probe_from_tick 5
+pos 0 0 0
+
+blk 1 80 80 0 80 0x00 0x00
+seg 10 999 1 0 0
