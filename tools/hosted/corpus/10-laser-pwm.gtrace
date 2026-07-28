@@ -1,0 +1,15 @@
+# gtrace/1
+V laser-pwm
+C f_tick=16000000 pulse_ticks=160 step_invert=0x00 dir_invert=0x00 rest_step=0x00 rest_dir=0x00 homing=0 homing_lock=0xff
+T 1 0 999 0x00 0x00 40 1 0 0
+T 2 1000 999 0x00 0x01 40 2 0 0
+T 3 2000 999 0x00 0x01 40 3 0 0
+T 4 3000 999 0x00 0x01 120 4 0 0
+T 5 4000 999 0x00 0x01 120 5 0 0
+T 6 5000 999 0x00 0x01 120 6 0 0
+T 7 6000 999 0x00 0x01 255 7 0 0
+T 8 7000 999 0x00 0x01 255 8 0 0
+T 9 8000 999 0x00 0x01 255 9 0 0
+T 10 9000 999 0x00 0x01 0 9 0 0
+X 10 9000 DRAIN pwm=0 idle=1
+Z ticks=10 clk=10000 pos=9,0,0 probe=0,0,0 probe_tick=0

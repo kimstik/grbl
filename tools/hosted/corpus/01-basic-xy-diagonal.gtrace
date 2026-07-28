@@ -1,0 +1,16 @@
+# gtrace/1
+V basic-xy-diagonal
+C f_tick=16000000 pulse_ticks=160 step_invert=0x00 dir_invert=0x00 rest_step=0x00 rest_dir=0x00 homing=0 homing_lock=0xff
+T 1 0 999 0x00 0x00 0 1 0 0
+T 2 1000 999 0x00 0x01 0 2 1 0
+T 3 2000 999 0x00 0x03 0 3 1 0
+T 4 3000 999 0x00 0x01 0 4 2 0
+T 5 4000 999 0x00 0x03 0 5 2 0
+T 6 5000 999 0x00 0x01 0 6 2 0
+T 7 6000 999 0x00 0x01 0 7 3 0
+T 8 7000 999 0x00 0x03 0 8 3 0
+T 9 8000 999 0x00 0x01 0 9 4 0
+T 10 9000 999 0x00 0x03 0 10 4 0
+T 11 10000 999 0x00 0x01 0 10 4 0
+X 11 10000 DRAIN pwm=0 idle=1
+Z ticks=11 clk=11000 pos=10,4,0 probe=0,0,0 probe_tick=0

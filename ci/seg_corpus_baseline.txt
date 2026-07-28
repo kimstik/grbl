@@ -1,0 +1,4 @@
+# ci/seg_conformance.py corpus ratchet - one-way, count may only grow.
+# Raised deliberately when vectors are added; never lowered to make a
+# check pass. Same posture as ci/warn_baseline_*.txt.
+vectors 13

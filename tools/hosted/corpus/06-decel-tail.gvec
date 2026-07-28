@@ -1,0 +1,17 @@
+# A deceleration ramp: cycles_per_tick climbing segment by segment, the shape a
+# feed hold arrives as. The period must take effect on the FIRST tick of the
+# segment that carries it, with no counter reset - the whole clk column is the
+# assertion.
+gvec 1
+name decel-tail
+f_tick 16000000
+pulse_ticks 160
+pos 100 -50 0
+
+blk 1 80 40 8 80 0x02 0x00
+seg 4 200 1 0 0
+seg 4 400 1 0 0
+seg 4 800 1 0 0
+seg 4 1600 1 0 0
+seg 4 3200 1 0 0
+seg 2 6400 1 0 0

@@ -1,0 +1,21 @@
+# n_step == 1 for every segment: the ring turns over on every single tick, so
+# every credit/ring-index path runs at its worst rate and any off-by-one in the
+# tail advance shows up immediately. Also crosses a block boundary at 1 tick.
+gvec 1
+name nstep1-burst
+f_tick 16000000
+pulse_ticks 160
+pos 0 0 0
+
+blk 1 80 80 80 80 0x00 0x00
+blk 2 80 0 0 80 0x07 0x00
+seg 1 99 1 0 0
+seg 1 99 1 0 0
+seg 1 99 1 0 0
+seg 1 99 1 0 0
+seg 1 99 1 0 0
+seg 1 99 1 0 0
+seg 1 99 1 0 0
+seg 1 199 2 0 0
+seg 1 199 2 0 0
+seg 1 199 2 0 0

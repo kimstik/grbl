@@ -1,0 +1,24 @@
+# Six blocks, so blk_gen 6 lands back on block slot 1 (gen % 5). The mod-5 reuse
+# is what makes "inequality triggers reinit" work at all; a wire that shipped
+# the ring index instead of a generation counter could not tell gen 1 from gen 6
+# and would skip the counter reinit on the wrap. Here the two blocks that share
+# slot 1 have DIFFERENT geometry, so a missed reinit is visible in the position
+# column within a few ticks.
+gvec 1
+name blkgen-wrap
+f_tick 16000000
+pulse_ticks 160
+pos 0 0 0
+
+blk 1 80 0 0 80 0x00 0x00
+blk 2 0 80 0 80 0x00 0x00
+blk 3 0 0 80 80 0x00 0x00
+blk 4 40 40 0 80 0x01 0x00
+blk 5 0 40 40 80 0x02 0x00
+blk 6 24 8 80 800 0x07 0x00
+seg 3 499 1 0 0
+seg 3 499 2 0 0
+seg 3 499 3 0 0
+seg 3 499 4 0 0
+seg 3 499 5 0 0
+seg 9 499 6 0 0

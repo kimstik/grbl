@@ -1,0 +1,17 @@
+# gvec/1 - SEGX/1 capture vector. Format: tools/hosted/README.md.
+# Two-axis diagonal, AMASS level 0, one block, no inverts. The smallest thing
+# that exercises Bresenham on two axes plus the one-tick step-output pipeline.
+gvec 1
+name basic-xy-diagonal
+f_tick 16000000
+pulse_ticks 160
+pulse_us 10
+step_invert 0x00
+dir_invert 0x00
+pos 0 0 0
+
+# steps are pre-multiplied << MAX_AMASS_LEVEL (=3), so 10 X steps and 4 Y steps
+# over a 10-event block: 80 / 32 / 0, step_event_count 80.
+blk 1 80 32 0 80 0x00 0x00
+seg 5 999 1 0 0
+seg 5 999 1 0 0
