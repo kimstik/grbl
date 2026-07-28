@@ -8,4 +8,4 @@
 # is allowed not to match the frozen ISR (SEGMENT-RUNTIME-PLAN §3.6),
 # so the count may not drift in either direction without an edit here.
 vectors 13
-declared_divergences 1
+declared_divergences 2

@@ -30,6 +30,14 @@
       --byte-gap N        idle clocks between link bytes (models SPI bit rate)
       --credit-latency N  clocks before a completion credit reaches the host
       --dir-settle N      clocks DIR leads the pulse
+      --wire FILE.gwire   replay a byte stream captured from the REAL host
+                          shipper (tools/hosted/wire_dump.c) instead of
+                          serialising the vector here. The vector is still read,
+                          for the things that describe the executor's
+                          ENVIRONMENT rather than its input: probe pin timing,
+                          max_ticks, and the trace header. Same trace expected -
+                          which is the point, because the frames now come from
+                          grbl/platform/extensions/seg-link/seg_link.c.
       --selfcheck         property tests, no vector
 */
 
@@ -82,6 +90,8 @@ static const char *fault_name(unsigned c)
     case SEGX_FAULT_OVERFLOW:    return "overflow";
     case SEGX_FAULT_AMASS:       return "amass";
     case SEGX_FAULT_BAD_TAG:     return "bad_tag";
+    case SEGX_FAULT_TOO_FAST:    return "too_fast";
+    case SEGX_FAULT_GEN_GAP:     return "gen_gap";
     default:                     return "?";
   }
 }
@@ -194,11 +204,53 @@ struct PulseStat {
   }
 };
 
+/* ---- captured-stream replay --------------------------------------------- */
+
+struct WireFrame { uint8_t tag; std::vector<uint8_t> bytes; };
+
+/* Walk a .gwire and split it into frames. The CRC is recomputed here and a
+   mismatch is fatal: this file came from the host shipper, so a bad CRC means
+   the shipper or the codec is broken, not that the link is noisy. (Deliberate
+   CRC corruption is tested in --selfcheck, where the executor is expected to
+   reject it - that is a different question.) */
+static std::vector<WireFrame> read_wire(const char *path)
+{
+  std::vector<WireFrame> out;
+  std::vector<uint8_t> raw;
+  FILE *f = fopen(path, "rb");
+  if (!f) die(std::string("cannot open wire stream: ") + path);
+  int c;
+  while ((c = fgetc(f)) != EOF) raw.push_back((uint8_t)c);
+  fclose(f);
+
+  size_t i = 0;
+  while (i < raw.size()) {
+    if (raw[i] != SEGX_SOF) die("wire stream is not frame-aligned at SOF");
+    if (i + 3 >= raw.size()) die("wire stream truncated in a frame header");
+    uint8_t tag = raw[i + 1], len = raw[i + 2];
+    if (len > SEGX_MAX_PAYLOAD) die("wire stream declares an over-long payload");
+    if (i + 3 + len >= raw.size()) die("wire stream truncated in a payload");
+    uint8_t crc = 0;
+    crc = segx_crc8_byte(crc, tag);
+    crc = segx_crc8_byte(crc, len);
+    for (uint8_t k = 0; k < len; k++) crc = segx_crc8_byte(crc, raw[i + 3 + k]);
+    if (crc != raw[i + 3 + len]) die("wire stream has a bad CRC - the shipper "
+                                     "and segwire.h disagree");
+    WireFrame wf;
+    wf.tag = tag;
+    wf.bytes.assign(raw.begin() + (long)i, raw.begin() + (long)(i + 4 + len));
+    out.push_back(wf);
+    i += 4 + (size_t)len;
+  }
+  return out;
+}
+
 /* ---- main --------------------------------------------------------------- */
 
 static Vsegx_top *top;
 static Link g_link;
 static int opt_byte_gap = 0, opt_credit_latency = 0, opt_dir_settle = 0;
+static const char *opt_wire = NULL;
 static bool opt_strict_clk = true;
 
 static void clk_cycle(bool feed)
@@ -241,6 +293,7 @@ int main(int argc, char **argv)
     if (a == "--byte-gap" && i + 1 < argc) opt_byte_gap = atoi(argv[++i]);
     else if (a == "--credit-latency" && i + 1 < argc) opt_credit_latency = atoi(argv[++i]);
     else if (a == "--dir-settle" && i + 1 < argc) opt_dir_settle = atoi(argv[++i]);
+    else if (a == "--wire" && i + 1 < argc) opt_wire = argv[++i];
     else if (a == "--no-strict-clk") opt_strict_clk = false;
     else if (a == "--selfcheck") do_selfcheck = true;
     else if (a.size() && a[0] == '-' && a.rfind("-V", 0) == 0) continue;  /* verilator arg */
@@ -276,8 +329,17 @@ int main(int argc, char **argv)
   const uint8_t dir_inv  = (uint8_t)(v.dir_invert & 7u);
   const uint8_t hlock    = v.homing ? v.homing_lock : 0xff;
 
+  std::vector<WireFrame> wire;
+  size_t next_frame = 0;
+  size_t wire_segs = 0;
+  if (opt_wire) {
+    wire = read_wire(opt_wire);
+    for (size_t k = 0; k < wire.size(); k++)
+      if (wire[k].tag == SEGX_TAG_SEG) wire_segs++;
+  }
+
   /* CFG */
-  {
+  if (!opt_wire) {
     grbl_cfg_frame_t c;
     uint8_t pay[SEGX_CFG_WIRE_LEN];
     memset(&c, 0, sizeof(c));
@@ -300,7 +362,30 @@ int main(int argc, char **argv)
   uint8_t pushed = 0;
   uint8_t seq = 0;
 
+  /* In --wire mode the frames already exist; this side only schedules them.
+     Non-SEG frames flow freely, SEG frames are gated on the credit window,
+     which is exactly the division of labour a DMA shipper has. */
+  auto flush_nonseg = [&]() {
+    while (opt_wire && next_frame < wire.size() &&
+           wire[next_frame].tag != SEGX_TAG_SEG) {
+      const WireFrame &f = wire[next_frame++];
+      for (size_t k = 0; k < f.bytes.size(); k++) g_link.q.push_back(f.bytes[k]);
+    }
+  };
+
+  auto ship_wire = [&]() {
+    flush_nonseg();
+    if (next_frame < wire.size()) {
+      const WireFrame &f = wire[next_frame++];
+      for (size_t k = 0; k < f.bytes.size(); k++) g_link.q.push_back(f.bytes[k]);
+      pushed++;
+      next_seg++;
+    }
+    flush_nonseg();
+  };
+
   auto ship_one = [&]() {
+    if (opt_wire) { ship_wire(); return; }
     const Seg &s = v.segs[next_seg];
     if (!blk_sent[s.gen]) {
       if (v.blks.find(s.gen) == v.blks.end()) die("vector references an undeclared blk");
@@ -326,10 +411,15 @@ int main(int argc, char **argv)
     pushed++;
   };
 
-  while (next_seg < v.segs.size() && pushed < W_WINDOW) ship_one();
+  const size_t n_segs = opt_wire ? wire_segs : v.segs.size();
 
-  /* WAKE last: stock fills the segment buffer, then calls st_wake_up(). */
-  { uint8_t epoch = 1; g_link.frame(SEGX_TAG_WAKE, &epoch, 1); }
+  if (opt_wire) flush_nonseg();
+  while (next_seg < n_segs && pushed < W_WINDOW) ship_one();
+
+  /* WAKE last: stock fills the segment buffer, then calls st_wake_up(). In
+     --wire mode the shipper already placed WAKE after the ring filled, so it
+     arrives through flush_nonseg above and must not be synthesised again. */
+  if (!opt_wire) { uint8_t epoch = 1; g_link.frame(SEGX_TAG_WAKE, &epoch, 1); }
 
   /* ---- run ------------------------------------------------------------- */
   std::vector<std::string> out;
@@ -398,7 +488,7 @@ int main(int argc, char **argv)
       credit_seen = credit_pipe.front().second;
       credit_pipe.pop_front();
     }
-    while (next_seg < v.segs.size() &&
+    while (next_seg < n_segs &&
            (uint8_t)(pushed - credit_seen) < W_WINDOW) ship_one();
 
     if (!is_tick) continue;
@@ -441,7 +531,7 @@ int main(int argc, char **argv)
       out.push_back(buf);
     }
 
-    if (top->drained && next_seg < v.segs.size()) {
+    if (top->drained && next_seg < n_segs) {
       // Host-side underrun, which is the authoritative one: the executor ran
       // dry while this host still had segments it had not shipped. In stock
       // that cannot happen (one core, one program order); over a link it is
@@ -450,7 +540,7 @@ int main(int argc, char **argv)
       fprintf(stderr, "tb_segx: FAIL - executor drained at tick %llu with %zu "
                       "segment(s) still unshipped (credit staleness, "
                       "byte-gap=%d credit-latency=%d)\n",
-              (unsigned long long)tick, v.segs.size() - next_seg,
+              (unsigned long long)tick, n_segs - next_seg,
               opt_byte_gap, opt_credit_latency);
       return 4;
     }

@@ -98,7 +98,8 @@ static inline uint8_t segx_crc8_byte(uint8_t crc, uint8_t d)
   uint8_t i;
   crc ^= d;
   for (i = 0; i < 8; i++) {
-    crc = (uint8_t)((crc & 0x80u) ? ((crc << 1) ^ 0x07u) : (crc << 1));
+    crc = (uint8_t)((crc & 0x80u) ? (((unsigned)crc << 1) ^ 0x07u)
+                                  : ((unsigned)crc << 1));
   }
   return crc;
 }
@@ -139,5 +140,10 @@ static inline uint16_t segx_frame_build(uint8_t *dst, uint8_t tag,
 #define SEGX_FAULT_OVERFLOW  5   /* host exceeded the credit window W         */
 #define SEGX_FAULT_AMASS     6   /* amass_level > MAX_AMASS_LEVEL             */
 #define SEGX_FAULT_BAD_TAG   7
+#define SEGX_FAULT_TOO_FAST  8   /* cycles_per_tick below the executor's
+                                    pipeline depth; see segx_exec.v's header */
+#define SEGX_FAULT_GEN_GAP   9   /* blk_gen did not advance by exactly one:
+                                    a BLK frame was lost, or the host shipped a
+                                    ring index where a generation belongs      */
 
 #endif /* GRBL_SEGWIRE_H */
