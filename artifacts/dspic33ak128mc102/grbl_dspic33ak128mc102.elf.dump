@@ -58,7 +58,7 @@
 # this batch) - the same DFP device pack every other toolchain
 # invocation on this unit already needs.
 
-/home/user/grbl/.claude/worktrees/agent-aaf15475d826f2185/build/grbl_dspic33ak128mc102.elf:     file format elf32-pic30
+/home/user/grbl/build/grbl_dspic33ak128mc102.elf:     file format elf32-pic30
 
 Sections:
 Idx Name          Size      VMA       LMA       File off  Algn
@@ -70,7 +70,7 @@ Idx Name          Size      VMA       LMA       File off  Algn
                   CONTENTS, DATA, NEVER_LOAD, ABSOLUTE
   3 __c30_signature 000000c0  00000000  00000000  0000afe8  2**0
                   CONTENTS, DEBUGGING, ABSOLUTE
-  4 _0x7f419c117360_at_address_0x81f800 00000800  0081f800  0081f800  0000a5f0  2**1
+  4 _0x7f1708517360_at_address_0x81f800 00000800  0081f800  0081f800  0000a5f0  2**1
                   ALLOC, ABSOLUTE
   5 .nbss         00000016  00004000  00004000  00000134  2**1
                   ALLOC, NEAR
@@ -102,37 +102,37 @@ Idx Name          Size      VMA       LMA       File off  Algn
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
  19 .text         00000194  00809df0  00809df0  0000a0b4  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 20 /tmp/ccTEzngR.s.scn3 000000a4  00809f84  00809f84  0000a248  2**1
+ 20 /tmp/ccuco84P.s.scn3 000000a4  00809f84  00809f84  0000a248  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
  21 .text         00000090  0080a028  0080a028  0000a2ec  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 22 /tmp/cccRX3EB.s.scn1 00000070  0080a0b8  0080a0b8  0000a37c  2**1
+ 22 /tmp/ccsvuyaB.s.scn1 00000070  0080a0b8  0080a0b8  0000a37c  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 23 /tmp/ccTEzngR.s.scn12 0000006c  0080a128  0080a128  0000a3ec  2**1
+ 23 /tmp/ccuco84P.s.scn12 0000006c  0080a128  0080a128  0000a3ec  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 24 /tmp/ccMUYkUm.s.scn1 0000005c  0080a194  0080a194  0000a458  2**1
+ 24 /tmp/ccc51i5s.s.scn1 0000005c  0080a194  0080a194  0000a458  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 25 /tmp/ccTEzngR.s.scn5 0000004c  0080a1f0  0080a1f0  0000a4b4  2**1
+ 25 /tmp/ccuco84P.s.scn5 0000004c  0080a1f0  0080a1f0  0000a4b4  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
  26 .text         0000004c  0080a23c  0080a23c  0000a500  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 27 /tmp/ccTEzngR.s.scn4 00000020  0080a288  0080a288  0000a54c  2**1
+ 27 /tmp/ccuco84P.s.scn4 00000020  0080a288  0080a288  0000a54c  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 28 /tmp/ccTEzngR.s.scn8 00000020  0080a2a8  0080a2a8  0000a56c  2**1
+ 28 /tmp/ccuco84P.s.scn8 00000020  0080a2a8  0080a2a8  0000a56c  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 29 /tmp/ccTEzngR.s.scn10 0000001c  0080a2c8  0080a2c8  0000a58c  2**1
+ 29 /tmp/ccuco84P.s.scn10 0000001c  0080a2c8  0080a2c8  0000a58c  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 30 /tmp/ccTEzngR.s.scn7 00000018  0080a2e4  0080a2e4  0000a5a8  2**1
+ 30 /tmp/ccuco84P.s.scn7 00000018  0080a2e4  0080a2e4  0000a5a8  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 31 /tmp/ccTEzngR.s.scn1 00000014  0080a2fc  0080a2fc  0000a5c0  2**1
+ 31 /tmp/ccuco84P.s.scn1 00000014  0080a2fc  0080a2fc  0000a5c0  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 32 /tmp/ccTEzngR.s.scn2 00000008  0080a310  0080a310  0000a5d4  2**1
+ 32 /tmp/ccuco84P.s.scn2 00000008  0080a310  0080a310  0000a5d4  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 33 /tmp/ccTEzngR.s.scn6 00000008  0080a318  0080a318  0000a5dc  2**1
+ 33 /tmp/ccuco84P.s.scn6 00000008  0080a318  0080a318  0000a5dc  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 34 /tmp/ccTEzngR.s.scn11 00000008  0080a320  0080a320  0000a5e4  2**1
+ 34 /tmp/ccuco84P.s.scn11 00000008  0080a320  0080a320  0000a5e4  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
- 35 /tmp/ccTEzngR.s.scn9 00000004  0080a328  0080a328  0000a5ec  2**1
+ 35 /tmp/ccuco84P.s.scn9 00000004  0080a328  0080a328  0000a5ec  2**1
                   CONTENTS, ALLOC, LOAD, CODE, ABSOLUTE
 SYMBOL TABLE:
 00000000 l    df *ABS*	00000000 ../../main.c
@@ -838,7 +838,7 @@ SYMBOL TABLE:
 008079e0 l       .text	00000000 .SE65
 00000000 l       *ABS*	00000000 __large_data_scalar
 00000000 l    d  *ABS*	00000000 
-0080a194 l    d  /tmp/ccMUYkUm.s.scn1	00000000 /tmp/ccMUYkUm.s.scn1
+0080a194 l    d  /tmp/ccc51i5s.s.scn1	00000000 /tmp/ccc51i5s.s.scn1
 00000000 l    d  *ABS*	00000000 
 0080766c l       .text	00000000 .L29
 008076a4 l       .text	00000000 .L30
@@ -1315,26 +1315,26 @@ SYMBOL TABLE:
 00000000 l       *ABS*	00000000 __large_data_scalar
 00000000 l    d  *ABS*	00000000 
 00000000 l    d  *ABS*	00000000 
-0080a2fc l    d  /tmp/ccTEzngR.s.scn1	00000000 /tmp/ccTEzngR.s.scn1
-0080a310 l    d  /tmp/ccTEzngR.s.scn2	00000000 /tmp/ccTEzngR.s.scn2
-00809f84 l    d  /tmp/ccTEzngR.s.scn3	00000000 /tmp/ccTEzngR.s.scn3
-0080a288 l    d  /tmp/ccTEzngR.s.scn4	00000000 /tmp/ccTEzngR.s.scn4
-0080a1f0 l    d  /tmp/ccTEzngR.s.scn5	00000000 /tmp/ccTEzngR.s.scn5
-0080a318 l    d  /tmp/ccTEzngR.s.scn6	00000000 /tmp/ccTEzngR.s.scn6
-0080a2e4 l    d  /tmp/ccTEzngR.s.scn7	00000000 /tmp/ccTEzngR.s.scn7
-0080a2a8 l    d  /tmp/ccTEzngR.s.scn8	00000000 /tmp/ccTEzngR.s.scn8
-0080a328 l    d  /tmp/ccTEzngR.s.scn9	00000000 /tmp/ccTEzngR.s.scn9
-0080a2c8 l    d  /tmp/ccTEzngR.s.scn10	00000000 /tmp/ccTEzngR.s.scn10
-0080a320 l    d  /tmp/ccTEzngR.s.scn11	00000000 /tmp/ccTEzngR.s.scn11
-0080a128 l    d  /tmp/ccTEzngR.s.scn12	00000000 /tmp/ccTEzngR.s.scn12
+0080a2fc l    d  /tmp/ccuco84P.s.scn1	00000000 /tmp/ccuco84P.s.scn1
+0080a310 l    d  /tmp/ccuco84P.s.scn2	00000000 /tmp/ccuco84P.s.scn2
+00809f84 l    d  /tmp/ccuco84P.s.scn3	00000000 /tmp/ccuco84P.s.scn3
+0080a288 l    d  /tmp/ccuco84P.s.scn4	00000000 /tmp/ccuco84P.s.scn4
+0080a1f0 l    d  /tmp/ccuco84P.s.scn5	00000000 /tmp/ccuco84P.s.scn5
+0080a318 l    d  /tmp/ccuco84P.s.scn6	00000000 /tmp/ccuco84P.s.scn6
+0080a2e4 l    d  /tmp/ccuco84P.s.scn7	00000000 /tmp/ccuco84P.s.scn7
+0080a2a8 l    d  /tmp/ccuco84P.s.scn8	00000000 /tmp/ccuco84P.s.scn8
+0080a328 l    d  /tmp/ccuco84P.s.scn9	00000000 /tmp/ccuco84P.s.scn9
+0080a2c8 l    d  /tmp/ccuco84P.s.scn10	00000000 /tmp/ccuco84P.s.scn10
+0080a320 l    d  /tmp/ccuco84P.s.scn11	00000000 /tmp/ccuco84P.s.scn11
+0080a128 l    d  /tmp/ccuco84P.s.scn12	00000000 /tmp/ccuco84P.s.scn12
 00000000 l    d  *ABS*	00000000 
 00803d7c l       .text	00000000 .L4
-0080a2fc l       /tmp/ccTEzngR.s.scn1	00000000 .LC0
-0080a304 l       /tmp/ccTEzngR.s.scn1	00000000 .LC1
-0080a30c l       /tmp/ccTEzngR.s.scn1	00000000 .LC2
+0080a2fc l       /tmp/ccuco84P.s.scn1	00000000 .LC0
+0080a304 l       /tmp/ccuco84P.s.scn1	00000000 .LC1
+0080a30c l       /tmp/ccuco84P.s.scn1	00000000 .LC2
 00803d74 l       .text	00000000 .L6
-0080a310 l       /tmp/ccTEzngR.s.scn2	00000000 .LC3
-00809f84 l       /tmp/ccTEzngR.s.scn3	00000000 .LC4
+0080a310 l       /tmp/ccuco84P.s.scn2	00000000 .LC3
+00809f84 l       /tmp/ccuco84P.s.scn3	00000000 .LC4
 00803e1c l       .text	00000000 .L11
 00803e14 l       .text	00000000 .L23
 00803e30 l       .text	00000000 .L22
@@ -1347,20 +1347,20 @@ SYMBOL TABLE:
 00803e68 l       .text	00000000 .L15
 00803e70 l       .text	00000000 .L14
 00803e78 l       .text	00000000 .L12
-00809f8a l       /tmp/ccTEzngR.s.scn3	00000000 .LC5
-00809f9c l       /tmp/ccTEzngR.s.scn3	00000000 .LC6
+00809f8a l       /tmp/ccuco84P.s.scn3	00000000 .LC5
+00809f9c l       /tmp/ccuco84P.s.scn3	00000000 .LC6
 00803e18 l       .text	00000000 .L24
-00809fb0 l       /tmp/ccTEzngR.s.scn3	00000000 .LC7
-00809fc2 l       /tmp/ccTEzngR.s.scn3	00000000 .LC8
-00809fca l       /tmp/ccTEzngR.s.scn3	00000000 .LC9
-00809fd4 l       /tmp/ccTEzngR.s.scn3	00000000 .LC10
-00809fe0 l       /tmp/ccTEzngR.s.scn3	00000000 .LC11
-00809ff0 l       /tmp/ccTEzngR.s.scn3	00000000 .LC12
-00809ff8 l       /tmp/ccTEzngR.s.scn3	00000000 .LC13
-0080a00c l       /tmp/ccTEzngR.s.scn3	00000000 .LC14
-0080a01e l       /tmp/ccTEzngR.s.scn3	00000000 .LC15
-0080a288 l       /tmp/ccTEzngR.s.scn4	00000000 .LC16
-0080a1f0 l       /tmp/ccTEzngR.s.scn5	00000000 .LC17
+00809fb0 l       /tmp/ccuco84P.s.scn3	00000000 .LC7
+00809fc2 l       /tmp/ccuco84P.s.scn3	00000000 .LC8
+00809fca l       /tmp/ccuco84P.s.scn3	00000000 .LC9
+00809fd4 l       /tmp/ccuco84P.s.scn3	00000000 .LC10
+00809fe0 l       /tmp/ccuco84P.s.scn3	00000000 .LC11
+00809ff0 l       /tmp/ccuco84P.s.scn3	00000000 .LC12
+00809ff8 l       /tmp/ccuco84P.s.scn3	00000000 .LC13
+0080a00c l       /tmp/ccuco84P.s.scn3	00000000 .LC14
+0080a01e l       /tmp/ccuco84P.s.scn3	00000000 .LC15
+0080a288 l       /tmp/ccuco84P.s.scn4	00000000 .LC16
+0080a1f0 l       /tmp/ccuco84P.s.scn5	00000000 .LC17
 008043c8 l       .text	00000000 .L31
 008043b8 l       .text	00000000 .L45
 00804348 l       .text	00000000 .L32
@@ -1370,25 +1370,25 @@ SYMBOL TABLE:
 008042e8 l       .text	00000000 .L42
 0080431c l       .text	00000000 .L38
 008043a8 l       .text	00000000 .L30
-0080a318 l       /tmp/ccTEzngR.s.scn6	00000000 .LC18
+0080a318 l       /tmp/ccuco84P.s.scn6	00000000 .LC18
 008044fc l       .text	00000000 .L56
 0080463c l       .text	00000000 .L58
-0080a2e8 l       /tmp/ccTEzngR.s.scn7	00000000 .LC20
+0080a2e8 l       /tmp/ccuco84P.s.scn7	00000000 .LC20
 008044f8 l       .text	00000000 .L54
 00804574 l       .text	00000000 .L55
 00804448 l       .text	00000000 .L60
-0080a2e4 l       /tmp/ccTEzngR.s.scn7	00000000 .LC19
+0080a2e4 l       /tmp/ccuco84P.s.scn7	00000000 .LC19
 0080445c l       .text	00000000 .L51
 008044a8 l       .text	00000000 .L61
-0080a2ec l       /tmp/ccTEzngR.s.scn7	00000000 .LC21
-0080a2f0 l       /tmp/ccTEzngR.s.scn7	00000000 .LC22
-0080a2f6 l       /tmp/ccTEzngR.s.scn7	00000000 .LC23
-0080a2a8 l       /tmp/ccTEzngR.s.scn8	00000000 .LC24
+0080a2ec l       /tmp/ccuco84P.s.scn7	00000000 .LC21
+0080a2f0 l       /tmp/ccuco84P.s.scn7	00000000 .LC22
+0080a2f6 l       /tmp/ccuco84P.s.scn7	00000000 .LC23
+0080a2a8 l       /tmp/ccuco84P.s.scn8	00000000 .LC24
 00804674 l       .text	00000000 .L63
-0080a2ae l       /tmp/ccTEzngR.s.scn8	00000000 .LC25
-0080a2b2 l       /tmp/ccTEzngR.s.scn8	00000000 .LC26
+0080a2ae l       /tmp/ccuco84P.s.scn8	00000000 .LC25
+0080a2b2 l       /tmp/ccuco84P.s.scn8	00000000 .LC26
 0080471c l       .text	00000000 .L86
-0080a2b8 l       /tmp/ccTEzngR.s.scn8	00000000 .LC27
+0080a2b8 l       /tmp/ccuco84P.s.scn8	00000000 .LC27
 00804754 l       .text	00000000 .L68
 008047cc l       .text	00000000 .L69
 0080475c l       .text	00000000 .L71
@@ -1397,44 +1397,44 @@ SYMBOL TABLE:
 00804740 l       .text	00000000 .L67
 008046f0 l       .text	00000000 .L65
 00804778 l       .text	00000000 .L84
-0080a2bc l       /tmp/ccTEzngR.s.scn8	00000000 .LC28
-0080a2c0 l       /tmp/ccTEzngR.s.scn8	00000000 .LC29
-0080a2c4 l       /tmp/ccTEzngR.s.scn8	00000000 .LC30
-0080a328 l       /tmp/ccTEzngR.s.scn9	00000000 .LC31
+0080a2bc l       /tmp/ccuco84P.s.scn8	00000000 .LC28
+0080a2c0 l       /tmp/ccuco84P.s.scn8	00000000 .LC29
+0080a2c4 l       /tmp/ccuco84P.s.scn8	00000000 .LC30
+0080a328 l       /tmp/ccuco84P.s.scn9	00000000 .LC31
 0080484c l       .text	00000000 .L90
 00804840 l       .text	00000000 .L92
-0080a2c8 l       /tmp/ccTEzngR.s.scn10	00000000 .LC32
-0080a2dc l       /tmp/ccTEzngR.s.scn10	00000000 .LC33
-0080a320 l       /tmp/ccTEzngR.s.scn11	00000000 .LC34
+0080a2c8 l       /tmp/ccuco84P.s.scn10	00000000 .LC32
+0080a2dc l       /tmp/ccuco84P.s.scn10	00000000 .LC33
+0080a320 l       /tmp/ccuco84P.s.scn11	00000000 .LC34
 00804ab8 l       .text	00000000 .L99
 00804978 l       .text	00000000 .L198
 008049b4 l       .text	00000000 .L106
 008049a0 l       .text	00000000 .L199
 00804af0 l       .text	00000000 .L109
 008049bc l       .text	00000000 .L105
-0080a156 l       /tmp/ccTEzngR.s.scn12	00000000 .LC43
+0080a156 l       /tmp/ccuco84P.s.scn12	00000000 .LC43
 008049b8 l       .text	00000000 .L194
 00804ae0 l       .text	00000000 .L101
 00804ab0 l       .text	00000000 .L102
 00804ae8 l       .text	00000000 .L103
-0080a13e l       /tmp/ccTEzngR.s.scn12	00000000 .LC39
+0080a13e l       /tmp/ccuco84P.s.scn12	00000000 .LC39
 00804ac0 l       .text	00000000 .L200
-0080a13a l       /tmp/ccTEzngR.s.scn12	00000000 .LC38
+0080a13a l       /tmp/ccuco84P.s.scn12	00000000 .LC38
 00804b3c l       .text	00000000 .L115
-0080a15c l       /tmp/ccTEzngR.s.scn12	00000000 .LC44
+0080a15c l       /tmp/ccuco84P.s.scn12	00000000 .LC44
 00804be4 l       .text	00000000 .L201
-0080a174 l       /tmp/ccTEzngR.s.scn12	00000000 .LC47
+0080a174 l       /tmp/ccuco84P.s.scn12	00000000 .LC47
 00804c08 l       .text	00000000 .L202
 00804cc4 l       .text	00000000 .L134
 00804d24 l       .text	00000000 .L138
-0080a128 l       /tmp/ccTEzngR.s.scn12	00000000 .LC35
-0080a130 l       /tmp/ccTEzngR.s.scn12	00000000 .LC36
-0080a134 l       /tmp/ccTEzngR.s.scn12	00000000 .LC37
+0080a128 l       /tmp/ccuco84P.s.scn12	00000000 .LC35
+0080a130 l       /tmp/ccuco84P.s.scn12	00000000 .LC36
+0080a134 l       /tmp/ccuco84P.s.scn12	00000000 .LC37
 00804b20 l       .text	00000000 .L114
 00804b24 l       .text	00000000 .L193
-0080a144 l       /tmp/ccTEzngR.s.scn12	00000000 .LC40
-0080a14a l       /tmp/ccTEzngR.s.scn12	00000000 .LC41
-0080a150 l       /tmp/ccTEzngR.s.scn12	00000000 .LC42
+0080a144 l       /tmp/ccuco84P.s.scn12	00000000 .LC40
+0080a14a l       /tmp/ccuco84P.s.scn12	00000000 .LC41
+0080a150 l       /tmp/ccuco84P.s.scn12	00000000 .LC42
 00804b2c l       .text	00000000 .L203
 00804b34 l       .text	00000000 .L113
 00804ad8 l       .text	00000000 .L111
@@ -1444,11 +1444,11 @@ SYMBOL TABLE:
 00804b70 l       .text	00000000 .L118
 00804b68 l       .text	00000000 .L205
 008049dc l       .text	00000000 .L121
-0080a164 l       /tmp/ccTEzngR.s.scn12	00000000 .LC45
+0080a164 l       /tmp/ccuco84P.s.scn12	00000000 .LC45
 008049e0 l       .text	00000000 .L195
-0080a16c l       /tmp/ccTEzngR.s.scn12	00000000 .LC46
+0080a16c l       /tmp/ccuco84P.s.scn12	00000000 .LC46
 00804a1c l       .text	00000000 .L122
-0080a17c l       /tmp/ccTEzngR.s.scn12	00000000 .LC48
+0080a17c l       /tmp/ccuco84P.s.scn12	00000000 .LC48
 00804c7c l       .text	00000000 .L206
 00804c44 l       .text	00000000 .L127
 00804c88 l       .text	00000000 .L207
@@ -1463,12 +1463,12 @@ SYMBOL TABLE:
 00804c58 l       .text	00000000 .L132
 00804c64 l       .text	00000000 .L133
 00804cf0 l       .text	00000000 .L137
-0080a184 l       /tmp/ccTEzngR.s.scn12	00000000 .LC49
+0080a184 l       /tmp/ccuco84P.s.scn12	00000000 .LC49
 00804a80 l       .text	00000000 .L135
-0080a18a l       /tmp/ccTEzngR.s.scn12	00000000 .LC50
+0080a18a l       /tmp/ccuco84P.s.scn12	00000000 .LC50
 00804db4 l       .text	00000000 .L141
 00804a94 l       .text	00000000 .L139
-0080a190 l       /tmp/ccTEzngR.s.scn12	00000000 .LC51
+0080a190 l       /tmp/ccuco84P.s.scn12	00000000 .LC51
 00804dc8 l       .text	00000000 .L196
 00804dac l       .text	00000000 .L212
 00804d94 l       .text	00000000 .L143
@@ -1564,7 +1564,7 @@ SYMBOL TABLE:
 00806c80 l       .text	00000000 .L1_966
 00806c98 l       .text	00000000 .L1_980
 00806cc8 l       .text	00000000 .L1_989
-00000000 l    df *ABS*	00000000 /home/user/grbl/.claude/worktrees/agent-aaf15475d826f2185/grbl/platform/dspic33ak128mc102/platform.c
+00000000 l    df *ABS*	00000000 /home/user/grbl/grbl/platform/dspic33ak128mc102/platform.c
 00000001 l       *ABS*	00000000 __33AK128MC102
 00000001 l       *ABS*	00000000 __dsPIC33A
 00000001 l       *ABS*	00000000 __HAS_DSP
@@ -1577,13 +1577,13 @@ SYMBOL TABLE:
 00000040 l       *ABS*	00000000 __ext_attr_.user_init
 00000000 l       *ABS*	00000000 ___PA___
 00000032 l       *ABS*	00000000 ___BP___
-0080a108 l     O /tmp/cccRX3EB.s.scn1	00000010 _gpio_ansel
-0080a118 l     O /tmp/cccRX3EB.s.scn1	00000010 _gpio_tris
-0080a0f8 l     O /tmp/cccRX3EB.s.scn1	00000010 _gpio_cnpu
-0080a0b8 l     O /tmp/cccRX3EB.s.scn1	00000010 _gpio_cnf
-0080a0e8 l     O /tmp/cccRX3EB.s.scn1	00000010 _gpio_cnen0
-0080a0d8 l     O /tmp/cccRX3EB.s.scn1	00000010 _gpio_cnen1
-0080a0c8 l     O /tmp/cccRX3EB.s.scn1	00000010 _gpio_cncon
+0080a108 l     O /tmp/ccsvuyaB.s.scn1	00000010 _gpio_ansel
+0080a118 l     O /tmp/ccsvuyaB.s.scn1	00000010 _gpio_tris
+0080a0f8 l     O /tmp/ccsvuyaB.s.scn1	00000010 _gpio_cnpu
+0080a0b8 l     O /tmp/ccsvuyaB.s.scn1	00000010 _gpio_cnf
+0080a0e8 l     O /tmp/ccsvuyaB.s.scn1	00000010 _gpio_cnen0
+0080a0d8 l     O /tmp/ccsvuyaB.s.scn1	00000010 _gpio_cnen1
+0080a0c8 l     O /tmp/ccsvuyaB.s.scn1	00000010 _gpio_cncon
 00000000 l       *ABS*	00000000 __large_data_scalar
 00000040 l       *ABS*	00000000 __ext_attr_.config_WDTRSTEN
 007f3030 l       .config_WDTRSTEN	00000000 __config_WDTRSTEN
@@ -1698,7 +1698,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00000001 l       *ABS*	00000000 __F_7F3000_FCP_CP
 00000000 l    d  *ABS*	00000000 
 00000000 l    d  *ABS*	00000000 
-0080a0b8 l    d  /tmp/cccRX3EB.s.scn1	00000000 /tmp/cccRX3EB.s.scn1
+0080a0b8 l    d  /tmp/ccsvuyaB.s.scn1	00000000 /tmp/ccsvuyaB.s.scn1
 00000000 l    d  *ABS*	00000000 
 007f3030 l    d  .config_WDTRSTEN	00000000 .config_WDTRSTEN
 007f3830 l    d  .config_BKUP_WDTRSTEN	00000000 .config_BKUP_WDTRSTEN
@@ -1715,7 +1715,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00809910 l       .text	00000000 .L27
 008099c0 l       .text	00000000 .L37
 008099c8 l       .text	00000000 .L38
-00000000 l    df *ABS*	00000000 /home/user/grbl/.claude/worktrees/agent-aaf15475d826f2185/grbl/platform/dspic33ak128mc102/handlers.c
+00000000 l    df *ABS*	00000000 /home/user/grbl/grbl/platform/dspic33ak128mc102/handlers.c
 00000001 l       *ABS*	00000000 __33AK128MC102
 00000001 l       *ABS*	00000000 __dsPIC33A
 00000001 l       *ABS*	00000000 __HAS_DSP
@@ -1732,7 +1732,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00000000 l    d  *ABS*	00000000 
 00000000 l    d  *ABS*	00000000 
 00000000 l    d  *ABS*	00000000 
-00000000 l    df *ABS*	00000000 /home/user/grbl/.claude/worktrees/agent-aaf15475d826f2185/grbl/platform/dspic33ak128mc102/serial.c
+00000000 l    df *ABS*	00000000 /home/user/grbl/grbl/platform/dspic33ak128mc102/serial.c
 00000001 l       *ABS*	00000000 __33AK128MC102
 00000001 l       *ABS*	00000000 __dsPIC33A
 00000001 l       *ABS*	00000000 __HAS_DSP
@@ -1799,7 +1799,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00809754 l       .text	00000000 .L84
 00809644 l       .text	00000000 .L65
 00809620 l       .text	00000000 .L68
-00000000 l    df *ABS*	00000000 /home/user/grbl/.claude/worktrees/agent-aaf15475d826f2185/grbl/platform/dspic33ak128mc102/nvmem.c
+00000000 l    df *ABS*	00000000 /home/user/grbl/grbl/platform/dspic33ak128mc102/nvmem.c
 00000001 l       *ABS*	00000000 __33AK128MC102
 00000001 l       *ABS*	00000000 __dsPIC33A
 00000001 l       *ABS*	00000000 __HAS_DSP
@@ -1812,11 +1812,11 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00000000 l       *ABS*	00000000 ___PA___
 00000015 l       *ABS*	00000000 ___BP___
 00004024 l     O .bss	00000800 _page_buffer
-0081f800 l     O _0x7f419c117360_at_address_0x81f800	00000800 _nvmem_reservation
+0081f800 l     O _0x7f1708517360_at_address_0x81f800	00000800 _nvmem_reservation
 00000000 l       *ABS*	00000000 __large_data_scalar
 00000000 l    d  *ABS*	00000000 
 00004024 l    d  .bss	00000000 .bss
-0081f800 l    d  _0x7f419c117360_at_address_0x81f800	00000000 _0x7f419c117360_at_address_0x81f800
+0081f800 l    d  _0x7f1708517360_at_address_0x81f800	00000000 _0x7f1708517360_at_address_0x81f800
 00000000 l    d  *ABS*	00000000 
 00808ccc l       .text	00000000 .L1
 00808ce0 l       .text	00000000 .L19
@@ -2366,7 +2366,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00808cd4  w      .text	00000000 _eeprom_put_char
 00004de4  w    O .bss	0000005c _settings
 00807624  w    F .text	00000000 _settings_restore
-0080a194  w    O /tmp/ccMUYkUm.s.scn1	0000005c _defaults
+0080a194  w    O /tmp/ccc51i5s.s.scn1	0000005c _defaults
 0080772c  w    F .text	00000000 _settings_read_startup_line
 00808fdc  w      .text	00000000 _memcpy_from_nvmem_with_checksum
 00807780  w    F .text	00000000 _settings_read_build_info
@@ -2800,6 +2800,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 0000329c g       *ABS*	00000000 _CM4SEL
 000009cc g       *ABS*	00000000 _AD1CH18CNTbits
 00003518 g       *ABS*	00000000 PTGC0LIM
+00000001 g       *ABS*	00000000 __linked_/tmp/ccc51i5s.s.scn1
 00001d68 g       *ABS*	00000000 _DAC3CONbits
 000017a4 g       *ABS*	00000000 _U3UIRbits
 00003188 g       *ABS*	00000000 _VCO1DIVbits
@@ -3402,7 +3403,6 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 0000110c g       *ABS*	00000000 _PG3DCAbits
 0000393c g       *ABS*	00000000 _RPINR14
 00003020 g       *ABS*	00000000 _NVMECCSTATbits
-00000001 g       *ABS*	00000000 __linked__0x7f419c117360_at_address_0x81f800
 00000998 g       *ABS*	00000000 AD1CH16DATA
 000019e0 g       *ABS*	00000000 _SENT2CON1
 0000353c g       *ABS*	00000000 _PTGQUE3
@@ -3543,9 +3543,11 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00000238 g       *ABS*	00000000 _CNFCbits
 000018d4 g       *ABS*	00000000 _I2C2STAT1bits
 00001044 g       *ABS*	00000000 _PWMEVTD
+00000001 g       *ABS*	00000000 __linked_/tmp/ccuco84P.s.scn8
 000009e8 g       *ABS*	00000000 _AD1CH19CMPLO
 00001048 g       *ABS*	00000000 _PWMEVTE
 0000317c g       *ABS*	00000000 CLK13DIV
+00000001 g       *ABS*	00000000 __linked_/tmp/ccuco84P.s.scn5
 000023a8 g       *ABS*	00000000 _DMA3CNT
 000009c4 g       *ABS*	00000000 _AD1CH18CONbits
 000018f0 g       *ABS*	00000000 I2C2LBRG
@@ -3557,6 +3559,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00000b3c g       *ABS*	00000000 _AD2CH12CNT
 00000bf0 g       *ABS*	00000000 _AD2CH19ACC
 0000319c g       *ABS*	00000000 CLKDIAG
+00000001 g       *ABS*	00000000 __linked_/tmp/ccuco84P.s.scn6
 00000080 g       *ABS*	00000000 _INTCON5bits
 00000234 g       *ABS*	00000000 CNSTATC
 00001090 g       *ABS*	00000000 _PG1DTbits
@@ -3569,6 +3572,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00000b90 g       *ABS*	00000000 AD2CH15ACC
 00000304 g       *ABS*	00000000 PR0ST
 00000960 g       *ABS*	00000000 AD1CH13ACC
+00000001 g       *ABS*	00000000 __linked_/tmp/ccuco84P.s.scn4
 00001fe0 g       *ABS*	00000000 B1RCCON
 00001d70 g       *ABS*	00000000 _DAC3SLPCON
 00001d58 g       *ABS*	00000000 DAC2CON
@@ -3586,6 +3590,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00001e9c g       *ABS*	00000000 _IOIM2CONbits
 0000088c g       *ABS*	00000000 _AD1CH5CONbits
 000018e4 g       *ABS*	00000000 _I2C2TRN
+00000001 g       *ABS*	00000000 __linked_/tmp/ccuco84P.s.scn7
 00003500 g       *ABS*	00000000 PTGCON
 000035e0 g       *ABS*	00000000 _PWBYECCCONbits
 0000101c g       *ABS*	00000000 _CMBTRIGbits
@@ -3595,11 +3600,14 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00000310 g       *ABS*	00000000 PR1CTRL
 00000a74 g       *ABS*	00000000 _AD2CH4CON
 000018b0 g       *ABS*	00000000 I2C1BTO
+00000001 g       *ABS*	00000000 __linked_/tmp/ccuco84P.s.scn1
 00001094 g       *ABS*	00000000 PG1CAP
+00000001 g       *ABS*	00000000 __linked_/tmp/ccuco84P.s.scn2
 00000954 g       *ABS*	00000000 _AD1CH13CNT
 000010c8 g       *ABS*	00000000 _PG2PER
 00001700 g       *ABS*	00000000 U1CON
 000008a0 g       *ABS*	00000000 AD1CH5ACC
+00000001 g       *ABS*	00000000 __linked_/tmp/ccuco84P.s.scn3
 00001e10 g       *ABS*	00000000 HPCCON
 000023c8 g       *ABS*	00000000 DMA4STAT
 00003124 g       *ABS*	00000000 _CLK2DIV
@@ -3629,6 +3637,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 000018f4 g       *ABS*	00000000 I2C2INTC
 00000078 g       *ABS*	00000000 _INTCON3bits
 00000a78 g       *ABS*	00000000 _AD2CH4DATA
+00000001 g       *ABS*	00000000 __linked_/tmp/ccuco84P.s.scn9
 00000ab8 g       *ABS*	00000000 _AD2CH6ACC
 0000319c g       *ABS*	00000000 _CLKDIAG
 0000314c g       *ABS*	00000000 _CLK7DIV
@@ -3994,6 +4003,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 000008a8 g       *ABS*	00000000 AD1CH6DATA
 00003990 g       *ABS*	00000000 _RPOR4bits
 0000077c g       *ABS*	00000000 _BMXXDATERR
+00000001 g       *ABS*	00000000 __linked__0x7f1708517360_at_address_0x81f800
 000010ec g       *ABS*	00000000 PG3EVT
 00000830 g       *ABS*	00000000 _AD1CH1DATA
 00003260 g       *ABS*	00000000 CM3CON
@@ -4087,7 +4097,6 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00003648 g       *ABS*	00000000 _CNPUAbits
 00002370 g       *ABS*	00000000 _DMA2STAT
 00001bac g       *ABS*	00000000 _CCP4RBbits
-00000001 g       *ABS*	00000000 __linked_/tmp/cccRX3EB.s.scn1
 00003a18 g       *ABS*	00000000 _PSINTV
 0000002c g       *ABS*	00000000 _PCTRAPbits
 00003518 g       *ABS*	00000000 _PTGC0LIMbits
@@ -4103,7 +4112,6 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 000036b8 g       *ABS*	00000000 _CNPDD
 0000180c g       *ABS*	00000000 _SPI1BUF
 00001f88 g       *ABS*	00000000 _B1IDS2
-00000001 g       *ABS*	00000000 __linked_/tmp/ccMUYkUm.s.scn1
 000002e4 g       *ABS*	00000000 IRTCTRL
 00001bb0 g       *ABS*	00000000 CCP4BUF
 00002368 g       *ABS*	00000000 _DMA2CHbits
@@ -4279,7 +4287,6 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00003010 g       *ABS*	00000000 NVMDATA2
 000035d0 g       *ABS*	00000000 RAMYECCEADDR
 00001714 g       *ABS*	00000000 _U1PA
-00000001 g       *ABS*	00000000 __linked_/tmp/ccTEzngR.s.scn10
 00001fe4 g       *ABS*	00000000 B1CTRLCON
 00003014 g       *ABS*	00000000 NVMDATA3
 0000000c g       *ABS*	00000000 _DISIIPLbits
@@ -4301,12 +4308,10 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00001eb8 g       *ABS*	00000000 _IOIM4BCON
 0000300c g       *ABS*	00000000 NVMDATA1
 00000828 g       *ABS*	00000000 _AD1CH0ACC
-00000001 g       *ABS*	00000000 __linked_/tmp/ccTEzngR.s.scn12
 00001018 g       *ABS*	00000000 _LFSR
 00001f8c g       *ABS*	00000000 B1IDS3
 0000235c g       *ABS*	00000000 _DMA1INV
 000018b0 g       *ABS*	00000000 _I2C1BTObits
-00000001 g       *ABS*	00000000 __linked_/tmp/ccTEzngR.s.scn11
 00000abc g       *ABS*	00000000 AD2CH7CON
 00002320 g       *ABS*	00000000 DMA0DST
 00001f88 g       *ABS*	00000000 B1IDS2
@@ -4379,6 +4384,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 000039b8 g       *ABS*	00000000 RPOR14
 000000fc g       *ABS*	00000000 IPC9
 0000351c g       *ABS*	00000000 _PTGC1LIM
+00000001 g       *ABS*	00000000 __linked_/tmp/ccsvuyaB.s.scn1
 00000b0c g       *ABS*	00000000 _AD2CH10CNTbits
 00000140 g       *ABS*	00000000 IPC26
 0000230c g       *ABS*	00000000 _DMAHIGHbits
@@ -4818,10 +4824,12 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00001b40 g       *ABS*	00000000 CCP2TMR
 00000090 g       *ABS*	00000000 _IFS0
 00003930 g       *ABS*	00000000 _RPINR11bits
+00000001 g       *ABS*	00000000 __linked_/tmp/ccuco84P.s.scn11
 00000b1c g       *ABS*	00000000 _AD2CH11CON
 000010f0 g       *ABS*	00000000 PG3FPCI
 00000038 g       *ABS*	00000000 PCHOLD
 0000179c g       *ABS*	00000000 U3CHK
+00000001 g       *ABS*	00000000 __linked_/tmp/ccuco84P.s.scn10
 00001060 g       *ABS*	00000000 PG1FPCI
 00003994 g       *ABS*	00000000 RPOR5
 00000318 g       *ABS*	00000000 PR1END
@@ -4846,6 +4854,7 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00003640 g       *ABS*	00000000 _ANSELAbits
 00001710 g       *ABS*	00000000 U1TXB
 00003990 g       *ABS*	00000000 RPOR4
+00000001 g       *ABS*	00000000 __linked_/tmp/ccuco84P.s.scn12
 000018ec g       *ABS*	00000000 _I2C2CON2bits
 000010b4 g       *ABS*	00000000 PG2SPCI
 00000364 g       *ABS*	00000000 PR6ST
@@ -5336,7 +5345,6 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00000abc g       *ABS*	00000000 _AD2CH7CONbits
 0000110c g       *ABS*	00000000 PG3DCA
 00001b04 g       *ABS*	00000000 CCP1CON2
-00000001 g       *ABS*	00000000 __linked_/tmp/ccTEzngR.s.scn3
 00003028 g       *ABS*	00000000 _NVMECCFADDRbits
 00001b10 g       *ABS*	00000000 CCP1TMR
 000023d4 g       *ABS*	00000000 DMA4CNT
@@ -5345,7 +5353,6 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00001b08 g       *ABS*	00000000 CCP1CON3
 00000b28 g       *ABS*	00000000 AD2CH11CMPLO
 00001e84 g       *ABS*	00000000 PACCON2
-00000001 g       *ABS*	00000000 __linked_/tmp/ccTEzngR.s.scn2
 0000231c g       *ABS*	00000000 _DMA0SRC
 0000090c g       *ABS*	00000000 _AD1CH10CNT
 00000a9c g       *ABS*	00000000 _AD2CH5CMPHI
@@ -5355,11 +5362,8 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00001890 g       *ABS*	00000000 _I2C1HBRG
 0000303c g       *ABS*	00000000 _NVMECCEDATA3
 000000e4 g       *ABS*	00000000 _IPC3bits
-00000001 g       *ABS*	00000000 __linked_/tmp/ccTEzngR.s.scn6
-00000001 g       *ABS*	00000000 __linked_/tmp/ccTEzngR.s.scn1
 00001720 g       *ABS*	00000000 _U1SCCON
 00000a18 g       *ABS*	00000000 _AD2CH0DATA
-00000001 g       *ABS*	00000000 __linked_/tmp/ccTEzngR.s.scn4
 0000022c g       *ABS*	00000000 _LATCbits
 00001100 g       *ABS*	00000000 PG3LEB
 00001b44 g       *ABS*	00000000 _CCP2PRbits
@@ -5372,14 +5376,12 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00001908 g       *ABS*	00000000 _I2C2CBCTO
 00003240 g       *ABS*	00000000 _CM2BUF
 00003034 g       *ABS*	00000000 _NVMECCEDATA1
-00000001 g       *ABS*	00000000 __linked_/tmp/ccTEzngR.s.scn9
 00001884 g       *ABS*	00000000 _I2C1STAT1bits
 0000099c g       *ABS*	00000000 AD1CH16CNT
 00003504 g       *ABS*	00000000 _PTGBTE
 00000a70 g       *ABS*	00000000 _AD2CH3ACC
 00003940 g       *ABS*	00000000 RPINR15
 000032ac g       *ABS*	00000000 _CM4LFAIL
-00000001 g       *ABS*	00000000 __linked_/tmp/ccTEzngR.s.scn7
 000023c4 g       *ABS*	00000000 _DMA4SELbits
 0000106c g       *ABS*	00000000 PG1SPCI
 00001b70 g       *ABS*	00000000 _CCP3TMR
@@ -5390,12 +5392,10 @@ ffffffff l       *ABS*	00000000 __F_7F40B0_FEPUCB_EPUCB
 00003274 g       *ABS*	00000000 _CM3SAT
 0000394c g       *ABS*	00000000 RPINR18
 00001eb0 g       *ABS*	00000000 IOIM3STAT
-00000001 g       *ABS*	00000000 __linked_/tmp/ccTEzngR.s.scn5
 000036c4 g       *ABS*	00000000 _CNEN1Dbits
 00001844 g       *ABS*	00000000 _SPI3CON2
 00000b5c g       *ABS*	00000000 AD2CH13CMPHI
 00001850 g       *ABS*	00000000 _SPI3BRG
-00000001 g       *ABS*	00000000 __linked_/tmp/ccTEzngR.s.scn8
 00000310 g       *ABS*	00000000 _PR1CTRLbits
 0000235c g       *ABS*	00000000 DMA1INV
 00001ba0 g       *ABS*	00000000 CCP4TMR
@@ -20107,7 +20107,7 @@ Disassembly of section .text:
 00809f80 <.L13>:
   809f80:	return    
 	...
-Disassembly of section /tmp/ccTEzngR.s.scn3:
+Disassembly of section /tmp/ccuco84P.s.scn3:
 
 00809f84 <.LC4>:
   809f84:	btst.lz   w11, w5
@@ -20266,7 +20266,7 @@ Disassembly of section .text:
   80a0ac:	rcall     0x8030dc <_st_prep_buffer>
   80a0b0:	rcall     0x802a60 <_st_wake_up>
   80a0b4:	bra       0x80a078 <.L1>
-Disassembly of section /tmp/cccRX3EB.s.scn1:
+Disassembly of section /tmp/ccsvuyaB.s.scn1:
 
 0080a0b8 <_gpio_cnf>:
   80a0b8:	....$...8...L...
@@ -20288,7 +20288,7 @@ Disassembly of section /tmp/cccRX3EB.s.scn1:
 
 0080a118 <_gpio_tris>:
   80a118:	........0...D...
-Disassembly of section /tmp/ccTEzngR.s.scn12:
+Disassembly of section /tmp/ccuco84P.s.scn12:
 
 0080a128 <.LC35>:
   80a128:	sub.w     w4, w9, w4
@@ -20373,7 +20373,7 @@ Disassembly of section /tmp/ccTEzngR.s.scn12:
 0080a190 <.LC51>:
   80a190:	bclr.l    w12, #0x17
   80a192:	neop      
-Disassembly of section /tmp/ccMUYkUm.s.scn1:
+Disassembly of section /tmp/ccc51i5s.s.scn1:
 
 0080a194 <_defaults>:
   80a194:	..zC..zC..zC...C
@@ -20382,7 +20382,7 @@ Disassembly of section /tmp/ccMUYkUm.s.scn1:
   80a1c4:	..........#<o..;
   80a1d4:	..zD...........A
   80a1e4:	...C.......?
-Disassembly of section /tmp/ccTEzngR.s.scn5:
+Disassembly of section /tmp/ccuco84P.s.scn5:
 
 0080a1f0 <.LC17>:
   80a1f0:	btsts.bz  w11, #0x5
@@ -20443,7 +20443,7 @@ Disassembly of section .text:
   80a27c:	muluu.d   w0, w1, w0
   80a280:	rcall     0x800f68 <___udivdi3>
   80a284:	bra       0x800804 <___delay32>
-Disassembly of section /tmp/ccTEzngR.s.scn4:
+Disassembly of section /tmp/ccuco84P.s.scn4:
 
 0080a288 <.LC16>:
   80a288:	mov.l     w13, [w14+0]
@@ -20460,7 +20460,7 @@ Disassembly of section /tmp/ccTEzngR.s.scn4:
   80a2a0:	.pword 0xa0d5d70
   80a2a4:	neop      
 	...
-Disassembly of section /tmp/ccTEzngR.s.scn8:
+Disassembly of section /tmp/ccuco84P.s.scn8:
 
 0080a2a8 <.LC24>:
   80a2a8:	btst.lz   w11, #0x15
@@ -20489,7 +20489,7 @@ Disassembly of section /tmp/ccTEzngR.s.scn8:
 
 0080a2c4 <.LC30>:
   80a2c4:	.pword 0x005320
-Disassembly of section /tmp/ccTEzngR.s.scn10:
+Disassembly of section /tmp/ccuco84P.s.scn10:
 
 0080a2c8 <.LC32>:
   80a2c8:	.pword 0x5245565b
@@ -20506,7 +20506,7 @@ Disassembly of section /tmp/ccTEzngR.s.scn10:
   80a2dc:	.pword 0x54504f5b
   80a2e0:	neop      
 	...
-Disassembly of section /tmp/ccTEzngR.s.scn7:
+Disassembly of section /tmp/ccuco84P.s.scn7:
 
 0080a2e4 <.LC19>:
   80a2e4:	btst.lz   w11, #0x15
@@ -20528,7 +20528,7 @@ Disassembly of section /tmp/ccTEzngR.s.scn7:
 0080a2f6 <.LC23>:
   80a2f6:	.pword 0x545b003a
   80a2fa:	neop      
-Disassembly of section /tmp/ccTEzngR.s.scn1:
+Disassembly of section /tmp/ccuco84P.s.scn1:
 
 0080a2fc <.LC0>:
   80a2fc:	ior.l     w6, w15, w6
@@ -20545,26 +20545,26 @@ Disassembly of section /tmp/ccTEzngR.s.scn1:
 0080a30c <.LC2>:
   80a30c:	mov.l     w13, [w14+0]
 	...
-Disassembly of section /tmp/ccTEzngR.s.scn2:
+Disassembly of section /tmp/ccuco84P.s.scn2:
 
 0080a310 <.LC3>:
   80a310:	btst.wz   w1, w4
   80a312:	.pword 0x52414c41
 	...
-Disassembly of section /tmp/ccTEzngR.s.scn6:
+Disassembly of section /tmp/ccuco84P.s.scn6:
 
 0080a318 <.LC18>:
   80a318:	.pword 0x4252505b
   80a31c:	neop      
 	...
-Disassembly of section /tmp/ccTEzngR.s.scn11:
+Disassembly of section /tmp/ccuco84P.s.scn11:
 
 0080a320 <.LC34>:
   80a320:	sub.l     w5, w11, w5
   80a322:	and.w     w6, w3, w6
   80a324:	cpb.w     w15, #0x6
   80a326:	neop      
-Disassembly of section /tmp/ccTEzngR.s.scn9:
+Disassembly of section /tmp/ccuco84P.s.scn9:
 
 0080a328 <.LC31>:
   80a328:	.pword 0x004e24
