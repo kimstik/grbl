@@ -364,6 +364,26 @@ void hal_timer_stepper_init(void) {
 
   // Enable TIM2 interrupt in NVIC
   NVIC_EnableIRQ(TIM2_IRQn);
+  NVIC_SetPriority(TIM2_IRQn, 1);   // CONTRACTS.md section 12.7 - stepper IRQ,
+                                    // numerically below serial so it is not
+                                    // starved, numerically above pulse-reset
+                                    // so pulse-reset can preempt it. Also the
+                                    // fix for st_go_idle()'s delay_ms(): with
+                                    // every IRQ left at its NVIC reset default
+                                    // (equal priority, no preemption), SysTick
+                                    // could never preempt this timer's ISR, so
+                                    // stm32_delay_ms() (common/stm32/
+                                    // stm32_timing.c) polling systick_millis
+                                    // from inside st_go_idle() <- ISR_STEP
+                                    // (stepper.c:401,266) span forever - the
+                                    // machine hangs at the end of every move
+                                    // whenever settings.stepper_idle_lock_time
+                                    // != 0xff (25 ms is the DEFAULTS_GENERIC
+                                    // default, defaults.h:49 - not an edge
+                                    // case). Demoting this IRQ below SysTick's
+                                    // untouched (higher) default priority
+                                    // restores the nesting stm32f411/hc32f460
+                                    // already rely on for the same reason.
 }
 
 void hal_timer_pulse_reset_init(void) {
@@ -378,6 +398,11 @@ void hal_timer_pulse_reset_init(void) {
 
   // Enable TIM3 interrupt in NVIC
   NVIC_EnableIRQ(TIM3_IRQn);
+  NVIC_SetPriority(TIM3_IRQn, 0);   // Pulse-reset IRQ priority >= stepper
+                                    // (numerically <=, i.e. higher preemption
+                                    // priority than TIM2's 1) - CONTRACTS.md
+                                    // section 5.2/12.7, matching
+                                    // stm32f411/platform.c:244.
 }
 
 // Spindle PWM timer initialization (TIM1, advanced-control timer - needs
@@ -421,6 +446,9 @@ void hal_serial_init(uint32_t baud_rate) {
 
   // Enable USART1 interrupt in NVIC
   NVIC_EnableIRQ(USART1_IRQn);
+  NVIC_SetPriority(USART1_IRQn, 3); // Serial must not starve the stepper pair
+                                    // (CONTRACTS.md section 12.7), matching
+                                    // stm32f411/platform.c:283.
 }
 
 // Forward declarations for serial ISR helpers (defined in serial.c)

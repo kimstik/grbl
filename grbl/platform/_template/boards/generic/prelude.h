@@ -11,6 +11,10 @@
 #include "../../gpio.h"
 #include "../../../common/gpio.h"
 #include "../../../common/clock_width.h" // CONTRACTS.md #36: F_CPU width guard
+#include "../../../common/amass_floor.h" // CONTRACTS.md #amass-floor: AMASS floor guard.
+// If your board's F_CPU pushes the floor over 200 steps/sec, see
+// amass_floor.h's own header comment for the GRBL_ACKNOWLEDGE_AMASS_FLOOR
+// escape hatch and what it requires you to state.
 #include "config.h"
 #include "../../platform.h"
 
