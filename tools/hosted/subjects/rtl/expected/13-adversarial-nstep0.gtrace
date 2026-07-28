@@ -1,0 +1,5 @@
+# gtrace/1
+V adversarial-nstep0
+C f_tick=16000000 pulse_ticks=160 step_invert=0x00 dir_invert=0x00 rest_step=0x00 rest_dir=0x00 homing=0 homing_lock=0xff
+X 1 0 FAULT code=1 nstep0
+Z ticks=0 clk=0 pos=0,0,0 probe=0,0,0 probe_tick=0

@@ -68,9 +68,11 @@ jobs:
   # NINTH RATCHET. Compiles grbl/stepper.c - the frozen consumer - straight out
   # of the tree with the HOST cc (no cross toolchain, which is why this is its
   # own fast job rather than a leg of a platform row), replays the committed
-  # SEGX/1 vector corpus through the real ISR, and gates three things: the
+  # SEGX/1 vector corpus through the real ISR, and gates four things: the
   # replay equals the committed goldens, every registered candidate executor
-  # equals the oracle bit-exactly, and the vector count only grows.
+  # equals the oracle bit-exactly (or matches a committed, counted, genuinely
+  # different declared divergence), every registered subject actually RAN, and
+  # the vector count only grows.
   #
   # It fails on any observable change to the frozen consumer - Bresenham, AMASS
   # shift, invert-mask timing, homing-lock placement, probe sample order, drain
@@ -80,12 +82,27 @@ jobs:
   #
   # NEVER add --regen here. Regenerating goldens is a deliberate act.
   seg-conformance:
-    name: segment conformance (hosted oracle, no cross toolchain)
+    name: segment conformance (hosted oracle + Verilated executor)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # The Verilated executor is a registered subject. Without verilator it
+      # exits 77 and the ratchet SKIPS it - fine on a developer laptop, not
+      # here, which is why the run below passes --require-rtl and why this
+      # install step must not be made "optional".
+      - name: Install verilator (for the RTL conformance subject)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq verilator
       - name: Replay the corpus through the frozen ISR and diff every subject
-        run: python3 ci/seg_conformance.py
+        run: python3 ci/seg_conformance.py --require-rtl
+      # Not a gate: a measurement. iCE40 place-and-route decides whether the
+      # executor closes timing at a given F_TICK, and SEGMENT-RUNTIME-PLAN §4
+      # stage 5 says that answer must be visible before the goldens move.
+      # Informational because it depends on nextpnr's placer seed.
+      - name: Install yosys and nextpnr-ice40 (informational synthesis)
+        run: sudo apt-get install -y -qq yosys nextpnr-ice40
+      - name: iCE40 utilisation and Fmax (informational)
+        continue-on-error: true
+        run: tools/hosted/subjects/rtl/ice40/synth.sh
 
   # One matrix row per platform/board/flavor; adding a port = one new row
   # (plus its ci/warn_baseline_<platform>.txt, which may start empty).
