@@ -58,10 +58,34 @@ jobs:
         run: sh tools/assert_no_double.sh --selftest
       - name: Warning ratchet selftest
         run: python3 ci/warn_ratchet.py --selftest
+      - name: Segment conformance selftest
+        run: python3 ci/seg_conformance.py --selftest
       - name: Macro single-owner check selftest (BUG #25 class)
         run: python3 ci/pinmap_overlap_check.py --selftest
       - name: Artifact tooling selftest
         run: make -C grbl/platform artifacts-selftest
+
+  # NINTH RATCHET. Compiles grbl/stepper.c - the frozen consumer - straight out
+  # of the tree with the HOST cc (no cross toolchain, which is why this is its
+  # own fast job rather than a leg of a platform row), replays the committed
+  # SEGX/1 vector corpus through the real ISR, and gates three things: the
+  # replay equals the committed goldens, every registered candidate executor
+  # equals the oracle bit-exactly, and the vector count only grows.
+  #
+  # It fails on any observable change to the frozen consumer - Bresenham, AMASS
+  # shift, invert-mask timing, homing-lock placement, probe sample order, drain
+  # sequencing, tick period accounting - and on a hand-edited golden. All three
+  # gates were verified by breaking what they guard; the verbatim output is in
+  # grbl/platform/docs/SEGMENT-CONFORMANCE.md.
+  #
+  # NEVER add --regen here. Regenerating goldens is a deliberate act.
+  seg-conformance:
+    name: segment conformance (hosted oracle, no cross toolchain)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Replay the corpus through the frozen ISR and diff every subject
+        run: python3 ci/seg_conformance.py
 
   # One matrix row per platform/board/flavor; adding a port = one new row
   # (plus its ci/warn_baseline_<platform>.txt, which may start empty).
