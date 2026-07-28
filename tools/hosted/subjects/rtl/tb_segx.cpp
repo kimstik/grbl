@@ -45,6 +45,7 @@
 #include "verilated.h"
 #include "Vsegx_top.h"
 #include "Vsegx_slot.h"
+#include "Vsegx_crc8.h"
 
 #include "segwire.h"
 
@@ -366,6 +367,29 @@ int main(int argc, char **argv)
     if (is_tick) ps.observe = true;
     ps.sample(top->phy_step, top->phy_dir, step_inv, v.pulse_ticks, is_tick);
     posedge();
+    uint64_t tick_cycle = g_cycle - 1;
+    bool probe_now = (top->probe_hit != 0);
+
+    if (is_tick && !top->fault) {
+      // A tick's Bresenham retires two clocks after its edge (segx_exec.v:
+      // phase 1 accumulates, phase 2 compares). The trace is a record of a
+      // COMPLETED tick, so it is sampled once the pipeline has drained - the
+      // port bits, period and pwm are already stable at the edge, the
+      // position is not. Those two clocks are inside the tick interval and
+      // are counted like any other; a tick short enough to collide with them
+      // is SEGX_FAULT_TOO_FAST and is caught below, not silently mis-sampled.
+      for (int k = 0; k < 2; k++) {
+        clk_cycle(true);
+        if (pre_tick()) {
+          fprintf(stderr, "tb_segx: tick %llu collided with the previous "
+                          "tick's pipeline (cycles_per_tick < 3)\n",
+                  (unsigned long long)(tick + 2));
+          return 3;
+        }
+        ps.sample(top->phy_step, top->phy_dir, step_inv, v.pulse_ticks, false);
+        posedge();
+      }
+    }
 
     /* reverse channel: credits arrive after credit_latency clocks */
     credit_pipe.push_back(std::make_pair(g_cycle + (uint64_t)opt_credit_latency,
@@ -388,8 +412,8 @@ int main(int argc, char **argv)
       break;
     }
 
-    if (!started) { started = true; first_tick_cycle = g_cycle - 1; }
-    uint64_t measured = (g_cycle - 1) - first_tick_cycle;
+    if (!started) { started = true; first_tick_cycle = tick_cycle; }
+    uint64_t measured = tick_cycle - first_tick_cycle;
     if (opt_strict_clk && measured != clk_model) {
       fprintf(stderr, "tb_segx: tick %llu clock mismatch: measured %llu, model %llu\n",
               (unsigned long long)(tick + 1), (unsigned long long)measured,
@@ -406,7 +430,7 @@ int main(int argc, char **argv)
              pos[0], pos[1], pos[2]);
     out.push_back(buf);
 
-    if (top->probe_hit) {
+    if (probe_now) {
       probe_tick = tick;
       probe_p[0] = (int32_t)top->probe_pos0;
       probe_p[1] = (int32_t)top->probe_pos1;
@@ -506,6 +530,23 @@ static int selfcheck()
       }
     }
     chk(bad == 0, "segx_slot == gen % 5 for all 256 generations");
+    delete m;
+  }
+
+  /* (1b) CRC-8 unit, all 65536 (remainder, byte) pairs against segwire.h.
+     If these two ever disagree the link rejects every frame the host sends,
+     which is a bring-up failure that looks like a wiring fault. */
+  {
+    Vsegx_crc8 *m = new Vsegx_crc8;
+    int bad = 0;
+    for (int c = 0; c < 256; c++) {
+      for (int d = 0; d < 256; d++) {
+        m->c = (uint8_t)c; m->d = (uint8_t)d;
+        m->eval();
+        if (m->q != segx_crc8_byte((uint8_t)c, (uint8_t)d)) bad++;
+      }
+    }
+    chk(bad == 0, "segx_crc8 == segx_crc8_byte() for all 65536 (crc, byte) pairs");
     delete m;
   }
 
