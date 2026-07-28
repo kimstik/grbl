@@ -1,0 +1,17 @@
+# Three blocks, changing direction bits and step ratios mid-stream. Bresenham
+# counters MUST reinitialize to sec>>1 exactly on blk_gen change and MUST
+# persist across the segments inside a block.
+gvec 1
+name block-boundary
+f_tick 16000000
+pulse_ticks 160
+pos 0 0 0
+
+blk 1 80 24 0 80 0x00 0x00
+blk 2 40 80 16 80 0x03 0x00
+blk 3 8 8 80 80 0x04 0x00
+seg 5 999 1 0 0
+seg 5 999 1 0 0
+seg 6 799 2 0 0
+seg 4 799 2 0 0
+seg 7 599 3 0 0
