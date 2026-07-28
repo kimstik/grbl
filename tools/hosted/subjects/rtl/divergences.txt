@@ -1,0 +1,22 @@
+# Declared divergences of the Verilated SEGX/1 executor from the frozen ISR.
+#
+# Part of Grbl / Intelligence assisted / License: MIT
+#
+# Format:  <vector.gvec>  <SEGX/1 reference>  <one-line reason>
+#
+# A vector listed here is compared against expected/<name>.gtrace instead of
+# against the oracle. That is a hole in the conformance gate, so it is fenced:
+#
+#   * ci/seg_conformance.py checks the count against ci/seg_corpus_baseline.txt
+#     EXACTLY - not one-way. Adding or removing a divergence is a deliberate
+#     edit to a ratchet file, visible in a diff, same posture as every other
+#     baseline in this tree.
+#   * the expected trace MUST actually differ from the oracle's. A "declared
+#     divergence" that quietly agrees is the mechanism being used to launder a
+#     passing subject, so it fails.
+#   * the expected trace is a committed artifact. What the executor does
+#     instead of stock is reviewable text, not a claim in a comment.
+#
+# Every entry needs owner sign-off at stage 4 (SEGMENT-RUNTIME-PLAN §3.6).
+
+13-adversarial-nstep0.gvec  §3.6.1  n_step==0 is a protocol violation: the executor FAULTs where stock wraps to a 65536-tick ghost segment that never retires

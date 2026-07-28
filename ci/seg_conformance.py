@@ -20,9 +20,23 @@ written-down, machine-checkable artifact. This script makes it one:
 
   (b) SUBJECT GATE. Every registered candidate executor is run on the same
       vectors and MUST match the oracle byte for byte. The oracle is the frozen
-      core; a candidate is never right against a candidate. This is the gate a
-      Verilated RTL executor plugs into unchanged (SEGMENT-RUNTIME-PLAN §4
-      stage 5) - registering a subject is one line in SUBJECTS below.
+      core; a candidate is never right against a candidate.
+
+      A subject may DECLARE divergences (SEGMENT-RUNTIME-PLAN §3.6): cases
+      where matching stock would mean reproducing behaviour stock does not
+      actually define. A subject that declares any ships a divergences.txt and
+      an expected/ trace per entry, and three things are enforced so the
+      mechanism cannot be used to launder a failing subject:
+        - the count is checked EXACTLY against the baseline, not one-way;
+        - the expected trace must genuinely differ from the oracle's, so a
+          declaration that quietly agrees is a failure, not a pass;
+        - the expected trace is committed text, reviewable in a diff.
+
+  (b') SUBJECT AVAILABILITY. A subject may exit 77 to mean "my toolchain is not
+      installed" (the Verilated executor needs verilator). That is a SKIP with
+      a notice locally and a FAILURE under --require-rtl, which CI always
+      passes. A gate that silently disappears on the machine that matters is
+      not a gate.
 
   (c) CORPUS MONOTONICITY. The vector count may only grow. Deleting or
       forgetting to commit a vector is the cheapest way to make a conformance
@@ -65,10 +79,16 @@ BASELINE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "seg_corpus_
 # Registered conformance subjects: (label, argv prefix). A subject takes a
 # .gvec on argv and writes a .gtrace to stdout. Adding a Verilator testbench
 # here is a one-line change - it is the same contract.
+RTL_DIR = os.path.join(HOSTED_DIR, "subjects", "rtl")
+
 SUBJECTS = [
     ("seg_exec_ref.py", [sys.executable,
-                         os.path.join(HOSTED_DIR, "subjects", "seg_exec_ref.py")]),
+                         os.path.join(HOSTED_DIR, "subjects", "seg_exec_ref.py")],
+     None),
+    ("rtl (verilated)", [os.path.join(RTL_DIR, "run_subject.sh")], RTL_DIR),
 ]
+
+SKIP_EXIT = 77
 
 
 def fail(msg):
@@ -96,8 +116,33 @@ def build_oracle():
     return os.path.isfile(ORACLE_BIN)
 
 
+def read_divergences(subject_dir):
+    """{vector: (reference, reason)} declared by a subject, or {}."""
+    if not subject_dir:
+        return {}
+    path = os.path.join(subject_dir, "divergences.txt")
+    if not os.path.isfile(path):
+        return {}
+    out = {}
+    for line in open(path):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split(None, 2)
+        if len(parts) < 3:
+            continue
+        out[parts[0]] = (parts[1], parts[2])
+    return out
+
+
+def expected_path(subject_dir, vec):
+    return os.path.join(subject_dir, "expected", vec[:-len(".gvec")] + ".gtrace")
+
+
 def run_capture(argv, vec_path, who):
     r = subprocess.run(argv + [vec_path], capture_output=True, text=True)
+    if r.returncode == SKIP_EXIT:
+        return SKIP_EXIT
     if r.returncode != 0:
         print("   %s exited %d on %s" % (who, r.returncode, os.path.basename(vec_path)))
         for line in r.stderr.strip().splitlines():
@@ -116,21 +161,44 @@ def show_diff(want, got, want_label, got_label, limit=25):
 
 
 def read_baseline():
+    """Vector count. Keyed by name, not by line position: the file grew a
+    second ratchet and 'first non-comment line' would have silently started
+    reading the wrong one."""
     if not os.path.isfile(BASELINE):
         return 0
     for line in open(BASELINE):
         line = line.strip()
-        if line and not line.startswith("#"):
+        if line.startswith("vectors"):
             return int(line.split()[-1])
     return 0
 
 
-def write_baseline(n):
+def read_declared_baseline():
+    """Declared-divergence count. Absent line reads as 0."""
+    if not os.path.isfile(BASELINE):
+        return 0
+    for line in open(BASELINE):
+        line = line.strip()
+        if line.startswith("declared_divergences"):
+            return int(line.split()[-1])
+    return 0
+
+
+def write_baseline(n, declared=None):
+    if declared is None:
+        declared = read_declared_baseline()
     with open(BASELINE, "w") as fh:
-        fh.write("# ci/seg_conformance.py corpus ratchet - one-way, count may only grow.\n"
-                 "# Raised deliberately when vectors are added; never lowered to make a\n"
-                 "# check pass. Same posture as ci/warn_baseline_*.txt.\n"
-                 "vectors %d\n" % n)
+        fh.write("# ci/seg_conformance.py ratchets.\n"
+                 "#\n"
+                 "# vectors: one-way, count may only grow. Raised deliberately when\n"
+                 "# vectors are added; never lowered to make a check pass. Same posture\n"
+                 "# as ci/warn_baseline_*.txt.\n"
+                 "#\n"
+                 "# declared_divergences: EXACT, not one-way. Each is a place a subject\n"
+                 "# is allowed not to match the frozen ISR (SEGMENT-RUNTIME-PLAN §3.6),\n"
+                 "# so the count may not drift in either direction without an edit here.\n"
+                 "vectors %d\n"
+                 "declared_divergences %d\n" % (n, declared))
 
 
 def main(argv):
@@ -138,6 +206,9 @@ def main(argv):
     ap.add_argument("--regen", action="store_true",
                     help="rewrite goldens from the oracle (deliberate, never in CI)")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--require-rtl", action="store_true",
+                    help="a subject that reports its toolchain missing is a "
+                         "failure, not a skip. CI always passes this.")
     args = ap.parse_args(argv[1:])
 
     if args.selftest:
@@ -166,7 +237,8 @@ def main(argv):
         for v, out in traces.items():
             with open(golden_path(v), "w") as fh:
                 fh.write(out)
-        write_baseline(len(vecs))
+        write_baseline(len(vecs),
+                       sum(len(read_divergences(d)) for _, _, d in SUBJECTS))
         print("seg_conformance: regenerated %d golden(s) and raised the corpus "
               "ratchet to %d" % (len(traces), len(vecs)))
         return 0
@@ -186,18 +258,66 @@ def main(argv):
             show_diff(want, traces[v], "golden", "replay")
 
     # (b) subject gate
-    for label, cmd in SUBJECTS:
+    ran_subjects = 0
+    declared_total = 0
+    for label, cmd, subject_dir in SUBJECTS:
+        div = read_divergences(subject_dir)
+        declared_total += len(div)
+        skipped = False
         for v in vecs:
             if v not in traces:
                 continue
             got = run_capture(cmd, os.path.join(CORPUS_DIR, v), label)
+            if got == SKIP_EXIT:
+                if args.require_rtl:
+                    problems.append("subject %s: toolchain missing and "
+                                    "--require-rtl was given" % label)
+                else:
+                    print("seg_conformance: SKIP subject %s - its toolchain is "
+                          "not installed on this machine. CI runs it with "
+                          "--require-rtl, where this is a failure." % label)
+                skipped = True
+                break
             if got is None:
                 problems.append("%s: subject %s failed" % (v, label))
+                continue
+            if v in div:
+                ref, reason = div[v]
+                ep = expected_path(subject_dir, v)
+                if not os.path.isfile(ep):
+                    problems.append("%s: subject %s declares a divergence (%s) "
+                                    "but ships no expected/ trace" % (v, label, ref))
+                    continue
+                want = open(ep).read()
+                if want == traces[v]:
+                    problems.append("%s: subject %s declares a divergence (%s) "
+                                    "whose expected trace is IDENTICAL to the "
+                                    "oracle - declare nothing, or diverge"
+                                    % (v, label, ref))
+                    continue
+                if got != want:
+                    problems.append("%s: subject %s does not match its own "
+                                    "declared divergence" % (v, label))
+                    print("   %s: subject %s != expected/ (%s: %s)"
+                          % (v, label, ref, reason))
+                    show_diff(want, got, "expected", label)
                 continue
             if got != traces[v]:
                 problems.append("%s: subject %s diverges from the oracle" % (v, label))
                 print("   %s: subject %s != oracle" % (v, label))
                 show_diff(traces[v], got, "oracle", label)
+        if not skipped:
+            ran_subjects += 1
+
+    # (b2) declared-divergence ratchet: exact, not one-way. Adding or removing
+    # a declaration must be a deliberate edit to the baseline.
+    want_div = read_declared_baseline()
+    if declared_total != want_div:
+        problems.append("declared divergences: %d present, baseline says %d "
+                        "(edit %s deliberately, with owner sign-off per "
+                        "SEGMENT-RUNTIME-PLAN §3.6)"
+                        % (declared_total, want_div,
+                           os.path.relpath(BASELINE, REPO_ROOT)))
 
     # (c) corpus monotonicity
     base = read_baseline()
@@ -214,8 +334,9 @@ def main(argv):
               "first.\nOnly then: ci/seg_conformance.py --regen")
         return 1
 
-    print("seg_conformance: OK - %d vector(s), %d subject(s); goldens fresh, "
-          "subjects bit-exact." % (len(vecs), len(SUBJECTS)))
+    print("seg_conformance: OK - %d vector(s), %d/%d subject(s) run, %d declared "
+          "divergence(s); goldens fresh, subjects bit-exact."
+          % (len(vecs), ran_subjects, len(SUBJECTS), declared_total))
     if grew:
         print("seg_conformance: corpus grew %d -> %d; raise the ratchet with --regen "
               "or by editing %s" % (base, len(vecs), os.path.relpath(BASELINE, REPO_ROOT)))

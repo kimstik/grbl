@@ -1,4 +1,11 @@
-# ci/seg_conformance.py corpus ratchet - one-way, count may only grow.
-# Raised deliberately when vectors are added; never lowered to make a
-# check pass. Same posture as ci/warn_baseline_*.txt.
+# ci/seg_conformance.py ratchets.
+#
+# vectors: one-way, count may only grow. Raised deliberately when
+# vectors are added; never lowered to make a check pass. Same posture
+# as ci/warn_baseline_*.txt.
+#
+# declared_divergences: EXACT, not one-way. Each is a place a subject
+# is allowed not to match the frozen ISR (SEGMENT-RUNTIME-PLAN §3.6),
+# so the count may not drift in either direction without an edit here.
 vectors 13
+declared_divergences 1
