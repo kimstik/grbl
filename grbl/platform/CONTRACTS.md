@@ -4959,7 +4959,7 @@ was committed - confirmed via `git status` showing no new file outside the
 two touched above.
 
 <a id="amass-floor"></a>
-## §NEW. AMASS's low-speed floor scales with the stepper-timer clock — a placement choice, not a defect (per-port trade table, field precedent, and the `_Static_assert` knob)
+## 41. AMASS's low-speed floor scales with the stepper-timer clock — a placement choice, not a defect (per-port trade table, field precedent, and the `_Static_assert` knob)
 
 **The claim investigated.** A prior analysis pass reported the AMASS
 16-bit clamp's minimum-speed floor scales linearly with `F_CPU`,
@@ -5314,3 +5314,138 @@ build units) rebuilt clean on both flavors after this batch: `stm32f103`,
 every one. Artifacts refreshed full-tree
 (`python3 tools/build_artifacts.py build`, both flavors, 11 units) and
 re-verified fresh (`tools/build_artifacts.py check`).
+
+<a id="extension-axis"></a>
+## 42. The extension axis (`EXT=`): where the edge is, as a separate question from which silicon
+
+*(Section number deliberately left as the literal `§NEW` placeholder per this
+file's top-of-file authoring rule - the integrator assigns the real number at
+merge time. Cite this section by its slug, `extension-axis`, not by a number.)*
+
+A **platform** answers *which silicon*: one injected entry point per board,
+`-include <board>/prelude.h` (§0). An **extension** answers a different
+question - *where is the edge* - and is not tied to any silicon. It changes the
+geometry of the periphery of the frozen core, nothing else. The two are
+orthogonal, so they get two injection points, ordered so first-definition-wins
+applies to the seam macros:
+
+```make
+EXT ?=
+$(foreach e,$(EXT),$(eval include ../extensions/$(e)/ext.mk))
+CFLAGS_EXTRA += $(foreach e,$(EXT),-include ../extensions/$(e)/prelude.h)
+CFLAGS_EXTRA += -include $(BOARD_DIR)/prelude.h     # existing line, stays LAST
+```
+
+Layout: `grbl/platform/extensions/<kebab-name>/{prelude.h, ext.mk, ext.md}` plus
+its own TUs; shared pieces in `extensions/common/`. Landed reference:
+`extensions/seg-trace/`, wired into `ch32v006/Makefile`.
+
+Rules, each of which exists because of something that has already gone wrong in
+this tree:
+
+1. **No `platform.h` at an extension root.** `ci/pinmap_overlap_check.py`
+   discovers ports as `grbl/platform/*/` directories containing a root
+   `platform.h`; an extension with one would be silently adopted as a phantom
+   port. (Verified after landing: the checker still reports 11 pairs.)
+2. **An extension prelude defines `GRBL_EXT_<NAME>`, never `GRBL_PRELUDE`.**
+   `hal.h`'s lost-prelude `#error` is the proven backstop against a dropped
+   board prelude and must not be masked.
+3. **An extension prelude runs BEFORE `config.h` has decided anything.** It is
+   textually first in the TU. It therefore cannot branch on the config tuple at
+   include time, and must not pretend to - see
+   [`#segment-runtime-boundary`](#segment-runtime-boundary) for the structural
+   alternative that replaced `#ifdef` in `seg_tap.h`.
+4. **`BUILD_DIR` and `BINARY_NAME` MUST key on the EXT set.** Un-keyed knobs
+   relinking stale objects under the wrong name bit this tree three times
+   (`BUILD` twice, `BOARD` once). Unit naming is `<port>+<ext>`; `+` is
+   unambiguous, no port or board name contains one. Verified by building
+   `EXT=seg-trace` RELEASE and confirming `build/grbl_ch32v006.bin` still hashed
+   to the committed bare artifact afterwards.
+5. **An extension and a platform supplying the same TU is a hard `$(error)`**,
+   never a link-order accident.
+6. **`EXT` empty MUST be byte-identical on every unit**, proven by
+   `tools/build_artifacts.py check`, not asserted.
+7. **CI is a sum, never a product**: every platform bare, plus each extension on
+   one representative platform. An extension's warnings are never unioned into a
+   bare platform's baseline - that is the falsified-baseline class.
+8. **An extension that can be optimized away is a defect, not a saving.** The
+   first RELEASE build of `seg-trace` linked cleanly, passed all eight existing
+   ratchets, and captured nothing, because LTO correctly proved nothing in the
+   image read its capture ring. An extension whose effect is invisible to the
+   linker MUST carry its own post-link guard asserting the effect survived, and
+   that guard MUST be verified by breaking it. `EXT_POSTLINK` is the hook; see
+   `extensions/seg-trace/live_check.sh`.
+
+Constitutive vs optional: a channel a port cannot function without (`sg2002`'s
+`shm.h` serial) is library extraction, not an `EXT` knob. That distinction is
+recorded here so the two do not get conflated later.
+
+<a id="segment-runtime-boundary"></a>
+## 43. The segment-runtime seam: `GRBL_SEG_PUBLISH`, `GRBL_STEPPER_TU_EXPORTS`, and why the tuple guard is structural
+
+*(Section number deliberately left as the literal `§NEW` placeholder per this
+file's top-of-file authoring rule - the integrator assigns the real number at
+merge time. Cite this section by its slug, `segment-runtime-boundary`, not by a
+number.)*
+
+The producer/consumer boundary in `grbl/stepper.c` is a lock-free SPSC ring
+whose publication is a single store. Two touch points in the frozen file make
+that boundary reachable by an extension, with `#ifndef` defaults in the same
+file so `stepper.c` stays self-contained (the hosted oracle compiles it
+standalone, with no `-include` chain to drift):
+
+```c
+#ifndef GRBL_SEG_PUBLISH
+  #define GRBL_SEG_PUBLISH() segment_buffer_head = segment_next_head
+#endif
+#ifndef GRBL_STEPPER_TU_EXPORTS
+  #define GRBL_STEPPER_TU_EXPORTS
+#endif
+```
+
+`GRBL_SEG_PUBLISH()` replaces the strobe; `GRBL_STEPPER_TU_EXPORTS` sits alone
+on the last line and expands to **zero tokens** by default. An override expands
+it to function definitions compiled *inside* `stepper.c`'s TU, which is the only
+way to reach the file-static rings and the private `segment_t`/`st_block_t`
+types without changing any storage class.
+
+Normative rules:
+
+1. **Token identity by default.** Both defaults reproduce the original token
+   stream exactly, so a bare build's codegen cannot move. Proven per unit by the
+   golden MD5 and `tools/build_artifacts.py check`, never asserted. The only
+   measured delta is DWARF line information in DEBUG `.elf`s - see
+   `artifacts/README.md`'s refresh-class note.
+2. **An override of `GRBL_SEG_PUBLISH` MUST perform the original store**, and
+   must order/ship both payload classes (the segment slot and, on a block
+   change, the block). The ILLEGAL-no-op law applies: a silent no-op override of
+   either macro is forbidden.
+3. **Accessors copy FIELDS into canonical frames, never structs.** `segment_t`
+   is 7 B on AVR and 8 B on 32-bit, and both structs reshape with the config
+   tuple; the compiler's struct image must never reach a wire, a vector file or
+   a trace.
+4. **Ring writers are test-only.** `SEG_TAP_READERS` (read + the reverse credit
+   pump) is the production set. `SEG_TAP_LOADERS`, which writes ring slots, is
+   test infrastructure and MUST NOT appear in a firmware build - nothing but the
+   frozen producer may write a slot.
+5. **The config-tuple guard is structural, not `#ifdef`.** This is the rule most
+   likely to be "simplified" later, so the reason is recorded. An extension
+   prelude is injected before the board prelude, i.e. before `config.h` has
+   decided anything, while the export macro bodies expand at the *end* of
+   `stepper.c`, where the tuple is decided. A header that branched at include
+   time would silently pick the wrong struct members. So
+   `extensions/common/seg_tap.h` does not branch: it is written for the one
+   tuple the wire format fixes (`N_AXIS` 3, AMASS on, `VARIABLE_SPINDLE` on,
+   `ENABLE_DUAL_AXIS` off), and any other tuple **fails to compile by member
+   name** at the expansion site. That is the same refusal the protocol demands
+   of an executor on a config mismatch, moved to compile time and impossible to
+   fake. `N_AXIS` is a value rather than a member, so it carries an explicit
+   guard; `ENABLE_DUAL_AXIS` is the one element with no structural tell and is
+   documented per extension instead.
+6. **The frozen ISR is the oracle.** `tools/hosted/` compiles `grbl/stepper.c`
+   straight out of the tree and replays committed vectors through it; the result
+   is the specification. `ci/seg_conformance.py` (ninth ratchet) gates three
+   things: replay equals the committed goldens, every registered candidate
+   executor equals the oracle bit-exactly, and the vector count only grows. Each
+   gate was verified by breaking what it guards -
+   `docs/SEGMENT-CONFORMANCE.md` carries the verbatim output.

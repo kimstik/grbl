@@ -1,0 +1,18 @@
+# gtrace/1
+V invert-masks
+C f_tick=16000000 pulse_ticks=160 step_invert=0x05 dir_invert=0x02 rest_step=0x05 rest_dir=0x02 homing=0 homing_lock=0xff
+T 1 0 999 0x02 0x05 0 -1 0 0
+T 2 1000 999 0x07 0x04 0 -2 1 0
+T 3 2000 999 0x07 0x06 0 -3 1 -1
+T 4 3000 999 0x07 0x00 0 -4 2 -1
+T 5 4000 999 0x07 0x06 0 -5 2 -1
+T 6 5000 999 0x07 0x04 0 -6 3 -1
+T 7 6000 999 0x07 0x06 0 -6 3 -2
+T 8 7000 999 0x07 0x01 0 -7 3 -2
+T 9 8000 999 0x07 0x04 0 -7 4 -2
+T 10 9000 999 0x07 0x07 0 -8 4 -2
+T 11 10000 999 0x07 0x04 0 -8 4 -2
+T 12 11000 999 0x07 0x05 0 -9 4 -2
+T 13 12000 999 0x07 0x04 0 -9 4 -2
+X 13 12000 DRAIN pwm=0 idle=1
+Z ticks=13 clk=13000 pos=-9,4,-2 probe=0,0,0 probe_tick=0

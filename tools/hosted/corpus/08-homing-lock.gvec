@@ -1,0 +1,14 @@
+# STATE_HOMING with only the X axis unlocked. Locked axes keep COUNTING and
+# keep updating sys_position; only the pulse is masked, and only after the
+# update (stepper.c:463-468). The position column is the whole point: it must
+# advance on Y and Z even though those pins never pulse.
+gvec 1
+name homing-lock
+f_tick 16000000
+pulse_ticks 160
+homing 1
+homing_lock 0x01
+pos 0 0 0
+
+blk 1 80 80 80 80 0x00 0x00
+seg 8 999 1 0 0

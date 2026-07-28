@@ -105,7 +105,7 @@ OUTPUT_DIR = ../../../build
 # or any -D) to silently relink under the wrong label (CONTRACTS.md gap
 # log: "make clean cleans only the invoked BUILD flavor's object dir").
 PLATFORM_BUILD_ROOT = $(OUTPUT_DIR)/$(PLATFORM_NAME)
-BUILD_DIR  = $(PLATFORM_BUILD_ROOT)/$(BOARD)/$(BUILD)
+BUILD_DIR  = $(PLATFORM_BUILD_ROOT)/$(BOARD)/$(BUILD)$(EXT_SUFFIX)
 PLATFORM_DIR = .
 
 # GRBL core sources. Excludes serial.c/nvmem.c/eeprom.c: TU-replacement
@@ -119,9 +119,34 @@ GRBL_SOURCES = main.c motion_control.c gcode.c spindle_control.c coolant_control
 # function, not a macro - see gpio.h's file header.
 PLATFORM_SOURCES = platform.c startup.c handlers.c serial.c nvmem.c
 
+# EXTENSION AXIS (grbl/platform/extensions/README.md, CONTRACTS.md
+# #extension-axis). A platform answers "which silicon"; an extension answers
+# "where is the edge". Extension preludes are injected BEFORE the board prelude
+# so that first-definition-wins applies to the seam macros, and each extension's
+# ext.mk contributes its own sources/flags.
+#
+# With EXT empty every line below expands to nothing: no -include, no source, no
+# flag, no change to BUILD_DIR or BINARY_NAME. That is not a claim, it is what
+# tools/build_artifacts.py check verifies on this unit at every run.
+empty :=
+space := $(empty) $(empty)
+EXT ?=
+EXT_SOURCES  =
+EXT_CFLAGS   =
+EXT_POSTLINK =
+$(foreach e,$(EXT),$(eval include ../extensions/$(e)/ext.mk))
+CFLAGS_EXTRA += $(foreach e,$(EXT),-include ../extensions/$(e)/prelude.h)
+CFLAGS_EXTRA += $(EXT_CFLAGS)
+# Suffix keying BUILD_DIR and BINARY_NAME. Un-keyed knobs relinking stale
+# objects under the wrong name bit this tree three times (BUILD twice, BOARD
+# once - see the BUILD_DIR comment above); an EXT build overwriting the
+# canonical build/ output would repeat both. '+' is unambiguous: no port or
+# board name in the tree contains one.
+EXT_SUFFIX = $(if $(EXT),+$(subst $(space),+,$(strip $(EXT))))
+
 # All sources
 SOURCES = $(addprefix $(GRBL_DIR)/,$(GRBL_SOURCES)) \
-          $(PLATFORM_SOURCES)
+          $(PLATFORM_SOURCES) $(EXT_SOURCES)
 
 OBJECTS = $(addprefix $(BUILD_DIR)/,$(notdir $(SOURCES:.c=.o)))
 
@@ -249,9 +274,9 @@ LIBS = -lm
 
 # Output file naming: release gets clean name, debug gets _dbg suffix
 ifeq ($(BUILD),RELEASE)
-  BINARY_NAME = grbl_$(PLATFORM_NAME)
+  BINARY_NAME = grbl_$(PLATFORM_NAME)$(EXT_SUFFIX)
 else
-  BINARY_NAME = grbl_$(PLATFORM_NAME)_dbg
+  BINARY_NAME = grbl_$(PLATFORM_NAME)$(EXT_SUFFIX)_dbg
 endif
 
 # Output files - artifacts go to /build, object files to /build/$(PLATFORM_NAME)
@@ -316,6 +341,17 @@ $(BUILD_DIR)/serial.o: serial.c | $(BUILD_DIR)
 $(BUILD_DIR)/nvmem.o: nvmem.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
+# One explicit rule per extension TU, generated from $(EXT_SOURCES). Explicit
+# rather than a `vpath` + generic pattern: a generic $(BUILD_DIR)/%.o: %.c rule
+# would also match every core file reachable through the existing vpath entries
+# and make's pattern-choice would decide which recipe wins. With EXT empty this
+# foreach emits zero rules.
+define EXT_OBJ_RULE
+$(BUILD_DIR)/$(notdir $(1:.c=.o)): $(1) | $(BUILD_DIR)
+	$$(CC) $$(CFLAGS) -MMD -MP -c $$< -o $$@
+endef
+$(foreach s,$(EXT_SOURCES),$(eval $(call EXT_OBJ_RULE,$(s))))
+
 # Full link. Historically the M3 "linker-as-checklist" diagnostic; now
 # (Steps 3-6 done) it must succeed with ZERO undefined PORT_TODO_*.
 link: $(ELF_FILE)
@@ -325,6 +361,7 @@ $(ELF_FILE): objects $(BOARD_STAMP)
 	$(SIZE) --format=berkeley $(ELF_FILE)
 	$(ASSERT_FP)
 	@sh $(INIT_CHECK) $(NM) $@ $(INIT_SYMBOLS)
+	@$(EXT_POSTLINK)
 
 # Create hex file
 $(HEX_FILE): $(ELF_FILE)

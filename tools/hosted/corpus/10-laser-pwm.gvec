@@ -1,0 +1,14 @@
+# VARIABLE_SPINDLE: per-segment PWM applied once at segment load, before the
+# first tick; the block is pwm-rate-adjusted so the drain MUST force PWM off
+# (stepper.c:402-405) - the read that goes through the never-cleared exec_block
+# pointer.
+gvec 1
+name laser-pwm
+f_tick 16000000
+pulse_ticks 160
+pos 0 0 0
+
+blk 1 80 0 0 80 0x00 0x01
+seg 3 999 1 0 40
+seg 3 999 1 0 120
+seg 3 999 1 0 255

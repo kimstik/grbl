@@ -1,0 +1,15 @@
+# $2 step-invert and $3 dir-invert both non-trivial. The masks are applied
+# ISR-side in stock (step at :477 after the homing lock, dir at :385 on segment
+# load), so an executor MUST own them; the resting port levels change too.
+gvec 1
+name invert-masks
+f_tick 16000000
+pulse_ticks 160
+step_invert 0x05
+dir_invert 0x02
+invert_st_enable 1
+pos 0 0 0
+
+blk 1 80 40 20 80 0x05 0x00
+seg 6 999 1 0 0
+seg 6 999 1 1 0
