@@ -7,6 +7,8 @@
 ROOT      := ../..
 BUILD_DIR := $(ROOT)/build/hosted
 BIN       := $(BUILD_DIR)/seg_oracle
+WIRE      := $(BUILD_DIR)/seg_wire
+SEGLINK   := $(ROOT)/grbl/platform/extensions/seg-link
 
 F_CPU ?= 16000000UL
 
@@ -24,15 +26,26 @@ OWN_CFLAGS := -Werror
 
 DEPS := prelude.h hosted_rt.h cpu_map.h \
         $(ROOT)/grbl/platform/extensions/common/seg_tap.h \
-        $(ROOT)/grbl/platform/extensions/common/segframe.h
+        $(ROOT)/grbl/platform/extensions/common/segframe.h \
+        $(ROOT)/grbl/platform/extensions/common/segwire.h
 
-OBJ := $(BUILD_DIR)/stepper.o $(BUILD_DIR)/hosted_rt.o $(BUILD_DIR)/stubs.o \
-       $(BUILD_DIR)/oracle.o
+COMMON_OBJ := $(BUILD_DIR)/stepper.o $(BUILD_DIR)/hosted_rt.o $(BUILD_DIR)/stubs.o
+OBJ := $(COMMON_OBJ) $(BUILD_DIR)/oracle.o
+WIRE_OBJ := $(COMMON_OBJ) $(BUILD_DIR)/wire_dump.o $(BUILD_DIR)/seg_link.o
 
-all: $(BIN)
+all: $(BIN) $(WIRE)
 
 $(BIN): $(OBJ)
 	$(CC) -o $@ $(OBJ) -lm
+
+# seg_wire links the SAME seg_link.c the firmware compiles - no copy, no fork,
+# same reasoning as compiling stepper.c straight out of the tree.
+$(WIRE): $(WIRE_OBJ)
+	$(CC) -o $@ $(WIRE_OBJ) -lm
+
+$(BUILD_DIR)/seg_link.o: $(SEGLINK)/seg_link.c $(SEGLINK)/seg_link.h $(DEPS)
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(OWN_CFLAGS) -c -o $@ $<
 
 $(BUILD_DIR)/stepper.o: $(ROOT)/grbl/stepper.c $(DEPS)
 	@mkdir -p $(BUILD_DIR)

@@ -86,6 +86,12 @@ SUBJECTS = [
                          os.path.join(HOSTED_DIR, "subjects", "seg_exec_ref.py")],
      None),
     ("rtl (verilated)", [os.path.join(RTL_DIR, "run_subject.sh")], RTL_DIR),
+    # Same executor, but the frames come from the REAL host shipper over the
+    # REAL frozen ring instead of from the testbench. This is the only subject
+    # that can fail because grbl/platform/extensions/seg-link/seg_link.c is
+    # wrong - everything else builds its own frames.
+    ("rtl via seg-link wire", [os.path.join(RTL_DIR, "run_wire_subject.sh")],
+     RTL_DIR),
 ]
 
 SKIP_EXIT = 77

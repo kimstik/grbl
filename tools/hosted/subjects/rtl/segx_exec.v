@@ -173,6 +173,7 @@ module segx_exec #(
   reg [31:0] sum0, sum1, sum2;
   reg [31:0] cur_s0, cur_s1, cur_s2, cur_sec;
   reg [2:0]  cur_dir, cur_slot;
+  reg [7:0]  cur_gen;
   reg [7:0]  cur_flg;
   reg        have_blk;
   reg [2:0]  step_next, dir_next;
@@ -197,8 +198,9 @@ module segx_exec #(
   wire [7:0] flt_code = flt_nstep0 ? 8'd1 :      // SEGX_FAULT_NSTEP0
                         flt_amass  ? 8'd6 :      // SEGX_FAULT_AMASS
                         flt_noblk  ? 8'd4 :      // SEGX_FAULT_UNKNOWN_BLK
+                        flt_gengap ? 8'd9 :      // SEGX_FAULT_GEN_GAP
                         flt_fast   ? 8'd8 : 8'd0;// SEGX_FAULT_TOO_FAST
-  wire flt_any = flt_nstep0 | flt_amass | flt_noblk | flt_fast;
+  wire flt_any = flt_nstep0 | flt_amass | flt_noblk | flt_fast | flt_gengap;
 
   // One place decides the occupancy, so a simultaneous push and pop cannot be
   // counted by two different branches of the same always block.
@@ -210,6 +212,20 @@ module segx_exec #(
   wire        seg_done = (sc_next == 16'd0);
 
   wire blk_chg = pop & (~have_blk | (h_slot != cur_slot));
+
+  // The wire carries an 8-bit GENERATION, not the host's mod-5 ring index
+  // (§3.2), and the reason is exactly this check: generations advance by
+  // exactly one per planner block, so a dropped BLK frame shows up as a gap. A
+  // ring index cannot express that - 4 -> 0 is indistinguishable from 4 -> 5.
+  //
+  // Without this the generation field is decorative: `gen % 5` is all the
+  // block lookup needs, so an executor that only does the lookup accepts a
+  // stream carrying raw slot indices and nobody notices. That is not a
+  // hypothetical - it is what this design did until a shipper defect
+  // (ship the slot instead of the counter) was injected and the whole corpus
+  // still passed.
+  wire gen_step_ok = (h_gen == (cur_gen + 8'd1));
+  wire flt_gengap  = pop & have_blk & (h_gen != cur_gen) & ~gen_step_ok;
 
   // Phase 2: compare and subtract. Stock's counters are uint32_t and
   // stepper.c:427 is `>`, not `>=`; both are load-bearing.
@@ -243,7 +259,7 @@ module segx_exec #(
       cnt0 <= 32'd0; cnt1 <= 32'd0; cnt2 <= 32'd0;
       sum0 <= 32'd0; sum1 <= 32'd0; sum2 <= 32'd0;
       cur_s0 <= 32'd0; cur_s1 <= 32'd0; cur_s2 <= 32'd0; cur_sec <= 32'd0;
-      cur_dir <= 3'd0; cur_slot <= 3'd0; cur_flg <= 8'd0;
+      cur_dir <= 3'd0; cur_slot <= 3'd0; cur_flg <= 8'd0; cur_gen <= 8'd0;
       have_blk <= 1'b0;
       step_next <= 3'd0; dir_next <= 3'd0; step_port <= 3'd0; dir_port <= 3'd0;
       pos0 <= 32'd0; pos1 <= 32'd0; pos2 <= 32'd0;
@@ -364,6 +380,7 @@ module segx_exec #(
             seg_active <= 1'b1;
             pwm        <= h_pwm;
             cur_slot   <= h_slot;
+            cur_gen    <= h_gen;
             have_blk   <= 1'b1;
             cur_sec    <= h_sec;
             cur_dir    <= h_dir;
