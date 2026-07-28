@@ -191,6 +191,30 @@ regression (a change that only shows up at `-O0`, e.g. a warning becoming
 real UB) is still *observable* via `git diff` on the manifest, without
 paying the storage cost of a second full binary set per port.
 
+### The one refresh class where DEBUG `.elf` moves alone
+
+A source edit that only *shifts line numbers* (adds/removes lines without
+changing any statement) leaves every RELEASE `.bin`/`.hex`/`.syms` and every
+DEBUG `.bin`/`.hex` byte-identical while changing 9 DEBUG `.elf` hashes,
+because the DEBUG `.elf` carries `-g3` DWARF and DWARF records line numbers
+by construction. A manifest diff whose *entire* content is DEBUG `.elf`
+lines is therefore evidence of line motion, **not** of codegen drift — and
+the absence of any `.bin`/`.hex`/`.syms` diff in the same commit is the
+proof, since `build` regenerates those files from a clean rebuild and `git`
+reports them unmodified.
+
+First instance: the `grbl/stepper.c` extension seam
+(`GRBL_SEG_PUBLISH` / `GRBL_STEPPER_TU_EXPORTS`, CONTRACTS.md
+`#segment-runtime-boundary`), which inserts a 17-line `#ifndef` default
+block at stepper.c:133. Verified beyond the hashes by a section-by-section
+`readelf -x` comparison of the ch32v006 DEBUG `.elf` built from both
+sources: `.text`, `.symtab`, `.strtab`, `.data`, `.bss`, `.srodata`,
+`.init` and `.riscv.attributes` byte-identical; only `.debug_abbrev`,
+`.debug_aranges`, `.debug_info`, `.debug_line`, `.debug_macro` and
+`.debug_str` differ. If a future manifest diff of this shape is ever
+accompanied by a `.bin`/`.hex`/`.syms` diff, it is **not** this class and
+must not be refreshed away.
+
 ## Growth cost — stated plainly, not hidden in a commit message
 
 Measured on this tree (RELEASE, all ten port/board units):
