@@ -49,6 +49,25 @@ GRBL_BOOT_INIT void hal_clock_config(void) {
   // Flash latency 2 wait states for 72 MHz
   FLASH->ACR = FLASH_ACR_LATENCY_2 | FLASH_ACR_PRFTBE;
 
+  // Bus prescalers, set explicitly BEFORE switching SYSCLK to PLL (never
+  // assume the RCC_CFGR reset default without checking - the ch32v006
+  // HPRE lesson, CONTRACTS.md section 14.9). This line was previously
+  // ABSENT: APB1 (TIM2/TIM3/USART2-4/I2C/SPI2, 36 MHz max per RM0008)
+  // ran at the full undivided 72 MHz HCLK, 2x its datasheet-rated
+  // maximum, silently - found auditing whether F_CPU really is TIM2's
+  // input clock (CONTRACTS.md #amass-floor). This fix does NOT change
+  // TIM2's actual clock, by the STM32 timer-clock-doubling rule
+  // (RM0008 7.2): with APB1 prescaler=1 (unconfigured, as before),
+  // TIM2CLK=PCLK1=HCLK=72MHz already; with APB1 prescaler=/2 (as fixed
+  // here), TIM2CLK=2*PCLK1=2*36MHz=72MHz - same 72 MHz either way, so
+  // stepper/AMASS timing (which already assumed F_CPU=72MHz) was never
+  // wrong. Only the APB1 BUS ITSELF was out of spec. APB2 (USART1/TIM1,
+  // 72 MHz max) was already correct at /1 by the same reset default.
+  RCC->CFGR = (RCC->CFGR & ~(0x7UL << RCC_CFGR_PPRE1_Pos))
+            | (RCC_CFGR_PPRE_DIV2 << RCC_CFGR_PPRE1_Pos);
+  RCC->CFGR = (RCC->CFGR & ~(0x7UL << RCC_CFGR_PPRE2_Pos))
+            | (RCC_CFGR_PPRE_DIV1 << RCC_CFGR_PPRE2_Pos);
+
   // Select PLL as system clock
   RCC->CFGR &= ~RCC_CFGR_SW;
   RCC->CFGR |= RCC_CFGR_SW_PLL;

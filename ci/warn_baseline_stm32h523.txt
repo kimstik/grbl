@@ -41,6 +41,18 @@
 # common/stm32 shared code (regs.h vs CMSIS-style headers, both stm32 ports):
 stm32_platform.h: warning: comparison of unsigned expression in '< 0' is always false [-Wtype-limits]
 #
+# amass_floor.h #warning, deliberate (CONTRACTS.md #amass-floor): this
+# port's AMASS 16-bit clamp minimum-speed floor is F_CPU/524288 = 476.8
+# dominant-axis steps/sec (250 MHz) - 71.5 mm/min @ 400 steps/mm / 357.6
+# mm/min @ 80 steps/mm, the WORST in the tree, inside ordinary
+# finishing/roughing feed ranges. GRBL_ACKNOWLEDGE_AMASS_FLOOR is defined
+# in this port's own prelude.h with that justification; the real remedy
+# (a divided/prescaled stepper-timer input clock, sg2002/Makefile
+# precedent) has not landed. Do NOT remove this line as "just noise" -
+# removing GRBL_ACKNOWLEDGE_AMASS_FLOOR instead re-enables the hard
+# _Static_assert, which is the point.
+amass_floor.h: warning: #warning "GRBL_ACKNOWLEDGE_AMASS_FLOOR: AMASS floor exceeds 200 steps/sec (CONTRACTS.md #amass-floor); feeds below it execute faster than programmed; no clock-domain remedy has landed for this port yet" [-Wcpp]
+#
 # stm32h523 platform code:
 platform.c: warning: unused parameter 'port' [-Wunused-parameter]
 #

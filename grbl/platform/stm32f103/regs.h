@@ -67,6 +67,16 @@ typedef struct {
 #define RCC_CFGR_SW_PLL     (0x2 << 0)
 #define RCC_CFGR_SWS        (0x3 << 2)
 #define RCC_CFGR_SWS_PLL    (0x2 << 2)
+// APB1/APB2 prescalers (RM0008 7.3.2): bits [10:8]=PPRE1, [13:11]=PPRE2.
+// 0xx = HCLK not divided; 100 = /2. Reset value is 0x0 (=/1) for BOTH -
+// left unconfigured, APB1 (36 MHz max per datasheet) runs at the full,
+// undivided 72 MHz HCLK, out of spec. See CONTRACTS.md #amass-floor's
+// "load-bearing assumption" audit and stm32f411/platform.c:81-85's
+// identical-shape fix for this sibling port.
+#define RCC_CFGR_PPRE1_Pos  (8)
+#define RCC_CFGR_PPRE2_Pos  (11)
+#define RCC_CFGR_PPRE_DIV1  (0x0)
+#define RCC_CFGR_PPRE_DIV2  (0x4)
 #define RCC_CFGR_PLLSRC     (1 << 16)
 #define RCC_CFGR_PLLMULL    (0xF << 18)
 #define RCC_CFGR_PLLMULL9   (0x7 << 18)

@@ -28,6 +28,14 @@
 #define GRBL_PRELUDE 1
 
 #include "../../../common/clock_width.h" // CONTRACTS.md #36: F_CPU width guard
+// CONTRACTS.md #amass-floor: sg2002's F_CPU (25 MHz, THE APB TIMER'S
+// INPUT CLOCK per sg2002/Makefile, not the ~700 MHz application-core
+// frequency) gives a floor of 47.7 steps/sec - well under the 200
+// steps/sec threshold, no acknowledgment needed. Do not "correct" this
+// to the CPU's real clock speed - see the Makefile's own comment and
+// CONTRACTS.md #4's 8-bit pulse-width horizon for why 25 MHz is
+// deliberate.
+#include "../../../common/amass_floor.h"
 #include "../../gpio.h"
 #include "../../../common/gpio.h"
 #include "config.h"

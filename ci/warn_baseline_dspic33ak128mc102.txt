@@ -3,6 +3,19 @@
 # platform files (platform.c/handlers.c/serial.c/nvmem.c) compile clean.
 # Generated from real xc-dsc-gcc 8.3.1 (XC-DSC v3.30) build logs, both flavors,
 # this session (see PLAN.md Decision Log / CI wiring entry). May only shrink.
+#
+# amass_floor.h #warning, deliberate (CONTRACTS.md #amass-floor): this
+# port's AMASS 16-bit clamp minimum-speed floor is F_CPU/524288 = 381.5
+# dominant-axis steps/sec (200 MHz) - 57.2 mm/min @ 400 steps/mm / 286.1
+# mm/min @ 80 steps/mm, inside ordinary finishing-feed range.
+# GRBL_ACKNOWLEDGE_AMASS_FLOOR is defined in this port's own prelude.h
+# with that justification; the real remedy (a divided/prescaled
+# stepper-timer input clock, sg2002/Makefile precedent) has not landed.
+# Do NOT remove this line as "just noise" - removing
+# GRBL_ACKNOWLEDGE_AMASS_FLOOR instead re-enables the hard
+# _Static_assert, which is the point.
+amass_floor.h: warning: #warning "GRBL_ACKNOWLEDGE_AMASS_FLOOR: AMASS floor exceeds 200 steps/sec (CONTRACTS.md #amass-floor); feeds below it execute faster than programmed; no clock-domain remedy has landed for this port yet" [-Wcpp]
+#
 gcode.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
 motion_control.c: warning: unused parameter 'cycle_mask' [-Wunused-parameter]
 report.c: warning: this statement may fall through [-Wimplicit-fallthrough=]

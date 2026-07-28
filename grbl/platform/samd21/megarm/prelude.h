@@ -15,6 +15,7 @@
 #include "../gpio.h"
 #include "../../common/gpio.h"
 #include "../../common/clock_width.h" // CONTRACTS.md #36: F_CPU width guard
+#include "../../common/amass_floor.h" // CONTRACTS.md #amass-floor: AMASS floor guard
 #include "config.h"
 #include "../platform.h"
 

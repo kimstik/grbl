@@ -16,6 +16,16 @@
 #include "../common/gpio.h"
 #include "../common/cortexm/cortexm_critical.h"
 #include "../common/clock_width.h" // CONTRACTS.md #36: F_CPU width guard
+// CONTRACTS.md #amass-floor: this port's floor (250 MHz -> 477
+// steps/sec, 71.5 mm/min @ 400 steps/mm / 357.6 mm/min @ 80 steps/mm) is
+// the WORST in the tree and exceeds amass_floor.h's 200 steps/sec
+// threshold. Acknowledged, not fixed: the real remedy is a platform-owned
+// divided/prescaled stepper-timer input clock (sg2002/Makefile
+// precedent), which is real per-port clock-tree hardware work outside
+// this investigation's scope. See CONTRACTS.md #amass-floor for the full
+// arithmetic and severity call.
+#define GRBL_ACKNOWLEDGE_AMASS_FLOOR
+#include "../common/amass_floor.h"
 
 /*
   SINGLE-PRECISION LIBM PIN - armed only when the Makefile's FP knob is

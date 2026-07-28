@@ -235,6 +235,8 @@ typedef struct {
 // Helper macros for NVIC
 #define NVIC_EnableIRQ(IRQn)   (NVIC->ISER[(uint32_t)IRQn >> 5] = (1 << ((uint32_t)IRQn & 0x1F)))
 #define NVIC_DisableIRQ(IRQn)  (NVIC->ICER[(uint32_t)IRQn >> 5] = (1 << ((uint32_t)IRQn & 0x1F)))
+// NVIC_SetPriority is declared after IRQn_Type below (it takes IRQn_Type by
+// name, which is not defined until the enum further down this file).
 
 // TIM (Timers)
 
@@ -396,6 +398,17 @@ typedef enum {
   LPTIM1_IRQn            = 59,
   TIM4_IRQn              = 60
 } IRQn_Type;
+
+// NVIC_SetPriority - IPR[] above is declared word-packed (4 IRQs/register,
+// matching RM0481's IPR0..IPRn naming) rather than CMSIS's byte-array `IP[240]`
+// (stm32f103/f411 regs.h). Same memory-mapped region either way, little-endian
+// Cortex-M byte order makes the two views equivalent - reinterpreting as a
+// byte array here reproduces stm32f411/regs.h:373-375's NVIC->IP[IRQn] write
+// without redeclaring NVIC_TypeDef. 4 priority bits implemented (upper nibble
+// of each byte), matching every other STM32 port in this tree.
+static inline void NVIC_SetPriority(IRQn_Type IRQn, uint32_t priority) {
+  ((volatile uint8_t*)NVIC->IPR)[(uint32_t)IRQn] = (uint8_t)(priority << 4);
+}
 
 // Core M33 Functions
 // Macros (not static inline functions): common/stm32/stm32_platform.h

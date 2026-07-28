@@ -469,14 +469,21 @@ target.
 
 ## Toolchain coverage in this environment
 
-Nine ports (ten units, samd21 counted per board) built and were committed
+Ten ports (eleven units, samd21 counted per board) built and are committed
 here: `atmega328p`, `stm32f103`, `stm32h523`, `stm32f411`, `samd21`
-(megarm + generic), `ch32v006`, `ch570`, `hc32f460`, `dspic33ak128mc102`.
-`sg2002` is intentionally absent — PLAN.md Phase 6 records it as
-design-complete/implementation-deferred (owner scope ruling), so there is no
-buildable binary to track yet. `tools/build_artifacts.py`'s `UNITS` table
-probes each toolchain before building and prints `SKIPPED <port>: toolchain
-not found ...` rather than failing the whole run if one is ever missing in a
-future environment — the plumbing (Makefile flags, DFP/TOOLCHAIN_PATH
-variables, nm binary selection) stays wired even when a given machine can't
-exercise it.
+(megarm + generic), `ch32v006`, `ch570`, `hc32f460`, `dspic33ak128mc102`,
+`sg2002`. **Corrected — `sg2002` is present, not absent**: this section
+previously said `sg2002` was "intentionally absent" because, at the time
+it was written, PLAN.md Phase 6 still recorded it as design-complete/
+implementation-deferred. That milestone has since landed —
+`artifacts/sg2002/` is built, manifested in `artifacts/MANIFEST.sha256`,
+and kept fresh by `tools/build_artifacts.py check` like every other unit
+here (verified this pass: `sg2002` is one of the 11 units the check
+covers, all fresh). The stale sentence was never updated when the port
+shipped; do not resurrect it. `tools/build_artifacts.py`'s `UNITS` table
+still probes each toolchain before building and prints `SKIPPED <port>:
+toolchain not found ...` rather than failing the whole run if one is ever
+missing in a future environment — the plumbing (Makefile flags,
+DFP/TOOLCHAIN_PATH variables, nm binary selection) stays wired even when a
+given machine can't exercise it; that mechanism is unrelated to sg2002
+specifically and remains accurate as written.

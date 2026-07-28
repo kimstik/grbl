@@ -4957,3 +4957,360 @@ outside `grbl/platform/common/chk.py` and the root `Makefile`'s `validate`
 recipe was edited). Nothing downloaded (the gcc-9.2.0 toolchain tarball)
 was committed - confirmed via `git status` showing no new file outside the
 two touched above.
+
+<a id="amass-floor"></a>
+## §NEW. AMASS's low-speed floor scales with the stepper-timer clock — a placement choice, not a defect (per-port trade table, field precedent, and the `_Static_assert` knob)
+
+**The claim investigated.** A prior analysis pass reported the AMASS
+16-bit clamp's minimum-speed floor scales linearly with `F_CPU`,
+approximately 477 dominant-axis steps/sec at stm32h523's 250 MHz versus
+≈30.5 at the 16 MHz AVR reference, with no CONTRACTS entry acknowledging
+it. Independently re-derived below, confirmed correct, and — after two
+reframes during the same investigation — resolved as a **documented
+per-port trade**, not a bug to fix at the algorithm level.
+
+**The formula, derived from the code, not assumed.** `stepper.c` (core,
+frozen): under `ADAPTIVE_MULTI_AXIS_STEP_SMOOTHING` (config.h:304,
+default ON — no port in this tree turns it off, so this applies
+uniformly), `MAX_AMASS_LEVEL` is fixed at 3. Per segment:
+
+```
+stepper.c:1025   cycles >>= prep_segment->amass_level;    // divide FIRST
+stepper.c:1028-9 if (cycles < 65536) { cycles_per_tick = cycles; }
+                  else { cycles_per_tick = 0xffff; }        // 16-bit clamp SECOND
+```
+
+`cycles_per_tick` is `uint16_t` in `segment_t` (stepper.c:86). The shift
+happens *before* the clamp, which means AMASS has a second, undocumented
+job beyond anti-aliasing (the only one its own header comment,
+stepper.c:38-46, describes): the pre-clamp `>>3` at the deepest level
+extends the representable low-speed range 8x past a bare 16-bit timer's
+native range. The floor is exact: the largest unshifted cycles-per-step
+value that still fits after an `amass_level`-3 shift is `65536 << 3 =
+524288` (2^19). Below that dominant-axis step rate, `cycles_per_tick`
+clamps to `0xffff` regardless of the true value and the ISR runs *faster*
+than commanded — a clamp, not a wraparound (stepper.c:1028-1029's own
+comment: "Just set the slowest speed possible").
+
+**Floor formula:** `floor_steps_per_sec = stepper_timer_clock / 524288`.
+Not a function of `ACCELERATION_TICKS_PER_SECOND` — that constant only
+governs segment-planning granularity (`DT_SEGMENT`, stepper.c:27), not
+this per-step timer-period ceiling; an earlier framing of this
+investigation's brief listed it as an input and that framing was wrong.
+
+**The wrap-vs-clamp question, settled.** Confirmed at stepper.c:1028-1029:
+an explicit `if/else` ternary-shaped clamp to `0xffff`, not arithmetic
+overflow. `AMASS_LEVEL1/2/3` (stepper.c:51-53, `F_CPU/8000`, `F_CPU/4000`,
+`F_CPU/2000`) select which shift applies but do not change the clamp
+itself. The `#else` branch (AMASS disabled, stepper.c:1030-1045) has a
+*different*, much lower floor: it uses a real 3-tier hardware prescaler
+(1/8/64) instead of the AMASS shift, giving a floor of `65536 << 6 =
+4194304` cycles/step (prescaler maxes at /64, not /8) — 8x more headroom
+than the AMASS path at the same clock. No port in this tree builds
+without `ADAPTIVE_MULTI_AXIS_STEP_SMOOTHING`, so this path is
+theoretical here, not evaluated per-port.
+
+**Per-port table**, `floor_steps_per_sec = clock / 524288`, feed in
+mm/min at two representative `steps/mm` assumptions (80: belt/leadscrew
+direct-drive; 400: fine microstepping) — `feed = floor * 60 / steps_per_mm`:
+
+| unit | stepper-timer clock | floor (steps/sec) | feed @ 80 steps/mm | feed @ 400 steps/mm |
+|---|---:|---:|---:|---:|
+| atmega328p (reference) | 16 MHz | 30.5 | 22.9 mm/min | 4.6 mm/min |
+| samd21, ch32v006 | 48 MHz | 91.6 | 68.7 mm/min | 13.7 mm/min |
+| ch570 | 60 MHz | 114.4 | 85.8 mm/min | 17.2 mm/min |
+| stm32f103 | 72 MHz | 137.3 | 103.0 mm/min | 20.6 mm/min |
+| stm32f411 | 96 MHz | 183.1 | 137.3 mm/min | 27.5 mm/min |
+| hc32f460, dspic33ak128mc102 | 200 MHz | 381.5 | 286.1 mm/min | 57.2 mm/min |
+| stm32h523 | 250 MHz | 476.8 | 357.6 mm/min | 71.5 mm/min |
+| sg2002 | 25 MHz | 47.7 | 35.8 mm/min | 7.2 mm/min |
+
+**sg2002 correction, load-bearing.** An earlier pass through this same
+investigation (and this file's own [§36](#clock-constant-width) prose,
+independently) used sg2002's ~700 MHz *application-core* frequency for
+this table, giving a wildly wrong 1335 steps/sec / 200 mm/min-at-400-spm
+result. That is not what `F_CPU` is on this port.
+`sg2002/Makefile:61-74` states explicitly, in its own words: *"CLOCK ->
+F_CPU. THIS IS THE APB TIMER'S INPUT CLOCK, NOT THE CPU CLOCK,"* and sets
+`CLOCK = 25000000`. This is deliberate (the same comment block explains
+that declaring the ~700 MHz core frequency there would overflow the
+8-bit pulse-width horizon, [§4](#pulse-reset-timer)) — sg2002 already
+independently arrived at the *"slow the timer's input clock down"* remedy
+this section recommends for the other high-clock ports below, for an
+unrelated reason, before this floor was ever measured. Its floor (47.7
+steps/sec, 7.2 mm/min @ 400 steps/mm) is the second-best in the tree.
+`grbl/platform/common/clock_width.h`'s header comment repeats the same
+700 MHz figure in passing (a different bug class, `F_CPU`'s *width*, not
+its value) — not corrected here, out of this section's scope, flagged so
+a future editor does not copy it forward again.
+
+**Is the floor reachable in normal use? Yes, for three ports, decisively
+— but load-bearing framing check first.** Fine finishing passes in hard
+material, V-carve/engraving detail work, thread milling at small pitch,
+low-power laser/plasma marking, and rotary fine positioning are ordinary,
+not edge-case, feed regimes — commonly well under 100 mm/min, sometimes
+under 50. Against that bar: `hc32f460`/`dspic33ak128mc102` (57.2 mm/min
+@ 400 steps/mm, 286.1 mm/min @ 80 steps/mm) and `stm32h523` (71.5 / 357.6
+mm/min) land the floor squarely inside that range at BOTH steps/mm
+assumptions — a commanded slow finishing feed on these three ports
+silently executes faster than programmed. `stm32f411` (27.5 / 137.3
+mm/min) is a real but lesser concern. The rest of the tree keeps the
+floor under ~20 mm/min at fine microstepping, closer to the AVR
+reference's ~4.6 mm/min (still not zero-risk, but comfortably outside
+where a machinist commands a deliberately slow finishing pass).
+
+**Is this a porting-induced defect, or inherited-and-must-only-be-
+documented ([§34](#core-purity-diagnostic-response))? Neither, on
+reflection — it is a *placement choice on a fixed-size window*, and
+[§34](#core-purity-diagnostic-response) does not govern it at all.**
+§34 governs a *compiler diagnostic* whose reported location is inside
+frozen core. Nothing here is a diagnostic — no warning or error ever
+points at `stepper.c` over this; it is silent, correct-looking arithmetic
+whose *consequence* is entirely a function of a platform-owned parameter
+core has no visibility into. The applicable precedent is
+[§36](#clock-constant-width) (`BUG #18` class) instead: a clock constant
+a porter controls interacts with fixed core arithmetic, and the
+correctness of that interaction depends on what value the porter chooses
+— exactly this section's shape, one bit-width class over.
+
+**The correct mental model** (this is the reframe that changed the
+recommendation mid-investigation, and it is the correct one): the AMASS
+16-bit-times-3-levels format gives a FIXED dynamic range of
+524288:1 between the floor and the fastest representable rate. That
+number does not change. What changes per port is *where that window
+sits* — entirely a function of what clock actually drives the stepper
+timer:
+
+| stepper-timer clock | low-speed floor | high-speed ceiling | conformance |
+|---|---|---|---|
+| 16 MHz (AVR-equivalent) | ~4.6 mm/min @ 400 steps/mm | F_CPU/1 cycles/step minimum, ~30 kHz step rate in practice | golden-equivalent low-speed behavior |
+| full port F_CPU (as shipped) | scales up with clock (worse) | scales up with clock (finer high-feed rate resolution) | a real trade, not a bug |
+| a divided/prescaled input clock, chosen per port | can be placed anywhere, including AVR-equivalent | trades away proportionally | a platform-layer knob, not core surgery |
+
+A fast stepper-timer clock buys finer `cycles_per_tick` rate resolution
+at high feed and pays for it in low-speed range; a slow one is the
+reverse. **The knob is the stepper *timer's* input clock, not the CPU
+clock** — the two are already different things on this tree (STM32's
+APB timer-clock-doubling rule, sg2002's explicit APB-vs-core split,
+below). Prescaling the stepper timer to 16 MHz on a 250 MHz part leaves
+the CPU at full speed for `st_prep_buffer`'s floating-point work while
+making low-speed behavior match the AVR reference exactly — likely the
+most attractive default for a port that wants golden-equivalent motion
+across the whole speed range, not just at the top end.
+
+**Field precedent: grblHAL (Terje Io's fork, MCUs from 80 MHz to 600
+MHz, the most actively maintained 32-bit GRBL descendant) independently
+converged on both halves of this answer.** Checked directly against
+`stepper.c`/`stepper.h` on `raw.githubusercontent.com/grblHAL/core/master/`
+this session:
+1. **It kept AMASS, unchanged in shape** — same three levels, the same
+   `>>= amass_level` / `<<= amass_level` transform, 36 references in its
+   `stepper.c`. After a full 32-bit rewrite of everything around it, the
+   most active fork did not replace Bresenham+AMASS with a DDA-class
+   rate generator. That is a data point (not decisive on its own) that
+   the pain here does not force an algorithm change — the fix is range
+   placement, not the algorithm.
+2. **The step-timer frequency is an explicit HAL field, computed at
+   *runtime*, not a compile-time `F_CPU` macro**:
+   ```c
+   // grblHAL stepper.c, near its AMASS threshold setup
+   amass.level_1 = hal.f_step_timer / 8000;
+   amass.level_2 = amass.level_1 << 1;
+   amass.level_3 = amass.level_2 << 1;
+   ```
+   `hal.f_step_timer` is a HAL member distinct from CPU clock (with a
+   `// TODO: move to driver?` comment beside it) — structurally the same
+   "the knob is the timer clock, not F_CPU" position this section takes,
+   just wired as a runtime HAL field instead of a compile-time constant
+   because grblHAL's own core is not byte-gated the way this tree's is.
+3. **`cycles_per_tick` is 32-bit in grblHAL** (`(uint32_t)max(ticks, ...)`).
+   No 16-bit clamp exists there at all — the floor this section
+   quantifies does not exist in grblHAL, because grblHAL owns its
+   `segment_t` and widened the field.
+
+**What does NOT transfer from grblHAL, stated precisely.** grblHAL's
+`segment_t` (and `cycles_per_tick`'s width) is that project's own,
+freely editable. Ours is inside `grbl/stepper.c`/`grbl/stepper.h`,
+covered by the golden-MD5 gate ([§0](#boundary-wiring)) and this tree's
+hard constraint against editing core. **Widening `cycles_per_tick` is
+therefore NOT an available platform-layer remedy here, and this section
+does not propose it.** The clamp to 16 bits happens in frozen core
+(stepper.c:1028-1029) *before* `STP_TMR_PERIOD_SET(st.exec_segment->
+cycles_per_tick)` (stepper.c:371) ever hands a value to the platform
+layer — by the time a port's `STP_TMR_PERIOD_SET` macro runs, the
+precision is already gone, regardless of how wide that port's own
+hardware timer register is (several here are 32-bit: most STM32 TIM2
+instances, dsPIC33AK's timers, hc32f460's). A platform with a 32-bit
+timer register gets zero relief from that width for this specific
+defect. The only lever available without touching core is what `F_CPU`
+(and the real hardware clock feeding the stepper timer) represents — the
+timer-clock-placement knob above, not a field-width change.
+
+**The load-bearing assumption, audited per port**: everything above only
+holds if the value passed as `F_CPU` actually equals the stepper timer's
+real input clock. Checked the clock-tree/timer-init code for every port,
+not assumed:
+
+- **stm32f411, stm32h523**: `RCC->CFGR` APB1/APB2 prescalers set
+  explicitly (f411: APB1 `/2`→48 MHz, APB2 `/1`→96 MHz; h523:
+  APB1/APB2 both `/2`→125 MHz). TIM2 (stepper) is on APB1; by the STM32
+  timer-clock-doubling rule (RM0383/RM0481: APBx prescaler != 1 ⇒
+  `TIMxCLK = 2 * PCLKx`), TIM2 lands at `2*48=96 MHz` (f411) and
+  `2*125=250 MHz` (h523) — both exactly `F_CPU`. **Correct, verified.**
+- **stm32f103: FOUND AND FIXED.** `hal_clock_config()` configured HSE,
+  the PLL, and the `SW`/`SWS` switch to PLL, but never touched the
+  `RCC_CFGR` `PPRE1`/`PPRE2` prescaler bits at all — no macro for them
+  even existed in this port's `regs.h`. Left at their power-on-reset
+  default (`/1`, undivided), APB1 (36 MHz max per RM0008) ran at the
+  full undivided 72 MHz HCLK, 2x its datasheet-rated maximum — a real,
+  silently-shipped out-of-spec hardware configuration bug, the same
+  class this file's own [§14.9](#ch32v006-riscv-gaps) already
+  documents for ch32v006's HPRE ("F_CPU lie" clock traps), just with the
+  bus running *faster* than spec instead of the CPU running slower.
+  Crucially, because `TIM2CLK = PCLK1` when the APB1 prescaler is `/1`
+  (no doubling applies), TIM2 (the stepper timer) still landed at
+  exactly 72 MHz = `F_CPU` *by coincidence* — so this bug did NOT
+  corrupt AMASS/step-rate arithmetic (this port's floor table row above
+  is unaffected), only the APB1 bus's own out-of-spec operation.
+  **Fixed this batch** (`stm32f103/regs.h`, `stm32f103/platform.c`):
+  `PPRE1` set to `/2` (APB1 → 36 MHz, in spec), `PPRE2` left `/1` (APB2
+  was already correct). Post-fix, TIM2 stays at 72 MHz via the same
+  doubling rule (`2 * 36 = 72`) — this fix changes zero step timing,
+  only brings the bus back into datasheet spec. Verified: both flavors
+  rebuild clean, `BOOT INTEGRITY: OK`, `warn_ratchet: OK`, artifacts
+  refreshed.
+- **samd21**: TC3 (stepper) explicitly clocked from `GCLK0`
+  (`GCLK_CLKCTRL_ID_TCC2_TC3` → `GCLK_CLKCTRL_GEN_GCLK0`, timer.h:53-54);
+  `GCLK0` sourced from DFLL48M with `GENDIV` `/1` (startup.c:151-158).
+  `CPU_FREQ`/`F_CPU` = 48 MHz matches. **Correct, verified.**
+- **ch32v006**: HPRE explicitly cleared in `SystemClock_Config`
+  ([§14.9](#ch32v006-riscv-gaps), a bug this project already found and
+  fixed before this investigation) — HCLK = `F_CPU` confirmed by that
+  prior work; the stepper timer takes HCLK directly with no further
+  division layer. **Correct, verified (via prior documented fix).**
+- **ch570**: `SystemClock_Config`'s own comment states the constraint
+  explicitly ("F_CPU=60000000 (Makefile CLOCK) must match this
+  function's actual [clock]") and TMR0 (stepper) has "no hw divider" per
+  `g_ch570_stepper_divisor`'s own comment — self-audited by the port's
+  author. **Correct, verified.**
+- **dspic33ak128mc102**: `T1CONbits.TCS=0` (internal peripheral clock),
+  `TCKPS=0` (`/1`) — Timer1 takes the instruction clock directly, no
+  separate peripheral-bus divider exists in this family the way ARM has
+  one. The port's own code already flags `FCY=F_CPU` as *"ASSUMED...
+  UNVERIFIED against the RM"* (handlers.c) — a pre-existing, disclosed
+  uncertainty this audit did not add to or resolve; not a new finding.
+- **sg2002**: `F_CPU` (25 MHz) is declared, by the port's own Makefile,
+  to BE the timer's real input clock rather than derived from CPU
+  frequency — self-consistent by construction; no additional divider
+  found in `hal_timer_stepper_init`.
+- **hc32f460: FOUND, NOT FIXED — an open, pre-existing risk, flagged
+  loudly rather than resolved blind.** `regs.h:241` defines
+  `CMU_SCFGR` — the HCLK/PCLK peripheral bus divider register — with its
+  own comment: *"UNVERIFIED - system clock (HCLK/PCLK) divider register,
+  placeholder address."* It is never written anywhere in `platform.c`.
+  The entire PLL configuration in `hal_clock_config()` is likewise
+  already flagged in its own comment as *"UNVERIFIED... not confirmed
+  against real PLL field positions/ratios."* This means the actual clock
+  reaching Int000/Int001 (stepper/pulse-reset, gated via `PWC_FCG2`) is
+  whatever this port's hardware reset default for that divider happens
+  to be — unknown, not 200 MHz confirmed. If that default divides the
+  bus, EVERY step-timing computation on this port (not just the AMASS
+  floor) is off by that undocumented factor — precisely the "far more
+  serious than the floor" class this investigation was asked to rule
+  out. It is **not** ruled out for this port. Not fixed here: the
+  register address itself is an admitted placeholder guess, and writing
+  to an unverified address on a real chip risks doing active harm rather
+  than closing the gap. This needs a bring-up engineer with the real
+  RM0xxx / oscilloscope on real silicon, the same bar `sg2002/Makefile`'s
+  own "a bring-up engineer MUST MEASURE" language already sets for that
+  port's F_CPU. Recorded here so the next person does not have to
+  re-discover it from scratch.
+
+**The response, chosen and built this batch — a documented knob, not a
+core fix, not silence either.**
+
+1. **This table and formula** (above) — so the trade is a recorded fact,
+   not a re-investigation.
+2. **`grbl/platform/common/amass_floor.h`**, modeled directly on
+   [§36](#clock-constant-width)'s `clock_width.h` mechanism: a
+   `_Static_assert(F_CPU / 524288ULL <= 200ULL, ...)` computing the floor
+   from `F_CPU` at compile time, included from every non-AVR port's
+   `prelude.h` (the same 11-file list `clock_width.h` uses). 200
+   steps/sec is chosen to sit above stm32f411's current 183 (a real but
+   lesser concern, not this guard's cut line) and below
+   hc32f460/dspic33ak128mc102/stm32h523's 381-477 (squarely inside
+   ordinary finishing-to-roughing feed ranges, per the reachability
+   analysis above). A port whose floor exceeds the threshold must
+   `#define GRBL_ACKNOWLEDGE_AMASS_FLOOR` in its own `prelude.h`, with a
+   comment stating why — the same discipline
+   [§37](#baseline-entry-discipline) already requires of a warning-
+   baseline entry: a permanent, reviewable admission, not a silent
+   suppression. An acknowledged port still gets a non-fatal `#warning`
+   in every build log instead of a quiet pass. The three ports currently
+   over threshold (`hc32f460`, `dspic33ak128mc102`, `stm32h523`) carry
+   that acknowledgment today, each with its own port-specific numbers in
+   the comment; the corresponding `#warning` line is baselined in each
+   port's `ci/warn_baseline_*.txt` with the same justification, so
+   `warn_ratchet.py` stays green without hiding the notice.
+3. **The assert's job is to force the choice to be explicit, not to
+   forbid a value or to implement a fix by itself** — matching the
+   framing this section settled on. It does not lower any port's floor;
+   it makes silence about the floor impossible.
+4. **Not built this batch, named as the real remedy for a future pass**:
+   the actual timer-clock-placement knob — reconfiguring
+   `hc32f460`/`dspic33ak128mc102`/`stm32h523`'s stepper-timer peripheral
+   to run from a divided/prescaled input clock lower than their current
+   full-`F_CPU` rate (the `sg2002`/samd21-TC3-off-GCLK0 pattern already
+   established in this tree), landing their floor back near the AVR
+   reference while leaving CPU-bound work (`st_prep_buffer`'s float
+   math) at full speed. This needs real per-port clock-tree engineering
+   and hardware pulse-width re-verification ([§4](#pulse-reset-timer)'s
+   8-bit horizon, PWM frequency, UART baud, watchdog timing — everything
+   else `F_CPU`-derived shifts with it) that this investigation
+   deliberately did not attempt blind, in the same session, without
+   hardware to confirm against — consistent with this project's own
+   "seen to actually fail/work, not just inspected" bar.
+
+**Seen to actually fire, not just inspected.** `stm32h523/prelude.h`'s
+`GRBL_ACKNOWLEDGE_AMASS_FLOOR` line was temporarily commented out and
+`grbl/platform/stm32h523` rebuilt (`BUILD=DEBUG`). The very first
+translation unit failed:
+
+```
+In file included from ./prelude.h:29,
+                 from <command-line>:
+./../common/amass_floor.h:129:1: error: static assertion failed: "AMASS
+16-bit clamp minimum-speed floor (F_CPU/524288 dominant-axis steps/sec)
+exceeds 200 steps/sec at this port's F_CPU - see CONTRACTS.md
+#amass-floor. Below this floor, commanded feeds execute FASTER than
+programmed, silently (a clamp, not a crash). At 200 MHz+, this lands
+inside ordinary finishing/roughing feed ranges, not just an unreachable
+edge case. Either lower the stepper timer's effective input clock
+(sg2002/Makefile's F_CPU-is-the-timer-clock precedent, not the raw core
+frequency) or, having reviewed CONTRACTS.md #amass-floor and accepted
+the consequence for this port, #define GRBL_ACKNOWLEDGE_AMASS_FLOOR
+before this include with a comment stating why."
+make: *** [../common/stm32/common.mk:225: .../main.o] Error 1
+```
+
+`make` exited nonzero. The line was restored (`diff` against the
+pre-edit copy: empty) and rebuilt clean (`warn_ratchet: OK - 8 distinct
+warning(s), all in baseline`). The `#warning` path was also observed
+firing for real (not synthetically) on `stm32h523`, `hc32f460`, and
+`dspic33ak128mc102` in their own unbaselined state, immediately after
+`amass_floor.h` was wired in and before each port's `ci/warn_baseline_*.txt`
+was updated — each failed `make` with `warn_ratchet: FAIL - 1 new
+warning(s)` until baselined, the identical two-state proof
+[§36](#clock-constant-width) used for `clock_width.h`.
+
+**Gates.** `make -C grbl/platform/atmega328p validate` PASSED throughout
+(`79af184e67b27defd27a39309ac53563`) — atmega328p has no `prelude.h` and
+is excluded from `amass_floor.h` for the identical reason
+[§36](#clock-constant-width) excludes it from `clock_width.h` (golden-MD5-
+gated root Makefile, no injection point). All ten other ports (eleven
+build units) rebuilt clean on both flavors after this batch: `stm32f103`,
+`stm32f411`, `stm32h523`, `hc32f460`, `dspic33ak128mc102`, `ch32v006`,
+`ch570`, `sg2002`, `samd21` (megarm + generic). `warn_ratchet` green on
+every one. Artifacts refreshed full-tree
+(`python3 tools/build_artifacts.py build`, both flavors, 11 units) and
+re-verified fresh (`tools/build_artifacts.py check`).
