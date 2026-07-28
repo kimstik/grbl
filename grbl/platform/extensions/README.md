@@ -53,6 +53,12 @@ Rules, each load-bearing:
 | name | what it does | status |
 |---|---|---|
 | `seg-trace` | tees canonical SEGX/1 frames at the publish strobe into a RAM ring for offline replay | builds on ch32v006; no CI row yet |
+| `seg-link` | serialises the segment stream into SEGX/1 Profile F frames and pumps credits back into the ring tail | builds on ch32v006 (+540 B text); shipper gated in CI against the Verilated executor; **board transport unwritten** |
+
+`extensions/common/segwire.h` carries the Profile F link framing (SOF/TAG/LEN/
+CRC8) that `segframe.h`'s payloads travel inside. It is shared verbatim by the
+host shipper and by the RTL testbench, so the wire cannot drift by one side
+being edited alone.
 
 `grbl/platform/sg2002/shm.h` is an extension in disguise — a silicon-independent
 cross-core shared-memory channel welded into one port. Extracting it is separate
