@@ -10,8 +10,9 @@ cd "$(dirname "$0")"
 GRBL=../../grbl
 W=build/mut
 survived=0 killed=0
-tab=$(printf '\t')
+tab=$(printf '\t') cr=$(printf '\r')
 while IFS="$tab" read -r id file from to; do
+  to=${to%"$cr"}  # mutants.txt may be checked out with CRLF
   case "$id" in ''|'#'*) continue ;; esac
   [ $# -gt 0 ] && [ "$1" != "$id" ] && continue
   rm -rf "$W/src" "$W/obj"; mkdir -p "$W"; cp -r "$GRBL" "$W/src"
