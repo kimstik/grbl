@@ -1,0 +1,53 @@
+name: G5 build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  avr:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install avr-gcc
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends gcc-avr avr-libc binutils-avr
+          avr-gcc --version | head -1
+
+      # Splines disabled with the stock flags must produce the vanilla binary.
+      - name: Splines off matches master
+        run: |
+          STOCK='avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -ffunction-sections -flto'
+          git worktree add -q ../master origin/master
+          make -s -C ../master COMPILE="$STOCK"
+          make -s COMPILE="$STOCK"
+          md5sum ../master/grbl.hex grbl.hex
+          cmp ../master/grbl.hex grbl.hex
+
+      # ATmega328P: 32768 bytes flash, 32256 with the 512-byte Uno bootloader.
+      - name: Size matrix
+        run: |
+          STOCK='avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -ffunction-sections -flto'
+          BRANCH=$(make -s --eval 'print-compile: ; @echo $(COMPILE)' print-compile)
+          G5='-DENABLE_CUBIC_SPLINES'
+          G51='-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES'
+          printf '| flags | splines | flash | ram | free (32256) |\n|---|---|---|---|---|\n' >> "$GITHUB_STEP_SUMMARY"
+          for flags in stock branch; do
+            if [ $flags = stock ]; then cc="$STOCK"; else cc="$BRANCH"; fi
+            for cfg in off G5 G5+G5.1; do
+              case $cfg in off) def='' ;; G5) def="$G5" ;; *) def="$G51" ;; esac
+              make -s clean
+              make -s COMPILE="$cc $def" > /dev/null
+              set -- $(avr-size --format=berkeley build/main.elf | tail -1)
+              flash=$(( $1 + $2 )); ram=$(( $2 + $3 ))
+              printf '| %s | %s | %d | %d | %d |\n' $flags $cfg $flash $ram $(( 32256 - flash )) | tee -a "$GITHUB_STEP_SUMMARY"
+              if [ $flags = branch ] && [ $cfg = G5+G5.1 ] && [ $flash -gt 32256 ]; then
+                echo "::error::G5+G5.1 with branch flags does not fit 32256 bytes"
+                exit 1
+              fi
+            done
+          done
