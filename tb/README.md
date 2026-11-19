@@ -20,7 +20,8 @@ the same test goes unseen (mutation testing found exactly that once).
 Decisions that tests encode:
 - Only I or only J on a continuation G5: the missing one is 0 (permissive,
   like G1/G2/G3; the LinuxCNC rule requiring both is not adopted).
-- Implicit I/J of a continuation are the negated P/Q of the previous G5.
+- Implicit I/J of a continuation are the negated P/Q of the previous G5, as
+  in LinuxCNC. grblHAL negates the P/Q of the current block instead.
 
 ## Catalog
 
@@ -62,9 +63,32 @@ Decisions that tests encode:
 | 34 | Realtime latency: worst gap between segments                           | avr `worst gap`       | CI                                      |
 | 35 | Feed hold and resume mid-curve, exact final position                   | avr dynamic           | in progress                             |
 | 36 | Soft reset, then the same line: same segments                          | host `reset`          | pass                                    |
-| 37 | Differential against grblHAL G5                                         | -                     | in progress                             |
+| 37 | Differential against grblHAL G5                                         | one-off host run      | segments bit-identical, see below       |
 | 38 | LinuxCNC word rules                                                     | host vectors          | pass                                    |
 | 39 | G93 time on G5 multiplied by the segment count                         | host vectors          | defect (5.5 min for 0.5)                |
 | 40 | Soft limits: curve leaves the envelope between inside endpoints        | host vector           | defect: alarm after 13 segments         |
 | 41 | K word rejected in G17                                                  | host vector           | pass                                    |
 | 42 | 40-digit literal read as inf                                            | host vector, avr      | defect                                  |
+
+## 37: grblHAL
+
+grblHAL core 3161cea. Its `mc_cubic_b_spline` and `BEZIER_*` constants are
+the same code as ours; only the abort check is spelled differently. Extracted
+unchanged and fed the control points our parser passes for
+`host/vectors/g5.vec`, `avr/lines.txt` and `tb --random 5000 1` (3290 curves),
+it queues the same segments bit for bit, compiled with or without
+-ffast-math. Not kept as a test: it would only prove again that the code is
+the same.
+
+The parsers differ:
+- Implicit I/J, see the decision above. On `g5.vec` 4 of 5 implicit
+  continuations get another start control point (up to 6 mm away) and the
+  paths separate by up to 2.5 mm.
+- grblHAL takes implicit I/J before P/Q are converted from inches, so under
+  G20 they are 25.4 times too short.
+- Negative P is accepted by grblHAL; defect 7 is ours only.
+- Plane other than G17, and G5.1 with I=J=0: grblHAL error:42 and error:39,
+  ours error:33.
+
+Shared with grblHAL: defects 6, 8 and 39. Defect 8 has no effect there,
+since grblHAL never reads the stored P/Q on the next line.
