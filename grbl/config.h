@@ -713,20 +713,21 @@
 
 #ifdef ENABLE_CUBIC_SPLINES
   // Bezier curve interpolation parameters. These control the quality vs. performance tradeoff.
-  // Smaller MIN_STEP = smoother curves but more segments (slower execution, more memory)
-  // Larger MAX_STEP = faster execution but may lose curve detail
+  // MIN_STEP and MAX_STEP bound the step of the curve parameter t (0..1), not a length in mm.
+  // Smaller MIN_STEP allows finer segments on sharp bends; larger MAX_STEP allows fewer, longer
+  // segments where the curve is nearly straight.
   // SIGMA = tolerance for linear approximation in mm (Manhattan distance)
 
   #ifndef BEZIER_MIN_STEP
-    #define BEZIER_MIN_STEP 0.002f  // Minimum step size (0.002 = 2 microns)
+    #define BEZIER_MIN_STEP 0.002f  // Minimum step of t (fraction of the curve parameter)
   #endif
 
   #ifndef BEZIER_MAX_STEP
-    #define BEZIER_MAX_STEP 0.1f    // Maximum step size (0.1mm)
+    #define BEZIER_MAX_STEP 0.1f    // Maximum step of t (fraction of the curve parameter)
   #endif
 
   #ifndef BEZIER_SIGMA
-    #define BEZIER_SIGMA 0.1f       // Linear approximation tolerance (0.1mm)
+    #define BEZIER_SIGMA 0.1f       // Linear approximation tolerance (mm)
   #endif
 #endif
 
