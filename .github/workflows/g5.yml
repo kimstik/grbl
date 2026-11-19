@@ -20,7 +20,9 @@ jobs:
       # The Arch image lacks git, which checkout needs for full history.
       - name: Arch packages
         if: matrix.container
-        run: pacman -Syu --noconfirm --needed git make diffutils avr-gcc avr-libc
+        run: |
+          pacman -Syu --noconfirm --needed git make diffutils avr-gcc avr-libc
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - uses: actions/checkout@v4
         with:
