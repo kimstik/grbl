@@ -239,7 +239,7 @@ typedef struct {
                                  // machine zero in mm. Non-persistent. Cleared upon reset and boot.
   float tool_length_offset;      // Tracks tool length offset value when enabled.
 #ifdef ENABLE_CUBIC_SPLINES
-  float spline_pq[2];            // Stores P,Q offsets from previous G5 command (X,Y)
+  float spline_pq[2];            // Stores P,Q offsets from previous G5 command (X,Y). G5.1 reuses it.
 #endif
 } parser_state_t;
 extern parser_state_t gc_state;

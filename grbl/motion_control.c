@@ -406,9 +406,10 @@ void mc_reset()
    - Enlarges step size when possible to improve performance
    - Uses Manhattan distance (L1 norm) instead of Euclidean for speed
 
-   Memory usage:
-   - Stack: ~50 bytes (local variables)
-   - Flash: ~700 bytes (code)
+   Memory usage (avr-gcc 7.3, Makefile flags):
+   - Stack: 26 bytes above mc_line() while a segment is queued, 77 more in
+     bezier_next() while the next one is computed
+   - Flash: ~1.8 KB (code)
    ------------------------------------------------------------------------------ */
 
 // Linear interpolation between two points
@@ -458,6 +459,97 @@ static inline float dist1(const float x1, const float y1, const float x2, const 
     return fabsf(x1 - x2) + fabsf(y1 - y2);
 }
 
+// Advance the walk below by one segment (its steps 1 and 2)
+//
+// Moves *walk_t to the end of the next segment and sets *walk_step to the step taken.
+// The curve point there is stored in bez_target[X_AXIS] and bez_target[Y_AXIS].
+//
+// Not inlined: its temporaries need a large stack frame, which is released
+// before mc_line() takes the stack further down to the planner. With the walk
+// state in memory, the caller keeps no floats in registers across mc_line()
+// and its own frame stays small too.
+static void __attribute__((noinline)) bezier_next(float *walk_t, float *walk_step, float *bez_target,
+                                                   float *target, float *position,
+                                                   float *first_offset, float *second_offset)
+{
+    // Control points
+    const float first0 = position[X_AXIS] + first_offset[X_AXIS],
+                first1 = position[Y_AXIS] + first_offset[Y_AXIS],
+                second0 = target[X_AXIS] + second_offset[X_AXIS],
+                second1 = target[Y_AXIS] + second_offset[Y_AXIS];
+
+    // -----------------------------------------------------------------------
+    // STEP 1: Try to reduce step size if curve deviates too much from linear
+    // -----------------------------------------------------------------------
+    const float t = *walk_t;
+    bool did_reduce = false;
+    float new_t = t + *walk_step;
+
+    if (new_t > 1.0f)
+        new_t = 1.0f;  // Clamp to end of curve
+
+    // Compute next position on Bezier curve
+    float new_pos0 = eval_bezier(position[X_AXIS], first0, second0, target[X_AXIS], new_t),
+          new_pos1 = eval_bezier(position[Y_AXIS], first1, second1, target[Y_AXIS], new_t);
+
+    // Iteratively reduce step size until linear approximation is good enough
+    while (new_t - t >= (BEZIER_MIN_STEP)) {
+
+        // Compute candidate midpoint on curve
+        const float candidate_t = 0.5f * (t + new_t),
+                  candidate_pos0 = eval_bezier(position[X_AXIS], first0, second0, target[X_AXIS], candidate_t),
+                  candidate_pos1 = eval_bezier(position[Y_AXIS], first1, second1, target[Y_AXIS], candidate_t);
+
+        // Compute linear interpolation midpoint (what we'd get with straight line)
+        const float interp_pos0 = 0.5f * (bez_target[X_AXIS] + new_pos0),
+                  interp_pos1 = 0.5f * (bez_target[Y_AXIS] + new_pos1);
+
+        // If curve point is close enough to linear interpolation, we're done
+        if (dist1(candidate_pos0, candidate_pos1, interp_pos0, interp_pos1) <= (BEZIER_SIGMA))
+            break;
+
+        // Curve deviates too much - reduce step size and try again
+        new_t = candidate_t;
+        new_pos0 = candidate_pos0;
+        new_pos1 = candidate_pos1;
+        did_reduce = true;
+    }
+
+    // -----------------------------------------------------------------------
+    // STEP 2: If we didn't reduce, try to enlarge step for better performance
+    // -----------------------------------------------------------------------
+    if (!did_reduce) {
+        while (new_t - t <= BEZIER_MAX_STEP) {
+
+            const float candidate_t = t + 2.0f * (new_t - t);
+
+            if (candidate_t >= 1.0f)
+                break;  // Can't enlarge past end
+
+            // Try a larger step - compute positions
+            const float candidate_pos0 = eval_bezier(position[X_AXIS], first0, second0, target[X_AXIS], candidate_t),
+                      candidate_pos1 = eval_bezier(position[Y_AXIS], first1, second1, target[Y_AXIS], candidate_t),
+                      interp_pos0 = 0.5f * (bez_target[X_AXIS] + candidate_pos0),
+                      interp_pos1 = 0.5f * (bez_target[Y_AXIS] + candidate_pos1);
+
+            // If enlarged step still maintains accuracy, use it
+            if (dist1(new_pos0, new_pos1, interp_pos0, interp_pos1) > (BEZIER_SIGMA))
+                break;
+
+            new_t = candidate_t;
+            new_pos0 = candidate_pos0;
+            new_pos1 = candidate_pos1;
+        }
+    }
+
+    // Update target position (only X,Y interpolated; Z moves linearly)
+    bez_target[X_AXIS] = new_pos0;
+    bez_target[Y_AXIS] = new_pos1;
+
+    *walk_step = new_t - t;
+    *walk_t = new_t;
+}
+
 // Execute cubic B-spline from position to target with two control points
 //
 // This function approximates the smooth Bezier curve with small linear segments.
@@ -475,12 +567,12 @@ static inline float dist1(const float x1, const float y1, const float x2, const 
 //   target - Target endpoint [X,Y,Z] in mm (machine coordinates)
 //   pl_data - Planner data (feed rate, conditions, etc)
 //   position - Current position [X,Y,Z] in mm (machine coordinates)
-//   first - First control point [X,Y,Z] in mm (absolute coordinates)
-//   second - Second control point [X,Y,Z] in mm (absolute coordinates)
+//   first_offset - First control point [X,Y] in mm, relative to position
+//   second_offset - Second control point [X,Y] in mm, relative to target
 //
 // Note: Only X,Y are interpolated. Z axis moves linearly (not interpolated).
 void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position,
-                       float *first, float *second)
+                       float *first_offset, float *second_offset)
 {
     float bez_target[N_AXIS];
 
@@ -493,85 +585,12 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
     // Walk along the Bezier curve from t=0 to t=1
     while (t < 1.0f) {
 
-        // -----------------------------------------------------------------------
-        // STEP 1: Try to reduce step size if curve deviates too much from linear
-        // -----------------------------------------------------------------------
-        bool did_reduce = false;
-        float new_t = t + step;
-
-        if (new_t > 1.0f)
-            new_t = 1.0f;  // Clamp to end of curve
-
-        // Compute next position on Bezier curve
-        float new_pos0 = eval_bezier(position[X_AXIS], first[X_AXIS],
-                                      second[X_AXIS], target[X_AXIS], new_t),
-              new_pos1 = eval_bezier(position[Y_AXIS], first[Y_AXIS],
-                                      second[Y_AXIS], target[Y_AXIS], new_t);
-
-        // Iteratively reduce step size until linear approximation is good enough
-        while (new_t - t >= (BEZIER_MIN_STEP)) {
-
-            // Compute candidate midpoint on curve
-            const float candidate_t = 0.5f * (t + new_t),
-                      candidate_pos0 = eval_bezier(position[X_AXIS], first[X_AXIS],
-                                                    second[X_AXIS], target[X_AXIS], candidate_t),
-                      candidate_pos1 = eval_bezier(position[Y_AXIS], first[Y_AXIS],
-                                                    second[Y_AXIS], target[Y_AXIS], candidate_t);
-
-            // Compute linear interpolation midpoint (what we'd get with straight line)
-            const float interp_pos0 = 0.5f * (bez_target[X_AXIS] + new_pos0),
-                      interp_pos1 = 0.5f * (bez_target[Y_AXIS] + new_pos1);
-
-            // If curve point is close enough to linear interpolation, we're done
-            if (dist1(candidate_pos0, candidate_pos1, interp_pos0, interp_pos1) <= (BEZIER_SIGMA))
-                break;
-
-            // Curve deviates too much - reduce step size and try again
-            new_t = candidate_t;
-            new_pos0 = candidate_pos0;
-            new_pos1 = candidate_pos1;
-            did_reduce = true;
-        }
-
-        // -----------------------------------------------------------------------
-        // STEP 2: If we didn't reduce, try to enlarge step for better performance
-        // -----------------------------------------------------------------------
-        if (!did_reduce) {
-            while (new_t - t <= BEZIER_MAX_STEP) {
-
-                const float candidate_t = t + 2.0f * (new_t - t);
-
-                if (candidate_t >= 1.0f)
-                    break;  // Can't enlarge past end
-
-                // Try a larger step - compute positions
-                const float candidate_pos0 = eval_bezier(position[X_AXIS], first[X_AXIS],
-                                                          second[X_AXIS], target[X_AXIS], candidate_t),
-                          candidate_pos1 = eval_bezier(position[Y_AXIS], first[Y_AXIS],
-                                                          second[Y_AXIS], target[Y_AXIS], candidate_t),
-                          interp_pos0 = 0.5f * (bez_target[X_AXIS] + candidate_pos0),
-                          interp_pos1 = 0.5f * (bez_target[Y_AXIS] + candidate_pos1);
-
-                // If enlarged step still maintains accuracy, use it
-                if (dist1(new_pos0, new_pos1, interp_pos0, interp_pos1) > (BEZIER_SIGMA))
-                    break;
-
-                new_t = candidate_t;
-                new_pos0 = candidate_pos0;
-                new_pos1 = candidate_pos1;
-            }
-        }
+        // Steps 1 and 2: find the next point on the curve
+        bezier_next(&t, &step, bez_target, target, position, first_offset, second_offset);
 
         // -----------------------------------------------------------------------
         // STEP 3: Move to the computed position
         // -----------------------------------------------------------------------
-        step = new_t - t;
-        t = new_t;
-
-        // Update target position (only X,Y interpolated; Z moves linearly)
-        bez_target[X_AXIS] = new_pos0;
-        bez_target[Y_AXIS] = new_pos1;
-
         // Queue the linear segment to the planner
         mc_line(bez_target, pl_data);
 

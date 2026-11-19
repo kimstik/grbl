@@ -47,10 +47,11 @@ void mc_arc(float *target, plan_line_data_t *pl_data, float *position, float *of
 
 #ifdef ENABLE_CUBIC_SPLINES
 // Execute cubic B-spline interpolation. position == current xyz, target == target xyz,
-// first == first control point xyz, second == second control point xyz.
+// first_offset == first control point xy relative to position, second_offset == second
+// control point xy relative to target.
 // Uses adaptive Bezier curve segmentation with De Casteljau's algorithm for numerical stability.
 void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position,
-                       float *first, float *second);
+                       float *first_offset, float *second_offset);
 #endif
 
 // Dwell for a specific number of seconds
