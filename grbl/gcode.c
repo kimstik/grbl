@@ -161,7 +161,10 @@ uint8_t gc_execute_line(char *line)
             }                
             break;
           case 0: case 1: case 2: case 3: case 38:
-            // Check for G0/1/2/3/38 being called with G10/28/30/92 on same block.
+#ifdef ENABLE_CUBIC_SPLINES
+          case 5:
+#endif
+            // Check for G0/1/2/3/38/G5 being called with G10/28/30/92 on same block.
             // * G43.1 is also an axis command but is not explicitly defined this way.
             if (axis_command) { FAIL(STATUS_GCODE_AXIS_COMMAND_CONFLICT); } // [Axis word/command conflict]
             axis_command = AXIS_COMMAND_MOTION_MODE;
@@ -175,7 +178,23 @@ uint8_t gc_execute_line(char *line)
               }
               gc_block.modal.motion += (mantissa/10)+100;
               mantissa = 0; // Set to zero to indicate valid non-integer G command.
-            }  
+            }
+#ifdef ENABLE_CUBIC_SPLINES
+            else if (int_value == 5) {
+              if (mantissa == 0) {
+                gc_block.modal.motion = MOTION_MODE_CUBIC_SPLINE;
+              }
+#ifdef ENABLE_QUADRATIC_SPLINES
+              else if (mantissa == 10) {
+                gc_block.modal.motion = MOTION_MODE_QUADRATIC_SPLINE;
+                mantissa = 0; // Set to zero to indicate valid non-integer G command.
+              }
+#endif
+              else {
+                FAIL(STATUS_GCODE_UNSUPPORTED_COMMAND); // [Unsupported G5.x command]
+              }
+            }
+#endif
             break;
           case 17: case 18: case 19:
             word_bit = MODAL_GROUP_G2;
@@ -309,7 +328,11 @@ uint8_t gc_execute_line(char *line)
           case 'N': word_bit = WORD_N; gc_block.values.n = trunc(value); break;
           case 'P': word_bit = WORD_P; gc_block.values.p = value; break;
           // NOTE: For certain commands, P value must be an integer, but none of these commands are supported.
+#ifdef ENABLE_CUBIC_SPLINES
+          case 'Q': word_bit = WORD_Q; gc_block.values.q = value; break;
+#else
           // case 'Q': // Not supported
+#endif
           case 'R': word_bit = WORD_R; gc_block.values.r = value; break;
           case 'S': word_bit = WORD_S; gc_block.values.s = value; break;
           case 'T': word_bit = WORD_T; 
@@ -806,6 +829,106 @@ uint8_t gc_execute_line(char *line)
             }
           }
           break;
+
+#ifdef ENABLE_CUBIC_SPLINES
+        case MOTION_MODE_CUBIC_SPLINE:
+          // [G5 Errors]:
+          // - Feed rate undefined (checked above)
+          // - The active plane is not G17 (XY)
+          // - P and Q are not both specified
+          // - I or J are unspecified in the first G5 command (motion mode change)
+          // - An axis other than X or Y is specified
+
+          // Verify we're in XY plane (G17)
+          if (gc_block.modal.plane_select != PLANE_SELECT_XY) {
+            FAIL(STATUS_GCODE_INVALID_TARGET); // [The active plane is not G17]
+          }
+
+          // Verify only X,Y axis words are used (no Z)
+          if (axis_words & ~((1<<X_AXIS)|(1<<Y_AXIS))) {
+            FAIL(STATUS_GCODE_AXIS_COMMAND_CONFLICT); // [An axis other than X or Y is specified]
+          }
+
+          // P and Q must both be specified
+          if (bit_isfalse(value_words, bit(WORD_P)) || bit_isfalse(value_words, bit(WORD_Q))) {
+            FAIL(STATUS_GCODE_VALUE_WORD_MISSING); // [P and Q are not both specified]
+          }
+
+          // Check if this is the first G5 (motion mode changed from non-spline)
+          if (gc_state.modal.motion != MOTION_MODE_CUBIC_SPLINE) {
+            // First G5 in a series - I and J must be specified
+            if (bit_isfalse(value_words, bit(WORD_I)) || bit_isfalse(value_words, bit(WORD_J))) {
+              FAIL(STATUS_GCODE_VALUE_WORD_MISSING); // [I or J unspecified in first G5]
+            }
+          }
+
+          // If I,J not specified, use negative of previous P,Q values
+          if (bit_isfalse(value_words, bit(WORD_I)) && bit_isfalse(value_words, bit(WORD_J))) {
+            gc_block.values.ijk[X_AXIS] = -gc_state.spline_pq[X_AXIS];
+            gc_block.values.ijk[Y_AXIS] = -gc_state.spline_pq[Y_AXIS];
+          } else {
+            // Convert I,J values to proper units
+            if (gc_block.modal.units == UNITS_MODE_INCHES) {
+              gc_block.values.ijk[X_AXIS] *= MM_PER_INCH;
+              gc_block.values.ijk[Y_AXIS] *= MM_PER_INCH;
+            }
+          }
+
+          // Convert P and Q values to proper units
+          if (gc_block.modal.units == UNITS_MODE_INCHES) {
+            gc_block.values.p *= MM_PER_INCH;
+            gc_block.values.q *= MM_PER_INCH;
+          }
+
+          // Store P,Q for next G5 command (for implicit I,J calculation)
+          gc_state.spline_pq[X_AXIS] = gc_block.values.p;
+          gc_state.spline_pq[Y_AXIS] = gc_block.values.q;
+
+          // Mark these words as used
+          bit_false(value_words, (bit(WORD_P)|bit(WORD_Q)|bit(WORD_I)|bit(WORD_J)));
+          break;
+
+#ifdef ENABLE_QUADRATIC_SPLINES
+        case MOTION_MODE_QUADRATIC_SPLINE:
+          // [G5.1 Errors]:
+          // - Feed rate undefined (checked above)
+          // - The active plane is not G17 (XY)
+          // - I or J are unspecified
+          // - I and J are both zero (no control point)
+          // - An axis other than X or Y is specified
+
+          // Verify we're in XY plane (G17)
+          if (gc_block.modal.plane_select != PLANE_SELECT_XY) {
+            FAIL(STATUS_GCODE_INVALID_TARGET); // [The active plane is not G17]
+          }
+
+          // Verify only X,Y axis words are used (no Z)
+          if (axis_words & ~((1<<X_AXIS)|(1<<Y_AXIS))) {
+            FAIL(STATUS_GCODE_AXIS_COMMAND_CONFLICT); // [An axis other than X or Y is specified]
+          }
+
+          // I and J must both be specified
+          if (bit_isfalse(value_words, bit(WORD_I)) || bit_isfalse(value_words, bit(WORD_J))) {
+            FAIL(STATUS_GCODE_VALUE_WORD_MISSING); // [I or J are unspecified]
+          }
+
+          // I and J cannot both be zero (would result in no control point)
+          if (gc_block.values.ijk[X_AXIS] == 0.0f && gc_block.values.ijk[Y_AXIS] == 0.0f) {
+            FAIL(STATUS_GCODE_INVALID_TARGET); // [I and J are both zero]
+          }
+
+          // Convert I,J values to proper units
+          if (gc_block.modal.units == UNITS_MODE_INCHES) {
+            gc_block.values.ijk[X_AXIS] *= MM_PER_INCH;
+            gc_block.values.ijk[Y_AXIS] *= MM_PER_INCH;
+          }
+
+          // Mark I,J words as used
+          bit_false(value_words, (bit(WORD_I)|bit(WORD_J)));
+          break;
+#endif // ENABLE_QUADRATIC_SPLINES
+#endif // ENABLE_CUBIC_SPLINES
+
         case MOTION_MODE_PROBE_TOWARD_NO_ERROR: case MOTION_MODE_PROBE_AWAY_NO_ERROR:
           gc_parser_flags |= GC_PARSER_PROBE_IS_NO_ERROR; // No break intentional.
         case MOTION_MODE_PROBE_TOWARD: case MOTION_MODE_PROBE_AWAY:
@@ -1057,6 +1180,54 @@ uint8_t gc_execute_line(char *line)
       } else if ((gc_state.modal.motion == MOTION_MODE_CW_ARC) || (gc_state.modal.motion == MOTION_MODE_CCW_ARC)) {
         mc_arc(gc_block.values.xyz, pl_data, gc_state.position, gc_block.values.ijk, gc_block.values.r,
             axis_0, axis_1, axis_linear, bit_istrue(gc_parser_flags,GC_PARSER_ARC_IS_CLOCKWISE));
+
+#ifdef ENABLE_CUBIC_SPLINES
+      } else if (gc_state.modal.motion == MOTION_MODE_CUBIC_SPLINE) {
+        // Execute cubic B-spline (G5)
+        // Calculate control points from offsets
+        float cp1[N_AXIS], cp2[N_AXIS];
+
+        // First control point = current position + I,J offsets
+        cp1[X_AXIS] = gc_state.position[X_AXIS] + gc_block.values.ijk[X_AXIS];
+        cp1[Y_AXIS] = gc_state.position[Y_AXIS] + gc_block.values.ijk[Y_AXIS];
+        cp1[Z_AXIS] = gc_state.position[Z_AXIS];
+
+        // Second control point = target position + P,Q offsets
+        cp2[X_AXIS] = gc_block.values.xyz[X_AXIS] + gc_state.spline_pq[X_AXIS];
+        cp2[Y_AXIS] = gc_block.values.xyz[Y_AXIS] + gc_state.spline_pq[Y_AXIS];
+        cp2[Z_AXIS] = gc_block.values.xyz[Z_AXIS];
+
+        // Execute the cubic Bezier spline
+        mc_cubic_b_spline(gc_block.values.xyz, pl_data, gc_state.position, cp1, cp2);
+
+#ifdef ENABLE_QUADRATIC_SPLINES
+      } else if (gc_state.modal.motion == MOTION_MODE_QUADRATIC_SPLINE) {
+        // Execute quadratic spline (G5.1)
+        // Convert quadratic to cubic Bezier using the 2/3 rule
+        float cp1[N_AXIS], cp2[N_AXIS];
+
+        // Quadratic control point
+        float qcp_x = gc_state.position[X_AXIS] + gc_block.values.ijk[X_AXIS];
+        float qcp_y = gc_state.position[Y_AXIS] + gc_block.values.ijk[Y_AXIS];
+
+        // Convert to cubic Bezier control points
+        // cp1 = start + (2/3) * (qcp - start)
+        cp1[X_AXIS] = gc_state.position[X_AXIS] + (gc_block.values.ijk[X_AXIS] * 2.0f) / 3.0f;
+        cp1[Y_AXIS] = gc_state.position[Y_AXIS] + (gc_block.values.ijk[Y_AXIS] * 2.0f) / 3.0f;
+        cp1[Z_AXIS] = gc_state.position[Z_AXIS];
+
+        // cp2 = target + (2/3) * (qcp - target)
+        float dx = qcp_x - gc_block.values.xyz[X_AXIS];
+        float dy = qcp_y - gc_block.values.xyz[Y_AXIS];
+        cp2[X_AXIS] = gc_block.values.xyz[X_AXIS] + (dx * 2.0f) / 3.0f;
+        cp2[Y_AXIS] = gc_block.values.xyz[Y_AXIS] + (dy * 2.0f) / 3.0f;
+        cp2[Z_AXIS] = gc_block.values.xyz[Z_AXIS];
+
+        // Execute the cubic Bezier spline
+        mc_cubic_b_spline(gc_block.values.xyz, pl_data, gc_state.position, cp1, cp2);
+#endif // ENABLE_QUADRATIC_SPLINES
+#endif // ENABLE_CUBIC_SPLINES
+
       } else {
         // NOTE: gc_block.values.xyz is returned from mc_probe_cycle with the updated position value. So
         // upon a successful probing cycle, the machine position and the returned value should be the same.
