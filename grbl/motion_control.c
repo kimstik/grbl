@@ -407,7 +407,7 @@ void mc_reset()
    - Uses Manhattan distance (L1 norm) instead of Euclidean for speed
 
    Memory usage:
-   - Stack: ~50 bytes (local variables)
+   - Stack: ~65 bytes (local variables and saved registers, avr-gcc 7.3)
    - Flash: ~700 bytes (code)
    ------------------------------------------------------------------------------ */
 
@@ -431,13 +431,18 @@ static inline float interp(const float a, const float b, const float t)
 //     - Final interpolation gives the point on curve
 //
 // Parameters:
-//   a, b, c, d - The four control points of the cubic Bezier
+//   pa, pb, pc, pd - The four control points of the cubic Bezier
+//   axis - The coordinate to evaluate
 //   t - Parameter in [0,1], where 0=start, 1=end
 // Returns:
 //   Point on the Bezier curve at parameter t
-static inline float eval_bezier(const float a, const float b, const float c,
-                                 const float d, const float t)
+//
+// The control points are read here, in a function that is not inline, so that the
+// walker below keeps no copies of them on the stack, which is deepest during G5.
+static float eval_bezier(const float *pa, const float *pb, const float *pc,
+                         const float *pd, const uint8_t axis, const float t)
 {
+    const float a = pa[axis], b = pb[axis], c = pc[axis], d = pd[axis];
     const float iab = interp(a, b, t),
                 ibc = interp(b, c, t),
                 icd = interp(c, d, t),
@@ -475,8 +480,8 @@ static inline float dist1(const float x1, const float y1, const float x2, const 
 //   target - Target endpoint [X,Y,Z] in mm (machine coordinates)
 //   pl_data - Planner data (feed rate, conditions, etc)
 //   position - Current position [X,Y,Z] in mm (machine coordinates)
-//   first - First control point [X,Y,Z] in mm (absolute coordinates)
-//   second - Second control point [X,Y,Z] in mm (absolute coordinates)
+//   first - First control point [X,Y] in mm (absolute coordinates)
+//   second - Second control point [X,Y] in mm (absolute coordinates)
 //
 // Note: Only X,Y are interpolated. Z axis moves linearly (not interpolated).
 void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position,
@@ -503,20 +508,16 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
             new_t = 1.0f;  // Clamp to end of curve
 
         // Compute next position on Bezier curve
-        float new_pos0 = eval_bezier(position[X_AXIS], first[X_AXIS],
-                                      second[X_AXIS], target[X_AXIS], new_t),
-              new_pos1 = eval_bezier(position[Y_AXIS], first[Y_AXIS],
-                                      second[Y_AXIS], target[Y_AXIS], new_t);
+        float new_pos0 = eval_bezier(position, first, second, target, X_AXIS, new_t),
+              new_pos1 = eval_bezier(position, first, second, target, Y_AXIS, new_t);
 
         // Iteratively reduce step size until linear approximation is good enough
         while (new_t - t >= (BEZIER_MIN_STEP)) {
 
             // Compute candidate midpoint on curve
             const float candidate_t = 0.5f * (t + new_t),
-                      candidate_pos0 = eval_bezier(position[X_AXIS], first[X_AXIS],
-                                                    second[X_AXIS], target[X_AXIS], candidate_t),
-                      candidate_pos1 = eval_bezier(position[Y_AXIS], first[Y_AXIS],
-                                                    second[Y_AXIS], target[Y_AXIS], candidate_t);
+                      candidate_pos0 = eval_bezier(position, first, second, target, X_AXIS, candidate_t),
+                      candidate_pos1 = eval_bezier(position, first, second, target, Y_AXIS, candidate_t);
 
             // Compute linear interpolation midpoint (what we'd get with straight line)
             const float interp_pos0 = 0.5f * (bez_target[X_AXIS] + new_pos0),
@@ -545,10 +546,8 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
                     break;  // Can't enlarge past end
 
                 // Try a larger step - compute positions
-                const float candidate_pos0 = eval_bezier(position[X_AXIS], first[X_AXIS],
-                                                          second[X_AXIS], target[X_AXIS], candidate_t),
-                          candidate_pos1 = eval_bezier(position[Y_AXIS], first[Y_AXIS],
-                                                          second[Y_AXIS], target[Y_AXIS], candidate_t),
+                const float candidate_pos0 = eval_bezier(position, first, second, target, X_AXIS, candidate_t),
+                          candidate_pos1 = eval_bezier(position, first, second, target, Y_AXIS, candidate_t),
                           interp_pos0 = 0.5f * (bez_target[X_AXIS] + candidate_pos0),
                           interp_pos1 = 0.5f * (bez_target[Y_AXIS] + candidate_pos1);
 

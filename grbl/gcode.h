@@ -210,10 +210,16 @@ typedef struct {
   float ijk[3];    // I,J,K Axis arc offsets
   uint8_t l;       // G10 or canned cycles parameters
   int32_t n;       // Line number
-  float p;         // G10 or dwell parameters
 #ifdef ENABLE_CUBIC_SPLINES
-  float q;         // G5 cubic spline Q parameter
+  union {
+    struct {
+      float p;     // G10 or dwell parameters
+      float q;     // G5 cubic spline Q parameter
+    };
+    float pq[2];   // P,Q as an array, reused for the G5/G5.1 second control point
+  };
 #else
+  float p;         // G10 or dwell parameters
   // float q;      // G82 peck drilling (not implemented)
 #endif
   float r;         // Arc radius
