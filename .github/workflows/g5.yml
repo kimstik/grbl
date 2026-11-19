@@ -152,6 +152,7 @@ jobs:
             gcc=${d#bench-}
             timeout 600 simavr -m atmega328p -f 16000000 "$d/bench.elf" 2>&1 |
               sed 's/\x1b\[[0-9;]*m//g; s/\.*$//' > "avr-$gcc.txt"
+            echo "== avr-gcc $gcc"; cat "avr-$gcc.txt"
             if ! grep -qx done "avr-$gcc.txt"; then
               echo "::error::bench for avr-gcc $gcc did not finish"; cat "avr-$gcc.txt"; exit 1
             fi
