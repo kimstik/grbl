@@ -112,3 +112,23 @@ jobs:
               fi
             done
           done
+
+      # Cycle counts of the real parser/spline/planner code under simavr, branch flags.
+      - name: Speed (simavr)
+        if: ${{ !matrix.container }}
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends simavr
+          make -s -C tb/avr > /dev/null
+          timeout 600 make -s -C tb/avr run | sed 's/\x1b\[[0-9;]*m//g; s/\.*$//' | tee speed.txt
+          grep -qx done speed.txt
+          calib=$(awk '$1 == "calib" { print $2 }' speed.txt)
+          if [ "$calib" -lt 1000000 ] || [ "$calib" -gt 1000300 ]; then
+            echo "::error::cycle counter calibration off: $calib for 1000000"
+            exit 1
+          fi
+          {
+            printf '\n### simavr cycles, avr-gcc ${{ matrix.gcc }}\n\n'
+            printf '| line | status | seg | total | planner | gen | first | worst gap | gen/seg |\n|---|---|---|---|---|---|---|---|---|\n'
+            awk 'NF == 8 { printf "| %s | %s | %s | %s | %s | %s | %s | %s | %s |\n", $1, $2, $3, $4, $5, $6, $7, $8, ($3 ? int($6 / $3) : "-") }' speed.txt
+          } >> "$GITHUB_STEP_SUMMARY"
