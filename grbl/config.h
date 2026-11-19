@@ -682,20 +682,23 @@
    This adds smooth curve generation using Bezier splines, useful for CAM-generated
    toolpaths requiring continuous smooth motion without discrete line segments.
 
-   FLASH MEMORY USAGE (measured on ATmega328P):
-   - ENABLE_CUBIC_SPLINES only (G5):     ~2.8KB  (fits in 32KB, 188 bytes free)
-   - + ENABLE_QUADRATIC_SPLINES (G5.1):  +666 bytes (OVERFLOW by 478 bytes!)
+   FLASH USAGE on ATmega328P, bytes (text + data). Limit: 32256 with the 512-byte
+   Arduino Uno bootloader, 32768 without. "-" means the link fails (> 32768).
 
-   The ATmega328P (Arduino Uno) has only 32KB flash (~30KB used by base Grbl).
+                        avr-gcc:  7.3.0   15.2.0   16.2.0   17 (20261115)
+     Stock flags        off       29738   30066    29868    29846
+                        G5        32580   -        -        -
+                        G5+G5.1   -       -        -        -
+     Makefile flags     off       28286   28444    27842    27782
+                        G5        30830   31052    30390    30354
+                        G5+G5.1   31610   31900    31244    31212
 
-   RECOMMENDATION for ATmega328P:
-   - Enable ONLY G5 (cubic splines) - fits perfectly
-   - Disable G5.1 (quadratic splines) - causes overflow
+   With the stock flags G5 does not fit the bootloader limit with any compiler. The
+   size flags in the Makefile let G5 + G5.1 fit with every compiler listed. RAM grows
+   by 12 bytes with splines enabled (1633 -> 1645 bytes of data + bss).
 
-   For ATmega2560 or other MCUs with more flash: Both can be enabled safely.
-
-   When BOTH DISABLED (default): No impact on flash/RAM. Firmware binary will be
-   IDENTICAL to baseline (same MD5 checksum). G5/G5.1 return "Unsupported command".
+   When BOTH DISABLED (default): built with the stock flags, the binary is identical
+   to vanilla Grbl with every compiler listed. G5/G5.1 return "Unsupported command".
 
    When ENABLED: Commands work in XY plane (G17) only. Implementation uses adaptive
    step size for smooth approximation of Bezier curves.
