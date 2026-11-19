@@ -9,11 +9,17 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
+      # 7.3.0: Ubuntu package. 15.2.0: ZakKemble/avr-gcc-build prebuilt.
+      # 16.2.0: Arch Linux packages pinned from the Arch archive.
+      # 17-*: GCC weekly snapshot built here and cached.
       matrix:
-        gcc: ['7.3.0', '15.2.0', '16.1.0']
         include:
-          - gcc: 'arch'
+          - gcc: '7.3.0'
+          - gcc: '15.2.0'
+          - gcc: '16.2.0'
             container: 'archlinux:latest'
+          - gcc: '17-20261115'
+            snapshot: true
     name: avr-gcc ${{ matrix.gcc }}
     container: ${{ matrix.container }}
     steps:
@@ -21,26 +27,49 @@ jobs:
       - name: Arch packages
         if: matrix.container
         run: |
-          pacman -Syu --noconfirm --needed git make diffutils avr-gcc avr-libc
+          pacman -Syu --noconfirm --needed git make diffutils
+          a=https://archive.archlinux.org/packages/a
+          pacman -U --noconfirm \
+            $a/avr-binutils/avr-binutils-2.47-1-x86_64.pkg.tar.zst \
+            $a/avr-gcc/avr-gcc-16.2.0-1-x86_64.pkg.tar.zst \
+            $a/avr-libc/avr-libc-2.3.2-4-any.pkg.tar.zst
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # 7.3.0 is the Ubuntu package; 15.2.0 and 16.1.0 are ZakKemble/avr-gcc-build
-      # prebuilts; arch tracks the newest packaged release.
-      - name: Install avr-gcc
-        if: '!matrix.container'
+      - name: Ubuntu avr-gcc
+        if: matrix.gcc == '7.3.0'
         run: |
-          if [ "${{ matrix.gcc }}" = 7.3.0 ]; then
-            sudo apt-get update -q
-            sudo apt-get install -y -q --no-install-recommends gcc-avr avr-libc binutils-avr
-          else
-            name=avr-gcc-${{ matrix.gcc }}-x64-linux
-            curl -fsSL "https://github.com/ZakKemble/avr-gcc-build/releases/download/v${{ matrix.gcc }}-1/$name.tar.bz2" | tar -xj -C "$RUNNER_TEMP"
-            echo "$RUNNER_TEMP/$name/bin" >> "$GITHUB_PATH"
-          fi
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends gcc-avr avr-libc binutils-avr
+
+      - name: ZakKemble avr-gcc
+        if: matrix.gcc == '15.2.0'
+        run: |
+          name=avr-gcc-${{ matrix.gcc }}-x64-linux
+          curl -fsSL "https://github.com/ZakKemble/avr-gcc-build/releases/download/v${{ matrix.gcc }}-1/$name.tar.bz2" | tar -xj -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/$name/bin" >> "$GITHUB_PATH"
+
+      - name: Snapshot avr-gcc cache
+        if: matrix.snapshot
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ~/avr-gcc-snapshot
+          key: avr-gcc-${{ matrix.gcc }}-${{ hashFiles('.github/build-avr-gcc.sh') }}
+
+      - name: Snapshot avr-gcc build
+        if: matrix.snapshot && steps.cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends libgmp-dev libmpfr-dev libmpc-dev texinfo
+          sh .github/build-avr-gcc.sh ~/avr-gcc-snapshot ${{ matrix.gcc }}
+
+      - name: Snapshot avr-gcc path
+        if: matrix.snapshot
+        run: echo ~/avr-gcc-snapshot/bin >> "$GITHUB_PATH"
 
       - name: Toolchain version
         run: avr-gcc --version | head -1
