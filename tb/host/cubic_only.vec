@@ -1,0 +1,9 @@
+# Run against a build with -DENABLE_CUBIC_SPLINES only (see Makefile test).
+
+= [25] G5.1 is unsupported when ENABLE_QUADRATIC_SPLINES is off
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5.1 X10 Y0 I5 J5 -> error
+G5.10 X10 Y0 I5 J5 -> error
+G5 X10 Y0 I3 J3 P3 Q3
+pos -90 -100 -10

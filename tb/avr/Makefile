@@ -1,4 +1,4 @@
-# tb/avr/Makefile - build the simavr cycle-count bench (bench.elf).
+# tb/avr/Makefile - build the simavr bench (bench.elf).
 #
 # Uses the firmware compile line from the top-level Makefile unless COMPILE is
 # given, so the cycle counts belong to the flags the firmware ships with.
@@ -20,6 +20,7 @@ all: $(BUILD)/bench.elf
 $(BUILD)/bench.elf: $(OBJECTS)
 	$(CC) -o $@ $^ -lm -Wl,--gc-sections
 	avr-size $@
+	@set -- $$(avr-size $@ | tail -1); [ $$(($$1 + $$2)) -le 32768 ] || { echo "$@: $$(($$1 + $$2)) bytes do not fit 32768"; exit 1; }
 
 # main.c only contributes the system globals; bench.c owns main().
 $(BUILD)/main.o: $(SRC)/main.c | $(BUILD)
@@ -29,8 +30,12 @@ $(BUILD)/main.o: $(SRC)/main.c | $(BUILD)
 $(BUILD)/planner.o: $(SRC)/planner.c | $(BUILD)
 	$(CC) -Dplan_buffer_line=tb_plan_buffer_line -c $< -o $@
 
-$(BUILD)/bench.o: bench.c | $(BUILD)
-	$(CC) -c $< -o $@
+$(BUILD)/bench.o: bench.c $(BUILD)/lines.h | $(BUILD)
+	$(CC) -I$(BUILD) -c $< -o $@
+
+# Each line of lines.txt becomes L("..."); '#' lines are comments.
+$(BUILD)/lines.h: lines.txt | $(BUILD)
+	tr -d '\r' < $< | sed -e '/^#/d' -e '/^$$/d' -e 's/.*/L("&")/' > $@
 
 $(BUILD)/%.o: $(SRC)/%.c | $(BUILD)
 	$(CC) -c $< -o $@
@@ -42,6 +47,6 @@ run: $(BUILD)/bench.elf
 	simavr -m atmega328p -f 16000000 $< 2>&1
 
 clean:
-	rm -f $(BUILD)/*.o $(BUILD)/bench.elf
+	rm -f $(BUILD)/*.o $(BUILD)/*.elf $(BUILD)/lines.h
 
 .PHONY: all run clean

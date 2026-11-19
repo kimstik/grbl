@@ -1,0 +1,374 @@
+# G5/G5.1 vectors. Numbers in [] are catalog IDs from ../../README.md.
+# Every test starts at machine X-100 Y-100 Z-10; most set work zero there.
+
+# ---- basics ----------------------------------------------------------------
+
+= basic S
+G10 L20 P1 X0 Y0 Z0
+G17 G21 G90 G94 F1000
+G5 X10 Y0 I3 J3 P3 Q3
+pos -90 -100 -10
+
+= [7] negative P, the usual CAM S-curve @bug
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I3 J3 P-3 Q3
+pos -90 -100 -10
+
+= [6] G5 without X/Y does not move to machine zero @bug
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 I1 J1 P1 Q1 -> any
+pos -100 -100 -10
+
+= [6] G5.1 without X/Y does not move to machine zero @bug
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5.1 I1 J1 -> any
+pos -100 -100 -10
+
+# ---- accuracy [1] [2] [3] [24] ---------------------------------------------
+
+# Inflection exactly on the first probed midpoint (t = 0.05): the chord of
+# t in [0, 0.1] runs along X and the curve adds A*(s^3 - 1.5s^2 + 0.5s) in Y,
+# which is zero at the probe. Expected deviation 0.0481*A mm, here A = 10.
+= [1] inflection on a probed midpoint hides the deviation @bug
+G10 L20 P1 X0 Y0 Z0
+F1000
+set maxseg 100000
+G5 X-10 Y8550 I-3.3333 J16.6667 P3.3333 Q-9016.667
+
+= [2] long handles 1e3
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I1000 J1000 P1000 Q1000
+
+= [2] long handles 1e4
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I10000 J10000 P10000 Q10000
+
+= [2] long handles 1e5
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I100000 J100000 P100000 Q100000
+
+# The step floor (MIN_STEP halving) caps a curve at 641 segments here; past
+# that the chords cannot follow and the tolerance is lost (1e6: 3.2 mm).
+= [2] handles 1e5 with opposite Q exceed the tolerance @bug
+G10 L20 P1 X0 Y0 Z0
+F1000
+set maxseg 100000
+G5 X100000 Y0 I1 J1 P100000 Q-100000
+
+= [2] long curve 1 m
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X1000 Y0 I300 J300 P300 Q300
+
+= [3] basic S rotated by 45 degrees
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X7.071068 Y7.071068 I0 J4.242641 P0 Q4.242641
+
+= [24] tiny curve below step resolution
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X0.002 Y0 I0.001 J0.001 P0.001 Q0.001
+
+= [24] near-zero handles
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X0.000001 Y0 I0.000001 J0.000001 P0.000001 Q0.000001
+
+= [24] all control points coincident
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X0 Y0 I0 J0 P0 Q0 -> any
+
+= far from origin, 60000 mm
+F1000
+G53 G0 X-60000 Y-60000
+G10 L20 P1 X0 Y0 Z0
+G5 X10 Y0 I3 J3 P3 Q3
+
+= closed loop, start == end
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X0 Y0 I10 J0 P0 Q10
+
+# ---- non-finite and overflowing values [5] [42] ----------------------------
+
+= [42] 40-digit literal is rejected, not read as inf @bug
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I1000000000000000000000000000000000000000 J0 P1 Q1 -> error
+
+= [5] handles near float overflow: no garbage targets (same class as G1 X1e35) @bug
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I100000000000000000000000000000000000 J0 P1 Q1 -> any
+
+# ---- geometry equivalences [12] [13] [14] [15] [16] [17] [18] [31] [36] -----
+
+= [12] cusp: the planner stops at the reversal
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X-10 Y0 I-10 J10 P10 Q10
+junction 50
+
+= [13] smooth chain with implicit I/J has no corner at the join
+G10 L20 P1 X0 Y0 Z0
+F1000
+set smooth 1
+G5 X-10 Y0 I-3 J3 P3 Q3
+G5 X-20 Y0 P3 Q-3
+X-30 Y0 P3 Q3
+pos -130 -100 -10
+
+= [14] handles on the chord: same as G1
+G10 L20 P1 X0 Y0 Z0
+F1000
+set tol 0.0001
+G5 X-30 Y0 I-10 J0 P10 Q0
+G5 X-60 Y-15 I-10 J-5 P10 Q5
+
+= [14] straight with overshooting handles
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X30 Y0 I40 J0 P40 Q0
+
+= [15] G5.1 equals G5 with 2/3-rule handles
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5.1 X-20 Y0 I-10 J10
+G0 X0 Y0
+G5 X-20 Y0 I-6.6666667 J6.6666667 P6.6666667 Q6.6666667
+same 0 0 0
+
+= [16] quarter circle R10 within the Bezier-circle error
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X-10 Y10 I0 J5.5228475 P5.5228475 Q0
+circle -110 -100 10 0.003
+
+= [17] translation by G91
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X-10 Y0 I-3 J3 P3 Q3
+G91 G5 X-10 Y0 I-3 J3 P3 Q3
+same -10 0 0
+
+= [17] translation by G92
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X-10 Y0 I-3 J3 P3 Q3
+G92 X0 Y0
+G5 X-10 Y0 I-3 J3 P3 Q3
+same -10 0 0
+
+= [17] G20 equals G21
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X-10 Y0 I-3 J3 P3 Q3
+G20 G91 G5 X-0.39370079 Y0 I-0.11811024 J0.11811024 P0.11811024 Q0.11811024 F39.370079
+same -10 0 0
+
+= [18] curve and its reverse
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X-10 Y0 I2 J5 P2 Q5
+G5 X0 Y0 I2 J5 P2 Q5
+pos -100 -100 -10
+
+= [31] same line from the same point gives the same segments
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X-10 Y0 I-3 J3 P3 Q3
+G0 X0 Y0
+G5 X-10 Y0 I-3 J3 P3 Q3
+same 0 0 0
+
+= [36] soft reset, then the same line gives the same segments
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X-10 Y0 I-3 J3 P3 Q3
+G0 X0 Y0
+reset
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X-10 Y0 I-3 J3 P3 Q3
+same 0 0 0
+
+# ---- modes and state [8] [19] [29] [30] [38] [39] -------------------------
+
+= [38] first G5 needs I and J
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 P3 Q3 -> error
+
+= [38] P and Q are required
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I0 J5 P0 -> error
+G5 X10 Y0 I0 J5 Q0 -> error
+
+= [38] continuation with only I: J is 0
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I0 J5 P0 Q5
+G5 X20 Y0 I1 P0 Q5
+pos -80 -100 -10
+
+= [30] modal continuation with P/Q and implicit I/J
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I0 J5 P0 Q5
+X20 Y0 P0 Q5
+pos -80 -100 -10
+
+= [30] modal continuation without P/Q
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I0 J5 P0 Q5
+X20 Y0 -> error
+
+= [8] rejected block does not change implicit I/J @bug
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I0 J5 P0 Q5
+G5 X20 Y0 P0 Q7 R1 -> error
+G5 X20 Y0 P0 Q5
+
+= [8] rejected jog does not change implicit I/J @bug
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I0 J5 P0 Q5
+$J=G5X20Y0I1J1P0Q7F100 -> error
+G5 X20 Y0 P0 Q5
+
+= [19] G5 after G5.1 needs I/J
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5.1 X10 Y0 I5 J5
+G5 X20 Y0 P0 Q5 -> error
+
+= [19] G5 after G1 needs I/J
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I0 J5 P0 Q5
+G1 X12
+G5 X20 Y0 P0 Q5 -> error
+
+= [19] check mode parses without motion
+G10 L20 P1 X0 Y0 Z0
+set check 1
+F1000
+G5 X10 Y0 I3 J3 P3 Q3
+pos -90 -100 -10
+
+= [38] G5.1 needs I and J, not both zero
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5.1 X10 Y0 I5 -> error
+G5.1 X10 Y0 I0 J0 -> error
+
+= no feed rate
+G10 L20 P1 X0 Y0 Z0
+G5 X10 Y0 I3 J3 P3 Q3 -> error:22
+
+= [29] G93 without F on the block
+G10 L20 P1 X0 Y0 Z0
+G93
+G5 X10 Y0 I3 J3 P3 Q3 -> error
+
+= [39] G93 G5 takes 1/F minutes @bug
+G10 L20 P1 X0 Y0 Z0
+G93
+G5 X10 Y0 I3 J3 P3 Q3 F2
+
+= [39] G93 G5.1 takes 1/F minutes @bug
+G10 L20 P1 X0 Y0 Z0
+G93
+G5.1 X10 Y0 I5 J5 F2
+
+# ---- spelling and forbidden combinations [25] [26] [27] [41] -----------------
+
+= [25] command spelling
+G10 L20 P1 X0 Y0 Z0
+F1000
+G05 X10 Y0 I3 J3 P3 Q3
+G5.0 X20 Y0 I3 J3 P3 Q3
+G5.10 X30 Y0 I3 J3
+G5.01 X40 Y0 I3 J3 P3 Q3 -> error
+G5.2 X40 Y0 I3 J3 P3 Q3 -> error
+pos -70 -100 -10
+
+= [26] number spelling
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I3 J3 P.5 Q3
+G5 X20 Y0 I3 J3 P+5 Q3
+G5 X30 Y0 I3 J3 P5. Q3
+G5 X40 Y0 I3 J3 P1E3 Q3 -> error
+G5 X40 Y0 I3 J3 P Q3 -> error
+pos -70 -100 -10
+
+= [26] number spelling, negative fraction @bug
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I3 J3 P-.5 Q3
+pos -90 -100 -10
+
+= [27] forbidden combinations
+G10 L20 P1 X0 Y0 Z0
+F1000
+G53 G5 X10 Y0 I3 J3 P3 Q3 -> error
+G5 G1 X10 Y0 I3 J3 P3 Q3 -> error
+G5 X10 Y0 Z-1 I3 J3 P3 Q3 -> error
+G18 G5 X10 Y0 I3 J3 P3 Q3 -> error
+G19 G5 X10 Y0 I3 J3 P3 Q3 -> error
+G18 G5.1 X10 Y0 I3 J3 -> error
+G28 G5 X10 Y0 I3 J3 P3 Q3 -> error
+pos -100 -100 -10
+
+# The preceding G5 has the same P/Q, so the known spline_pq write [8] leaves
+# the state unchanged and the status check stays strict (no @bug masking).
+= [27] unused words R, K, L
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I3 J3 P3 Q3
+G5 X20 Y0 I3 J3 P3 Q3 R1 -> error
+G5 X20 Y0 I3 J3 P3 Q3 K1 -> error
+G5 X20 Y0 I3 J3 P3 Q3 L1 -> error
+pos -90 -100 -10
+
+# ---- machine and environment [32] [33] [40] --------------------------------
+
+= [32] 1 step per mm: segments shorter than a step
+G10 L20 P1 X0 Y0 Z0
+set steps 1
+F1000
+G5 X10 Y0 I3 J3 P3 Q3
+G5 X10.3 Y0.2 I0.1 J0.1 P0.1 Q0.1
+
+= [32] 1000 steps per mm, slow axes
+G10 L20 P1 X0 Y0 Z0
+set steps 1000
+set rate 100
+set accel 1
+F1000
+G5 X10 Y0 I3 J3 P3 Q3
+
+= [33] tool length offset
+G10 L20 P1 X0 Y0 Z0
+G43.1 Z5
+F1000
+G5 X10 Y0 I3 J3 P3 Q3
+pos -90 -100 -10
+
+= [40] soft limits: curve leaves the envelope between inside endpoints @bug
+G10 L20 P1 X0 Y0 Z0
+set soft 1
+F1000
+G5 X10 Y0 I0 J150 P0 Q150 -> error

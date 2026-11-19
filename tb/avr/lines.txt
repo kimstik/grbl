@@ -1,0 +1,39 @@
+# Lines for bench.c and for `tb --hash` on the host, in the form the protocol
+# hands to the parser: upper case, no spaces. A leading '*' marks a line to
+# measure; the rest only set up state. Curves mostly run toward -X because
+# the parser rejects a negative P (error:4, open defect).
+G21G90G94G17F1000
+G0X0Y0Z0
+# one plain segment and an R10 half circle: reference costs
+*G1X10Y0
+G0X0Y0
+*G2X20Y0I10J0
+G0X0Y0
+# gentle S
+*G5I-5J5P5Q-5X-20Y0
+G0X0Y0
+# large bulge
+*G5I-50J100P50Q100X-100Y0
+G0X0Y0
+# collinear controls: straight line
+*G5I-10J0P10Q0X-30Y0
+G0X0Y0
+# closed loop, end == start
+*G5I30J30P30Q-30X0Y0
+G0X0Y0
+# tiny
+*G5I-0.1J0.1P0.1Q0.1X-0.5Y0
+G0X0Y0
+# near cusp
+*G5I0J40P0Q40X1Y0
+G0X0Y0
+*G5.1I10J20X20Y0
+G0X0Y0
+# worst case found on the host: the step floor caps it at 641 segments
+*G5X100000Y0I1J1P100000Q-100000
+G0X0Y0
+# inflection on a probed midpoint [1]
+*G5X-10Y8550I-3.3333J16.6667P3.3333Q-9016.667
+G0X0Y0
+# overflowing literal [42]: AVR read_float behavior
+*G5X10Y0I1000000000000000000000000000000000000000J0P1Q1

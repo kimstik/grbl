@@ -1,0 +1,24 @@
+# Mutants for mutate.sh: id, file, exact text, replacement (tab-separated).
+# Every mutant must make the bench fail. Replacement applies to all occurrences.
+sigma-reduce	motion_control.c	<= (BEZIER_SIGMA))	<= (BEZIER_SIGMA)*4)
+sigma-enlarge	motion_control.c	> (BEZIER_SIGMA))	> (BEZIER_SIGMA)*4)
+min-step	motion_control.c	>= (BEZIER_MIN_STEP))	>= (BEZIER_MIN_STEP)*20)
+end-clamp	motion_control.c	new_t = 1.0f;  // Clamp	new_t = 0.999f;  // Clamp
+midpoint	motion_control.c	candidate_t = 0.5f * (t + new_t)	candidate_t = 0.45f * (t + new_t)
+casteljau-swap	motion_control.c	return interp(iabc, ibcd, t);	return interp(ibcd, iabc, t);
+lerp-form	motion_control.c	return (1.0f - t) * a + t * b;	return a + t * (b - a);
+dist-x-only	motion_control.c	fabsf(x1 - x2) + fabsf(y1 - y2)	fabsf(x1 - x2)
+skip-last	motion_control.c	mc_line(bez_target, pl_data);	if (t < 1.0f) { mc_line(bez_target, pl_data); }
+implicit-sign	gcode.c	= -gc_state.spline_pq[	= gc_state.spline_pq[
+cp1-swap	gcode.c	cp1[X_AXIS] = gc_state.position[X_AXIS] + gc_block.values.ijk[X_AXIS];	cp1[X_AXIS] = gc_state.position[X_AXIS] + gc_block.values.ijk[Y_AXIS];
+cp2-sign	gcode.c	gc_block.values.xyz[Y_AXIS] + gc_state.spline_pq[Y_AXIS];	gc_block.values.xyz[Y_AXIS] - gc_state.spline_pq[Y_AXIS];
+quad-cp1	gcode.c	(gc_block.values.ijk[X_AXIS] * 2.0f) / 3.0f	(gc_block.values.ijk[X_AXIS] * 1.0f) / 3.0f
+quad-cp2	gcode.c	(dy * 2.0f) / 3.0f	(dy * 1.0f) / 3.0f
+inch-pq	gcode.c	gc_block.values.q *= MM_PER_INCH;	gc_block.values.q *= 1.0f;
+inch-ij	gcode.c	gc_block.values.ijk[Y_AXIS] *= MM_PER_INCH;	gc_block.values.ijk[Y_AXIS] *= 1.0f;
+plane-check	gcode.c	if (gc_block.modal.plane_select != PLANE_SELECT_XY) {	if (0) {
+z-check	gcode.c	if (axis_words & ~((1<<X_AXIS)|(1<<Y_AXIS))) {	if (0) {
+pq-required	gcode.c	if (bit_isfalse(value_words, bit(WORD_P)) || bit_isfalse(value_words, bit(WORD_Q))) {	if (0) {
+first-ij	gcode.c	if (gc_state.modal.motion != MOTION_MODE_CUBIC_SPLINE) {	if (0) {
+quad-ij-zero	gcode.c	if (gc_block.values.ijk[X_AXIS] == 0.0f && gc_block.values.ijk[Y_AXIS] == 0.0f) {	if (0) {
+words-used	gcode.c	bit_false(value_words, (bit(WORD_P)|bit(WORD_Q)|bit(WORD_I)|bit(WORD_J)));	bit_false(value_words, (bit(WORD_P)|bit(WORD_Q)|bit(WORD_I)|bit(WORD_J)|bit(WORD_R)));
