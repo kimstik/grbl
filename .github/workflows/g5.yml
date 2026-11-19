@@ -41,8 +41,12 @@ jobs:
             for cfg in off G5 G5+G5.1; do
               case $cfg in off) def='' ;; G5) def="$G5" ;; *) def="$G51" ;; esac
               make -s clean
-              make -s COMPILE="$cc $def" > /dev/null
-              set -- $(avr-size --format=berkeley build/main.elf | tail -1)
+              if ! make -s COMPILE="$cc $def" > /dev/null 2>&1; then
+                printf '| %s | %s | link fails (> 32768) | | |\n' $flags $cfg | tee -a "$GITHUB_STEP_SUMMARY"
+                [ $flags = branch ] && [ $cfg = G5+G5.1 ] && exit 1
+                continue
+              fi
+              set --$(avr-size --format=berkeley build/main.elf | tail -1)
               flash=$(( $1 + $2 )); ram=$(( $2 + $3 ))
               printf '| %s | %s | %d | %d | %d |\n' $flags $cfg $flash $ram $(( 32256 - flash )) | tee -a "$GITHUB_STEP_SUMMARY"
               if [ $flags = branch ] && [ $cfg = G5+G5.1 ] && [ $flash -gt 32256 ]; then
