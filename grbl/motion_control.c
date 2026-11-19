@@ -407,7 +407,7 @@ void mc_reset()
    - Uses Manhattan distance (L1 norm) instead of Euclidean for speed
 
    Memory usage:
-   - Stack: ~65 bytes (local variables and saved registers, avr-gcc 7.3)
+   - Stack: ~47 bytes (saved registers and locals, avr-gcc 7.3); bez_target is static (12 bytes)
    - Flash: ~700 bytes (code)
    ------------------------------------------------------------------------------ */
 
@@ -487,7 +487,8 @@ static inline float dist1(const float x1, const float y1, const float x2, const 
 void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position,
                        float *first, float *second)
 {
-    float bez_target[N_AXIS];
+    // Static: frees more stack on the deepest path (G5) than it takes from .bss (avr-gcc 7.3).
+    static float bez_target[N_AXIS];
 
     // Initialize to start position
     memcpy(bez_target, position, sizeof(float) * N_AXIS);
