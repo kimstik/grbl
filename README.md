@@ -21,48 +21,6 @@ Grbl includes full acceleration management with look ahead. That means the contr
 
 ***
 
-## Why this fork
-
-**Thesis — proven structural template, not a rewrite.** The Grbl core in this tree is not reimplemented or semantically forked: it is byte-for-byte verified against upstream. A same-toolchain, same-flags build of this repo's `atmega328p` port and a fresh clone of `gnea/grbl` tag `v1.1h.20190825` produce `.text` sections that differ by exactly **2 bytes** — the `GRBL_VERSION_BUILD` date string (`grbl/grbl.h`: `"20190830"` here vs `"20190825"` upstream). Every other byte of machine code is identical. One BLOCKING golden gate on every push, plus one weekly report-only provenance audit against live upstream, enforce this on an ongoing basis:
-
-- **Golden gate (blocking, every push):** `make -C grbl/platform/atmega328p validate` checks the built `grbl.hex` MD5 against a pinned golden hash (`79af184e67b27defd27a39309ac53563`, see `grbl/platform/common/chk.py`); wired in as the `Golden gate` step of `.github/workflows/ci.yml`.
-- **Provenance (weekly, against live upstream):** `.github/workflows/provenance.yml` clones `gnea/grbl` fresh, rebuilds both trees with matched flags in the same job, and byte-diffs `.text` — reconfirming the 2-byte drift against the real upstream repository, not a cached snapshot.
-- The HAL macro layer's own zero-overhead claim (adding the HAL didn't change AVR codegen at all) is verified separately in `verify_hal_avr.sh` and `BINARY_MATCH_VERIFICATION.md`.
-
-**vs [grblHAL](https://github.com/grblHAL):** grblHAL abstracts hardware behind a runtime `hal_t` struct of function pointers, and its core has diverged well past the Grbl 1.1 codebase it started from — richer feature set, heavier footprint. This project abstracts hardware with compile-time macros injected via one `-include <board>/prelude.h` per platform (no runtime indirection, no function-pointer HAL) — so the upstream core stays untouched rather than reimplemented, and AVR carries zero added overhead (byte-proof above). Trade-off: a narrower feature set, but it fits silicon grblHAL doesn't — minimal 28-pin parts, and four of the ARM ports below are smaller than the AVR reference itself (see platform matrix).
-
-**vs [FluidNC](https://github.com/bdring/FluidNC):** FluidNC targets ESP32 specifically, is configured via YAML at runtime, and is WiFi-first. This project is bare-metal minimalism — no OS, no runtime config parser — and stays wire-compatible with the Grbl 1.1 protocol: every existing sender (UGS, bCNC, Candle, LaserGRBL) works against it unmodified.
-
-**Platform matrix** (RELEASE flash body, `text`+`data`; "Body" = the two summed, i.e. what actually
-occupies flash, since `.data`'s flash-resident initializer counts against flash size even though it
-lives in RAM at runtime; see `grbl/platform/PLAN.md`'s canonical size table for how these are
-re-verified at every integration):
-
-| Platform | ISA | RELEASE text | data | Body (text+data) | CI | Proven by |
-|---|---|---|---|---|---|---|
-| atmega328p | AVR (8-bit, reference) | 30640 | 0 | 30640 | build + golden MD5 | byte-identical to upstream |
-| stm32f103 (Blue Pill) | ARM Cortex-M3 | 29028 | 80 | 29108 | build, both flavors | build/link/contract-proven |
-| stm32h523 (Black Pill H5) | ARM Cortex-M33 | 25468 | 388 | 25856 | build, both flavors | build/link/contract-proven |
-| stm32f411 (Black Pill) | ARM Cortex-M4F | 26132 | 80 | 26212 | build, both flavors | build/link/contract-proven |
-| samd21 megarm | ARM Cortex-M0+ | 31956 | 296 | 32252 | build, both boards x both flavors | **Renode-booted and Renode-driven through a real arc move**, with STEP-pin toggling observed — the only port executed anywhere, even in emulation |
-| samd21 generic | ARM Cortex-M0+ | 31944 | 296 | 32240 | build, both boards x both flavors | build/link/contract-proven |
-| ch32v006 | RISC-V rv32ec | 41076 | 0 | 41076 | build, both flavors | build/link/contract-proven |
-| hc32f460 | ARM Cortex-M4F | 25796 | 80 | 25876 | build, both flavors | build/link/contract-proven; register facts largely UNVERIFIED pending a real register-level manual |
-| dsPIC33AK128MC102 | dsPIC33 DSC (3rd ISA family) | ~41.8KB (approx.) | — | ~41.8KB | not yet (toolchain fetch/licensing unresolved) | build/link/contract-proven |
-
-Four of the five ARM ports (stm32f103, stm32h523, stm32f411, hc32f460) are now smaller in flash
-body than the 8-bit AVR reference build; only samd21 (Cortex-M0+, the one Thumb-1 core in the set)
-is larger, an honest architectural tax rather than fat. **No port, including samd21, has been run
-on physical hardware** — that is the community/owner's next step, not a claim this repo makes for
-you. `ch570` builds clean (both flavors, in CI) but landed after this matrix's numbers were last
-compiled here and isn't listed as its own row yet; `sg2002` is recon'd/designed but not yet
-functional/buildable (riscv toolchain decision deferred — see
-`grbl/platform/PLATFORM_ROADMAP.md`).
-
-Porting a new platform: copy the `_template` port skeleton, fill in the documented macro contracts (`grbl/platform/CONTRACTS.md`), follow `grbl/platform/PORTING-CHECKLIST.md`, add one line (per build flavor) to the CI build matrix.
-
-***
-
 ### Official Supporters of the Grbl CNC Project
 ![Official Supporters](https://github.com/gnea/gnea-Media/blob/master/Contributors.png?raw=true)
 
