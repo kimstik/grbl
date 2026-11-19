@@ -58,6 +58,7 @@ static void field(uint32_t v) { serial_write(' '); print_uint32_base10(v); }
 
 // Lines are in the form the protocol hands to the parser: upper case, no spaces.
 // A leading '*' marks a line to measure; the rest only set up state.
+// Curves mostly run toward -X because the parser rejects a negative P (error:4).
 static const char vectors[] PROGMEM =
   "G21G90G94G17F1000\0"
   "G0X0Y0Z0\0"
@@ -65,15 +66,15 @@ static const char vectors[] PROGMEM =
   "G0X0Y0\0"
   "*G2X20Y0I10J0\0"      // R10 half circle, reference arc
   "G0X0Y0\0"
-  "*G5I5J5P-5Q5X20Y0\0"  // gentle S
+  "*G5I-5J5P5Q-5X-20Y0\0"      // gentle S
   "G0X0Y0\0"
-  "*G5I50J100P-50Q100X100Y0\0" // large bulge
+  "*G5I-50J100P50Q100X-100Y0\0" // large bulge
   "G0X0Y0\0"
-  "*G5I10J0P-10Q0X30Y0\0"      // collinear controls: straight line
+  "*G5I-10J0P10Q0X-30Y0\0"     // collinear controls: straight line
   "G0X0Y0\0"
   "*G5I30J30P30Q-30X0Y0\0"     // closed loop, end == start
   "G0X0Y0\0"
-  "*G5I0.1J0.1P-0.1Q0.1X0.5Y0\0" // tiny
+  "*G5I-0.1J0.1P0.1Q0.1X-0.5Y0\0" // tiny
   "G0X0Y0\0"
   "*G5I0J40P0Q40X1Y0\0"        // near cusp
 #ifdef ENABLE_QUADRATIC_SPLINES
@@ -97,6 +98,7 @@ int main(void)
   sei();
 
   // Calibration: a known delay must read back as its cycle count plus a small overhead.
+  while (serial_get_tx_buffer_count()) { } // settings_init() may still be printing.
   uint32_t t = now();
   __builtin_avr_delay_cycles(1000000);
   printPgmString(PSTR("calib"));
