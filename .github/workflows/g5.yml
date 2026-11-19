@@ -11,14 +11,25 @@ jobs:
       fail-fast: false
       matrix:
         gcc: ['7.3.0', '15.2.0', '16.1.0']
+        include:
+          - gcc: 'arch'
+            container: 'archlinux:latest'
     name: avr-gcc ${{ matrix.gcc }}
+    container: ${{ matrix.container }}
     steps:
+      # The Arch image lacks git, which checkout needs for full history.
+      - name: Arch packages
+        if: matrix.container
+        run: pacman -Syu --noconfirm --needed git make diffutils avr-gcc avr-libc
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # 7.3.0 is the Ubuntu package; newer releases are ZakKemble/avr-gcc-build prebuilts.
+      # 7.3.0 is the Ubuntu package; 15.2.0 and 16.1.0 are ZakKemble/avr-gcc-build
+      # prebuilts; arch tracks the newest packaged release.
       - name: Install avr-gcc
+        if: '!matrix.container'
         run: |
           if [ "${{ matrix.gcc }}" = 7.3.0 ]; then
             sudo apt-get update -q
