@@ -9,10 +9,11 @@
      tb --random N SEED        N random curves, failures shrunk to a minimal line
 
    Vector file syntax, one statement per line, '#' starts a comment:
-     = name [@bug]             new test; machine at X-100 Y-100 Z-10 (mm), F unset.
+     = name [@bug]             new test; machine at X-100 Y-100 Z-10 (mm), work
+                               offsets zero, F unset.
                                @bug: known open defect, failures count as XFAIL
-     set KEY VALUE             soft 0|1, check 0|1, tol MM, maxseg N, smooth 0|1,
-                               steps N (all axes), rate MM/MIN, accel MM/S^2
+     set KEY VALUE             soft 0|1, check 0|1, laser 0|1, tol MM, maxseg N,
+                               smooth 0|1, steps N (all axes), rate MM/MIN, accel MM/S^2
      reset                     soft reset: parser and planner re-initialized,
                                machine position kept
      GCODE [-> ok|error|error:N|any]   default expectation: ok
@@ -23,6 +24,10 @@
                                circle (machine mm)
      junction V                some junction inside the last curve is limited to
                                at most V mm/min (a stop at a cusp)
+     travel A MM               executed steps of axis A (X, Y or Z) on the last line,
+                               summed without sign, are at most MM mm
+     power S                   every segment of the last line was queued with
+                               spindle (laser) speed S
 
    Checked on every line:
      rejected line: no segment queued and parser state byte-identical
@@ -38,6 +43,7 @@
 #include <stdio.h>
 
 extern int tb_soft_limit_hits;
+extern float tb_coord[N_COORDINATE_SYSTEM + 2][N_AXIS];
 uint8_t __real_plan_buffer_line(float *target, plan_line_data_t *pl_data);
 
 #define MAXSEG 20000
@@ -46,7 +52,9 @@ static pt_t seg[MAXSEG];                    /* targets queued by the current lin
 static pt_t curve[2][MAXSEG];               /* last accepted curve and the one before */
 static int nseg, ncurve[2];
 static int32_t steps[N_AXIS];               /* executed (drained) step position */
+static uint32_t travel[N_AXIS];             /* executed steps of the current line, unsigned */
 static double line_time, min_junction;      /* minutes; mm/min */
+static float power_min, power_max;          /* spindle speed of the segments of the current line */
 static int checks, line_fails;
 static double tol, maxseg;
 static int smooth;
@@ -60,6 +68,8 @@ static int n_pass, n_fail, n_xfail, n_xpass, test_fails, quiet;
 uint8_t __wrap_plan_buffer_line(float *target, plan_line_data_t *pl_data)
 {
   if (nseg < MAXSEG) { memcpy(seg[nseg], target, sizeof(pt_t)); }
+  if (pl_data->spindle_speed < power_min) { power_min = pl_data->spindle_speed; }
+  if (pl_data->spindle_speed > power_max) { power_max = pl_data->spindle_speed; }
   if (++nseg > 1000000) { sys.abort = true; }  /* runaway guard; reported by the count check */
   return __real_plan_buffer_line(target, pl_data);
 }
@@ -71,6 +81,7 @@ void tb_drain(void)
   while ((b = plan_get_current_block())) {
     for (int i = 0; i < N_AXIS; i++) {
       steps[i] += (b->direction_bits & (1 << i)) ? -(int32_t)b->steps[i] : (int32_t)b->steps[i];
+      travel[i] += b->steps[i];
     }
     if (!(b->condition & PL_COND_FLAG_RAPID_MOTION)) { line_time += b->millimeters / b->programmed_rate; }
     double v = sqrt(b->max_junction_speed_sqr);
@@ -102,6 +113,7 @@ static void machine_reset(void)
   steps[Z_AXIS] = -10 * 250;
   settings.junction_deviation = 0.01f; settings.arc_tolerance = 0.002f;
   memcpy(sys_position, steps, sizeof(steps));
+  memset(tb_coord, 0, sizeof(tb_coord));      /* work offsets do not leak from the previous test */
   plan_reset(); plan_sync_position();
   gc_init(); gc_sync_position();
   tol = 0.1; maxseg = 2000; smooth = 0; prev_curve = 0; nseg = ncurve[0] = ncurve[1] = 0;
@@ -248,6 +260,7 @@ static void run_gcode(const char *src, const char *want)
   static parser_state_t saved_state; saved_state = gc_state;
   curve_t c = model_line(line, start, wco);
   nseg = 0; line_time = 0; min_junction = 1e300;
+  memset(travel, 0, sizeof travel); power_min = 1e30f; power_max = -1e30f;
   uint8_t st = gc_execute_line(line);
   tb_drain();
   char got[16]; if (st) snprintf(got, sizeof got, "error:%d", st); else strcpy(got, "ok");
@@ -310,6 +323,7 @@ static void run_file(const char *path)
       char k[16]; sscanf(s + 4, "%15s %lf", k, &v[0]);
       if (!strcmp(k, "soft")) { if (v[0]) settings.flags |= BITFLAG_SOFT_LIMIT_ENABLE; else settings.flags &= ~BITFLAG_SOFT_LIMIT_ENABLE; }
       else if (!strcmp(k, "check")) sys.state = v[0] ? STATE_CHECK_MODE : STATE_IDLE;
+      else if (!strcmp(k, "laser")) { if (v[0]) settings.flags |= BITFLAG_LASER_MODE; else settings.flags &= ~BITFLAG_LASER_MODE; }
       else if (!strcmp(k, "tol")) tol = v[0];
       else if (!strcmp(k, "maxseg")) maxseg = v[0];
       else if (!strcmp(k, "smooth")) smooth = (int)v[0];
@@ -342,6 +356,16 @@ static void run_file(const char *path)
     } else if (!strncmp(s, "junction ", 9)) {
       sscanf(s + 9, "%lf", &v[0]); checks++;
       if (min_junction > v[0]) fail("junction: slowest %g mm/min > %g", min_junction, v[0]);
+    } else if (!strncmp(s, "travel ", 7)) {
+      char ax = 0; sscanf(s + 7, " %c %lf", &ax, &v[0]); checks++;
+      int a = toupper((unsigned char)ax) - 'X';
+      if (a < 0 || a >= N_AXIS) { fprintf(stderr, "%s:%d: bad axis %c\n", path, lineno, ax); exit(2); }
+      double mm = travel[a] / settings.steps_per_mm[a];
+      if (mm > v[0] + 1e-9) fail("travel: axis %c moved %g mm (%u steps) > %g", "XYZ"[a], mm, travel[a], v[0]);
+    } else if (!strncmp(s, "power ", 6)) {
+      sscanf(s + 6, "%lf", &v[0]); checks++;
+      if (!nseg) fail("power: no segment queued");
+      else if (power_min != v[0] || power_max != v[0]) fail("power: segments queued with %g..%g, expected %g", power_min, power_max, v[0]);
     } else {
       run_gcode(s, want);
     }

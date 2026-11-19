@@ -1,0 +1,180 @@
+# G5/G5.1 vectors aimed at places where breakage is expected: state that
+# outlives a block, modes the spline path forgets, degenerate geometry and
+# float rounding on an axis that must not move. Numbers in [] are catalog IDs
+# from ../../README.md.
+
+# ---- laser mode [43] --------------------------------------------------------
+
+# Control: the bench sees the laser power that G1 and G0 pass to the planner.
+= [43] laser mode: G1 burns at S, G0 does not
+G10 L20 P1 X0 Y0 Z0
+set laser 1
+F1000
+M3 S1000
+G1 X1 Y0
+power 1000
+G0 X2 Y0
+power 0
+
+# Laser mode lets only G1/G2/G3 burn (gcode.c "If in laser mode"), so a
+# spline is cut with the power of a rapid.
+= [43] laser mode: G5 burns at S like G1 @bug
+G10 L20 P1 X0 Y0 Z0
+set laser 1
+F1000
+M3 S1000
+G5 X10 Y0 I3 J3 P3 Q3
+power 1000
+
+= [43] laser mode: G5.1 burns at S with M4 @bug
+G10 L20 P1 X0 Y0 Z0
+set laser 1
+F1000
+M4 S1000
+G5.1 X10 Y0 I5 J5
+power 1000
+
+# ---- units, offsets, distance mode [44] -------------------------------------
+
+# The implicit I/J of a continuation are kept in mm: switching to G20 must
+# not scale them again. Same direction either way, so only the model catches it.
+= [44] implicit I/J across G21 -> G20 stay in mm
+G10 L20 P1 X0 Y0 Z0
+F1000
+set smooth 1
+G21 G5 X10 Y0 I0 J5 P0 Q5
+G20 G5 X0.78740157 Y0 P0 Q-0.19685039
+pos -80 -100 -10
+
+# G54 + G92 + G20 + G90 at once: the second curve is the first one shifted.
+= [44] G54, G92 and G20 stacked: same segments as the plain curve
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X-10 Y0 I-3 J3 P3 Q3
+G92 X7 Y-3
+G20 G5 X-0.11811024 Y-0.11811024 I-0.11811024 J0.11811024 P0.11811024 Q0.11811024 F39.370079
+same -10 0 0
+pos -120 -100 -10
+
+# ---- degenerate geometry [45] -----------------------------------------------
+
+# Start == end, both handles on one ray: the tool runs out to 0.75 of the
+# handle and straight back. The chord of the whole curve has zero length and
+# every probe window around the tip has coinciding ends.
+= [45] spike: cubic out and back reaches the tip and stops there
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X0 Y0 I8 J6 P8 Q6
+travel X 12
+travel Y 9
+junction 50
+pos -100 -100 -10
+
+= [45] spike: quadratic out and back reaches the tip and stops there
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5.1 X0 Y0 I8 J6
+travel X 8
+travel Y 6
+junction 50
+pos -100 -100 -10
+
+# ---- float rounding on a fixed or monotone axis [46] ------------------------
+
+# X is constant along the whole curve and sits exactly on a rounding boundary
+# (1 step/mm, X-100.5). The lerp (1-t)*a + t*a is not exactly a in float
+# unless the compiler reassociates it (-ffast-math does); any 1-ulp wobble
+# rounds to the other step and X moves back and forth.
+= [46] fixed X on a half-step boundary never steps
+set steps 1
+G53 G0 X-100.5
+F1000
+G5 Y-90 I0 J3 P0 Q-3
+travel X 0
+travel Y 10
+
+# ulp(60000) = 0.004 mm = one step at 250 steps/mm: rounding of the walker
+# must not turn a monotone X into a reversal, nor the bump in Y into a wobble.
+= [46] far from origin: monotone X and a single bump in Y
+F1000
+G53 G0 X-60000 Y-60000
+G5 X-60010 Y-60000 I-3 J3 P3 Q3
+travel X 10
+travel Y 4.5
+
+# ---- what keeps and what ends a G5 series [47] ------------------------------
+
+# LinuxCNC keeps -P/-Q of the last G5 whatever comes between (convert_spline
+# reads cycle_i/cycle_j); grbl keys on the motion mode, which non-modal
+# commands and rejected lines leave alone.
+= [47] series survives G4, a rejected G1, G28 and G92
+G10 L20 P1 X0 Y0 Z0
+F1000
+G28.1
+G5 X10 Y0 I0 J5 P0 Q5
+G4 P0.1
+G5 X20 Y0 P0 Q5
+G1 X30 Y0 Q1 -> error
+G5 X30 Y0 P0 Q5
+G28
+G5 X10 Y0 P0 Q5
+G92 X0 Y0
+G5 X10 Y0 P0 Q5
+pos -80 -100 -10
+
+= [47] soft reset ends the series
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I0 J5 P0 Q5
+reset
+F1000
+G5 X20 Y0 P0 Q5 -> error
+
+= [47] check mode: the series continues without motion
+G10 L20 P1 X0 Y0 Z0
+set check 1
+F1000
+G5 X10 Y0 I0 J5 P0 Q5
+G5 X20 Y0 P0 Q5
+X30 Y0 P0 Q5
+pos -70 -100 -10
+
+# P/Q with no axis word in G5 mode: no motion, so the words are unused; they
+# must not become the implicit I/J of the next curve either.
+= [47] P/Q alone in G5 mode are unused and not stored
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I0 J5 P0 Q5
+P0 Q9 -> error:36
+G5 X20 Y0 P0 Q5
+pos -80 -100 -10
+
+# ---- words [48] -------------------------------------------------------------
+
+# LinuxCNC rejects G4 with G2/G3 "because they both use P" and forgot G5;
+# grbl gives P to the dwell first and the curve misses it. Either way the
+# line must not run: neither a dwell nor a curve with a dwell time as handle.
+= [48] G4 and G5 on one line both want P: rejected
+G10 L20 P1 X0 Y0 Z0
+F1000
+G4 G5 X10 Y0 I3 J3 P3 Q3 -> error:28
+G5 X10 Y0 I3 J3 P3 Q3
+G4 P0.5 X20 Y0 Q3 -> error:28
+pos -90 -100 -10
+
+= [48] G5.1 continuation needs I/J on every block and takes no P/Q
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5.1 X10 Y0 I5 J5
+X20 Y0 I5 J-5
+X30 Y0 -> error:28
+X30 Y0 I5 J5 P1 -> error:36
+X30 Y0 I5 J5 Q1 -> error:36
+pos -80 -100 -10
+
+= [48] repeated Q, zero inverse-time feed
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I3 J3 P3 Q3 Q4 -> error:25
+G93 G5 X10 Y0 I3 J3 P3 Q3 F0 -> error:22
+pos -100 -100 -10

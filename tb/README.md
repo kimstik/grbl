@@ -22,6 +22,8 @@ Decisions that tests encode:
   like G1/G2/G3; the LinuxCNC rule requiring both is not adopted).
 - Implicit I/J of a continuation are the negated P/Q of the previous G5, as
   in LinuxCNC. grblHAL negates the P/Q of the current block instead.
+  As in LinuxCNC, non-motion lines (G4, G28, G92, rejected lines) do not end
+  the series; soft reset does.
 
 ## Catalog
 
@@ -30,13 +32,13 @@ Decisions that tests encode:
 | 1  | Inflection on a probed midpoint hides the deviation                    | host vector           | defect: 0.0481*A mm, shared with Marlin |
 | 2  | Step floor: long handles exceed the tolerance                          | host vectors          | defect at 1e5 with opposite Q (0.41 mm) |
 | 3  | L1 metric: rotated curve within tolerance                              | host vector           | pass                                    |
-| 4  | Last segment bit-exact on the parser position under -ffast-math        | avr `end exact`       | CI                                      |
+| 4  | Last segment bit-exact on the parser position under -ffast-math        | avr `end exact`       | pass on all four compilers              |
 | 5  | Non-finite or overflowing values never reach the planner               | host vector, avr      | defect, same class as G1 X1e35          |
 | 6  | G5/G5.1 without X/Y must not move to machine zero                      | host vectors          | defect                                  |
 | 7  | Negative P accepted                                                     | host vectors          | defect (error:4)                        |
 | 8  | Rejected line: nothing queued, parser state byte-identical            | host, every line      | defect: spline_pq written early         |
-| 9  | Worst-case generation time                                              | avr (641 segments)    | CI                                      |
-| 10 | Stack never touched on ATmega328P                                       | avr                   | CI                                      |
+| 9  | Worst-case generation time                                              | avr (641 segments)    | 1.12 s for one 641-segment line         |
+| 10 | Stack never touched on ATmega328P                                       | avr                   | 107-162 bytes, without stepper ISR      |
 | 11 | Planner starvation while streaming curves at speed                     | avr dynamic           | in progress                             |
 | 12 | Cusp: the planner stops at the reversal                                | host `junction`       | pass                                    |
 | 13 | Smooth chain with implicit I/J: no corner at the joins                 | host `set smooth`     | pass                                    |
@@ -48,8 +50,8 @@ Decisions that tests encode:
 | 19 | Check mode, `$J=G5` rejection, mode changes before implicit I/J        | host vectors          | pass                                    |
 | 20 | Mutation testing                                                        | host `mutate.sh`      | 22 of 22 killed                         |
 | 21 | Random curves, failures shrunk to a minimal line                       | host `--random`       | pass (negative P skipped, see 7)        |
-| 22 | Host vs AVR: same segments                                              | CI simavr `= host`    | CI                                      |
-| 23 | Compiler vs compiler: same segments                                     | CI simavr per gcc     | CI                                      |
+| 22 | Host vs AVR: same segments                                              | CI simavr `= host`    | G5/G5.1 identical; G2 differs (sin/cos) |
+| 23 | Compiler vs compiler: same segments                                     | CI simavr per gcc     | G5/G5.1 identical on all four           |
 | 24 | Denormal, near-zero and coincident handles                             | host vectors          | pass                                    |
 | 25 | Command spelling; G5.1 rejected when disabled                          | host, `cubic_only.vec`| pass                                    |
 | 26 | Number spelling: P.5, P+5, P5., P1E3, empty P                          | host vectors          | pass; P-.5 is defect 7                  |
@@ -60,7 +62,7 @@ Decisions that tests encode:
 | 31 | Same line from the same point: same segments                           | host `same`           | pass                                    |
 | 32 | Machine settings: 1 and 1000 steps/mm, slow axes                       | host `set`            | pass                                    |
 | 33 | Tool length offset with G5                                              | host vector           | pass                                    |
-| 34 | Realtime latency: worst gap between segments                           | avr `worst gap`       | CI                                      |
+| 34 | Realtime latency: worst gap between segments                           | avr `worst gap`       | up to 33k cycles (2.1 ms), 48k on NaN   |
 | 35 | Feed hold and resume mid-curve, exact final position                   | avr dynamic           | in progress                             |
 | 36 | Soft reset, then the same line: same segments                          | host `reset`          | pass                                    |
 | 37 | Differential against grblHAL G5                                         | one-off host run      | segments bit-identical, see below       |
@@ -69,6 +71,12 @@ Decisions that tests encode:
 | 40 | Soft limits: curve leaves the envelope between inside endpoints        | host vector           | defect: alarm after 13 segments         |
 | 41 | K word rejected in G17                                                  | host vector           | pass                                    |
 | 42 | 40-digit literal read as inf                                            | host vector, avr      | defect                                  |
+| 43 | Laser mode `$32=1`: G5/G5.1 burn at S like G1                           | host `power`          | defect: power 0 (gcode.c:992)           |
+| 44 | Implicit I/J across G20/G21; G54+G92+G20 stacked                        | host `same`           | pass                                    |
+| 45 | Out-and-back spike: the tip is reached, nothing overshoots              | host `travel`         | pass                                    |
+| 46 | Half-step boundary never steps; curve 60 m from origin                  | host `travel`         | pass                                    |
+| 47 | Series lifetime: G4, G28, G92, rejected line, reset, check mode         | host vectors          | pass                                    |
+| 48 | G4+G5 share P; G5.1 continuation rules; repeated Q; G93 F0              | host vectors          | pass                                    |
 
 ## 37: grblHAL
 
