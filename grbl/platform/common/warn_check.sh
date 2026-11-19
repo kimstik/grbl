@@ -8,7 +8,7 @@
 #
 #  WHY THIS EXISTS
 #  ----------------
-#  ci/warn_ratchet.py has existed since Phase 0 but was invoked from NOWHERE
+#  .github/ci/warn_ratchet.py has existed since Phase 0 but was invoked from NOWHERE
 #  in any port Makefile - only from .github/workflows/ci.yml, after the fact,
 #  against a log the CI job captured itself. A developer's local `make` was
 #  therefore completely blind to warning regressions; the baseline files were
@@ -70,7 +70,7 @@
 #     (.github/actions/build-platform/action.yml's `2>&1 | tee`) - this
 #     script does not make that pre-existing characteristic worse, and each
 #     single diagnostic line is still written by one process's own ordered
-#     output, so line-oriented parsing (ci/warn_ratchet.py's job) stays
+#     output, so line-oriented parsing (.github/ci/warn_ratchet.py's job) stays
 #     sound.
 #  3. Prove step 1 actually happened before trusting the log at all: count
 #     the *.o files sitting in the object directory after the rebuild

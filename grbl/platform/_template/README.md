@@ -83,7 +83,7 @@ to stay assignable. See `gpio.h`'s docstring for the full reasoning.
    generic; anything new you add needs the same audit.
 4. Re-add `-Wl,--gc-sections` to the Makefile's `LDFLAGS` once real vector
    wiring exists (see the Makefile's comment on why it's absent here).
-5. Add a `ci/warn_baseline_<yourchip>.txt` and a matrix row in
+5. Add a `.github/ci/warn_baseline_<yourchip>.txt` and a matrix row in
    `.github/workflows/ci.yml` (existing rows are the template - `_template`
    itself must NOT get a row, see below).
 6. Fold anything you learn back into `CONTRACTS.md`/this template

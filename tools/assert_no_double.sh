@@ -104,7 +104,7 @@ run_assert() {
 }
 
 # --- selftest ---------------------------------------------------------------
-# Style matches ci/warn_ratchet.py --selftest: construct both a POSITIVE
+# Style matches .github/ci/warn_ratchet.py --selftest: construct both a POSITIVE
 # (must be caught) and a NEGATIVE (must not be flagged) case, plus an
 # end-to-end run through the real entry point with a fake nm, so the
 # script can't silently regress to checking the wrong symbol family again.

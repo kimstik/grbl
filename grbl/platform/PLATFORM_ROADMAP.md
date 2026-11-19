@@ -115,7 +115,7 @@ that fails the build if the vector table or reset SP look wrong.
     step output ever**, while `$H`/status still reported success (a position lie: MPos moved,
     pins stayed dead). Fixed via a logical-bit/physical-pin split (CONTRACTS.md §1); a
     `_Static_assert` now makes "logical bit > 7" a build-time failure everywhere, not just here.
-  - Renode smoke test landed in CI (`ci/renode/`, `.github/workflows/smoke.yml`): boot → banner →
+  - Renode smoke test landed in CI (`.github/ci/renode/`, `.github/workflows/smoke.yml`): boot → banner →
     `$$` dump → `ok`. Extended with a motion stage: `G2` arc traced with real STEP-pin (PA25)
     toggling and correct MPos, plus a negative control (the pre-#17-fix tree fails the motion
     stage, proving the test would have caught it).
@@ -172,7 +172,7 @@ that fails the build if the vector table or reset SP look wrong.
   base `0x8fe00000`, present in the LTO'd image); boot-init reachability
   PASSED WITH LTO on (`GRBL_BOOT_INIT`/`used` keep `Reset_Handler`/
   `SystemClock_Config`/`sg2002_plic_init` alive under whole-program IPA);
-  `ci/warn_baseline_sg2002.txt` committed from real logs; two CI matrix rows
+  `.github/ci/warn_baseline_sg2002.txt` committed from real logs; two CI matrix rows
   added (DEBUG + RELEASE, board `generic`, **not** `continue-on-error` — same
   two apt packages as the other RISC-V ports).
   The design pass's channel design was implemented as specified: CONTRACTS §7
@@ -239,7 +239,7 @@ There was no CI when this roadmap was first written; there is now (landed 2026-0
   two checks (CI history existing, and this file's numbers) corroborate rather than substitute for
   each other.
 - **Golden gate (BLOCKING)**: `make -C grbl/platform/atmega328p validate` runs on every push and fails the pipeline if the built `grbl.hex` MD5 drifts from the canonical hash (`79af184e67b27defd27a39309ac53563`). The root `Makefile`'s `validate` target calls `python3 grbl/platform/common/chk.py --require-canonical grbl.hex`, which owns a tiered known-hash table (canonical/known/unreproducible - see CONTRACTS.md [§chk-py-tiers](CONTRACTS.md#chk-py-tiers)); only the canonical tier passes this gate, and a build matching some other recognised-but-non-canonical hash still fails it, distinctly from an unrecognised one. Verified locally in this worktree: **PASSED**, text=30640 bytes. This is the one gate that never gets waived — AVR byte-for-byte integrity is the project's core invariant.
-- **Warning ratchet**: `ci/warn_ratchet.py` plus one `ci/warn_baseline_<platform>.txt` per platform. One-way ratchet (new warnings not already in the baseline fail CI) rather than a blanket `-Werror`, since the ARM baselines are still partly inspection-derived pending a first real CI run.
+- **Warning ratchet**: `.github/ci/warn_ratchet.py` plus one `.github/ci/warn_baseline_<platform>.txt` per platform. One-way ratchet (new warnings not already in the baseline fail CI) rather than a blanket `-Werror`, since the ARM baselines are still partly inspection-derived pending a first real CI run.
 - **compile_commands.json**: `make compdb` (samd21) via `tools/gen_compile_commands.py`, preserving the `-include` injection chain so IDEs/clangd see what the build actually sees.
 - **Provenance (weekly, report-only)**: `provenance.yml` clones live `gnea/grbl` tag `v1.1h.20190825` fresh and rebuilds both trees with the same toolchain/flags in one job, then byte-diffs `.text`. **Empirical result** (same avr-gcc 7.3.0, no LTO): the two `.text` sections differ by exactly **2 bytes** — the `GRBL_VERSION_BUILD` date string (`"20190825"` upstream vs `"20190830"` in `grbl/grbl.h` here). Every other byte of machine code is identical. This job doesn't gate CI (the golden-hash check above does); it's an ongoing proof that the golden hashes themselves stay upstream-derived instead of silently drifting into an undocumented fork.
 

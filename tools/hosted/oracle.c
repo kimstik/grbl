@@ -9,7 +9,7 @@
   the seam's TU exports, and calls the real ISR_STEP()/ISR_STEP_RESET() in
   virtual time (hosted_rt.h). Whatever comes out IS the golden trace, by
   definition. A candidate executor is conformant iff it reproduces this byte for
-  byte (ci/seg_conformance.py).
+  byte (.github/ci/seg_conformance.py).
 
   usage: seg_oracle <vector.gvec>          -> trace on stdout
 */

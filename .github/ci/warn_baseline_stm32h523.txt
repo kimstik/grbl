@@ -1,0 +1,64 @@
+# Warning baseline for the stm32h523 build (-Wall -Wextra, arm-none-eabi-gcc).
+# Format: normalized warnings, see .github/ci/warn_ratchet.py header. Ratchet is
+# one-way: only remove lines here manually, after the warning is really gone.
+#
+# Regenerated from a REAL build (grbl/platform/PLAN.md Phase 1 fixed the
+# TIM1-register-gap / spindle-PWM / handlers.c EXTI-model breakage that
+# previously prevented arm-none-eabi-gcc from ever reaching this file list -
+# the PREVIOUS version of this file was authored by code inspection before
+# the build ever ran and is fully replaced here). Union of BUILD=DEBUG and
+# BUILD=RELEASE logs - both produced the identical warning set. Command:
+#   make -C grbl/platform/stm32h523 BUILD=<DEBUG|RELEASE> > build.log 2>&1
+#   python3 .github/ci/warn_ratchet.py --log build.log --emit
+#
+# The "config.h vs platform.h dual pin-map canon" entries that used to sit
+# here (same 9 lines as stm32f103's baseline) were BUG #25, not harmless
+# debt: SPINDLE_ENABLE_PIN/SPINDLE_DIRECTION_PIN/COOLANT_FLOOD_PIN genuinely
+# disagreed in value between the two files, and hal_gpio_init() didn't even
+# consume the pin macro for the affected pins here - it hardcoded raw
+# literals that happened to match config.h's (now-deleted) values instead of
+# platform.h's, with the direction pin additionally hardcoded onto the wrong
+# GPIO port. The spindle enable relay's pin was configured as an output on
+# one physical pin and driven (GPIO_BSET/GPIO_BCLR) on a different one.
+# Baselining the warning instead of reading it hid a live wiring defect
+# behind a green ratchet for as long as the entry sat here (and it sat here
+# BECAUSE stm32f103's baseline already carried it - "same pattern already
+# accepted" should have been the signal to fix the class, not repeat it) -
+# see CONTRACTS.md #gpio-pin-map-single-owner. Fixed by making platform.h
+# the sole owner of every pin/port/bit/mask and deriving hal_gpio_init()'s
+# masks from it. Do NOT re-add any of these lines - if this class of warning
+# reappears, a duplicate pin-map definition has come back and the ratchet is
+# now supposed to fail on it.
+#
+# Removed 2026-07-26: `stepper.c: ... integer overflow ... '2115098112'
+# [-Woverflow]` (BUG #18 class, CONTRACTS.md's clock-constant-width
+# section). Root cause:
+# common/stm32/common.mk's F_CPU lacked a suffix wide enough for 250 MHz -
+# the true compile-time constant is 15000000000, not 2115098112 (a real
+# ~7.09x-too-fast stepper timing bug). Fixed at the source (common.mk now
+# uses ULL); do NOT re-add.
+#
+# common/stm32 shared code (regs.h vs CMSIS-style headers, both stm32 ports):
+stm32_platform.h: warning: comparison of unsigned expression in '< 0' is always false [-Wtype-limits]
+#
+# amass_floor.h #warning, deliberate (CONTRACTS.md #amass-floor): this
+# port's AMASS 16-bit clamp minimum-speed floor is F_CPU/524288 = 476.8
+# dominant-axis steps/sec (250 MHz) - 71.5 mm/min @ 400 steps/mm / 357.6
+# mm/min @ 80 steps/mm, the WORST in the tree, inside ordinary
+# finishing/roughing feed ranges. GRBL_ACKNOWLEDGE_AMASS_FLOOR is defined
+# in this port's own prelude.h with that justification; the real remedy
+# (a divided/prescaled stepper-timer input clock, sg2002/Makefile
+# precedent) has not landed. Do NOT remove this line as "just noise" -
+# removing GRBL_ACKNOWLEDGE_AMASS_FLOOR instead re-enables the hard
+# _Static_assert, which is the point.
+amass_floor.h: warning: #warning "GRBL_ACKNOWLEDGE_AMASS_FLOOR: AMASS floor exceeds 200 steps/sec (CONTRACTS.md #amass-floor); feeds below it execute faster than programmed; no clock-domain remedy has landed for this port yet" [-Wcpp]
+#
+# stm32h523 platform code:
+platform.c: warning: unused parameter 'port' [-Wunused-parameter]
+#
+# GRBL core (shared with every platform; not stm32h523-specific):
+gcode.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
+motion_control.c: warning: unused parameter 'cycle_mask' [-Wunused-parameter]
+nvmem.c: warning: '<<' in boolean context, did you mean '<'? [-Wint-in-bool-context]
+report.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
+system.c: warning: this statement may fall through [-Wimplicit-fallthrough=]

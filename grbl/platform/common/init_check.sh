@@ -131,7 +131,7 @@ run_check() {
 }
 
 # --- selftest ---------------------------------------------------------------
-# Style matches tools/assert_no_double.sh --selftest and ci/warn_ratchet.py
+# Style matches tools/assert_no_double.sh --selftest and .github/ci/warn_ratchet.py
 # --selftest: POSITIVE cases (must be caught), NEGATIVE cases (must not be
 # flagged), and an end-to-end run through the real entry point with a fake
 # nm, including the exact BUG #23 symbol table.

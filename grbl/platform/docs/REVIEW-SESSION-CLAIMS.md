@@ -76,7 +76,7 @@ Repeated on the actual toolchains named in the claim:
 Confirms: (1) my invocation can detect a real defect when using real codegen (`-c`); (2) the
 report's claim that `-fanalyzer` is silently inert under `-fsyntax-only` is TRUE on every
 compiler tested, including host gcc 13.3.0 — this is a genuinely calibrated, correct finding by
-the original agent, not a self-serving one. Checked whether any CI script or `ci/*.py`/`*.sh`/
+the original agent, not a self-serving one. Checked whether any CI script or `.github/ci/*.py`/`*.sh`/
 `.github/workflows/*.yml` actually pairs `-fanalyzer` with `-fsyntax-only`:
 `grep -rn fanalyzer .github/workflows ci` → **zero matches anywhere in CI** — `-fanalyzer` is not
 a persistent CI gate at all, only a one-off manual audit recorded in
@@ -248,7 +248,7 @@ restoration; final tree state below confirms nothing left dirty.
 | 2 | `tools/assert_no_double.sh` | `--selftest` → PASS (8 checks) | Added `__attribute__((used)) double __review_poison_double(volatile double a, volatile double b){return a*b+a/b;}` to `grbl/platform/hc32f460/platform.c`, `make BUILD=RELEASE` | Real link FAILED: `__aeabi_dadd/__aeabi_ddiv/__aeabi_dmul/__aeabi_drsub/__aeabi_dsub/__divdf3/__floatdidf/__muldf3/__subdf3` reported, `make` exit 1, `.elf` deleted. Reverted; rebuild PASSED, byte-identical `.bin` (MD5 matches `artifacts/hc32f460/grbl_hc32f460.bin`) |
 | 3 | `grbl/platform/common/init_check.sh` | `--selftest` → PASS (10 checks) | Removed the `hal_gpio_clock_init();` call from `ch32v006/startup.c`'s `SystemInit()`, `make BUILD=RELEASE` | Real link FAILED with the script's own BUG #23 message (symbol unreachable after LTO), `make` exit 1. Reverted; rebuild clean, `text=39224` unchanged |
 | 4 | `grbl/platform/common/boot_check.sh` | none (no selftest mode) | Hand-crafted a garbage 16-byte `.bin` (`SP=0xDEADBEEF`, `PC=0x00000000`) | `BOOT INTEGRITY: FAIL`, exit 1. Cross-checked positive case against the real committed `artifacts/stm32f411/grbl_stm32f411.bin` → `BOOT INTEGRITY: OK`. No repo file touched for this one (synthetic input file only) |
-| 5 | `ci/warn_ratchet.py` | `--selftest` → PASS (12 checks) | Built ch32v006 RELEASE clean (ratchet OK, 4/4 baseline), then added an unused local `int __review_unused_var = 0;` to `hal_gpio_config_pin()` in `ch32v006/platform.c`, rebuilt | Real ratchet run FAILED: `1 new warning(s) not in ci/warn_baseline_ch32v006.txt: + platform.c: warning: unused variable ...`, exit 1. Reverted; rebuild clean, ratchet OK again |
+| 5 | `.github/ci/warn_ratchet.py` | `--selftest` → PASS (12 checks) | Built ch32v006 RELEASE clean (ratchet OK, 4/4 baseline), then added an unused local `int __review_unused_var = 0;` to `hal_gpio_config_pin()` in `ch32v006/platform.c`, rebuilt | Real ratchet run FAILED: `1 new warning(s) not in .github/ci/warn_baseline_ch32v006.txt: + platform.c: warning: unused variable ...`, exit 1. Reverted; rebuild clean, ratchet OK again |
 | 6 | `tools/check_contracts_numbering.py` | `--selftest` → PASS (11 checks) | Real `CONTRACTS.md` starts clean (`38 sections, 38 slugs, 36 cross-file links, OK`). Changed `## 2. GPIO interrupts` to `## 1. GPIO interrupts` (line 193, duplicating section 1) | Real run FAILED: `duplicate section number 1: line 125 and line 193` + sequential-numbering error, confirmed `$? == 1` on a clean, non-piped re-run. Reverted; re-run OK (exit 0), 38/38/36 again |
 | 7 | `tools/build_artifacts.py check` | `--selftest` → PASS (62 checks) | Real `check --platforms ch32v006` PASSED clean first. Flipped one byte (`data[100] ^= 0xFF`) in the committed `artifacts/ch32v006/grbl_ch32v006.bin` | Real run FAILED: `ch32v006: artifacts/ch32v006/grbl_ch32v006.bin is STALE (committed=... fresh=...)`. Restored the exact original bytes from a saved copy (`md5sum` matched pre/post); re-run OK, 6/6 fresh |
 | 8 | `grbl/platform/common/clock_width.h` `_Static_assert` | none (header, no selftest) | Reverted `ch32v006/Makefile`'s `-DF_CPU=$(CLOCK)ULL` to `...UL`, `make BUILD=RELEASE clean && make BUILD=RELEASE` | Real compile FAILED at the very first TU: `error: static assertion failed: "F_CPU must be suffixed ULL ..."`, exit 1 (reproduces the PLAN.md entry's own claimed transcript, independently). Reverted; rebuild clean, `text=39224` unchanged |
@@ -261,7 +261,7 @@ after this claim's work (see final verification at the end of this document).
 
 ## Claim B — "All non-F_CPU warn-baseline entries are genuine noise"
 
-**Verdict: SURVIVES.** Read all 238 lines across all 9 `ci/warn_baseline_*.txt` files directly
+**Verdict: SURVIVES.** Read all 238 lines across all 9 `.github/ci/warn_baseline_*.txt` files directly
 (not sampled) and independently re-verified the three specific entries the brief called out as
 worth re-checking, by reading the flagged source, not by re-quoting the existing PLAN.md verdict.
 
@@ -303,7 +303,7 @@ references `addr` anywhere in its body — only `efm_unlock()`/`EFM->FWMC`/`__DS
 typically use to also tell the erase command *which page* to target. `efm_erase_page` has no
 equivalent store, so on real silicon this may well erase the wrong page (or rely on some other
 undocumented default-address behavior) — a genuinely open, disclosed risk. This is **not** graded
-"benign" anywhere in the project's own docs: `ci/warn_baseline_hc32f460.txt` carries the warning
+"benign" anywhere in the project's own docs: `.github/ci/warn_baseline_hc32f460.txt` carries the warning
 with no dismissive comment, and `PLAN.md`'s own entry says outright "at minimum suspicious...
 worth a real look at hardware bring-up time — not fixed here," consistent with `platform.md`'s
 blanket "EFM register layout UNVERIFIED, hardware bring-up must confirm" disclaimer (no HC32F460
@@ -324,7 +324,7 @@ unsigned call sites, harmless by construction, matches the doc's own judgement).
 in this pass that the project's docs mis-graded, beyond the three already known to have been real
 bugs before this session (#25 pin-map, #26 Z-limit overflow, F_CPU) which are explicitly logged as
 fixed and absent from the current baselines (confirmed: `grep -rn "SPINDLE_ENABLE_PIN.*redefined"
-ci/warn_baseline_*.txt` → zero hits).
+.github/ci/warn_baseline_*.txt` → zero hits).
 
 ---
 

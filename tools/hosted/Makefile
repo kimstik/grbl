@@ -1,7 +1,7 @@
 # tools/hosted/Makefile - build the hosted oracle (seg_oracle).
 #
 # Compiles grbl/stepper.c STRAIGHT OUT OF THE TREE - no copy, no fork. If the
-# frozen consumer ever changes, the goldens move and ci/seg_conformance.py says
+# frozen consumer ever changes, the goldens move and .github/ci/seg_conformance.py says
 # so. Part of Grbl / Intelligence assisted / License: MIT
 
 ROOT      := ../..

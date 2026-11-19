@@ -54,7 +54,7 @@ size-optimization pass shared across the STM32 ports; the numbers above are
 from a fresh build today.)
 
 Both link with zero `PORT_TODO_*` symbols and zero undefined references.
-Warning baseline: `ci/warn_baseline_stm32f411.txt` (regenerated from these
+Warning baseline: `.github/ci/warn_baseline_stm32f411.txt` (regenerated from these
 real logs, DEBUG and RELEASE produce the identical warning set).
 
 ## Known gaps

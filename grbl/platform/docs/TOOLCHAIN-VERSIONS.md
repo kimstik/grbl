@@ -84,7 +84,7 @@ compiler-version-dependent analyzer false positive:
 Also observed on ARM only (stm32f411), both **already tracked, not new**:
 `stepper.c:1015` `-Woverflow` ("integer overflow ... results in
 1465032704") and `settings.c:339` `-Woverflow` ("1024 to 0") both already
-appear in `ci/warn_baseline_stm32f411.txt` (lines 32/31) under the
+appear in `.github/ci/warn_baseline_stm32f411.txt` (lines 32/31) under the
 existing apt-toolchain baseline — this session's newer-compiler run
 reproduces them identically, confirming they are pre-existing, tracked
 defects, not compiler-version regressions. Root cause of the first:

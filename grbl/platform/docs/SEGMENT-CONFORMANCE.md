@@ -19,7 +19,7 @@ where a candidate executor plugs in.**
 | the oracle | `tools/hosted/` | frozen `stepper.c` on x86, in virtual time |
 | the corpus | `tools/hosted/corpus/*.gvec` + `*.gtrace` | 13 vectors, committed goldens |
 | a subject | `tools/hosted/subjects/seg_exec_ref.py` | independent executor, bit-exact |
-| the ratchet | `ci/seg_conformance.py` | ninth ratchet, 3 gates |
+| the ratchet | `.github/ci/seg_conformance.py` | ninth ratchet, 3 gates |
 | the tap | `grbl/platform/extensions/seg-trace/` | on-target capture, `EXT=seg-trace` |
 
 ## The seam, and why the binaries did not move
@@ -88,7 +88,7 @@ seg_conformance: building hosted oracle (frozen grbl/stepper.c on x86)
   - 12-blkgen-wrap.gvec: subject seg_exec_ref.py diverges from the oracle
 
 If the frozen consumer legitimately changed, re-read the golden MD5 gate first.
-Only then: ci/seg_conformance.py --regen
+Only then: .github/ci/seg_conformance.py --regen
 exit=1
 ```
 
@@ -231,7 +231,7 @@ exactly the step a probe measurement is about.
    `.elf` hashes for a file no firmware build reads.
 
 4. **`ch32v006+seg-trace` is not a CI row.** A row means a
-   `ci/warn_baseline_ch32v006+seg-trace.txt` and an additive `artifacts/` unit
+   `.github/ci/warn_baseline_ch32v006+seg-trace.txt` and an additive `artifacts/` unit
    (~1.4 MB of tracked blobs on every refresh). That is an integrator decision
    about repo growth, not something to slip into this batch. The extension
    builds, passes no-DP / boot-init / boot-integrity / warn ratchet, and its

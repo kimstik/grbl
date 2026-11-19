@@ -30,7 +30,7 @@ extensions/common/
 
 Rules, each load-bearing:
 
-- **No `platform.h` at an extension root.** `ci/pinmap_overlap_check.py`
+- **No `platform.h` at an extension root.** `.github/ci/pinmap_overlap_check.py`
   discovers ports as `grbl/platform/*/` directories containing a root
   `platform.h`; an extension with one would be adopted as a phantom port.
 - A prelude defines `GRBL_EXT_<NAME>` and **never** `GRBL_PRELUDE` — hal.h:34's

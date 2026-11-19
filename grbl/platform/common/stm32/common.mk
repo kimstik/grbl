@@ -276,9 +276,9 @@ $(BIN_FILE): $(ELF_FILE)
 $(DUMP_FILE): $(ELF_FILE)
 	$(OBJDUMP) -Sxdstr $< >$@
 
-# WARNING RATCHET (ci/warn_ratchet.py) wired at build time, shared by every
+# WARNING RATCHET (.github/ci/warn_ratchet.py) wired at build time, shared by every
 # STM32 family Makefile including this file - CONTRACTS.md
-# #warn-ratchet-build-time-wiring. Until this landed, ci/warn_ratchet.py was
+# #warn-ratchet-build-time-wiring. Until this landed, .github/ci/warn_ratchet.py was
 # invoked ONLY from .github/workflows/ci.yml against a log CI captured
 # itself; a developer's local `make` was completely blind to warning
 # regressions even though the other three ratchets (ASSERT_FP/INIT_CHECK/
@@ -306,8 +306,8 @@ WARN_SCRATCH     = $(OUTPUT_DIR)/.warncheck/$(PLATFORM_NAME)/$(BUILD)
 WARN_SCRATCH_OBJ = $(WARN_SCRATCH)/obj
 WARN_SCRATCH_OUT = $(WARN_SCRATCH)/out
 WARN_LOG         = $(WARN_SCRATCH)/build.log
-WARN_BASELINE    = ../../../ci/warn_baseline_$(PLATFORM_NAME).txt
-WARN_RATCHET     = ../../../ci/warn_ratchet.py
+WARN_BASELINE    = ../../../.github/ci/warn_baseline_$(PLATFORM_NAME).txt
+WARN_RATCHET     = ../../../.github/ci/warn_ratchet.py
 WARN_CHECK       = ../common/warn_check.sh
 
 warn_check:

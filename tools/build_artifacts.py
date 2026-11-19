@@ -1,89 +1,22 @@
 #!/usr/bin/env python3
-"""build_artifacts.py - build and track per-platform GRBL release artifacts.
+"""Build GRBL outputs for local inspection or GitHub Actions downloads.
 
-Part of Grbl / Intelligence assisted / License: MIT
+Generated bin/hex, symbol maps, disassemblies and manifests live in the
+ignored artifacts/ tree. Expected RELEASE and DEBUG hashes are retained in
+.github/ci/artifacts.sha256, not the binaries themselves.
 
-WHY THIS EXISTS (owner directive, PLAN.md "build artifacts tracked in git"
-batch): before this tool, only atmega328p had any byte-level build history
-(the golden MD5 in grbl/platform/Makefile's `validate` target, ratchet #1).
-Every other port could only be compared "now vs now" by rebuilding twice in
-the same session - a 40-byte size drift between sessions had nothing to
-diff against. This tool commits RELEASE elf/bin/hex plus a plain-text
-symbol-size map for every buildable port into artifacts/<port>/, so the
-CURRENT state of every port is inspectable and diffable over time in normal
-`git log -p`/`git diff`, not just at release time.
+  build [--platforms p1,p2] [--skip-debug] [--with-elf]
+      Generate outputs and artifacts/MANIFEST.sha256; never update the baseline.
+  check [--platforms p1,p2] [--skip-debug] [--with-elf]
+      Generate outputs, then compare their hashes against the CI baseline.
+      Missing selected toolchains fail rather than silently reducing coverage.
+  --selftest
+      Run pure-logic regression checks without invoking compilers.
 
-This is a TRACKING artifact set, not an end-of-project report: it gets
-regenerated and re-committed whenever a port's *content* changes (see the
-refresh policy in artifacts/README.md), not on every push.
-
-GROWTH COST (state plainly, per the owner's request): git does not delta
-binaries usefully across recompiles - even a source change that only moves
-one function by 40 bytes typically re-links every address after it, so the
-whole .elf/.bin/.hex blob changes and git stores it again close to in full
-(zlib-compressed, but not diffed against the prior blob in any way that
-tracks the source edit). Measured sizes in this tree: .bin 25-41KB (94KB on
-dsPIC33A - word-per-instruction padding, see below), .hex 72-115KB, .elf
-93-166KB per port/board. Ten port/board artifact sets (nine ports; samd21
-counts twice, once per board) land around 2.4-2.6MB for one full snapshot.
-Every subsequent *content* refresh adds roughly that much again - this is
-the deliberate, accepted cost of byte-level observability the owner asked
-for, not a defect to optimize away.
-
-USAGE
-  tools/build_artifacts.py build [--platforms p1,p2,...] [--skip-debug]
-      Rebuild every port (DEBUG then RELEASE by default), copy RELEASE
-      bin/hex + a generated symbol-size map AND a full objdump disassembly
-      dump (<binary>.elf.dump - see gen_elf_dump()/elf_dump_header() below)
-      into artifacts/<port>/, and (re)write artifacts/MANIFEST.sha256
-      covering every artifact of every port AND flavor (DEBUG hashes are
-      recorded even though DEBUG binaries are not committed - see the
-      manifest's own header; .elf.dump is NOT in the manifest at all - see
-      below). Does NOT copy .elf ("Эльф на тегах" owner directive - ELF is
-      tracked ONLY at release-tag time, see --with-elf below); any stale
-      .elf left over in artifacts/<port>/ from a prior --with-elf run is
-      removed so a plain refresh can't leave a mismatched ELF sitting in
-      the tree. .elf.dump follows a DIFFERENT lifecycle than .elf despite
-      the name - it's tracked continuously (every refresh, like bin/hex/
-      syms), not tag-time-only, because its whole purpose is a readable
-      diff of what changed BETWEEN builds; a tag-gated dump would only ever
-      be diffable release-to-release. See artifacts/README.md.
-
-  tools/build_artifacts.py build --with-elf [--platforms p1,p2,...] [--skip-debug]
-      Same as plain `build`, but ALSO copies RELEASE .elf into
-      artifacts/<port>/ and records its hash in MANIFEST.sha256. Intended
-      to be run ONLY at release-tag time - ELF is the largest artifact
-      class (48-166KB/unit vs. bin 25-95KB, hex 72-116KB, syms a few KB)
-      and git cannot delta binaries across recompiles, so tracking it on
-      every refresh (as this tool used to) roughly doubled the growth
-      cost of every port-content change for a file most refreshes don't
-      need byte-for-byte. See artifacts/README.md's "Growth cost" section
-      and PORTING-CHECKLIST.md's refresh policy for the full rule and
-      measured numbers.
-
-  tools/build_artifacts.py check [--platforms p1,p2,...] [--skip-debug]
-      Rebuild fresh (into the ordinary build/ scratch dir, never touching
-      artifacts/) and compare hashes against the committed artifacts/ tree
-      (RELEASE) and the recorded manifest (DEBUG). Exits 1 and prints every
-      drifted/missing file if the committed artifacts are stale relative to
-      a fresh build. bin/hex/syms are always required and always hash-
-      gated, for EVERY unit including dsPIC33AK (see nondeterministic_elf
-      below - only that one unit's .elf is exempt); .elf is verified ONLY
-      if present (absence is expected between tags, not a failure - see
-      --with-elf above), and even then only for units NOT flagged
-      nondeterministic_elf. .elf.dump is checked for PRESENCE only, never
-      hash-compared - objdump prints its own invocation path as line 1 of
-      every dump it produces, so a fresh rebuild's dump text differs from
-      the committed one across any two different absolute checkout paths
-      even when the underlying .elf is byte-identical (measured this
-      batch); see elf_dump_header()'s "NOT HASH-GATED" paragraph. This is
-      the sixth ratchet (after golden MD5, warn baseline, boot integrity,
-      no-DP assert, docs integrity).
-
-  tools/build_artifacts.py --selftest
-      Pure-logic unit tests (manifest line parsing/formatting, hash
-      comparison) - no compiler invoked, matches the style of
-      ci/warn_ratchet.py / tools/assert_no_double.sh / tools/check_contracts_numbering.py.
+To accept intentional code-generation changes, review the generated outputs
+and copy the relevant manifest entries to .github/ci/artifacts.sha256.
+A partial build's manifest contains only that run's units on a clean checkout;
+retain entries for other units when refreshing the baseline.
 """
 
 import argparse
@@ -99,6 +32,7 @@ REPO_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file
 ARTIFACTS_DIR = os.path.join(REPO_ROOT, "artifacts")
 BUILD_DIR = os.path.join(REPO_ROOT, "build")
 MANIFEST_PATH = os.path.join(ARTIFACTS_DIR, "MANIFEST.sha256")
+BASELINE_PATH = os.path.join(REPO_ROOT, ".github", "ci", "artifacts.sha256")
 
 MANIFEST_LINE_RE = re.compile(r"^#?\s*([0-9a-f]{64})\s+(\S+)")
 
@@ -444,18 +378,9 @@ def gen_symbol_map(nm_bin, elf_path, objdump_bin=None):
 
 
 # ---------------------------------------------------------------------------
-# .elf.dump - human-readable disassembly companion, tracked CONTINUOUSLY
-# (every refresh, like .syms) even though the .elf it's derived from is
-# tag-time-only ("Эльф на тегах"). Rationale, argued from what the owner
-# wants this file FOR (a readable diff of what changed between BUILDS, not
-# just between release tags): a tag-time-only dump would only ever be
-# diffable release-to-release - the exact "now vs now" gap .bin/.hex/.syms
-# were already built to close for every OTHER artifact class. Generating it
-# from the freshly-built RELEASE .elf that already sits in the build/
-# scratch dir (never persisted itself between tags) costs nothing extra to
-# produce and needs no committed .elf to exist alongside it, exactly like
-# .syms today. See artifacts/README.md for the full argument and the
-# NOT-hash-gated rationale below.
+# Human-readable disassembly is generated from each fresh RELEASE ELF.
+# It accompanies CI downloads but is not hash-gated: objdump embeds the
+# input path, so otherwise identical builds in different locations differ.
 # ---------------------------------------------------------------------------
 
 ELF_DUMP_FLAGS = ["-d", "-S", "-h", "-t", "--no-show-raw-insn"]
@@ -504,11 +429,11 @@ def gen_elf_dump(objdump_bin, elf_path, extra_args):
 def elf_dump_header(unit, objdump_bin):
     objdump_name = objdump_bin if os.path.isabs(objdump_bin) else os.path.basename(objdump_bin)
     header = (
-        "# {binary}.elf.dump - `{od} {flags} <elf>` on the committed RELEASE\n"
+        "# {binary}.elf.dump - `{od} {flags} <elf>` on the generated RELEASE\n"
         "# .elf. Full disassembly + section headers + symbol table, plain\n"
         "# text: when a size ratchet fires, `git diff` on THIS file shows the\n"
         "# actual instruction-level change behind a byte-count drift, one\n"
-        "# level deeper than `.syms` (see artifacts/README.md).\n"
+        "# level deeper than `.syms` (see CONTRACTS.md #build-artifacts-tracked).\n"
         "#\n"
         "# Flags, each picked for diff readability over completeness:\n"
         "#   -d  disassemble CODE sections only - not -D/--disassemble-all,\n"
@@ -534,7 +459,7 @@ def elf_dump_header(unit, objdump_bin):
         "#\n"
         "# NOT HASH-GATED (`tools/build_artifacts.py check` verifies this\n"
         "# file is PRESENT but does not compare its content - see do_check()\n"
-        "# and artifacts/README.md \"elf.dump is not hash-gated\"): objdump\n"
+        "# and CONTRACTS.md #build-artifacts-tracked \"elf.dump is not hash-gated\"): objdump\n"
         "# prints the exact path it was invoked with as the FIRST line of its\n"
         "# own output, on every toolchain, regardless of any compiler flag -\n"
         "# so this file is only byte-identical to a fresh rebuild when\n"
@@ -584,31 +509,12 @@ def sha256_file(path):
 # --selftest, no compiler involved)
 # ---------------------------------------------------------------------------
 
-MANIFEST_HEADER = """\
-# artifacts/MANIFEST.sha256 - checksums for every tracked build artifact,
-# generated by tools/build_artifacts.py build. Do not hand-edit.
-#
-# Purpose: answer "did anything change, and where" without rebuilding -
-# `git diff` on this file names the exact drifted file(s) instantly, and
-# `sha256sum -c artifacts/MANIFEST.sha256` (run from the repo root)
-# verifies the RELEASE section against the working tree.
-#
-# Regenerate:      python3 tools/build_artifacts.py build
-# Staleness check: python3 tools/build_artifacts.py check
-# Refresh policy:  see artifacts/README.md.
-#
-# RELEASE (tracked in git - verifiable with sha256sum -c, see above):
+MANIFEST_HEADER = """# Generated RELEASE checksums; paths are relative to the repository root.
+# Outputs are ignored in git and uploaded by Actions.
+# Expected hashes: .github/ci/artifacts.sha256.
 """
 
-MANIFEST_DEBUG_HEADER = """\
-#
-# DEBUG (NOT tracked in git - DEBUG binaries are rebuilt on demand, never
-# committed; see artifacts/README.md "why DEBUG isn't committed"). These
-# lines are comments (leading '#') so `sha256sum -c` skips them cleanly -
-# they exist purely so a DEBUG-only regression is still observable in
-# `git diff` without paying the storage cost of a second full binary set
-# per port. `tools/build_artifacts.py check` rebuilds DEBUG and compares
-# against these hashes.
+MANIFEST_DEBUG_HEADER = """# DEBUG hashes (commented so sha256sum -c verifies RELEASE outputs only).
 """
 
 
@@ -666,7 +572,7 @@ def load_manifest_sections(path):
 
 
 def merge_manifest_entries(preserved, fresh, rebuilt_dirs):
-    """Combine a manifest section's preserved (previously-committed) entries
+    """Combine a manifest section's preserved (previously-generated) entries
     with this run's freshly-computed ones: any preserved entry belonging to
     a unit in `rebuilt_dirs` is dropped (superseded by the fresh entry for
     that same unit, which is already in `fresh`); everything else survives
@@ -742,7 +648,7 @@ def check_manifest_coverage(all_units, manifest_path=MANIFEST_PATH):
                 "defect class, CONTRACTS.md gap log, or a manual edit). "
                 "Run a full 'build' (no --platforms) to restore coverage."
                 .format(unit["key"], d,
-                        os.path.relpath(manifest_path, REPO_ROOT)))
+                        manifest_path))
     return problems
 
 
@@ -799,7 +705,7 @@ def do_build(units, skip_debug, include_elf=False, quiet=False):
     # rewrite MANIFEST.sha256 from scratch containing ONLY X's freshly
     # computed entries, silently deleting every other unit's hashes -
     # anyone using the documented per-platform flag corrupted the manifest
-    # for the rest of the tree. Load whatever is already committed and
+    # for the rest of the tree. Load whatever was already generated and
     # carry forward every entry belonging to a unit this invocation does
     # NOT actually rebuild (a unit is only "rebuilt" once its toolchain is
     # confirmed present and its build actually runs below - a unit named
@@ -860,13 +766,13 @@ def do_build(units, skip_debug, include_elf=False, quiet=False):
             paths, _log = build_std_unit(unit, "RELEASE")
 
         # Copy RELEASE artifacts into the tracked artifacts/ tree. ELF is
-        # copied only in --with-elf (tag-time) mode - see release_extensions().
+        # copied only in --with-elf (ELF download) mode - see release_extensions().
         out_dir = os.path.join(ARTIFACTS_DIR, unit["artifact_dir"])
         os.makedirs(out_dir, exist_ok=True)
         for ext in release_extensions(include_elf):
             dst = os.path.join(out_dir, unit["binary"] + "." + ext)
             shutil.copyfile(paths[ext], dst)
-            rel = os.path.relpath(dst, REPO_ROOT)
+            rel = os.path.relpath(dst, REPO_ROOT).replace(os.sep, "/")
             release_entries.append((rel, sha256_file(dst)))
 
         if not include_elf:
@@ -891,7 +797,7 @@ def do_build(units, skip_debug, include_elf=False, quiet=False):
         syms = gen_symbol_map(nm_bin, paths["elf"], objdump_bin=unit["objdump"])
         syms_path = os.path.join(out_dir, unit["binary"] + ".syms")
         header = ("# {}.syms - `{} --print-size --size-sort --demangle` "
-                  "on the committed RELEASE .elf.\n"
+                  "on the generated RELEASE .elf.\n"
                   "# Plain-text, diffable: when a port's binary size drifts, "
                   "`git diff` on this file shows WHICH function grew/shrank,\n"
                   "# not just that the binary changed. Regenerate with "
@@ -916,7 +822,7 @@ def do_build(units, skip_debug, include_elf=False, quiet=False):
         with open(syms_path, "w") as f:
             f.write(header)
             f.write(syms)
-        rel = os.path.relpath(syms_path, REPO_ROOT)
+        rel = os.path.relpath(syms_path, REPO_ROOT).replace(os.sep, "/")
         release_entries.append((rel, sha256_file(syms_path)))
 
         # .elf.dump: generated from the SAME freshly-built RELEASE .elf
@@ -954,164 +860,53 @@ def do_build(units, skip_debug, include_elf=False, quiet=False):
     print("Wrote {} ({} release files, {} debug hashes, {} skipped{}{})".format(
         os.path.relpath(MANIFEST_PATH, REPO_ROOT), len(all_release),
         len(all_debug), len(skipped),
-        ", --with-elf: .elf included (tag-time mode)" if include_elf else
+        ", --with-elf: .elf included (ELF download mode)" if include_elf else
         ", .elf excluded (tracked only at tag time - see --with-elf)",
         ", {} entries carried forward from units not in this run".format(carried) if carried else ""))
     return 0
 
 
-def do_check(units, skip_debug):
-    if not os.path.isfile(MANIFEST_PATH):
-        print("check: FAIL - {} does not exist; run "
-              "'tools/build_artifacts.py build' first".format(MANIFEST_PATH))
-        return 1
-    with open(MANIFEST_PATH) as f:
-        manifest = parse_manifest(f.read())
-
-    os.makedirs(BUILD_DIR, exist_ok=True)
-    # Global RELEASE coverage assertion - runs against the FULL unit table
-    # regardless of this run's --platforms filter, so a `check` scoped
-    # away from a silently-dropped unit still fails instead of printing
-    # OK having verified only part of the tree. See check_manifest_coverage()
-    # for the full rationale (and why it is RELEASE-only, not DEBUG).
-    problems = check_manifest_coverage(UNITS)
-    checked = 0
-    skipped = []
-
+def compare_manifests(expected, fresh, units, skip_debug):
+    """Compare selected units only; require both baseline and generated hashes."""
+    problems = []
     for unit in units:
-        key = unit["key"]
-        if not toolchain_available(unit):
-            print("SKIPPED {}: toolchain not found - cannot verify "
-                  "freshness".format(key))
-            skipped.append(key)
-            continue
+        d = unit["artifact_dir"]
+        labels = ["artifacts/{}/{}.{}".format(d, unit["binary"], ext)
+                  for ext in ("hex", "bin", "syms")]
+        if unit["has_debug"] and not skip_debug:
+            labels += ["build/{}/{}_dbg.{}".format(d, unit["binary"], ext)
+                       for ext in hash_gated_extensions(unit["nondeterministic_elf"])]
+        for label in labels:
+            if label not in expected:
+                problems.append("{}: no baseline hash".format(label))
+            elif label not in fresh:
+                problems.append("{}: no generated hash".format(label))
+            elif expected[label] != fresh[label]:
+                problems.append("{}: hash changed (baseline={} fresh={})".format(
+                    label, expected[label][:12], fresh[label][:12]))
+    return problems
 
-        print("== checking {} ==".format(key))
 
-        if unit["kind"] == "avr":
-            paths, _log = build_avr_unit()
-        else:
-            if unit["has_debug"] and not skip_debug:
-                dpaths, _dlog = build_std_unit(unit, "DEBUG")
-                # See do_build's matching comment: only .elf is exempt for
-                # nondeterministic_elf units - hex/bin are deterministic and
-                # stay fully hash-gated in DEBUG exactly like every other unit.
-                debug_exts = hash_gated_extensions(unit["nondeterministic_elf"])
-                if unit["nondeterministic_elf"]:
-                    print("   (skipping DEBUG .elf hash check for {}: ELF is "
-                          "not byte-reproducible on this toolchain - hex/bin "
-                          "ARE still checked)".format(key))
-                for ext in debug_exts:
-                    label = "build/{}/{}".format(unit["artifact_dir"], os.path.basename(dpaths[ext]))
-                    fresh = sha256_file(dpaths[ext])
-                    checked += 1
-                    expected = manifest.get(label)
-                    if expected is None:
-                        problems.append("{}: DEBUG {} has no recorded hash "
-                                         "in MANIFEST (manifest stale/incomplete)"
-                                         .format(key, label))
-                    elif expected != fresh:
-                        problems.append("{}: DEBUG {} hash changed "
-                                         "(manifest={} fresh={})".format(
-                                             key, label, expected[:12], fresh[:12]))
-            paths, _log = build_std_unit(unit, "RELEASE")
-
-        out_dir = os.path.join(ARTIFACTS_DIR, unit["artifact_dir"])
-        if unit["kind"] == "avr":
-            nm_bin = shutil.which("avr-nm")
-        else:
-            nm_bin = unit["nm"]
-        fresh_syms = gen_symbol_map(nm_bin, paths["elf"], objdump_bin=unit["objdump"])
-
-        # nondeterministic_elf (dsPIC33AK only): the ELF's differing bytes
-        # are embedded compiler-tempfile SECTION NAMES (/tmp/ccXXXXXX.s.scnN,
-        # a random-per-invocation `as` scratch filename echoed into a few
-        # section-name strings), not code or layout - see the UNITS table
-        # comment for the measured evidence (bin/hex `cmp -l` empty across
-        # two clean rebuilds; only .elf differs, ~12-13% of its bytes).
-        # bin/hex are produced by objcopy/bin2hex from the linked image's
-        # actual code/data bytes, which never see those scratch strings, so
-        # they are hash-gated for this unit EXACTLY like every other unit -
-        # only the .elf comparison below is skipped.
-        exts_to_check = hash_gated_extensions(unit["nondeterministic_elf"])
-        if unit["nondeterministic_elf"]:
-            print("   (skipping RELEASE .elf hash check for {}: ELF is not "
-                  "byte-reproducible on this toolchain, see UNITS table - "
-                  "hex/bin ARE still checked)".format(key))
-        for ext in exts_to_check:
-            committed = os.path.join(out_dir, unit["binary"] + "." + ext)
-            if ext == "elf" and not os.path.isfile(committed):
-                # ELF is tracked ONLY at release-tag time (owner
-                # directive, see build --with-elf) - its absence
-                # between tags is the expected state, not a failure.
-                # bin/hex/syms are still required below/elsewhere.
-                continue
-            checked += 1
-            if not os.path.isfile(committed):
-                problems.append("{}: committed {} is MISSING".format(
-                    key, os.path.relpath(committed, REPO_ROOT)))
-                continue
-            fresh_hash = sha256_file(paths[ext])
-            committed_hash = sha256_file(committed)
-            if fresh_hash != committed_hash:
-                problems.append("{}: {} is STALE (committed={} fresh={})".format(
-                    key, os.path.relpath(committed, REPO_ROOT),
-                    committed_hash[:12], fresh_hash[:12]))
-
-        committed_syms_path = os.path.join(out_dir, unit["binary"] + ".syms")
-        checked += 1
-        if not os.path.isfile(committed_syms_path):
-            problems.append("{}: committed {} is MISSING".format(
-                key, os.path.relpath(committed_syms_path, REPO_ROOT)))
-        else:
-            with open(committed_syms_path) as f:
-                committed_syms = f.read()
-            # Compare body only (ignore the header we prepend - it's static).
-            committed_body = "\n".join(
-                l for l in committed_syms.splitlines() if not l.startswith("#"))
-            fresh_body = fresh_syms.strip("\n")
-            if committed_body.strip("\n") != fresh_body:
-                problems.append("{}: {} is STALE (symbol map differs from "
-                                 "fresh build)".format(
-                                     key, os.path.relpath(committed_syms_path, REPO_ROOT)))
-
-        # .elf.dump: PRESENCE required (tracked continuously, same cadence
-        # as .syms) but content is DELIBERATELY NOT hash-gated/diffed here -
-        # NOT added to `checked`, unlike every file above. Reason (measured
-        # this batch, see elf_dump_header()'s "NOT HASH-GATED" paragraph in
-        # full): objdump always prints the exact path it was invoked with
-        # as the FIRST line of its own output, regardless of any compiler
-        # flag - a fresh rebuild's dump is only byte-identical to the
-        # committed one when regenerated from the IDENTICAL absolute
-        # checkout path, which this project's actual workflow (a fresh
-        # worktree per task) does not provide. Hash-gating it would
-        # false-positive on effectively every `check` run for zero real
-        # drift, so `check` intentionally skips the comparison rather than
-        # papering over it with a silent pass.
-        committed_dump_path = os.path.join(out_dir, unit["binary"] + ".elf.dump")
-        if not os.path.isfile(committed_dump_path):
-            problems.append("{}: committed {} is MISSING".format(
-                key, os.path.relpath(committed_dump_path, REPO_ROOT)))
-        else:
-            print("   (skipping {} content check for {}: objdump's own "
-                  "first output line is its invocation path, not "
-                  "reproducible across checkouts/worktrees - presence "
-                  "verified, content intentionally not diffed here, see "
-                  "the file's own header)".format(
-                      os.path.relpath(committed_dump_path, REPO_ROOT), key))
-
-    if problems:
-        print("")
-        print("artifacts check: FAIL - {} problem(s):".format(len(problems)))
-        for p in problems:
-            print("  - " + p)
-        print("")
-        print("Regenerate with: python3 tools/build_artifacts.py build")
+def do_check(units, skip_debug, include_elf=False):
+    if not os.path.isfile(BASELINE_PATH):
+        print("artifacts check: FAIL - missing " + BASELINE_PATH)
         return 1
-
-    print("artifacts check: OK - {} file(s) verified fresh across {} unit(s)"
-          "{}.".format(checked, len(units) - len(skipped),
-                       ", {} skipped (no toolchain)".format(len(skipped)) if skipped else ""))
+    with open(BASELINE_PATH) as f:
+        expected = parse_manifest(f.read())
+    problems = check_manifest_coverage(UNITS, BASELINE_PATH)
+    problems += ["{}: toolchain not found".format(u["key"])
+                 for u in units if not toolchain_available(u)]
+    if not problems:
+        do_build(units, skip_debug, include_elf=include_elf)
+        with open(MANIFEST_PATH) as f:
+            fresh = parse_manifest(f.read())
+        problems += compare_manifests(expected, fresh, units, skip_debug)
+    if problems:
+        print("artifacts check: FAIL\n  - " + "\n  - ".join(problems))
+        print("Review generated artifacts and update .github/ci/artifacts.sha256 "
+              "only for intentional changes.")
+        return 1
+    print("artifacts check: OK - {} unit(s) match the CI baseline".format(len(units)))
     return 0
 
 
@@ -1448,17 +1243,27 @@ def selftest():
     check(parsed_tag.with_elf is True,
           "build --with-elf parses and sets the flag")
 
-    # --- the core drift-detection comparison, without any build ------------
-    # This is the logic 'check' runs per-file; exercise it directly with
-    # synthetic hashes so the comparison itself is proven correct
-    # independent of any toolchain being installed.
-    def compare(committed, fresh):
-        return committed == fresh
-
-    check(compare("deadbeef", "deadbeef") is True, "identical hash: no drift")
-    check(compare("deadbeef", "cafef00d") is False,
-          "differing hash: drift detected (the exact case a mutated source "
-          "file must trigger)")
+    # Exercise the actual baseline comparison without invoking a compiler.
+    unit = dict(key="foo", artifact_dir="foo", binary="grbl_foo",
+                has_debug=True, nondeterministic_elf=False)
+    expected = {"artifacts/foo/grbl_foo." + ext: "a" * 64
+                for ext in ("hex", "bin", "syms")}
+    expected.update({"build/foo/grbl_foo_dbg." + ext: "b" * 64
+                     for ext in ("elf", "hex", "bin")})
+    check(compare_manifests(expected, expected, [unit], False) == [],
+          "identical generated hashes match baseline")
+    changed = dict(expected)
+    changed["artifacts/foo/grbl_foo.bin"] = "c" * 64
+    check(len(compare_manifests(expected, changed, [unit], False)) == 1,
+          "changed RELEASE binary is rejected")
+    del changed["build/foo/grbl_foo_dbg.elf"]
+    check(len(compare_manifests(expected, changed, [unit], False)) == 2,
+          "missing DEBUG hash is rejected")
+    check(len(compare_manifests({}, expected, [unit], False)) == 6,
+          "incomplete baseline cannot silently pass")
+    check(compare_manifests(expected, {k: v for k, v in expected.items()
+                                     if k.startswith("artifacts/")}, [unit], True) == [],
+          "skip-debug does not require DEBUG hashes")
 
     print("selftest: PASS ({} checks)".format(checks))
     return 0
@@ -1476,16 +1281,14 @@ def build_arg_parser():
     p.add_argument("--selftest", action="store_true", help="run unit checks, no compiler invoked")
     sub = p.add_subparsers(dest="cmd")
 
-    b = sub.add_parser("build", help="build and commit RELEASE artifacts + MANIFEST.sha256")
+    b = sub.add_parser("build", help="generate RELEASE outputs and MANIFEST.sha256")
     b.add_argument("--platforms", help="comma-separated unit keys (default: all)")
     b.add_argument("--skip-debug", action="store_true", help="skip DEBUG builds (manifest DEBUG section omitted for skipped units)")
     b.add_argument("--with-elf", action="store_true",
-                   help="also copy RELEASE .elf into artifacts/ (tag-time "
-                        "only - 'Эльф на тегах' owner directive; see the "
-                        "module docstring and PORTING-CHECKLIST.md's "
-                        "refresh policy)")
+                   help="also copy RELEASE ELF into generated outputs")
 
-    c = sub.add_parser("check", help="rebuild fresh and fail if committed artifacts are stale")
+    c = sub.add_parser("check", help="generate outputs and compare against the CI hash baseline")
+    c.add_argument("--with-elf", action="store_true", help="include RELEASE ELF in generated outputs")
     c.add_argument("--platforms", help="comma-separated unit keys (default: all)")
     c.add_argument("--skip-debug", action="store_true", help="skip DEBUG freshness check")
 
@@ -1516,7 +1319,7 @@ def main(argv=None):
         except KeyError as e:
             p.error(str(e))
         try:
-            return do_check(units, a.skip_debug)
+            return do_check(units, a.skip_debug, include_elf=a.with_elf)
         except BuildError as e:
             print("check: FAIL - {}".format(e))
             return 1

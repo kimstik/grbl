@@ -3,7 +3,7 @@
 
   Part of Grbl / Intelligence assisted / License: MIT
 
-  Contract, identical to every other subject (ci/seg_conformance.py):
+  Contract, identical to every other subject (.github/ci/seg_conformance.py):
       tb_segx <vector.gvec>   -> .gtrace on stdout, exit 0
 
   The subject plays HOST. It serialises the vector into Profile F frames using

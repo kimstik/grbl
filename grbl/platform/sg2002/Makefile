@@ -356,7 +356,7 @@ $(BIN_FILE): $(ELF_FILE)
 $(DUMP_FILE): $(ELF_FILE)
 	$(OBJDUMP) -Sxdstr $< >$@
 
-# WARNING RATCHET (ci/warn_ratchet.py) wired at build time - CONTRACTS.md
+# WARNING RATCHET (.github/ci/warn_ratchet.py) wired at build time - CONTRACTS.md
 # #warn-ratchet-build-time-wiring. See common/warn_check.sh's header for the
 # full soundness rationale: forces its own from-scratch build in a scratch
 # directory (never the developer's own $(BUILD_DIR)) so the captured log
@@ -376,8 +376,8 @@ WARN_SCRATCH     = $(OUTPUT_DIR)/.warncheck/$(PLATFORM_NAME)/$(BOARD)/$(BUILD)
 WARN_SCRATCH_OBJ = $(WARN_SCRATCH)/obj
 WARN_SCRATCH_OUT = $(WARN_SCRATCH)/out
 WARN_LOG         = $(WARN_SCRATCH)/build.log
-WARN_BASELINE    = ../../../ci/warn_baseline_$(PLATFORM_NAME).txt
-WARN_RATCHET     = ../../../ci/warn_ratchet.py
+WARN_BASELINE    = ../../../.github/ci/warn_baseline_$(PLATFORM_NAME).txt
+WARN_RATCHET     = ../../../.github/ci/warn_ratchet.py
 WARN_CHECK       = ../common/warn_check.sh
 
 warn_check:

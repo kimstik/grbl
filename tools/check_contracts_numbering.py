@@ -230,7 +230,7 @@ def run_check(contracts_path, repo_root):
 
 
 # --- selftest ----------------------------------------------------------------
-# Style matches ci/warn_ratchet.py / tools/assert_no_double.sh --selftest:
+# Style matches .github/ci/warn_ratchet.py / tools/assert_no_double.sh --selftest:
 # build synthetic CONTRACTS.md-shaped text for each failure class (the exact
 # shape of the four-times-bitten bug: duplicate numbers) plus one clean
 # control case, and drive the same run_check() entry point a real invocation

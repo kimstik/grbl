@@ -166,7 +166,7 @@ _Static_assert(X_STEP_BIT <= 7 && Y_STEP_BIT <= 7 && Z_STEP_BIT <= 7 &&
 // whole homing cycle) - Z-axis homing could never see its switch and would
 // drive into the physical hard stop. Found by an independent-compiler
 // probe (clang -Wconstant-conversion on settings.c:339); gcc's -Woverflow
-// had also flagged it (ci/warn_baseline_stm32f103.txt carried the line as
+// had also flagged it (.github/ci/warn_baseline_stm32f103.txt carried the line as
 // accepted "known debt" - it was real, not noise). Fix: Z moved to PB2,
 // keeping Z_LIMIT_BIT within bits 0-7 (CONTRACTS.md section 1.3) like every
 // other port's LIMIT pin choice; no hardware was ever wired to PB10 for

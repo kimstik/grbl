@@ -22,7 +22,7 @@ inputs:
 
 outputs:
   log:
-    description: Path of the captured build log (input for ci/warn_ratchet.py)
+    description: Path of the captured build log (input for .github/ci/warn_ratchet.py)
     value: ${{ steps.build.outputs.log }}
 
 runs:

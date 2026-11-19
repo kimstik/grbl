@@ -59,40 +59,21 @@ check: ## boot-init reachability ratchet, AVR reference leg (BUG #23)
 	$(MAKE) -C atmega328p validate
 
 # Pure-logic unit tests for the ratchet itself - no compiler invoked,
-# matches tools/assert_no_double.sh --selftest / ci/warn_ratchet.py
+# matches tools/assert_no_double.sh --selftest / .github/ci/warn_ratchet.py
 # --selftest / tools/build_artifacts.py --selftest.
 init-check-selftest:
 	sh common/init_check.sh --selftest
 
 # ============================================================================
-# TRACKED BUILD ARTIFACTS (PLAN.md "build artifacts tracked in git for
-# observability" batch; CONTRACTS.md #build-artifacts-tracked)
-#
-# Placed HERE (not a subdirectory Makefile, not the AVR root Makefile) on
-# purpose: this file is already the one place that knows about every
-# non-AVR platform as a unit (the $(READY_PLATFORMS)/all dispatch above),
-# and the artifact tooling needs to drive ALL platforms including AVR from
-# one entry point - a per-platform target would just mean ten near-
-# identical copy-pasted stanzas, and the root (AVR) Makefile is golden-MD5
-# gated, so it stays untouched rather than gaining unrelated targets.
-# tools/build_artifacts.py is the actual orchestrator (build truth still
-# lives in each platform's own Makefile - this is a thin invoker, same
-# division of labor as .github/actions/build-platform).
+# GENERATED BUILD ARTIFACTS (ignored locally, uploaded by Actions).
+# tools/build_artifacts.py reuses each platform Makefile and compares
+# RELEASE/DEBUG hashes with .github/ci/artifacts.sha256.
 # ============================================================================
 
-# Ordinary refresh: bin/hex/syms only. .elf is deliberately EXCLUDED here
-# ("Эльф на тегах" owner directive - ELF tracked only at release-tag time,
-# see artifacts/README.md's "Tagging a release" section) - it's the
-# largest artifact class and git can't delta binaries, so tracking it on
-# every refresh (as this used to) roughly doubled the growth cost of
-# every push that touched a port for a file most refreshes don't need.
 artifacts:
 	python3 ../../tools/build_artifacts.py build
 
-# Tag-time only: same as `artifacts` but ALSO copies+hashes .elf. Follow
-# with `git add -f artifacts/*/*.elf` (NOT `git add -A` - .elf is
-# deliberately .gitignore'd between tags, and -A silently skips ignored
-# paths; see artifacts/README.md).
+# Include ELF for release downloads; outputs are never committed.
 artifacts-tag:
 	python3 ../../tools/build_artifacts.py build --with-elf
 
@@ -144,13 +125,11 @@ help:
 	@echo "  Release: grbl_<platform>.bin"
 	@echo "  Debug:   grbl_<platform>_dbg.bin"
 	@echo ""
-	@echo "Tracked artifacts (../../artifacts/ - committed to git, see"
-	@echo "../../artifacts/README.md):"
-	@echo "  make artifacts          - Rebuild every port RELEASE, commit"
-	@echo "                            elf/bin/hex + symbol map + MANIFEST.sha256"
-	@echo "  make artifacts-check    - Fail if committed artifacts are stale"
-	@echo "                            relative to a fresh build (the 6th ratchet)"
-	@echo "  make artifacts-selftest - Pure-logic unit tests, no compiler invoked"
+	@echo "Generated artifacts (../../artifacts/ - ignored, uploaded by Actions):"
+	@echo "  make artifacts          - Generate RELEASE outputs and manifest"
+	@echo "  make artifacts-tag      - Generate outputs including RELEASE ELF"
+	@echo "  make artifacts-check    - Generate and compare with CI hash baseline"
+	@echo "  make artifacts-selftest - Pure-logic tests, no compiler invoked"
 	@echo ""
 	@echo "Boot-init reachability ratchet (BUG #23):"
 	@echo "  make check               - AVR reference leg (every other port"

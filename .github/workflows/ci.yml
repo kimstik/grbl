@@ -29,7 +29,7 @@ jobs:
       # No toolchain needed (pure text/regex over the tree), so it lives
       # here rather than in a per-port build job.
       - name: config.h/platform.h macro single-owner check
-        run: python3 ci/pinmap_overlap_check.py
+        run: python3 .github/ci/pinmap_overlap_check.py
       # Pure-logic unit tests for the sixth ratchet's manifest-format/hash-
       # compare machinery (no compiler invoked - same "no toolchain needed"
       # shape as the numbering check above, so it lives in this job rather
@@ -57,11 +57,11 @@ jobs:
       - name: FP=SINGLE no-DP assert selftest
         run: sh tools/assert_no_double.sh --selftest
       - name: Warning ratchet selftest
-        run: python3 ci/warn_ratchet.py --selftest
+        run: python3 .github/ci/warn_ratchet.py --selftest
       - name: Segment conformance selftest
-        run: python3 ci/seg_conformance.py --selftest
+        run: python3 .github/ci/seg_conformance.py --selftest
       - name: Macro single-owner check selftest (BUG #25 class)
-        run: python3 ci/pinmap_overlap_check.py --selftest
+        run: python3 .github/ci/pinmap_overlap_check.py --selftest
       - name: Artifact tooling selftest
         run: make -C grbl/platform artifacts-selftest
 
@@ -93,9 +93,9 @@ jobs:
       - name: Install verilator (for the RTL conformance subject)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq verilator
       - name: Replay the corpus through the frozen ISR and diff every subject
-        run: python3 ci/seg_conformance.py --require-rtl
+        run: python3 .github/ci/seg_conformance.py --require-rtl
       # Not a gate: a measurement. iCE40 place-and-route decides whether the
-      # executor closes timing at a given F_TICK, and SEGMENT-RUNTIME-PLAN §4
+      # executor closes timing at a given F_TICK, and SEGMENT-RUNTIME-PLAN Â§4
       # stage 5 says that answer must be visible before the goldens move.
       # Informational because it depends on nextpnr's placer seed.
       - name: Install yosys and nextpnr-ice40 (informational synthesis)
@@ -105,7 +105,7 @@ jobs:
         run: tools/hosted/subjects/rtl/ice40/synth.sh
 
   # One matrix row per platform/board/flavor; adding a port = one new row
-  # (plus its ci/warn_baseline_<platform>.txt, which may start empty).
+  # (plus its .github/ci/warn_baseline_<platform>.txt, which may start empty).
   build:
     name: ${{ matrix.platform }}${{ matrix.board && format(' {0}', matrix.board) || '' }} ${{ matrix.build }}
     runs-on: ubuntu-latest
@@ -208,9 +208,9 @@ jobs:
       # the allowed action set.
       - name: Warning ratchet
         run: >
-          python3 ci/warn_ratchet.py
+          python3 .github/ci/warn_ratchet.py
           --log '${{ steps.build.outputs.log }}'
-          --baseline 'ci/warn_baseline_${{ matrix.platform }}.txt'
+          --baseline '.github/ci/warn_baseline_${{ matrix.platform }}.txt'
 
       # Golden gate (BLOCKING): byte-exact reference build integrity.
       # make validate checks grbl.hex MD5 against the golden hash
@@ -219,29 +219,9 @@ jobs:
         if: matrix.platform == 'atmega328p'
         run: make -C grbl/platform/atmega328p validate
 
-      # Sixth ratchet (build-artifacts freshness), wired in per adversarial
-      # review - `tools/build_artifacts.py check` existed and was documented
-      # as "the sixth ratchet" but no job in this file ever ran it
-      # (`grep -n build_artifacts .github/workflows/ci.yml` returned
-      # nothing before this). `check` needs every toolchain (ARM/AVR/
-      # RISC-V/xc-dsc) to rebuild everything, which no single job here has -
-      # a dedicated all-toolchains job would either re-install every
-      # toolchain already installed by this matrix (duplicated install
-      # cost, zero new coverage) or need actions/download-artifact to move
-      # binaries between jobs (outside this workflow's allowed action set -
-      # see the build-dspic33ak128mc102 job's own comment on why IT isn't
-      # folded into build-platform for the identical reason in reverse).
-      # Instead: each row runs `check --platforms <its own unit(s)>` using
-      # the ONE toolchain it already has on PATH, right after already
-      # building that unit once this run - partial-but-full-matrix
-      # coverage at zero extra toolchain-install cost. Gated to the RELEASE
-      # row only: `check` always rebuilds BOTH DEBUG and RELEASE fresh
-      # regardless of which matrix row triggers it (see
-      # tools/build_artifacts.py's do_check), so running it from both rows
-      # of the same platform would just double-compile for no extra
-      # coverage; atmega328p has only one row (RELEASE, no DEBUG flavor on
-      # this port) so the same condition covers it too.
-      - name: Artifacts freshness ratchet (tools/build_artifacts.py check)
+      # Generate downloads and compare against the retained RELEASE/DEBUG
+      # hash baseline. Only RELEASE rows rebuild both flavors.
+      - name: Generate artifacts and verify baseline
         if: matrix.build == 'RELEASE'
         run: |
           unit="${{ matrix.platform }}"
@@ -254,7 +234,15 @@ jobs:
           if [ "${{ matrix.platform }}" = "samd21" ]; then
             unit="samd21-${{ matrix.board }}"
           fi
-          python3 tools/build_artifacts.py check --platforms "$unit"
+          python3 tools/build_artifacts.py check --with-elf --platforms "$unit"
+
+      - name: Upload generated release artifacts
+        if: always() && matrix.build == 'RELEASE'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}${{ matrix.board && format('-{0}', matrix.board) || '' }}
+          path: artifacts/
+          if-no-files-found: error
 
   # dspic33ak128mc102: deliberately NOT a row in the `build` matrix above.
   # Every other platform's toolchain is `apt-get install <packages>` (see
@@ -366,7 +354,7 @@ jobs:
       # BLOCKING integrity check, unconditional (cache hit AND miss): a
       # corrupted download that still "installs" without complaint is
       # exactly the failure class this project has been burned by before
-      # (see ci/warn_ratchet.py's own history). Re-checked every run, even
+      # (see .github/ci/warn_ratchet.py's own history). Re-checked every run, even
       # from cache, so a poisoned/altered cache entry fails loudly here
       # instead of silently "installing" downstream.
       - name: Verify installer + DFP SHA-256
@@ -421,7 +409,7 @@ jobs:
       # (Makefile `link` target comment / PLAN.md "zero PORT_TODO_*"
       # entries) - enforced here since there is no Renode/emulator boot
       # check for dsPIC33A (none exists for this core - PLAN.md/CONTRACTS
-      # §16 both say so explicitly), so this nm-based assert IS this
+      # Â§16 both say so explicitly), so this nm-based assert IS this
       # platform's boot-check-equivalent gate.
       - name: Assert zero PORT_TODO_* (linker-as-checklist, Definition-of-Done)
         run: |
@@ -434,9 +422,9 @@ jobs:
 
       - name: Warning ratchet
         run: >
-          python3 ci/warn_ratchet.py
+          python3 .github/ci/warn_ratchet.py
           --log '${{ steps.build.outputs.log }}'
-          --baseline 'ci/warn_baseline_dspic33ak128mc102.txt'
+          --baseline '.github/ci/warn_baseline_dspic33ak128mc102.txt'
 
       # RELEASE-only note (not enforced as a check - there is nothing to
       # assert against without a licensed compiler): xc-dsc-gcc FreeMode
@@ -454,20 +442,14 @@ jobs:
           echo "::notice::dsPIC33AK128MC102 RELEASE built with XC-DSC FreeMode: -Os is silently substituted with -O2-equivalent codegen ('Options have been disabled due to restricted license'). The build's size is exact and reproducible, but it is -O2, not true -Os."
           grep -c "Options have been disabled due to restricted license" "${{ steps.build.outputs.log }}" || true
 
-      # Sixth ratchet, wired in per adversarial review - see the `build`
-      # job's matching step for the full "why here, why RELEASE-gated"
-      # rationale (identical reasoning: check rebuilds BOTH flavors fresh
-      # regardless of which row triggers it, so one row per platform is
-      # correct, not redundant). This unit's .elf is exempt from the hash
-      # comparison (nondeterministic_elf - see tools/build_artifacts.py's
-      # UNITS table comment: embedded compiler-tempfile section names, not
-      # code); hex/bin/syms ARE hash-gated here exactly like every other
-      # unit, for both DEBUG and RELEASE.
-      - name: Artifacts freshness ratchet (tools/build_artifacts.py check)
+      # XC-DSC ELF is not reproducible; bin/hex/syms and DEBUG bin/hex
+      # remain hash-gated, as for the existing baseline.
+      - name: Generate artifacts and verify baseline
         if: matrix.build == 'RELEASE'
-        run: python3 tools/build_artifacts.py check --platforms dspic33ak128mc102
+        run: python3 tools/build_artifacts.py check --with-elf --platforms dspic33ak128mc102
 
       - name: Upload artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: grbl-${{ steps.build.outputs.tag }}
@@ -476,4 +458,5 @@ jobs:
             build/*.elf
             build/*.map
             build/*.log
+            artifacts/
           if-no-files-found: error

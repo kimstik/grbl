@@ -227,7 +227,7 @@ $(OUTPUT_DIR):
 
 # Board stamp: the FINAL artifact path (ELF_FILE = build/grbl_samd21[_dbg].elf,
 # and everything objcopy'd from it) is deliberately left un-keyed by BOARD -
-# .github/actions/build-platform/action.yml, ci/renode/smoke.sh, and
+# .github/actions/build-platform/action.yml, .github/ci/renode/smoke.sh, and
 # tools/build_artifacts.py all expect it at exactly this path (verified by
 # grep before adding this). BUILD_DIR above already keys the OBJECT dirs by
 # board, so object staleness is correct per-board - but that alone doesn't
@@ -298,7 +298,7 @@ $(BIN_FILE): $(ELF_FILE)
 $(DUMP_FILE): $(ELF_FILE)
 	$(OBJDUMP) -Sxdstr $< >$@
 
-# WARNING RATCHET (ci/warn_ratchet.py) wired at build time - CONTRACTS.md
+# WARNING RATCHET (.github/ci/warn_ratchet.py) wired at build time - CONTRACTS.md
 # #warn-ratchet-build-time-wiring. See common/warn_check.sh's header for the
 # full soundness rationale: this forces its own from-scratch build in a
 # scratch directory (never the developer's own $(BUILD_DIR)) so the
@@ -325,8 +325,8 @@ WARN_SCRATCH     = $(OUTPUT_DIR)/.warncheck/$(PLATFORM_NAME)/$(BOARD)/$(BUILD)
 WARN_SCRATCH_OBJ = $(WARN_SCRATCH)/obj
 WARN_SCRATCH_OUT = $(WARN_SCRATCH)/out
 WARN_LOG         = $(WARN_SCRATCH)/build.log
-WARN_BASELINE    = ../../../ci/warn_baseline_$(PLATFORM_NAME).txt
-WARN_RATCHET     = ../../../ci/warn_ratchet.py
+WARN_BASELINE    = ../../../.github/ci/warn_baseline_$(PLATFORM_NAME).txt
+WARN_RATCHET     = ../../../.github/ci/warn_ratchet.py
 WARN_CHECK       = ../common/warn_check.sh
 
 warn_check:

@@ -141,7 +141,7 @@ no new machinery needed):**
    on `-include` reaching AVR.)
 2. `tools/build_artifacts.py check` → every committed RELEASE blob for all
    11 units byte-identical.
-3. `ci/warn_ratchet.py` per port → identical TU emits identical
+3. `.github/ci/warn_ratchet.py` per port → identical TU emits identical
    diagnostics; baselines untouched.
 4. Remaining ratchets (boot, init, no-DP, numbering, pinmap) unchanged by
    construction.
@@ -171,7 +171,7 @@ grbl/platform/extensions/<kebab-name>/
 
 Rules, each load-bearing:
 - **No file named `platform.h` at the extension root** —
-  `ci/pinmap_overlap_check.py` discovers ports as `grbl/platform/*/` dirs
+  `.github/ci/pinmap_overlap_check.py` discovers ports as `grbl/platform/*/` dirs
   containing a root `platform.h` and would adopt the extension as a
   phantom port.
 - `prelude.h` defines `GRBL_EXT_<NAME>` and **never** `GRBL_PRELUDE` —
@@ -210,7 +210,7 @@ BOARD once — two-strike rule, ch32v006/Makefile:95-108); an EXT build
 overwriting the canonical `build/` output would repeat both mistakes.
 `+` is unambiguous: no existing port/board name contains it. Unit naming
 `<port>+<ext>` is used uniformly for CI rows, warn baselines
-(`ci/warn_baseline_<port>+<ext>.txt`), and `tools/build_artifacts.py`
+(`.github/ci/warn_baseline_<port>+<ext>.txt`), and `tools/build_artifacts.py`
 UNITS entries (`artifact_dir "<port>+<ext>"` — the samd21
 two-units-one-port precedent). Extension warnings are **never** unioned
 into a bare platform baseline (that is the falsified-baseline class
@@ -562,7 +562,7 @@ Deliverables:
   behavior. Vectors are committed artifacts, regenerated only
   deliberately — vector *generation* touches float producer code and must
   never run in CI (x86 float divergence churn); CI only replays.
-- **Ninth ratchet** `ci/seg_conformance.py`, one-way: (a) staleness gate —
+- **Ninth ratchet** `.github/ci/seg_conformance.py`, one-way: (a) staleness gate —
   regenerated traces from the frozen-consumer replay must equal committed
   goldens; (b) subject gate — any registered far-side implementation must
   match bit-exactly on step/dir sequence, per-tick clock counts, final and
@@ -590,7 +590,7 @@ shipper's serialized frames, replayed through the stage-3 oracle, must
 reproduce the golden traces — host side proven correct with no FPGA in
 existence.
 Gate: unit ch32v006+seg-link builds, own baseline/artifacts; loopback
-replay green under `ci/seg_conformance.py`; bare units untouched.
+replay green under `.github/ci/seg_conformance.py`; bare units untouched.
 
 **Stage 5 — FPGA executor in simulation. THE PROTOTYPE (part 2).**
 Deliverables: RTL executor (segment FIFO + 5-entry block store in 2-3 EBR,

@@ -28,11 +28,11 @@ The single highest-leverage phase. Converts manual review marathons into automat
       Provenance dual-build vs live upstream v1.1h → weekly workflow (provenance.yml,
       report-only; expected drift = 2 bytes VERSION_BUILD date).
 - [x] Warning ratchet (chosen over -Werror: one-way baseline per platform,
-      ci/warn_ratchet.py selftest 12/12). ARM baselines inspection-derived —
+      .github/ci/warn_ratchet.py selftest 12/12). ARM baselines inspection-derived —
       first real CI run may need recalibration (expected, not a defect).
 - [x] `compile_commands.json`: tools/gen_compile_commands.py + `make compdb` (samd21),
       -include flags preserved verbatim, 21 entries verified locally.
-- [x] **`ci/warn_ratchet.py` wired into build-time for every real port
+- [x] **`.github/ci/warn_ratchet.py` wired into build-time for every real port
       (2026-07-26) - measured gap closed.** Grepped every port Makefile plus
       `common/stm32/common.mk` and found the other three ratchets
       (`assert_no_double.sh` 8/10, `init_check.sh` 9/10, `boot_check.sh`-
@@ -82,7 +82,7 @@ The single highest-leverage phase. Converts manual review marathons into automat
       **STATUS UPDATE (2026-07-27): `sg2002` is no longer excluded — it is
       the concurrent session's rewrite of the port that made it off-limits
       here has since landed, and `sg2002` now has its own
-      `ci/warn_baseline_sg2002.txt` (already seeded from a real build log)
+      `.github/ci/warn_baseline_sg2002.txt` (already seeded from a real build log)
       and the identical `warn_check.sh` wiring as every other port.
       Verified this session: fresh `make BUILD=RELEASE` on `sg2002` reports
       `warn_ratchet: OK - 4 distinct warning(s), all in baseline`; a
@@ -115,7 +115,7 @@ undeclared (pre-existing defect; roadmap's "production ready" is false); also
 PLATFORM_NAME + sei/cli redefinitions, LIMIT_DDR self-collisions in platform.h;
 (d) **stm32h523 DOES NOT BUILD** — Makefile never sets CFLAGS_EXTRA (missing
 -I../common/dummy → avr/pgmspace.h not found), copy/paste omission;
-(e) ci/warn_baseline_stm32f103.txt entry for HAL_GPIO_IRQ_HANDLER is FALSIFIED by real
+(e) .github/ci/warn_baseline_stm32f103.txt entry for HAL_GPIO_IRQ_HANDLER is FALSIFIED by real
 build (warning does not occur there); (f) generic BOARD of samd21 has pre-existing
 config error (SPINDLE_PWM_MIN_VALUE must be > 0).
 
@@ -140,7 +140,7 @@ config error (SPINDLE_PWM_MIN_VALUE must be > 0).
       _template; no-clean flavor-switch proof landed; CI/smoke/compdb unaffected
 - [x] **Resolve dual-canon — VERIFIED STALE, closed on evidence (2026-07-26).**
       Re-checked from scratch rather than trusted: `grep -rn
-      "HAL_GPIO_IRQ_HANDLER|EEPROM_SIZE" ci/warn_baseline_*.txt` — zero hits
+      "HAL_GPIO_IRQ_HANDLER|EEPROM_SIZE" .github/ci/warn_baseline_*.txt` — zero hits
       in any of the 6 baselines (samd21's baseline even carries its own
       comment noting both redefinition classes died with the Phase-1 prelude
       canon). Then a FRESH clean build of all 7 ports, both flavors where
@@ -156,7 +156,7 @@ config error (SPINDLE_PWM_MIN_VALUE must be > 0).
       platform.h explicitly comments "deliberately NOT defined here". The
       checkbox was stale, not aspirational: the work landed in Phase 1
       (22aa27c) and nobody ticked it. All 7 ports' warning ratchets stayed
-      green (`ci/warn_ratchet.py` against every `ci/warn_baseline_*.txt`,
+      green (`.github/ci/warn_ratchet.py` against every `.github/ci/warn_baseline_*.txt`,
       0 new warnings anywhere) and AVR golden `make validate` PASSED
       (MD5 79af184e67b27defd27a39309ac53563) throughout.
 - [x] **Loud-failure guard — ALREADY LANDED (Phase 1, 22aa27c), PROVEN LIVE
@@ -270,7 +270,7 @@ assumptions); BUG #4 (baud arithmetic) — none catchable without stated contrac
       sizes byte-identical to the canonical table (f103 28700/80, h523
       25132/388, f411 25796/80, ch32v006 41072/0, samd21 megarm 31952/296);
       all warning ratchets stayed green (0 new warnings, verified per-port
-      via `ci/warn_ratchet.py` against every `ci/warn_baseline_*.txt`); AVR
+      via `.github/ci/warn_ratchet.py` against every `.github/ci/warn_baseline_*.txt`); AVR
       golden `make validate` PASSED throughout (untouched by this batch —
       no platform/atmega328p or grbl/ core file in this sweep).
 - [x] **`_template` platform LANDED — mechanism PROVEN**: 37 distinct PORT_TODO_*
@@ -313,7 +313,7 @@ without reverse-engineering an existing port.
       warning gone.
 - [x] **STALE, corrected 2026-07-26 (warn-ratchet build-time-wiring batch):**
       this line claimed 8 pre-existing core warnings were missing from
-      `ci/warn_baseline_samd21.txt` and that the first CI run would trip the
+      `.github/ci/warn_baseline_samd21.txt` and that the first CI run would trip the
       ratchet until regenerated. Re-verified from a REAL fresh full DEBUG
       rebuild of samd21 this session: `warn_ratchet: OK - 4 distinct
       warning(s), all in baseline.` The regeneration this item asked for had
@@ -327,7 +327,7 @@ without reverse-engineering an existing port.
       banner → interactive `$$` via RXC interrupt → full stock-correct dump → ok.
       TX via DRE drain, RX via ring buffer — BUG #12 fixes exercised live. 3× repro
       (Renode 1.16.1 stable + nightly). Negative test: hang forensics captures
-      PC+symbol (verified on OSC8M poll startup.c:143). Delivered: ci/renode/
+      PC+symbol (verified on OSC8M poll startup.c:143). Delivered: .github/ci/renode/
       {samd21_grbl.repl,samd21_smoke.resc,smoke.sh,uart_probe.py} +
       .github/workflows/smoke.yml (non-blocking until GH-runner green streak).
       Emu workarounds via Renode Tags only (SYSCTRL_PCLKSR, NVMCTRL_INTFLAG) —
@@ -477,7 +477,7 @@ Priority order (revise as hardware/toolchain reality dictates):
         `x-amz-meta-sha256` header, independent match; `make BUILD=DEBUG
         link` and `make BUILD=RELEASE link` both succeed (~3-5s each),
         zero `PORT_TODO_*` in both ELFs (nm-verified). Warn baseline
-        (`ci/warn_baseline_dspic33ak128mc102.txt`) generated from these
+        (`.github/ci/warn_baseline_dspic33ak128mc102.txt`) generated from these
         real logs: identical 4-warning core-only class every other port's
         baseline has (gcode.c/motion_control.c/report.c/system.c).
         TWO real gaps found and handled, neither a port-source fix (gate:
@@ -550,7 +550,7 @@ Priority order (revise as hardware/toolchain reality dictates):
       stm32h523 RELEASE 25132/388; stm32f411 RELEASE 25796/80; ch32v006
       generic RELEASE 41072/0 — all six siblings byte-identical, confirming
       this port touched only `grbl/platform/hc32f460/`, CONTRACTS.md,
-      PLAN.md, PLATFORM_ROADMAP.md, `ci/warn_baseline_hc32f460.txt`, and
+      PLAN.md, PLATFORM_ROADMAP.md, `.github/ci/warn_baseline_hc32f460.txt`, and
       `.github/workflows/ci.yml`. CI: 2 matrix rows added
       (`hc32f460` × `{DEBUG, RELEASE}`), warn baseline generated from real
       build logs. Not smoke-tested (no HC32F460 emulator exists) — marked
@@ -710,7 +710,7 @@ Priority order (revise as hardware/toolchain reality dictates):
         - Golden AVR `make -C grbl/platform/atmega328p validate` PASSED
           (`79af184e67b27defd27a39309ac53563`, unchanged); all 7 warning
           ratchets green including a freshly regenerated
-          `ci/warn_baseline_sg2002.txt` cross-check (4 distinct warnings, all
+          `.github/ci/warn_baseline_sg2002.txt` cross-check (4 distinct warnings, all
           core-file, all in baseline, both flavors).
       * **HARDWARE SINGLE-PRECISION FLOAT + RELEASE LTO (2026-07-26, same-day
         follow-up, coordinator-directed adversarial re-check).** Two closed
@@ -1270,7 +1270,7 @@ identity to integration time.
 - OWNER DIRECTIVES 2026-07-24: (1) dsPIC EULA approved — CI wiring unblocked;
   (2) alarm now UNCONDITIONAL 3h grid :13 (job 16d87106; prior 6h job died with
   a context compaction — session-only store, known behavior); (3) TEST/REVIEW
-  FOCUS = PORT CODE ONLY (grbl/platform/*, ci/*): core is presumed clean, do
+  FOCUS = PORT CODE ONLY (grbl/platform/*, .github/ci/*): core is presumed clean, do
   not spend review/test cycles hunting core bugs (aligns with byte-proven
   template philosophy).
 
@@ -1353,7 +1353,7 @@ identity to integration time.
   State; CONTRACTS §18 landed; boot_check.sh ratchet landed on all ARM ports +
   _template, RISC-V variant on ch32v006).
 - FP twin (samd21) re-dispatched to fresh agent (Renode-agent pool walled to
-  20:50; harness is landed in ci/renode — any agent can drive it now).
+  20:50; harness is landed in .github/ci/renode — any agent can drive it now).
 
 - ORCHESTRATOR-PURITY CORRECTION 2026-07-24 (owner: "Сам? Ты же оркестратор!!"):
   orchestrator was caught authoring ledger edits/baseline merges/roadmap refreshes
@@ -1486,7 +1486,7 @@ identity to integration time.
   true at the time it was written but stale by the time both branches
   merged. The dangling `# ch570: TODO - not landed...` comment block at
   the bottom of `ci.yml`, contradicting the real rows already present
-  above it, is removed. `ci/warn_baseline_ch570.txt` confirmed present and
+  above it, is removed. `.github/ci/warn_baseline_ch570.txt` confirmed present and
   re-verified against fresh local build logs for both flavors (`warn_
   ratchet: OK - 4 distinct warning(s), all in baseline` both times — same
   core-file class as ch32v006's baseline, exactly as its own header
@@ -1507,7 +1507,7 @@ identity to integration time.
 
 ## Current State (update each session)
 
-- **[x] `ci/warn_ratchet.py` WIRED INTO BUILD-TIME, EVERY REAL PORT
+- **[x] `.github/ci/warn_ratchet.py` WIRED INTO BUILD-TIME, EVERY REAL PORT
   (2026-07-26, ratchet-coverage audit batch).** Measured (grep every port
   Makefile + `common/stm32/common.mk`), not assumed: three of the four
   ratchets (`assert_no_double.sh`, `init_check.sh`, `boot_check.sh`-or-
@@ -1629,7 +1629,7 @@ identity to integration time.
   Gates: golden AVR `make -C grbl/platform/atmega328p validate` PASSED
   (`79af184e67b27defd27a39309ac53563`) throughout; all `script.ld`-touched
   ports rebuilt RELEASE and `md5sum`-diffed byte-identical against
-  `artifacts/`; `ci/warn_ratchet.py`/`tools/assert_no_double.sh`/
+  `artifacts/`; `.github/ci/warn_ratchet.py`/`tools/assert_no_double.sh`/
   `grbl/platform/common/init_check.sh` `--selftest` and
   `tools/check_contracts_numbering.py`/`tools/build_artifacts.py check`
   all green.
@@ -1670,7 +1670,7 @@ identity to integration time.
     the committed `artifacts/samd21-*`; DEBUG `.bin`/`.hex` byte-identical
     too (only the DEBUG `.elf`'s DWARF line-number metadata shifts, from
     the added comment lines). **New permanent ratchet**:
-    `ci/pinmap_overlap_check.py` (discovers every config.h/platform.h pair
+    `.github/ci/pinmap_overlap_check.py` (discovers every config.h/platform.h pair
     in the tree automatically, fails on any unguarded common macro name),
     wired into `.github/workflows/ci.yml`'s `docs-integrity` job plus its
     own `--selftest` in `ratchet-selftests`. Proven to actually fire: run
@@ -1786,7 +1786,7 @@ identity to integration time.
     `main.c`, a pre-existing gap unrelated to F_CPU (confirmed: the only
     Makefile diff is the `ULL` suffix itself); verified instead via an
     isolated compile with matching `-march=rv64gc -mabi=lp64d` flags.
-  - **All ratchets green**: `ci/warn_ratchet.py` against every rebuilt
+  - **All ratchets green**: `.github/ci/warn_ratchet.py` against every rebuilt
     port's baseline, both flavors - the stepper.c:1015 entry is gone from
     the four baselines that had it (f103/f411/h523/hc32f460) and was
     never present in dspic33ak128mc102's (confirming it was invisible,
@@ -1801,7 +1801,7 @@ identity to integration time.
     five untouched ports' `.elf.dump` shows only the known
     objdump-invocation-path line (this worktree's absolute path), not a
     content change (`build_artifacts.py check`: 56 files fresh, 10 units).
-  - **Full baseline audit** (every `ci/warn_baseline_*.txt` entry, not
+  - **Full baseline audit** (every `.github/ci/warn_baseline_*.txt` entry, not
     just the ones this fix touched): every remaining entry across all 9
     files is either the already-catalogued core-file class
     (`-Wimplicit-fallthrough` gcode.c/report.c/system.c,
@@ -1849,7 +1849,7 @@ identity to integration time.
     entirely at the platform Makefile layer, per the hard constraint);
     no `platform.h` on any STM32 port touched (the concurrent pin-width
     batch's territory) - every edit here is a `Makefile`/`common.mk`/
-    `CONTRACTS.md`/`ci/warn_baseline_*.txt` change.
+    `CONTRACTS.md`/`.github/ci/warn_baseline_*.txt` change.
 
 - **[x] CROSS-ARCHITECTURE DE-DUPLICATION BATCH, BYTE-IDENTITY GATED
   (2026-07-26)** — four duplication clusters extracted into `common/`,
@@ -1927,7 +1927,7 @@ identity to integration time.
   sufficient: the FINAL artifact (`ELF_FILE` = `build/grbl_<plat>[_dbg]
   .elf`, and everything objcopy'd from it) is deliberately left un-keyed,
   because `.github/actions/build-platform/action.yml`,
-  `ci/renode/smoke.sh`, and `tools/build_artifacts.py` all expect it at
+  `.github/ci/renode/smoke.sh`, and `tools/build_artifacts.py` all expect it at
   exactly that shared path. Consequence, reproduced cold on the merged
   tree by the orchestrator: `rm -rf build; make BOARD=megarm
   BUILD=RELEASE` -> 31952/296 (correctly under `build/samd21/megarm/
@@ -1946,7 +1946,7 @@ identity to integration time.
   every consumer path stays put; (b) key the output name/dir by board and
   update all three consumers + CI matrix expectations; (c) something
   better. **Chose (a)**: it's the only option that doesn't touch
-  `.github/actions/build-platform/action.yml`, `ci/renode/smoke.sh`, or
+  `.github/actions/build-platform/action.yml`, `.github/ci/renode/smoke.sh`, or
   `tools/build_artifacts.py` at all (re-verified by grep before
   implementing, same three files as the previous entry) - (b) would ripple
   into the CI matrix's artifact names and every downstream consumer of
@@ -1989,7 +1989,7 @@ identity to integration time.
   OK, 56 files verified fresh across all 10 units (this fix only changes
   WHEN the link step reruns, never what it produces, so every tracked
   artifact byte was already correct - no regeneration needed);
-  `ci/warn_ratchet.py` OK against every touched port's baseline (samd21,
+  `.github/ci/warn_ratchet.py` OK against every touched port's baseline (samd21,
   ch32v006, ch570, dspic33ak128mc102), both flavors, real build logs;
   `check_contracts_numbering.py` unaffected (`--selftest` PASS 9 checks,
   real run OK 26/26/12).
@@ -2015,7 +2015,7 @@ identity to integration time.
   `grbl/platform/_template/Makefile`, `ch32v006/Makefile`,
   `ch570/Makefile`, `dspic33ak128mc102/Makefile`. OUTPUT_DIR and every
   final artifact name/path are UNCHANGED (verified by grep BEFORE editing:
-  `.github/actions/build-platform/action.yml` and `ci/renode/smoke.sh`
+  `.github/actions/build-platform/action.yml` and `.github/ci/renode/smoke.sh`
   only ever reference `build/*.hex`/`build/*.bin`/`build/*.map`/
   `build/grbl_samd21_dbg.elf`, i.e. OUTPUT_DIR, never the intermediate
   per-board/per-flavor object dir) - CI, the smoke test, and
@@ -2029,7 +2029,7 @@ identity to integration time.
   `79af184e67b27defd27a39309ac53563`); `tools/build_artifacts.py check`
   OK, 56 files verified fresh across all 10 units, no regeneration needed
   (this batch's fix is purely to the intermediate object-dir path, so
-  every tracked artifact byte was already correct); `ci/warn_ratchet.py`
+  every tracked artifact byte was already correct); `.github/ci/warn_ratchet.py`
   OK against every touched port's baseline (samd21, ch32v006, ch570,
   dspic33ak128mc102), both flavors, real build logs.
 - **[x] check_contracts_numbering.py SCANNED .claude/ SCRATCH WORKTREES
@@ -2135,7 +2135,7 @@ identity to integration time.
   (26 sections/slugs now, 9 cross-file links, new §25 placeholder -
   slugged `build-artifacts-tracked`, integrator assigns the final number);
   every pre-existing ratchet's own `--selftest` still PASSED
-  (`ci/warn_ratchet.py`, `tools/assert_no_double.sh`,
+  (`.github/ci/warn_ratchet.py`, `tools/assert_no_double.sh`,
   `tools/check_contracts_numbering.py`) - none of this batch's edits
   touched their logic, only added a sixth alongside them. Also fixed
   along the way (needed for the "hex+bin, not just elf" requirement to be
@@ -2354,7 +2354,7 @@ identity to integration time.
   all 7 ports rebuilt both flavors where applicable (atmega328p single-flavor;
   stm32f103/h523/f411 D+R; samd21 megarm+generic D+R; ch32v006 D+R;
   dspic33ak128mc102 D+R via the real `/opt/xc-dsc` toolchain) — 0 failures;
-  every `ci/warn_baseline_*.txt` ratchet re-run against the fresh logs — 0
+  every `.github/ci/warn_baseline_*.txt` ratchet re-run against the fresh logs — 0
   new warnings anywhere; sizes byte-identical to the CANONICAL RELEASE SIZE
   TABLE (f103 28700/80, h523 25132/388, f411 25796/80, ch32v006 41072/0,
   samd21 megarm 31952/296) — the `_Static_assert`/doc-only edits added zero
@@ -2387,7 +2387,7 @@ identity to integration time.
      (complex double) and `__floatdidf`; only `__aeabi_d2f` stays tolerated
      (verified via `nm` on the landed samd21 ELF — it is still the only
      conversion present, at the `_delay_ms(double)` boundary). Added
-     `--selftest` (8 checks, `ci/warn_ratchet.py`-style: positive + negative
+     `--selftest` (8 checks, `.github/ci/warn_ratchet.py`-style: positive + negative
      + end-to-end through a fake `nm`) — `PASS (8 checks)`. Re-run on real
      builds: samd21 FP=SINGLE RELEASE still `31952/296/6160`, assert PASSES
      honestly (confirmed via `nm`, only `__aeabi_d2f`); an FP=DOUBLE build
@@ -2631,7 +2631,7 @@ identity to integration time.
 - BUG #21 gates: AVR golden `make -C grbl/platform/atmega328p validate` PASSED
   (MD5 79af184e67b27defd27a39309ac53563). Warning ratchet clean on all of
   stm32f103 (21 warns) / stm32f411 (14) / stm32h523 (18) / samd21 (0) — no new
-  entries against any `ci/warn_baseline_*`. CONTRACTS.md §18 authored.
+  entries against any `.github/ci/warn_baseline_*`. CONTRACTS.md §18 authored.
 
 - ALARM SEMANTICS (owner directive 2026-07-23): the 6h cron is FALLBACK RECOVERY
   ONLY — never a scheduler/heartbeat. Work is dispatched immediately when known;
@@ -2659,7 +2659,7 @@ identity to integration time.
 - Phase 0 landed: c3c42b6 (pipeline+ratchet+compdb+AVR shim) + follow-up (golden gate
   blocking, provenance weekly). Local: make validate PASSED, ratchet selftest 12/12,
   compdb 21 entries. NEXT CRON SESSION: check GitHub Actions result of these pushes;
-  recalibrate ci/warn_baseline_{stm32f103,stm32h523,samd21}.txt from real logs if red.
+  recalibrate .github/ci/warn_baseline_{stm32f103,stm32h523,samd21}.txt from real logs if red.
 - Makefile self-sufficiency fixes DONE via atmega328p shim (root Makefile untouched)
 - Local container: avr-gcc 7.3.0 OK; gcc-arm-none-eabi apt install running in background
   (if it lands, ARM platforms verifiable locally; else CI-only)
@@ -2700,7 +2700,7 @@ identity to integration time.
     `_delay_us`/`_delay_ms` narrow exactly once via `__aeabi_d2f` and stay in
     float/uint32 forever. That recovered the remaining 3940 bytes.
   - **RUNTIME ARBITRATION (the point of the batch).** Renode 1.16.1 portable,
-    `ci/renode/smoke.sh` reused as-is and extended with a new arc stage
+    `.github/ci/renode/smoke.sh` reused as-is and extended with a new arc stage
     (`--arc` / `SMOKE_ARC=1` in smoke.sh; `arc_stage()` in `uart_probe.py`,
     new exit code 5). On the FP=SINGLE megarm DEBUG image: banner + `$$`
     (through `$132=`) + `G91`/`G0 X1` (MPos 0→1.000, Idle) + **`G2 X2 I1 F200`
@@ -2716,9 +2716,9 @@ identity to integration time.
     `assert_no_double.sh` PASSING as the bar.
   - Gates: AVR golden `make -C grbl/platform/atmega328p validate` **PASSED**
     (text 30640, MD5 79af184e67b27defd27a39309ac53563); warn ratchet vs
-    `ci/warn_baseline_samd21.txt` **OK** across all 4 megarm/generic ×
+    `.github/ci/warn_baseline_samd21.txt` **OK** across all 4 megarm/generic ×
     DEBUG/RELEASE combos (5 distinct warnings, all baselined, 0 new); sibling
-    platforms untouched (diff is samd21/, ci/renode/, tools/ only).
+    platforms untouched (diff is samd21/, .github/ci/renode/, tools/ only).
   - Watch-out recorded for future smoke runs: sweeping `BOARD=generic` builds
     overwrite `build/grbl_samd21_dbg.elf`, and the PA25 STEP assertion is
     megarm-specific — always rebuild megarm DEBUG immediately before the smoke
@@ -2810,9 +2810,9 @@ identity to integration time.
     authored with `MAX_VALUE=255` and the `_Static_assert` from its first
     commit. samd21 was the only port that ever carried the wrong value.
   - **Ratchet**: removed the now-dead `config.h: ... -Woverflow ...` line from
-    `ci/warn_baseline_samd21.txt` (one-way ratchet, removal-on-real-fix
+    `.github/ci/warn_baseline_samd21.txt` (one-way ratchet, removal-on-real-fix
     direction). Confirmed gone from fresh build logs across all 4 combos
-    (megarm/generic × DEBUG/RELEASE); `ci/warn_ratchet.py` OK against the
+    (megarm/generic × DEBUG/RELEASE); `.github/ci/warn_ratchet.py` OK against the
     trimmed baseline on all 4 (4 distinct warnings each, all baselined, 0 new).
   - **Gates**: AVR golden `make validate` PASSED (text 30640, data 0, bss
     1633, MD5 79af184e67b27defd27a39309ac53563, `AVR_GCC_PATH=/usr/bin` in
@@ -2825,8 +2825,8 @@ identity to integration time.
     f103 28700/80, h523 25132/388, f411 25796/80, hc32f460 25596/80, ch32v006
     41072/0 (dsPIC not in this environment's toolchain roster; untouched by
     the diff regardless — `git diff --stat` shows only
-    `ci/warn_baseline_samd21.txt` and the two samd21 board config.h files).
-  - **Runtime proof (Renode)**: `ci/renode/smoke.sh --arc` on a freshly
+    `.github/ci/warn_baseline_samd21.txt` and the two samd21 board config.h files).
+  - **Runtime proof (Renode)**: `.github/ci/renode/smoke.sh --arc` on a freshly
     rebuilt megarm DEBUG image — banner, `$$`, motion (MPos 0→1.000, Idle),
     arc (`G2 X2 I1 F200`, Y peak 1.000, endpoint (3,0,0), Idle), dwell (`G4
     P0.5` ok in 0.49s) all PASS, PA25 X STEP driven high 427 times, **exit
@@ -2910,8 +2910,8 @@ identity to integration time.
     check (Makefile's `_start`-at-flash-base assertion, the RISC-V form of
     BUG #21's ratchet) **OK** all four builds (`_start=0x00000000`);
     `tools/assert_no_double.sh` FP=SINGLE post-link assert **PASSED** all
-    four builds; `ci/warn_ratchet.py` **OK** against
-    `ci/warn_baseline_ch32v006.txt`/`ci/warn_baseline_ch570.txt` for all
+    four builds; `.github/ci/warn_ratchet.py` **OK** against
+    `.github/ci/warn_baseline_ch32v006.txt`/`.github/ci/warn_baseline_ch570.txt` for all
     four build logs (ch570 RELEASE additionally reported 4 baseline
     warnings no longer observed — left in the baseline per the one-way
     ratchet rule, not removed); zero `PORT_TODO_*` in all four ELFs.
@@ -2927,7 +2927,7 @@ identity to integration time.
     outside `ch32v006/`, `ch570/`, and `MANIFEST.sha256` — this batch is
     scoped to exactly the two ports it targets, verified rather than
     assumed. `tools/build_artifacts.py --selftest`,
-    `tools/assert_no_double.sh --selftest`, `ci/warn_ratchet.py
+    `tools/assert_no_double.sh --selftest`, `.github/ci/warn_ratchet.py
     --selftest`, and `tools/check_contracts_numbering.py` all still PASS
     unchanged.
   - **Files touched**: `grbl/platform/ch32v006/{Makefile,startup.c}`,
@@ -3069,7 +3069,7 @@ Every landed port was audited, not just the four that were broken.
     "defined in the final ELF" *means* "reachable". The single false negative
     (inlining) is removed by `GRBL_BOOT_INIT`.
   - **`--selftest` (10 checks, pure logic, no compiler)** — house style,
-    matching `tools/assert_no_double.sh` / `ci/warn_ratchet.py` /
+    matching `tools/assert_no_double.sh` / `.github/ci/warn_ratchet.py` /
     `tools/build_artifacts.py`. Positive cases: the **verbatim pre-fix
     stm32f103 symbol table** (`Reset_Handler` + `main` only) must be caught;
     partial loss (gpio dropped, clock kept) must name exactly the one
@@ -3353,8 +3353,8 @@ mechanism and deserve their own work items.
   - **Gates re-run**: golden AVR `make -C grbl/platform/atmega328p
     validate` PASSED (MD5 `79af184e67b27defd27a39309ac53563`, untouched —
     no core file or `atmega328p/` file in this batch); warning ratchet
-    green on both flavors (`ci/warn_ratchet.py` against
-    `ci/warn_baseline_ch32v006.txt`, 4 pre-existing core-only warnings,
+    green on both flavors (`.github/ci/warn_ratchet.py` against
+    `.github/ci/warn_baseline_ch32v006.txt`, 4 pre-existing core-only warnings,
     0 new); `assert_no_double.sh` PASSED both flavors; `init_check.sh`
     PASSED both flavors listing `hal_gpio_clock_init` as defined; boot
     integrity (`_start=0x00000000`) PASSED both flavors; ch570 rebuilt
@@ -3612,7 +3612,7 @@ mechanism and deserve their own work items.
     checked, not assumed.
   - **gcc itself had already flagged this** — `-Woverflow` (part of
     `-Wall`), same line, all three ports — sitting in each port's
-    `ci/warn_baseline_stm32{f103,f411,h523}.txt` as an accepted, never
+    `.github/ci/warn_baseline_stm32{f103,f411,h523}.txt` as an accepted, never
     re-examined baseline entry since whichever session first built these
     ports. The value the independent compiler added was not detection gcc
     lacked; it was `-Wconstant-conversion`'s sharper framing (a specific
@@ -3643,8 +3643,8 @@ mechanism and deserve their own work items.
   validate` PASSED (`79af184e67b27defd27a39309ac53563`, untouched); all
   three ports rebuilt both flavors clean; `boot_check.sh`/`init_check.sh`/
   `assert_no_double.sh` OK on all six builds; warning ratchet green on all
-  three ports (`ci/warn_ratchet.py`) — the now-dead `settings.c`
-  1024→0 baseline line removed from all three `ci/warn_baseline_*.txt`
+  three ports (`.github/ci/warn_ratchet.py`) — the now-dead `settings.c`
+  1024→0 baseline line removed from all three `.github/ci/warn_baseline_*.txt`
   files per the ratchet's own "remove only after verified gone" rule (the
   sibling `stepper.c` `-Woverflow` line, a DIFFERENT pre-existing accepted
   warning — BUG #18's F_CPU-needs-a-UL-suffix class, never rolled out to
@@ -3736,14 +3736,14 @@ mechanism and deserve their own work items.
     `SPINDLE_DIRECTION_PORT` is GPIOB (a port mismatch, not just a bit
     mismatch) — its pin map was decorative regardless of which header
     would have won.
-  - **The baseline was hiding it, read literally**: `ci/warn_baseline_
-    stm32f103.txt` and `ci/warn_baseline_stm32h523.txt` carried these exact
+  - **The baseline was hiding it, read literally**: `.github/ci/warn_baseline_
+    stm32f103.txt` and `.github/ci/warn_baseline_stm32h523.txt` carried these exact
     warnings under a comment reading, verbatim, "Known debt (config.h vs
     platform.h dual pin-map canon, PLAN.md Phase 1/2)"; h523's said "same
     pattern already accepted for stm32f103"; f411's said "same accepted
     pattern already carried by stm32f103/stm32h523". The recurrence across
     three ports was noticed each time and propagated as accepted baseline
-    debt instead of escalated. `ci/warn_ratchet.py` is a one-way ratchet by
+    debt instead of escalated. `.github/ci/warn_ratchet.py` is a one-way ratchet by
     design (PLAN.md Phase 0 rationale) — an accepted baseline entry
     provides zero ongoing protection from the moment it lands; it held
     down a live wiring defect for three ports' worth of porting sessions.
@@ -3760,7 +3760,7 @@ mechanism and deserve their own work items.
     are legitimately single-board (unlike samd21/ch32v006/ch570, which
     have real per-board config selection to inject) — the fix is one file
     too many claiming ownership, not a missing board layer.
-  - **Ratchet**: no new mechanism invented — `ci/warn_ratchet.py` had
+  - **Ratchet**: no new mechanism invented — `.github/ci/warn_ratchet.py` had
     already caught every one of these warnings; the fix is deleting the
     now-dead baseline lines (9 f103, 9 h523, 6 f411) with a comment
     explaining why they must never return, then re-running the ratchet
@@ -3841,7 +3841,7 @@ mechanism and deserve their own work items.
      baseline debt like BUG #26 was): the truncation is a *runtime* AND
      between a register read and a mask, narrowed only at the enclosing
      `uint8_t` return — gcc's constant-conversion warning has no compile-time
-     constant to flag. Confirmed by grepping every `ci/warn_baseline_*.txt`
+     constant to flag. Confirmed by grepping every `.github/ci/warn_baseline_*.txt`
      for probe.c/system.c overflow/conversion lines: zero hits anywhere.
      **No baseline entry was found masking a width bug in this pass** — the
      one class of "invisible" truncation this audit turned up was invisible
@@ -3884,8 +3884,8 @@ mechanism and deserve their own work items.
   **Gates, all re-run, all green**: golden AVR `make validate` PASSED
   (`79af184e67b27defd27a39309ac53563`, untouched — no `grbl/` core file in
   this batch). All 9 implemented ports rebuilt both flavors (18 builds)
-  clean; every warning ratchet green (`ci/warn_ratchet.py` against every
-  `ci/warn_baseline_*.txt`, zero new warnings anywhere after the
+  clean; every warning ratchet green (`.github/ci/warn_ratchet.py` against every
+  `.github/ci/warn_baseline_*.txt`, zero new warnings anywhere after the
   `PROBE_PIN` redefinition above was resolved at the source). Byte-identity
   proof against committed `artifacts/`, per port: **byte-identical**
   (assert-only changes) — hc32f460, ch32v006, dspic33ak128mc102 (RELEASE
@@ -4033,7 +4033,7 @@ mechanism and deserve their own work items.
     rebuilt DEBUG and checked: stm32f103 (10 warnings, in baseline),
     stm32f411 (6), stm32h523 (7), hc32f460 (6), ch32v006 (4), ch570 (4),
     samd21 megarm+generic (4), dspic33ak128mc102 (4, real `xc-dsc-gcc`
-    toolchain at `/opt/xc-dsc`, not skipped) — all `ci/warn_ratchet.py`
+    toolchain at `/opt/xc-dsc`, not skipped) — all `.github/ci/warn_ratchet.py`
     clean, zero new warnings anywhere. `_template` rebuilt (not gated, not
     in CI by design): exit 0, zero errors. `tools/check_contracts_numbering.py`:
     OK, 38 sections/slugs, 31 cross-file links, all consistent (no new
@@ -4111,7 +4111,7 @@ mechanism and deserve their own work items.
      drive lld against real port sources) before/after the fix: samd21
      536,876,864B -> 35,016B; hc32f460 537,000,960B -> 33,104B.
   2. **`sg2002` warn-ratchet wiring, the last of 10 ports.** Same
-     `common/warn_check.sh` mechanism as every other port - `ci/warn_baseline_sg2002.txt`
+     `common/warn_check.sh` mechanism as every other port - `.github/ci/warn_baseline_sg2002.txt`
      already existed, seeded from a real build log (its own header says
      so), so no baseline was authored here. Break/restore verified:
      removed a line -> `make BUILD=RELEASE` failed with `warn_ratchet:
@@ -4167,7 +4167,7 @@ mechanism and deserve their own work items.
      owned `artifacts/`).
   4. **Ledger truth pass.** Corrected in place (marked, not deleted) every
      claim this session's own work falsified: the Phase 0 and Current
-     State duplicate bullets claiming `ci/warn_ratchet.py` coverage was
+     State duplicate bullets claiming `.github/ci/warn_ratchet.py` coverage was
      "9/10, `sg2002` out of scope"; the toolchain-axis entry's "hc32f460/
      samd21/sg2002 still need the identical one-line fix" and "deliberately
      NOT wired into any port Makefile"; a much older entry claiming
@@ -4191,7 +4191,7 @@ mechanism and deserve their own work items.
     PASSED (`79af184e67b27defd27a39309ac53563`) throughout, root Makefile
     untouched. `python3 tools/build_artifacts.py check`: OK, 62 files,
     11 units (re-run after every item, not just once at the end).
-    `python3 ci/pinmap_overlap_check.py`: OK, 11 config.h/platform.h
+    `python3 .github/ci/pinmap_overlap_check.py`: OK, 11 config.h/platform.h
     pairs, 8 overlapping names, all guarded. `python3
     tools/check_contracts_numbering.py`: OK, 40 sections/slugs, 44
     cross-file links, unchanged section count (CONTRACTS.md got in-place
@@ -4339,7 +4339,7 @@ that hardcoded string, not the tiered scheme actually sitting unused in
   three-way distinct behavior proved above (canonical PASS / recognised-
   non-canonical FAIL / unrecognised FAIL). `python3
   tools/build_artifacts.py check`: OK, 62 files, 11 units. `python3
-  ci/pinmap_overlap_check.py`: OK, 11 pairs, 8 overlaps, all guarded.
+  .github/ci/pinmap_overlap_check.py`: OK, 11 pairs, 8 overlaps, all guarded.
   `python3 tools/check_contracts_numbering.py`: OK, 40 sections, 41 slugs
   (one new anchor for the `§NEW` section, section count unchanged since it
   isn't numbered yet), 45 cross-file links.

@@ -71,8 +71,8 @@ generation 1 from generation 6.
 
 ## CI
 
-No permanent CI row yet. Adding one means a `ci/warn_baseline_ch32v006+seg-trace.txt`
+No permanent CI row yet. Adding one means a `.github/ci/warn_baseline_ch32v006+seg-trace.txt`
 and an additive `artifacts/` unit (~1.4 MB of tracked blobs) — an integrator
 decision, not something to slip in. The extension is exercised today by building
-it, and the frames it emits are exercised on every run of `ci/seg_conformance.py`
+it, and the frames it emits are exercised on every run of `.github/ci/seg_conformance.py`
 because the oracle shares `segframe.h` with it byte for byte.

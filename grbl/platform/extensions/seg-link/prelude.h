@@ -22,7 +22,7 @@
 
   WHAT IS AND IS NOT HERE. seg_link.c - the serialiser, the blk_gen
   reconstruction, the credit pump - is complete and is gated end to end by
-  ci/seg_conformance.py's "rtl via seg-link wire" subject, on the host, against
+  .github/ci/seg_conformance.py's "rtl via seg-link wire" subject, on the host, against
   the Verilated executor. What is NOT written is the board transport: SPI1
   remap 011 + DMA1 ch2/ch3, the PB6/EXTI6 event line, PC4 MCO exporting the
   clock, the KILL pin, and the STP_TMR_INT_ENA / STP_TMR_INT_DIS overrides that

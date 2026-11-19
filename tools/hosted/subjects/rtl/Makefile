@@ -3,7 +3,7 @@
 # Part of Grbl / Intelligence assisted / License: MIT
 #
 # Nothing in the firmware build reaches this directory. It is host tooling for
-# ci/seg_conformance.py, and it is the only place in the tree that needs
+# .github/ci/seg_conformance.py, and it is the only place in the tree that needs
 # verilator. If verilator is absent the ratchet says so and CI (which passes
 # --require-rtl) fails; a developer without it gets a notice, not a false pass.
 

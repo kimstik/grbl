@@ -390,7 +390,7 @@ with the golden Makefile's flags, `-Os -mmcu=atmega328p`).
 
 | File:line | Diagnostic | Judgement |
 |---|---|---|
-| `stepper.c:1015` | `-Winteger-overflow`: `TICKS_PER_MICROSECOND*1000000*60` overflows `int`, folds to `1465032704` | **Real, not noise.** gcc's `-Woverflow` already flags the identical line (verified: it was sitting in `ci/warn_baseline_stm32{f103,f411,h523}.txt` as accepted debt) — this is BUG #18's exact class (F_CPU needs a `UL` suffix; already fixed on samd21/ch32v006's own Makefiles) **never rolled out to `common/stm32/common.mk`**, which still has plain `-DF_CPU=$(CLOCK)` with no suffix. Live, currently-shipping, on stm32f103/f411/h523/hc32f460 (every port sharing that common.mk). Flagged here, **not fixed in this session** — out of scope for a toolchain-axis probe, a one-line Makefile fix (`$(CLOCK)UL`) for whoever picks it up next. |
+| `stepper.c:1015` | `-Winteger-overflow`: `TICKS_PER_MICROSECOND*1000000*60` overflows `int`, folds to `1465032704` | **Real, not noise.** gcc's `-Woverflow` already flags the identical line (verified: it was sitting in `.github/ci/warn_baseline_stm32{f103,f411,h523}.txt` as accepted debt) — this is BUG #18's exact class (F_CPU needs a `UL` suffix; already fixed on samd21/ch32v006's own Makefiles) **never rolled out to `common/stm32/common.mk`**, which still has plain `-DF_CPU=$(CLOCK)` with no suffix. Live, currently-shipping, on stm32f103/f411/h523/hc32f460 (every port sharing that common.mk). Flagged here, **not fixed in this session** — out of scope for a toolchain-axis probe, a one-line Makefile fix (`$(CLOCK)UL`) for whoever picks it up next. |
 | `settings.c:339` | `-Wconstant-conversion`: `get_limit_pin_mask()` truncates `1<<Z_LIMIT_BIT` (1024→0) for a `uint8_t` return | **Real — this is BUG #26** (fixed this session, see PLAN.md/CONTRACTS.md). gcc's `-Woverflow` had already caught the identical line on all three affected ports; both were sitting in the accepted warning baseline unexamined. The value clang added here was not a fact gcc lacked, it was a sharper diagnostic name prompting someone to actually trace the consequence. |
 | `settings.c:26` | `-Wduplicate-decl-specifier`: `const __flash settings_t defaults` — `__flash` expands to `const` on this port's prelude for non-AVR, giving `const const` | Noise. Redundant qualifier, zero behavioral effect, gcc doesn't warn on it by default (no GCC-equivalent warning flag in `-Wall -Wextra`). |
 | `nvmem.c:127,149` | `-Wint-in-bool-context`: `(checksum << 1) \|\| (checksum >> 7)` | Noise — already known, already in every port's baseline, already documented as deliberate (CONTRACTS.md §10.4: "Never fix the AVR `\|\|`" — this is the upstream-grbl checksum quirk preserved for byte-golden AVR). |
@@ -555,7 +555,7 @@ yet. Flagged as a real remaining gap, not silently assumed closed.
 
 ## 8. Warn baselines must be keyed per-toolchain
 
-`ci/warn_baseline_<port>.txt` today implicitly means "gcc's warning set."
+`.github/ci/warn_baseline_<port>.txt` today implicitly means "gcc's warning set."
 The moment clang builds anything, its warning vocabulary is different
 enough (different names for overlapping diagnostics, entirely new
 categories like `-Wconstant-conversion` with no gcc equivalent, as §3
@@ -563,9 +563,9 @@ shows) that reusing the same baseline file either floods the ratchet with
 every one of clang's differently-worded restatements of already-accepted
 gcc warnings, or — worse — silently accepts clang-only new warnings
 because the ratchet was never asked to distinguish. Proposed convention:
-`ci/warn_baseline_<port>.<tc>.txt` (e.g.
-`ci/warn_baseline_stm32f411.gcc.txt`, `ci/warn_baseline_stm32f411.clang.txt`),
-with `ci/warn_ratchet.py` taking the toolchain as an explicit argument
+`.github/ci/warn_baseline_<port>.<tc>.txt` (e.g.
+`.github/ci/warn_baseline_stm32f411.gcc.txt`, `.github/ci/warn_baseline_stm32f411.clang.txt`),
+with `.github/ci/warn_ratchet.py` taking the toolchain as an explicit argument
 (same pattern as the NM-binary argument it already takes) rather than
 inferring it. This session's own core-diagnostic catalogue (§3) is a
 worked example of why this matters: several of clang's diagnostics on the
@@ -577,7 +577,7 @@ fact, defeating the "one line per real thing" design the ratchet already
 has for gcc alone.
 
 **STATUS (2026-07-26, later session): rule still stands, unchanged. No
-`ci/warn_baseline_*.clang.txt` file was created this session** — doing so
+`.github/ci/warn_baseline_*.clang.txt` file was created this session** — doing so
 without a CI job (or at least a documented manual invocation) to generate
 it from a real log would be inventing a baseline with no build behind it,
 exactly the kind of guard that cannot meaningfully fail this project
@@ -627,7 +627,7 @@ point of running one. When that happens:
    whose untaken branch clang validates differently than gcc — a
    flags-layer fact about the header, not a claim about core); or
    (b) accepted into that toolchain's own warn baseline
-   (ci/warn_baseline_<port>.<tc>.txt, see the toolchain-axis doc) if
+   (.github/ci/warn_baseline_<port>.<tc>.txt, see the toolchain-axis doc) if
    there is no legitimate flag-layer suppression and the diagnostic is
    judged noise, with the judgement written down at the point of
    acceptance, not silently absorbed.

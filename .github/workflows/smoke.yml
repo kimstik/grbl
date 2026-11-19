@@ -7,9 +7,9 @@ name: Smoke (Renode)
 # linear rpm range (never at the rpm_max clamp, which is what let the
 # original probe's M3 S1000 miss the 258x RPM->PWM gradient bug entirely)
 # and reads TCC0's CC[0] register back over the Renode monitor (made
-# observable by ci/renode/SAMD21_TCC.cs) against spindle_control.c's own
+# observable by .github/ci/renode/SAMD21_TCC.cs) against spindle_control.c's own
 # formula.
-# See ci/renode/smoke.sh for the runner and ci/renode/samd21_grbl.repl for the
+# See .github/ci/renode/smoke.sh for the runner and .github/ci/renode/samd21_grbl.repl for the
 # platform model (including the SYSCTRL PCLKSR / NVMCTRL READY tag
 # workarounds required because Renode has no SYSCTRL/NVMCTRL models).
 
@@ -55,17 +55,17 @@ jobs:
           tar xzf renode.tar.gz -C renode-portable --strip-components=1
 
       - name: Boot smoke (banner + $$)
-        run: RENODE="$PWD/renode-portable/renode" ci/renode/smoke.sh
+        run: RENODE="$PWD/renode-portable/renode" .github/ci/renode/smoke.sh
 
       - name: Motion smoke (G91 + G0 X1, MPos X -> 1.000)
         run: >
           RENODE="$PWD/renode-portable/renode" LOG_DIR=build/smoke-motion
-          ci/renode/smoke.sh --motion
+          .github/ci/renode/smoke.sh --motion
 
       - name: Spindle smoke (BUG #22 register observability - TCC0 CC[0] vs formula)
         run: >
           RENODE="$PWD/renode-portable/renode" LOG_DIR=build/smoke-spindle
-          ci/renode/smoke.sh --spindle
+          .github/ci/renode/smoke.sh --spindle
 
       - name: Upload smoke logs
         if: always()

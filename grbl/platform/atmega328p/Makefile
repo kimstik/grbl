@@ -45,7 +45,7 @@ INIT_CHECK    = ../common/init_check.sh
 NM           ?= avr-nm
 ELF           = $(ROOT)/build/main.elf
 
-# WARNING RATCHET (ci/warn_ratchet.py) wired at build time - CONTRACTS.md
+# WARNING RATCHET (.github/ci/warn_ratchet.py) wired at build time - CONTRACTS.md
 # #warn-ratchet-build-time-wiring, same precedent as INIT_CHECK above:
 # attached to THIS shim (never the golden-MD5-gated root Makefile itself),
 # right after the check that's already here. See common/warn_check.sh's
@@ -75,8 +75,8 @@ ELF           = $(ROOT)/build/main.elf
 WARN_EXPECT_OBJECTS = 18
 WARN_OBJ_DIR  = $(ROOT)/build
 WARN_LOG      = $(ROOT)/build/warn_atmega328p.log
-WARN_BASELINE = ../../../ci/warn_baseline_atmega328p.txt
-WARN_RATCHET  = ../../../ci/warn_ratchet.py
+WARN_BASELINE = ../../../.github/ci/warn_baseline_atmega328p.txt
+WARN_RATCHET  = ../../../.github/ci/warn_ratchet.py
 WARN_CHECK    = ../common/warn_check.sh
 
 all:

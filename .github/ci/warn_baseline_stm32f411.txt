@@ -1,0 +1,45 @@
+# Warning baseline for the stm32f411 build (-Wall -Wextra, arm-none-eabi-gcc).
+# Format: normalized warnings, see .github/ci/warn_ratchet.py header. Ratchet is
+# one-way: only remove lines here manually, after the warning is really gone.
+#
+# Regenerated from REAL builds (Phase 6 rolling port #1, first real
+# make/make link runs in grbl/platform/stm32f411/) - not inspection-derived.
+# Union of BUILD=DEBUG and BUILD=RELEASE logs - both produced the identical
+# warning set (same as stm32h523's baseline note). Command:
+#   make -C grbl/platform/stm32f411 BUILD=<DEBUG|RELEASE> > build.log 2>&1
+#   python3 .github/ci/warn_ratchet.py --log build.log --emit
+#
+# Removed 2026-07-26: `stepper.c: ... integer overflow ... '1465032704'
+# [-Woverflow]` (BUG #18 class, CONTRACTS.md's clock-constant-width
+# section). Root cause:
+# common/stm32/common.mk's F_CPU lacked a suffix wide enough for 96 MHz -
+# the true compile-time constant is 5760000000, not 1465032704 (a real
+# ~3.93x-too-fast stepper timing bug, not cosmetic). Fixed at the source
+# (common.mk now uses ULL); do NOT re-add.
+#
+# The "config.h vs platform.h dual pin-map canon" entries that used to sit
+# here (CONTROL_MASK/DIRECTION_MASK/LIMIT_MASK/PROBE_MASK/
+# STEPPERS_DISABLE_MASK/STEP_MASK, all "redefined") were the numerically-
+# benign half of BUG #25: every value here happened to match platform.h's
+# (this port's config.h was hand-mirrored to platform.h, unlike f103/h523
+# where SPINDLE_ENABLE_PIN/SPINDLE_DIRECTION_PIN/COOLANT_FLOOD_PIN actually
+# disagreed and drove a real wiring defect). "Numerically benign today"
+# is not "safe to baseline forever": a hand-mirrored duplicate is one
+# unreviewed edit away from splitting exactly like its siblings did, and
+# the compiler would not have warned about a *matching* redefinition drifting
+# apart in a future edit that touched only one file's copy - the warning
+# above only ever caught the fact of duplication, not a future divergence.
+# Fixed by making platform.h the sole owner of every pin/port/bit/mask (see
+# CONTRACTS.md #gpio-pin-map-single-owner) instead of relying on two files
+# being kept in sync by hand. Do NOT re-add any of these lines - if this
+# class of warning reappears, a duplicate pin-map definition has come back.
+#
+# common/stm32 shared code (regs.h vs CMSIS-style headers, all stm32 ports):
+stm32_platform.h: warning: comparison of unsigned expression in '< 0' is always false [-Wtype-limits]
+#
+# GRBL core (shared with every platform; not stm32f411-specific):
+gcode.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
+motion_control.c: warning: unused parameter 'cycle_mask' [-Wunused-parameter]
+nvmem.c: warning: '<<' in boolean context, did you mean '<'? [-Wint-in-bool-context]
+report.c: warning: this statement may fall through [-Wimplicit-fallthrough=]
+system.c: warning: this statement may fall through [-Wimplicit-fallthrough=]

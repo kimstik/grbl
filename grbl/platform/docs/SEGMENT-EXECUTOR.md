@@ -31,7 +31,7 @@ committed vector
 ```
 
 Three registered subjects, thirteen vectors, one gate:
-`ci/seg_conformance.py`. All three run in CI.
+`.github/ci/seg_conformance.py`. All three run in CI.
 
 ```
 seg_conformance: OK - 13 vector(s), 3/3 subject(s) run, 2 declared divergence(s);
@@ -48,7 +48,7 @@ goldens fresh, subjects bit-exact.
 | RTL executor | `tools/hosted/subjects/rtl/segx_{top,exec,rx,slot,crc8}.v` |
 | Verilator testbench | `tools/hosted/subjects/rtl/tb_segx.cpp` |
 | iCE40 synthesis | `tools/hosted/subjects/rtl/ice40/` |
-| ratchet extensions | `ci/seg_conformance.py`, `ci/seg_corpus_baseline.txt` |
+| ratchet extensions | `.github/ci/seg_conformance.py`, `.github/ci/seg_corpus_baseline.txt` |
 
 ## Nothing moved
 
@@ -197,7 +197,7 @@ cannot both be wrong in the same way.
 
 ```
   - 13-adversarial-nstep0.gvec: subject rtl (verilated) diverges from the oracle
-  - declared divergences: 0 present, baseline says 1 (edit ci/seg_corpus_baseline.txt
+  - declared divergences: 0 present, baseline says 1 (edit .github/ci/seg_corpus_baseline.txt
     deliberately, with owner sign-off per SEGMENT-RUNTIME-PLAN §3.6)
 ```
 
@@ -216,7 +216,7 @@ a passing subject.
 ### (i) The subject's toolchain missing
 
 ```
-$ PATH=<no verilator> ci/seg_conformance.py --require-rtl
+$ PATH=<no verilator> .github/ci/seg_conformance.py --require-rtl
   - subject rtl (verilated): toolchain missing and --require-rtl was given
 ```
 

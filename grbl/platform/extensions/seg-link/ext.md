@@ -35,7 +35,7 @@ pre-increments from 0, so blocks claim slots 1,2,3,4,0,1,… while generations r
 shipper needs no state from the producer: every slot change it observes is one
 new block.
 
-This is gated, not asserted. `ci/seg_conformance.py`'s `rtl via seg-link wire`
+This is gated, not asserted. `.github/ci/seg_conformance.py`'s `rtl via seg-link wire`
 subject runs this exact file over the real ring, captures the bytes, and replays
 them through the Verilated executor. Shipping the raw slot where the generation
 belongs faults `12-blkgen-wrap` at the 4 → 0 wrap with `FAULT code=9 gen_gap`.
