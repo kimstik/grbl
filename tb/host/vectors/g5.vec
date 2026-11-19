@@ -29,13 +29,13 @@ pos -100 -100 -10
 
 # ---- accuracy [1] [2] [3] [24] ---------------------------------------------
 
-# Inflection exactly on the first probed midpoint (t = 0.05): the chord of
-# t in [0, 0.1] runs along X and the curve adds A*(s^3 - 1.5s^2 + 0.5s) in Y,
-# which is zero at the probe. Expected deviation 0.0481*A mm, here A = 10.
-= [1] inflection on a probed midpoint hides the deviation @bug
+# Inflection on the midpoint of t in [0, 0.1] (t = 0.05): the chord of that
+# interval runs along X and the curve adds A*(s^3 - 1.5s^2 + 0.5s) in Y, which
+# is zero at the midpoint, so a midpoint probe sees no deviation where there
+# is 0.0481*A mm, here A = 10.
+= [1] inflection on a probed midpoint does not hide the deviation
 G10 L20 P1 X0 Y0 Z0
 F1000
-set maxseg 100000
 G5 X-10 Y8550 I-3.3333 J16.6667 P3.3333 Q-9016.667
 
 = [2] long handles 1e3
@@ -53,13 +53,19 @@ G10 L20 P1 X0 Y0 Z0
 F1000
 G5 X10 Y0 I100000 J100000 P100000 Q100000
 
-# The step floor (MIN_STEP halving) caps a curve at 641 segments here; past
-# that the chords cannot follow and the tolerance is lost (1e6: 3.2 mm).
-= [2] handles 1e5 with opposite Q exceed the tolerance @bug
+# About 1700 segments: within the tolerance and under the cap of 2000.
+= [2] handles 1e5 with opposite Q stay within the tolerance
 G10 L20 P1 X0 Y0 Z0
 F1000
-set maxseg 100000
 G5 X100000 Y0 I1 J1 P100000 Q-100000
+
+# Past BEZIER_MAX_SEGMENTS (2000, the default maxseg) the tolerance is given
+# up: absurd handles get the cap, never an endless or undefined count.
+= [2] handles 1e7: capped at 2000 segments, deviation 1.6 mm
+G10 L20 P1 X0 Y0 Z0
+F1000
+set tol 2
+G5 X10 Y0 I10000000 J10000000 P10000000 Q10000000
 
 = [2] long curve 1 m
 G10 L20 P1 X0 Y0 Z0

@@ -29,8 +29,11 @@ G0X0Y0
 G0X0Y0
 *G5.1I10J20X20Y0
 G0X0Y0
-# worst case found on the host: the step floor caps it at 641 segments
+# long handles, 1699 segments within the tolerance
 *G5X100000Y0I1J1P100000Q-100000
+G0X0Y0
+# worst case: absurd handles hit BEZIER_MAX_SEGMENTS
+*G5X10Y0I10000000J10000000P10000000Q10000000
 G0X0Y0
 # inflection on a probed midpoint [1]
 *G5X-10Y8550I-3.3333J16.6667P3.3333Q-9016.667

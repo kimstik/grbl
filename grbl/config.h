@@ -700,8 +700,8 @@
    When BOTH DISABLED (default): built with the stock flags, the binary is identical
    to vanilla Grbl with every compiler listed. G5/G5.1 return "Unsupported command".
 
-   When ENABLED: Commands work in XY plane (G17) only. Implementation uses adaptive
-   step size for smooth approximation of Bezier curves.
+   When ENABLED: Commands work in XY plane (G17) only. Each curve is cut into segments
+   of equal step of the curve parameter, as many as needed to stay within BEZIER_SIGMA.
 
    Usage:
      G5 X.. Y.. I.. J.. P.. Q..  - Cubic spline with two control points
@@ -716,21 +716,17 @@
 
 #ifdef ENABLE_CUBIC_SPLINES
   // Bezier curve interpolation parameters. These control the quality vs. performance tradeoff.
-  // MIN_STEP and MAX_STEP bound the step of the curve parameter t (0..1), not a length in mm.
-  // Smaller MIN_STEP allows finer segments on sharp bends; larger MAX_STEP allows fewer, longer
-  // segments where the curve is nearly straight.
-  // SIGMA = tolerance for linear approximation in mm (Manhattan distance)
-
-  #ifndef BEZIER_MIN_STEP
-    #define BEZIER_MIN_STEP 0.002f  // Minimum step of t (fraction of the curve parameter)
-  #endif
-
-  #ifndef BEZIER_MAX_STEP
-    #define BEZIER_MAX_STEP 0.1f    // Maximum step of t (fraction of the curve parameter)
-  #endif
+  // SIGMA is the largest distance in mm between the curve and its segments, both ways. The
+  // segment count grows with 1/sqrt(SIGMA): 0.1 mm gives 11 for G5 X10 Y0 I3 J3 P3 Q3.
+  // MAX_SEGMENTS caps a single curve; only absurd handles reach it (1699 segments for handles
+  // 100 m long), and past it the tolerance is not met.
 
   #ifndef BEZIER_SIGMA
-    #define BEZIER_SIGMA 0.1f       // Linear approximation tolerance (mm)
+    #define BEZIER_SIGMA 0.1f        // Linear approximation tolerance (mm)
+  #endif
+
+  #ifndef BEZIER_MAX_SEGMENTS
+    #define BEZIER_MAX_SEGMENTS 2000 // Most segments per curve
   #endif
 #endif
 

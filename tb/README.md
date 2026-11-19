@@ -29,16 +29,16 @@ Decisions that tests encode:
 
 | ID | Test                                                                   | Where                 | Status                                  |
 |----|------------------------------------------------------------------------|-----------------------|-----------------------------------------|
-| 1  | Inflection on a probed midpoint hides the deviation                    | host vector           | defect: 0.0481*A mm, shared with Marlin |
-| 2  | Step floor: long handles exceed the tolerance                          | host vectors          | defect at 1e5 with opposite Q (0.41 mm) |
+| 1  | Inflection on a probed midpoint does not hide the deviation            | host vector           | pass: 0.0029 mm with 276 segments       |
+| 2  | Long handles stay within the tolerance                                 | host vectors          | pass to 1e5; capped at 2000 segments    |
 | 3  | L1 metric: rotated curve within tolerance                              | host vector           | pass                                    |
 | 4  | Last segment bit-exact on the parser position under -ffast-math        | avr `end exact`       | pass on all four compilers              |
 | 5  | Non-finite or overflowing values never reach the planner               | host vector, avr      | defect, same class as G1 X1e35          |
 | 6  | G5/G5.1 without X/Y must not move to machine zero                      | host vectors          | defect                                  |
 | 7  | Negative P accepted                                                     | host vectors          | defect (error:4)                        |
 | 8  | Rejected line: nothing queued, parser state byte-identical            | host, every line      | defect: spline_pq written early         |
-| 9  | Worst-case generation time                                              | avr (641 segments)    | 1.12 s for one 641-segment line         |
-| 10 | Stack on ATmega328P: static chain and with interrupts                   | avr, avr dynamic      | defect: G5 needs ~443 of 403 bytes free |
+| 9  | Worst-case generation time                                              | avr (2000 segments)   | 2.0 s at the cap of 2000 segments       |
+| 10 | Stack on ATmega328P: static chain and with interrupts                   | avr, avr dynamic      | pass: 343 of 403 bytes (7.3)            |
 | 11 | Planner starvation while streaming curves at speed                     | avr dynamic           | pass: G5 never starves; G1/G2 do        |
 | 12 | Cusp: the planner stops at the reversal                                | host `junction`       | pass                                    |
 | 13 | Smooth chain with implicit I/J: no corner at the joins                 | host `set smooth`     | pass                                    |
@@ -48,7 +48,7 @@ Decisions that tests encode:
 | 17 | Translation by G91/G92, G20 vs G21: same segments                      | host `same`           | pass                                    |
 | 18 | Reversed curve within tolerance                                         | host vector           | pass                                    |
 | 19 | Check mode, `$J=G5` rejection, mode changes before implicit I/J        | host vectors          | pass                                    |
-| 20 | Mutation testing                                                        | host `mutate.sh`      | 22 of 22 killed                         |
+| 20 | Mutation testing                                                        | host `mutate.sh`      | 32 of 32 killed                         |
 | 21 | Random curves, failures shrunk to a minimal line                       | host `--random`       | pass (negative P skipped, see 7)        |
 | 22 | Host vs AVR: same segments                                              | CI simavr `= host`    | G5/G5.1 identical; G2 differs (sin/cos) |
 | 23 | Compiler vs compiler: same segments                                     | CI simavr per gcc     | G5/G5.1 identical on all four           |
@@ -62,13 +62,13 @@ Decisions that tests encode:
 | 31 | Same line from the same point: same segments                           | host `same`           | pass                                    |
 | 32 | Machine settings: 1 and 1000 steps/mm, slow axes                       | host `set`            | pass                                    |
 | 33 | Tool length offset with G5                                              | host vector           | pass                                    |
-| 34 | Realtime latency: worst gap between segments                           | avr `worst gap`       | up to 33k cycles (2.1 ms), 48k on NaN   |
+| 34 | Realtime latency: worst gap between segments                           | avr `worst gap`       | G5 up to 4.1k cycles (0.26 ms)          |
 | 35 | Feed hold and resume mid-curve, exact final position                   | avr dynamic           | pass: 0 steps off in 6 holds            |
 | 36 | Soft reset, then the same line: same segments                          | host `reset`          | pass                                    |
 | 37 | Differential against grblHAL G5                                         | one-off host run      | segments bit-identical, see below       |
 | 38 | LinuxCNC word rules                                                     | host vectors          | pass                                    |
 | 39 | G93 time on G5 multiplied by the segment count                         | host vectors          | defect (5.5 min for 0.5)                |
-| 40 | Soft limits: curve leaves the envelope between inside endpoints        | host vector           | defect: alarm after 13 segments         |
+| 40 | Soft limits: curve leaves the envelope between inside endpoints        | host vector           | defect: alarm after 11 segments         |
 | 41 | K word rejected in G17                                                  | host vector           | pass                                    |
 | 42 | 40-digit literal read as inf                                            | host vector, avr      | defect                                  |
 | 43 | Laser mode `$32=1`: G5/G5.1 burn at S like G1                           | host `power`          | defect: power 0 (gcode.c:992)           |
@@ -86,13 +86,15 @@ stepper interrupt live; it plays a send-and-wait-for-ok host inside
 Timer2. simavr does not start the Timer1 CTC with OCR1A = 0, which Grbl
 leaves until its first stepper interrupt, so dyn.c presets OCR1A.
 
-- Stack: with G5 the deepest stack reaches 434-446 bytes (avr-gcc 7.3) and
-  425 (15.2); G1 329-347, G2 341-353. The firmware with G5+G5.1 has 403 bytes
-  of free RAM, so G5 overruns into `sys` at the top of .bss. Early dyn
-  builds with 416-434 free bytes showed exactly that: spurious resets, lost
-  F (error:22), ALARM. The static bench agrees: its G5 chain alone leaves
-  107 bytes of 574 untouched (80 of them its own line buffer, which is
-  static in the firmware) before any interrupt frame. Not seen on hardware.
+- Stack: the firmware with G5+G5.1 has 403 bytes of free RAM. The deepest
+  stack is 343 bytes with avr-gcc 7.3 (G5 341, G1 343, G2 343). It was 446
+  for G5 with the adaptive walker, which overran into `sys` at the top of
+  .bss; early dyn builds with 416-434 free bytes showed exactly that:
+  spurious resets, lost F (error:22), ALARM. The generator now has one call
+  site, so it is inlined into `gc_execute_line` like `mc_arc` and shares its
+  frame. The static bench: the G5 chain leaves 212 bytes of 574 untouched
+  (107 with the walker; 80 of them its own line buffer, which is static in
+  the firmware) before any interrupt frame.
 - Starvation: 120 programs (G5, G1 along the same chords, G2; 2 and 5 mm;
   F1000-5000; 500 and 2000 mm/s^2; 2 and 16 ms host latency). G5 keeps
   13-14 blocks queued; its speed is limited by chord geometry, not by
@@ -103,13 +105,12 @@ leaves until its first stepper interrupt, so dyn.c presets OCR1A.
 
 ## 37: grblHAL
 
-grblHAL core 3161cea. Its `mc_cubic_b_spline` and `BEZIER_*` constants are
-the same code as ours; only the abort check is spelled differently. Extracted
-unchanged and fed the control points our parser passes for
-`host/vectors/g5.vec`, `avr/lines.txt` and `tb --random 5000 1` (3290 curves),
-it queues the same segments bit for bit, compiled with or without
--ffast-math. Not kept as a test: it would only prove again that the code is
-the same.
+grblHAL core 3161cea. Its `mc_cubic_b_spline` is the adaptive walker this
+code used before the equal-step generator replaced it (defects 1 and 2 are
+that walker's). Before the replacement, extracted unchanged and fed the
+control points our parser passes for `host/vectors/g5.vec`, `avr/lines.txt`
+and `tb --random 5000 1` (3290 curves), it queued the same segments bit for
+bit, compiled with or without -ffast-math.
 
 The parsers differ:
 - Implicit I/J, see the decision above. On `g5.vec` 4 of 5 implicit

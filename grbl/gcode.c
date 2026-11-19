@@ -1182,50 +1182,51 @@ uint8_t gc_execute_line(char *line)
             axis_0, axis_1, axis_linear, bit_istrue(gc_parser_flags,GC_PARSER_ARC_IS_CLOCKWISE));
 
 #ifdef ENABLE_CUBIC_SPLINES
-      } else if (gc_state.modal.motion == MOTION_MODE_CUBIC_SPLINE) {
-        // Execute cubic B-spline (G5)
-        // Calculate control points from offsets
-        float cp1[N_AXIS], cp2[N_AXIS];
+      } else if ((gc_state.modal.motion == MOTION_MODE_CUBIC_SPLINE)
+#ifdef ENABLE_QUADRATIC_SPLINES
+              || (gc_state.modal.motion == MOTION_MODE_QUADRATIC_SPLINE)
+#endif
+              ) {
+        // One call for G5 and G5.1: the compiler then inlines mc_cubic_b_spline here, as it does
+        // mc_arc, and its locals share this frame instead of stacking a frame of their own on it.
+        float cp1[2], cp2[2]; // X and Y only, the curve is planar
 
-        // First control point = current position + I,J offsets
-        cp1[X_AXIS] = gc_state.position[X_AXIS] + gc_block.values.ijk[X_AXIS];
-        cp1[Y_AXIS] = gc_state.position[Y_AXIS] + gc_block.values.ijk[Y_AXIS];
-        cp1[Z_AXIS] = gc_state.position[Z_AXIS];
+        if (gc_state.modal.motion == MOTION_MODE_CUBIC_SPLINE) {
+          // Execute cubic B-spline (G5)
+          // Calculate control points from offsets
 
-        // Second control point = target position + P,Q offsets
-        cp2[X_AXIS] = gc_block.values.xyz[X_AXIS] + gc_state.spline_pq[X_AXIS];
-        cp2[Y_AXIS] = gc_block.values.xyz[Y_AXIS] + gc_state.spline_pq[Y_AXIS];
-        cp2[Z_AXIS] = gc_block.values.xyz[Z_AXIS];
+          // First control point = current position + I,J offsets
+          cp1[X_AXIS] = gc_state.position[X_AXIS] + gc_block.values.ijk[X_AXIS];
+          cp1[Y_AXIS] = gc_state.position[Y_AXIS] + gc_block.values.ijk[Y_AXIS];
 
-        // Execute the cubic Bezier spline
-        mc_cubic_b_spline(gc_block.values.xyz, pl_data, gc_state.position, cp1, cp2);
+          // Second control point = target position + P,Q offsets
+          cp2[X_AXIS] = gc_block.values.xyz[X_AXIS] + gc_state.spline_pq[X_AXIS];
+          cp2[Y_AXIS] = gc_block.values.xyz[Y_AXIS] + gc_state.spline_pq[Y_AXIS];
 
 #ifdef ENABLE_QUADRATIC_SPLINES
-      } else if (gc_state.modal.motion == MOTION_MODE_QUADRATIC_SPLINE) {
-        // Execute quadratic spline (G5.1)
-        // Convert quadratic to cubic Bezier using the 2/3 rule
-        float cp1[N_AXIS], cp2[N_AXIS];
+        } else {
+          // Execute quadratic spline (G5.1)
+          // Convert quadratic to cubic Bezier using the 2/3 rule
 
-        // Quadratic control point
-        float qcp_x = gc_state.position[X_AXIS] + gc_block.values.ijk[X_AXIS];
-        float qcp_y = gc_state.position[Y_AXIS] + gc_block.values.ijk[Y_AXIS];
+          // Quadratic control point
+          float qcp_x = gc_state.position[X_AXIS] + gc_block.values.ijk[X_AXIS];
+          float qcp_y = gc_state.position[Y_AXIS] + gc_block.values.ijk[Y_AXIS];
 
-        // Convert to cubic Bezier control points
-        // cp1 = start + (2/3) * (qcp - start)
-        cp1[X_AXIS] = gc_state.position[X_AXIS] + (gc_block.values.ijk[X_AXIS] * 2.0f) / 3.0f;
-        cp1[Y_AXIS] = gc_state.position[Y_AXIS] + (gc_block.values.ijk[Y_AXIS] * 2.0f) / 3.0f;
-        cp1[Z_AXIS] = gc_state.position[Z_AXIS];
+          // Convert to cubic Bezier control points
+          // cp1 = start + (2/3) * (qcp - start)
+          cp1[X_AXIS] = gc_state.position[X_AXIS] + (gc_block.values.ijk[X_AXIS] * 2.0f) / 3.0f;
+          cp1[Y_AXIS] = gc_state.position[Y_AXIS] + (gc_block.values.ijk[Y_AXIS] * 2.0f) / 3.0f;
 
-        // cp2 = target + (2/3) * (qcp - target)
-        float dx = qcp_x - gc_block.values.xyz[X_AXIS];
-        float dy = qcp_y - gc_block.values.xyz[Y_AXIS];
-        cp2[X_AXIS] = gc_block.values.xyz[X_AXIS] + (dx * 2.0f) / 3.0f;
-        cp2[Y_AXIS] = gc_block.values.xyz[Y_AXIS] + (dy * 2.0f) / 3.0f;
-        cp2[Z_AXIS] = gc_block.values.xyz[Z_AXIS];
+          // cp2 = target + (2/3) * (qcp - target)
+          float dx = qcp_x - gc_block.values.xyz[X_AXIS];
+          float dy = qcp_y - gc_block.values.xyz[Y_AXIS];
+          cp2[X_AXIS] = gc_block.values.xyz[X_AXIS] + (dx * 2.0f) / 3.0f;
+          cp2[Y_AXIS] = gc_block.values.xyz[Y_AXIS] + (dy * 2.0f) / 3.0f;
+#endif // ENABLE_QUADRATIC_SPLINES
+        }
 
         // Execute the cubic Bezier spline
         mc_cubic_b_spline(gc_block.values.xyz, pl_data, gc_state.position, cp1, cp2);
-#endif // ENABLE_QUADRATIC_SPLINES
 #endif // ENABLE_CUBIC_SPLINES
 
       } else {

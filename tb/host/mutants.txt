@@ -1,14 +1,24 @@
 # Mutants for mutate.sh: id, file, exact text, replacement (tab-separated).
 # Every mutant must make the bench fail. Replacement applies to all occurrences.
-sigma-reduce	motion_control.c	<= (BEZIER_SIGMA))	<= (BEZIER_SIGMA)*4)
-sigma-enlarge	motion_control.c	> (BEZIER_SIGMA))	> (BEZIER_SIGMA)*4)
-min-step	motion_control.c	>= (BEZIER_MIN_STEP))	>= (BEZIER_MIN_STEP)*20)
-end-clamp	motion_control.c	new_t = 1.0f;  // Clamp	new_t = 0.999f;  // Clamp
-midpoint	motion_control.c	candidate_t = 0.5f * (t + new_t)	candidate_t = 0.45f * (t + new_t)
-casteljau-swap	motion_control.c	return interp(iabc, ibcd, t);	return interp(ibcd, iabc, t);
-lerp-form	motion_control.c	return (1.0f - t) * a + t * b;	return a + t * (b - a);
-dist-x-only	motion_control.c	fabsf(x1 - x2) + fabsf(y1 - y2)	fabsf(x1 - x2)
-skip-last	motion_control.c	mc_line(bez_target, pl_data);	if (t < 1.0f) { mc_line(bez_target, pl_data); }
+n-factor	motion_control.c	(0.8f/BEZIER_SIGMA)	(0.2f/BEZIER_SIGMA)
+n-sqrt	motion_control.c	sqrtf(sqrtf(max(a, b))	sqrtf((max(a, b))
+n-first-only	motion_control.c	max(a, b)	a
+n-last-only	motion_control.c	max(a, b)	b
+n-floor	motion_control.c	segments = 1 + n;	segments = n;
+cap-removed	motion_control.c	if (n < BEZIER_MAX_SEGMENTS) { segments = 1 + n; }	segments = 1 + n;
+cap-value	motion_control.c	uint16_t segments = BEZIER_MAX_SEGMENTS;	uint16_t segments = 1;
+second-diff	motion_control.c	second[i] - 2.0f*first[i] + position[i]	second[i] - first[i] + position[i]
+second-diff-last	motion_control.c	target[i] - 2.0f*second[i] + first[i]	target[i] - second[i] + first[i]
+horner-c0	motion_control.c	t*(3.0f*(first[i] - position[i])	t*(2.0f*(first[i] - position[i])
+horner-c1	motion_control.c	t*(3.0f*e0	t*(2.0f*e0
+horner-c2	motion_control.c	t*(e1 - e0)	t*(e1 + e0)
+horner-t	motion_control.c	t*(e1 - e0)	(e1 - e0)
+step	motion_control.c	1.0f/segments	1.0f/(segments + 1)
+loop-first	motion_control.c	for (j = 1;	for (j = 2;
+loop-last	motion_control.c	j < segments	j < segments - 1
+end-inexact	motion_control.c	p[X_AXIS] = target[X_AXIS];	p[X_AXIS] = position[X_AXIS] + 3.0f*(first[X_AXIS] - position[X_AXIS]) + 3.0f*(second[X_AXIS] - 2.0f*first[X_AXIS] + position[X_AXIS]) + (target[X_AXIS] - 3.0f*second[X_AXIS] + 3.0f*first[X_AXIS] - position[X_AXIS]);
+skip-last	motion_control.c	p[Y_AXIS] = target[Y_AXIS];	p[Y_AXIS] = target[Y_AXIS]; return;
+g51-as-g5	gcode.c	if (gc_state.modal.motion == MOTION_MODE_CUBIC_SPLINE) {	if (1) {
 implicit-sign	gcode.c	= -gc_state.spline_pq[	= gc_state.spline_pq[
 cp1-swap	gcode.c	cp1[X_AXIS] = gc_state.position[X_AXIS] + gc_block.values.ijk[X_AXIS];	cp1[X_AXIS] = gc_state.position[X_AXIS] + gc_block.values.ijk[Y_AXIS];
 cp2-sign	gcode.c	gc_block.values.xyz[Y_AXIS] + gc_state.spline_pq[Y_AXIS];	gc_block.values.xyz[Y_AXIS] - gc_state.spline_pq[Y_AXIS];
