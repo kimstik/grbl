@@ -7,16 +7,30 @@ on:
 jobs:
   avr:
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        gcc: ['7.3.0', '15.2.0', '16.1.0']
+    name: avr-gcc ${{ matrix.gcc }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      # 7.3.0 is the Ubuntu package; newer releases are ZakKemble/avr-gcc-build prebuilts.
       - name: Install avr-gcc
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q --no-install-recommends gcc-avr avr-libc binutils-avr
-          avr-gcc --version | head -1
+          if [ "${{ matrix.gcc }}" = 7.3.0 ]; then
+            sudo apt-get update -q
+            sudo apt-get install -y -q --no-install-recommends gcc-avr avr-libc binutils-avr
+          else
+            name=avr-gcc-${{ matrix.gcc }}-x64-linux
+            curl -fsSL "https://github.com/ZakKemble/avr-gcc-build/releases/download/v${{ matrix.gcc }}-1/$name.tar.bz2" | tar -xj -C "$RUNNER_TEMP"
+            echo "$RUNNER_TEMP/$name/bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Toolchain version
+        run: avr-gcc --version | head -1
 
       # Splines disabled with the stock flags must produce the vanilla binary.
       - name: Splines off matches master
@@ -35,6 +49,7 @@ jobs:
           BRANCH=$(make -s --eval 'print-compile: ; @echo $(COMPILE)' print-compile)
           G5='-DENABLE_CUBIC_SPLINES'
           G51='-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES'
+          printf '### avr-gcc ${{ matrix.gcc }}\n\n' >> "$GITHUB_STEP_SUMMARY"
           printf '| flags | splines | flash | ram | free (32256) |\n|---|---|---|---|---|\n' >> "$GITHUB_STEP_SUMMARY"
           for flags in stock branch; do
             if [ $flags = stock ]; then cc="$STOCK"; else cc="$BRANCH"; fi
