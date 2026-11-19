@@ -38,8 +38,8 @@ Decisions that tests encode:
 | 7  | Negative P accepted                                                     | host vectors          | defect (error:4)                        |
 | 8  | Rejected line: nothing queued, parser state byte-identical            | host, every line      | defect: spline_pq written early         |
 | 9  | Worst-case generation time                                              | avr (641 segments)    | 1.12 s for one 641-segment line         |
-| 10 | Stack never touched on ATmega328P                                       | avr                   | 107-162 bytes, without stepper ISR      |
-| 11 | Planner starvation while streaming curves at speed                     | avr dynamic           | in progress                             |
+| 10 | Stack on ATmega328P: static chain and with interrupts                   | avr, avr dynamic      | defect: G5 needs ~443 of 403 bytes free |
+| 11 | Planner starvation while streaming curves at speed                     | avr dynamic           | pass: G5 never starves; G1/G2 do        |
 | 12 | Cusp: the planner stops at the reversal                                | host `junction`       | pass                                    |
 | 13 | Smooth chain with implicit I/J: no corner at the joins                 | host `set smooth`     | pass                                    |
 | 14 | Handles on the chord: same as G1                                        | host vectors          | pass                                    |
@@ -63,7 +63,7 @@ Decisions that tests encode:
 | 32 | Machine settings: 1 and 1000 steps/mm, slow axes                       | host `set`            | pass                                    |
 | 33 | Tool length offset with G5                                              | host vector           | pass                                    |
 | 34 | Realtime latency: worst gap between segments                           | avr `worst gap`       | up to 33k cycles (2.1 ms), 48k on NaN   |
-| 35 | Feed hold and resume mid-curve, exact final position                   | avr dynamic           | in progress                             |
+| 35 | Feed hold and resume mid-curve, exact final position                   | avr dynamic           | pass: 0 steps off in 6 holds            |
 | 36 | Soft reset, then the same line: same segments                          | host `reset`          | pass                                    |
 | 37 | Differential against grblHAL G5                                         | one-off host run      | segments bit-identical, see below       |
 | 38 | LinuxCNC word rules                                                     | host vectors          | pass                                    |
@@ -77,6 +77,29 @@ Decisions that tests encode:
 | 46 | Half-step boundary never steps; curve 60 m from origin                  | host `travel`         | pass                                    |
 | 47 | Series lifetime: G4, G28, G92, rejected line, reset, check mode         | host vectors          | pass                                    |
 | 48 | G4+G5 share P; G5.1 continuation rules; repeated Q; G93 F0              | host vectors          | pass                                    |
+
+## 10, 11, 35: motion under simavr
+
+`avr/dyn.c` runs the real `main()` and `protocol_main_loop()` with the
+stepper interrupt live; it plays a send-and-wait-for-ok host inside
+`serial_read()` at 115200 baud and injects feed hold and cycle start from
+Timer2. simavr does not start the Timer1 CTC with OCR1A = 0, which Grbl
+leaves until its first stepper interrupt, so dyn.c presets OCR1A.
+
+- Stack: with G5 the deepest stack reaches 434-446 bytes (avr-gcc 7.3) and
+  425 (15.2); G1 329-347, G2 341-353. The firmware with G5+G5.1 has 403 bytes
+  of free RAM, so G5 overruns into `sys` at the top of .bss. Early dyn
+  builds with 416-434 free bytes showed exactly that: spurious resets, lost
+  F (error:22), ALARM. The static bench agrees: its G5 chain alone leaves
+  107 bytes of 574 untouched (80 of them its own line buffer, which is
+  static in the firmware) before any interrupt frame. Not seen on hardware.
+- Starvation: 120 programs (G5, G1 along the same chords, G2; 2 and 5 mm;
+  F1000-5000; 500 and 2000 mm/s^2; 2 and 16 ms host latency). G5 keeps
+  13-14 blocks queued; its speed is limited by chord geometry, not by
+  generation. G1 starves at 16 ms latency, G2 on 2 mm arcs from F3000-4000.
+  Final position exact in all runs.
+- Feed hold at 60-1000 ms into a G5 chain at F3000, resume 400 ms later:
+  final position 0 steps off in all six.
 
 ## 37: grblHAL
 

@@ -113,13 +113,21 @@ jobs:
             done
           done
 
-      # The simavr bench, branch flags; run by the simavr job below.
-      - name: Build AVR bench
-        run: make -s -C tb/avr
+      # The simavr benches, branch flags, and the free RAM of the firmware
+      # built last by the size matrix (branch flags, G5+G5.1).
+      - name: Build AVR benches
+        run: |
+          make -s -C tb/avr
+          make -s -C tb/avr dyn || echo "::warning::dyn.elf does not build or fit with avr-gcc ${{ matrix.gcc }}"
+          set -- $(avr-size --format=berkeley build/main.elf | tail -1)
+          echo $(( 2048 - $2 - $3 )) > tb/avr/build/free-ram.txt
       - uses: actions/upload-artifact@v4
         with:
           name: bench-${{ matrix.gcc }}
-          path: tb/avr/build/bench.elf
+          path: |
+            tb/avr/build/bench.elf
+            tb/avr/build/dyn.elf
+            tb/avr/build/free-ram.txt
 
   # Correctness on the PC: vectors, random curves, G5-only build, mutants.
   host:
@@ -131,44 +139,71 @@ jobs:
       - name: Mutation testing
         run: tb/host/mutate.sh
 
-  # Every compiler's bench under simavr: cycles, stack, and whether the
-  # segments match the host bench bit for bit.
+  # Every compiler's benches under simavr: cycles, stack, segments against the
+  # host bench, and the real main loop with the stepper running.
   simavr:
     needs: avr
     if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        gcc: ['7.3.0', '15.2.0', '16.2.0', '17-20261115']
+    name: simavr ${{ matrix.gcc }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          pattern: bench-*
-      - name: Run
+          name: bench-${{ matrix.gcc }}
+          path: elf
+      - name: Install simavr
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q --no-install-recommends simavr
+      - name: Segments and cycles
+        run: |
           make -s -C tb/host > /dev/null
           tb/host/build/tb --hash tb/avr/lines.txt > host.txt
-          for d in bench-*; do
-            gcc=${d#bench-}
-            timeout 600 simavr -m atmega328p -f 16000000 "$d/bench.elf" 2>&1 |
-              sed 's/\x1b\[[0-9;]*m//g; s/\.*$//' > "avr-$gcc.txt"
-            echo "== avr-gcc $gcc"; cat "avr-$gcc.txt"
-            if ! grep -qx done "avr-$gcc.txt"; then
-              echo "::error::bench for avr-gcc $gcc did not finish"; cat "avr-$gcc.txt"; exit 1
-            fi
-            calib=$(awk '$1 == "calib" { print $2 }' "avr-$gcc.txt")
-            if [ "$calib" -lt 1000000 ] || [ "$calib" -gt 1001000 ]; then
-              echo "::error::cycle counter calibration off for $gcc: $calib for 1000000"; exit 1
-            fi
-            {
-              printf '\n### avr-gcc %s, stack never touched: %s bytes\n\n' "$gcc" "$(awk '$1 == "stack" { print $2 }' "avr-$gcc.txt")"
-              printf '| line | status | seg | total | planner | gen | gen/seg | first | worst gap | end exact | non-finite | = host |\n'
-              printf '|---|---|---|---|---|---|---|---|---|---|---|---|\n'
-              awk 'NR == FNR { h[$1] = $2 " " $3 " " $4; next }
-                   NF == 11 { printf "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n",
-                     $1, $2, $3, $4, $5, $6, ($3 ? int($6 / $3) : "-"), $7, $8, $9, $10,
-                     (h[$1] == $2 " " $3 " " $11) ? "yes" : "**no**" }' host.txt "avr-$gcc.txt"
-            } >> "$GITHUB_STEP_SUMMARY"
-            awk -v gcc="$gcc" 'NR == FNR { h[$1] = $2 " " $3 " " $4; next }
-                 NF == 11 && h[$1] != $2 " " $3 " " $11 { print "::warning::avr-gcc " gcc ": segments differ from host on " $1 }' host.txt "avr-$gcc.txt"
-          done
+          timeout 600 simavr -m atmega328p -f 16000000 elf/bench.elf 2>&1 |
+            sed 's/\x1b\[[0-9;]*m//g; s/\.*$//' > avr.txt
+          cat avr.txt
+          grep -qx done avr.txt
+          calib=$(awk '$1 == "calib" { print $2 }' avr.txt)
+          if [ "$calib" -lt 1000000 ] || [ "$calib" -gt 1001000 ]; then
+            echo "::error::cycle counter calibration off: $calib for 1000000"; exit 1
+          fi
+          {
+            printf '\n### avr-gcc ${{ matrix.gcc }}, stack never touched: %s bytes\n\n' "$(awk '$1 == "stack" { print $2 }' avr.txt)"
+            printf '| line | status | seg | total | planner | gen | gen/seg | first | worst gap | end exact | non-finite | = host |\n'
+            printf '|---|---|---|---|---|---|---|---|---|---|---|---|\n'
+            awk 'NR == FNR { h[$1] = $2 " " $3 " " $4; next }
+                 NF == 11 { printf "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n",
+                   $1, $2, $3, $4, $5, $6, ($3 ? int($6 / $3) : "-"), $7, $8, $9, $10,
+                   (h[$1] == $2 " " $3 " " $11) ? "yes" : "**no**" }' host.txt avr.txt
+          } >> "$GITHUB_STEP_SUMMARY"
+          awk 'NR == FNR { h[$1] = $2 " " $3 " " $4; next }
+               NF == 11 && h[$1] != $2 " " $3 " " $11 { print "::warning::segments differ from host on " $1 }' host.txt avr.txt
+      # Planner fill while streaming curves, feed hold and resume, stack depth
+      # with the stepper and serial interrupts.
+      - name: Motion
+        if: ${{ hashFiles('elf/dyn.elf') != '' }}
+        run: |
+          timeout 1200 simavr -m atmega328p -f 16000000 elf/dyn.elf 2>&1 |
+            sed 's/\x1b\[[0-9;]*m//g; s/\.*$//' | grep -v '^ok$' > motion.txt
+          cat motion.txt
+          grep -qx done motion.txt
+          free=$(cat elf/free-ram.txt)
+          stack=$(awk '$1 == "stack" { print $2 }' motion.txt)
+          {
+            printf '\n### simavr motion, avr-gcc ${{ matrix.gcc }}\n\n'
+            printf 'Most stack used %d bytes, firmware free RAM %d bytes.\n\n' $stack $free
+            printf '| kind | size um | F | accel | lat ms | seg | t ms | feed | peak | min | min full | low | stops | dx | dy | stack |\n'
+            printf '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n'
+            awk '$1 == "run" { $1 = ""; $8 = ""; gsub(/ +/, " | "); print $0 " |" }' motion.txt
+            printf '\n| hold ms | state | x steps | state at resume | suspend | dx | dy | dz | t ms | stack |\n'
+            printf '|---|---|---|---|---|---|---|---|---|---|\n'
+            awk '$1 == "hold" { $1 = ""; gsub(/ +/, " | "); print $0 " |" }' motion.txt
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ $stack -gt $free ]; then
+            echo "::warning::stack $stack bytes exceeds the firmware's free RAM $free bytes"
+          fi
