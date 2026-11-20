@@ -7,6 +7,7 @@
 ROOT    := ../..
 SRC     := $(ROOT)/grbl
 BUILD   := build
+LINES   ?= lines.txt
 COMPILE ?= $(shell $(MAKE) -s -C $(ROOT) --no-print-directory --eval 'print-compile: ; @echo $$(COMPILE)' print-compile)
 DEFS    ?= -DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES
 CC       = $(COMPILE) $(DEFS) -I$(SRC)
@@ -52,8 +53,9 @@ $(BUILD)/planner.o: $(SRC)/planner.c | $(BUILD)
 $(BUILD)/bench.o: bench.c $(BUILD)/lines.h | $(BUILD)
 	$(CC) -I$(BUILD) -c $< -o $@
 
-# Each line of lines.txt becomes L("..."); '#' lines are comments.
-$(BUILD)/lines.h: lines.txt | $(BUILD)
+# Each line of LINES becomes L("..."); '#' lines are comments. Use a fresh BUILD
+# when changing LINES or DEFS; Make does not track command-line options.
+$(BUILD)/lines.h: $(LINES) | $(BUILD)
 	tr -d '\r' < $< | sed -e '/^#/d' -e '/^$$/d' -e 's/.*/L("&")/' > $@
 
 # dyn.c plays the host in serial_read() and leaves out the $ commands, which it

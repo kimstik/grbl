@@ -1,0 +1,8 @@
+# Run separately, with a process timeout. These are not performance samples.
+G21G17G90@MODE@
+G0X0Y0Z0
+# Non-finite input, known upstream parser defect [42].
+*G5X10Y0I9999999999999999999999999999999999999999J0P0Q0@Z@F@F@
+G0X0Y0Z0
+# Finite literal, overflowing arithmetic, known defect [5].
+*G5X10Y0I99999999999999999999999999999999999J0P0Q0@Z@F@F@

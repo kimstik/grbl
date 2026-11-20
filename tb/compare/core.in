@@ -1,0 +1,27 @@
+# Common finite end-to-end corpus. See tb/README.md, comparison protocol.
+# @MODE@: G94 or G93. @Z@: empty or Z-3. @F@: 1000 or 2.
+G21G17G90@MODE@
+# S; start at the machine origin.
+G0X0Y0Z0
+*G5X10Y0I3J12P3Q-12@Z@F@F@
+# Closed loop.
+G0X0Y0Z0
+*G5X0Y0I10J20P10Q-20@Z@F@F@
+# Cusp on a line.
+G0X0Y0Z0
+*G5X0Y0I10J0P10Q0@Z@F@F@
+# Collinear backtracking with a nonzero endpoint.
+G0X0Y0Z0
+*G5X10Y0I40J0P5Q0@Z@F@F@
+# Nearly straight, with small handles normal to the chord.
+G0X0Y0Z0
+*G5X100Y0I30J.001P5Q-.001@Z@F@F@
+# Quadratic, converted to cubic by the real parser.
+G0X0Y0Z0
+*G5.1X10Y5I40J-20@Z@F@F@
+# Tight actual-global control net, deliberately rounded for read_float.
+G0X0Y0Z0
+*G5X-1973.5884Y498.73666I-2361.6646J614.28149P89.928833Q-16.900238@Z@F@F@
+# Very unequal parameter speed on a straight line (handles 99:1).
+G0X0Y0Z0
+*G5X100Y0I99J0P1Q0@Z@F@F@

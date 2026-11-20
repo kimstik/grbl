@@ -1,0 +1,4 @@
+# A supplied high-curvature S, separate from the compact core.
+G21G17G90@MODE@
+G0X0Y0Z0
+*G5X-10Y8550I-3.3333J16.6667P3.3333Q-9016.667@Z@F@F@
