@@ -8,6 +8,9 @@ on:
 jobs:
   controls:
     runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - name: AVR and simulator
@@ -23,15 +26,17 @@ jobs:
           make -s -C tb/avr observe BUILD=build/full DEFS="$FLAGS"
       - name: Positive and negative controls
         run: |
+          python3 tb/avr/check-observe.py --self-test
           timeout 180 simavr -m atmega328p -f 16000000 tb/avr/build/normal/observe.elf > normal.txt 2>&1
           timeout 180 simavr -m atmega328p -f 16000000 tb/avr/build/stall/observe.elf > stall.txt 2>&1
-          python3 tb/avr/check-observe.py normal.txt --no-moving | tee normal-check.txt
-          python3 tb/avr/check-observe.py stall.txt --expect-moving | tee stall-check.txt
+          python3 tb/avr/check-observe.py normal.txt --no-moving --programs 3 > normal-check.txt
+          python3 tb/avr/check-observe.py stall.txt --expect-moving --programs 3 > stall-check.txt
+          cat normal-check.txt stall-check.txt
           if python3 tb/avr/check-observe.py normal.txt --expect-moving; then
             echo '::error::negative control unexpectedly passed'
             exit 1
           fi
-          sed '/^done/,$d' normal.txt > incomplete.txt
+          python3 -c "from pathlib import Path; s=Path('normal.txt').read_text(); Path('incomplete.txt').write_text(s[:s.rfind('done')])"
           if python3 tb/avr/check-observe.py incomplete.txt; then
             echo '::error::truncated log unexpectedly passed'
             exit 1
@@ -39,7 +44,8 @@ jobs:
       - name: Full by-length observation
         run: |
           timeout 1200 simavr -m atmega328p -f 16000000 tb/avr/build/full/observe.elf > full.txt 2>&1
-          python3 tb/avr/check-observe.py full.txt | tee full-check.txt
+          python3 tb/avr/check-observe.py full.txt --programs 126 > full-check.txt
+          cat full-check.txt
           {
             printf '### ISR shutdown observations, AVR GCC 7.3\n\n```text\n'
             cat normal-check.txt stall-check.txt full-check.txt

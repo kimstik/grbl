@@ -88,5 +88,27 @@ Z-by-length enabled:
 - The positive-control assertion rejects the no-stall log.
 - The unobserved `dyn.elf` is byte-identical to the same build from `6bff342`.
 
+The full observed sweep also completed locally and on Linux CI (AVR GCC 7.3):
+126 programs, all final XY/hold XYZ positions exact. In the Linux artifact,
+40 G5 programs recorded 104 ISR empty shutdowns, 17 with a planner block still
+queued, but zero nonzero endpoint-speed snapshots. Forty G1 programs recorded
+5620 empty shutdowns (8 queued), 40 G2 programs recorded 40 (0 queued). These
+include planned ends and restarts, not merely the legacy foreground `stops`.
+
+The six holds each stop twice (hold and final end). Two holds recorded small
+nonzero planned endpoint speeds, 0.331 and 0.798 mm/min, consistent with the
+stepper's documented sub-step hold termination case; this is not a measured
+high-speed starvation event. No physical instantaneous speed is inferred.
+Observation overhead changes scheduling: do not substitute these counts for
+the normal dynamic bench's counts or use them as production timing evidence.
+
+Raw Linux simavr UART output ends a CRLF line with two dots, while the local
+Windows build used one. The initial CI appeared green despite a parser error
+because its output was piped through `tee` without `pipefail`. That run is not
+accepted as a CI assertion: its raw artifacts were checked separately with the
+fixed parser, 126-program requirement, and positive/negative controls. The
+workflow now uses Bash with `pipefail`, direct checker redirection, and ten
+checker self-tests (including both renderers and malformed/incomplete logs).
+
 These are simulator measurements, not hardware results or a proof for arbitrary
 curves, settings or interrupt loads.
