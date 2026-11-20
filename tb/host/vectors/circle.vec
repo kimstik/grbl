@@ -53,3 +53,22 @@ G10 L20 P1 X0 Y0 Z0
 F1000
 G5.1 X10 Y0 I3 J4
 pos -90 -100 -10
+
+= nonfinite parsed handle is rejected before queue @circle
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I9999999999999999999999999999999999999999 J0 P0 Q0 -> error:33
+pos -100 -100 -10
+
+= finite huge handle arithmetic is rejected at work limit @circle
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I99999999999999999999999999999999999 J0 P0 Q0 -> error:38
+pos -100 -100 -10
+
+= check mode performs validation without planner output @circle
+G10 L20 P1 X0 Y0 Z0
+F1000
+set check 1
+G5 X10 Y0 I3 J3 P3 Q3
+pos -90 -100 -10
