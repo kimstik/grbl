@@ -11,6 +11,10 @@
                                tb/avr/lines.txt, as tb/avr/bench.c prints them
      tb --dump LINES OUT       check the segment targets that tb/avr dump.elf
                                printed under simavr (OUT) against the model
+     tb --dump-strict LINES OUT  compare with the control net captured at the host
+                               mc_cubic_b_spline call; no cap or float-grid waiver.
+                               Budget: TB_XY_BUDGET, default BEZIER_SIGMA. This is a
+                               sampled distance check, not a geometric proof.
 
    Vector file syntax, one statement per line, '#' starts a comment:
      = name [@bug] [@OPT]...   new test; machine at X-100 Y-100 Z-10 (mm), work
@@ -135,6 +139,9 @@ static void machine_reset(void)
   }
   steps[Z_AXIS] = -10 * 250;
   settings.junction_deviation = 0.01f; settings.arc_tolerance = 0.002f;
+#ifdef TB_ARC_TOLERANCE
+  settings.arc_tolerance = TB_ARC_TOLERANCE;
+#endif
   memcpy(sys_position, steps, sizeof(steps));
   memset(tb_coord, 0, sizeof(tb_coord));      /* work offsets do not leak from the previous test */
   plan_reset(); plan_sync_position();
@@ -146,6 +153,23 @@ static void machine_reset(void)
 
 static struct { int inch, incr, inv, motion; double pq[2], f; } m;  /* motion: 0, 50 (G5), 51 (G5.1) */
 typedef struct { double p[4][N_AXIS]; int ok; } curve_t;
+
+/* Capture the actual host float net, after read_float and parser arithmetic.
+   This link-time probe does not alter the firmware or its AVR code generation. */
+static curve_t parsed;
+#ifdef ENABLE_CUBIC_SPLINES
+void __real_mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position, float *first, float *second);
+void __wrap_mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position, float *first, float *second)
+{
+  for (int a = 0; a < N_AXIS; a++) {
+    parsed.p[0][a] = position[a]; parsed.p[3][a] = target[a];
+    parsed.p[1][a] = a < 2 ? first[a] : position[a];
+    parsed.p[2][a] = a < 2 ? second[a] : target[a];
+  }
+  parsed.ok = 1;
+  __real_mc_cubic_b_spline(target, pl_data, position, first, second);
+}
+#endif
 
 static double bez(const curve_t *c, int a, double t)
 {
@@ -219,7 +243,10 @@ static double turn(const double *d0, const double *d1)  /* angle between two dir
   return atan2(fabs(d0[0]*d1[1] - d0[1]*d1[0]), d0[0]*d1[0] + d0[1]*d1[1]);
 }
 
-#define DENSE 4000
+#ifndef TB_DENSE
+  #define TB_DENSE 4000
+#endif
+#define DENSE TB_DENSE
 static double dense[DENSE + 1][2], poly[MAXSEG + 1][2];
 
 /* Two-sided distance in XY between the polyline start, pts[0..n) and the model curve. */
@@ -726,7 +753,11 @@ static pt_t avr[MAXSEG];
 static float avr_feed[MAXSEG];
 static uint8_t avr_cond[MAXSEG];
 
-static void run_dump(const char *lines, const char *out)
+#ifndef TB_XY_BUDGET
+  #define TB_XY_BUDGET BEZIER_SIGMA
+#endif
+
+static void run_dump(const char *lines, const char *out, int strict)
 {
   FILE *fl = fopen(lines, "r"), *fo = fopen(out, "rb");
   char raw[256], o[256];
@@ -751,29 +782,47 @@ static void run_dump(const char *lines, const char *out)
       if (na < MAXSEG) { memcpy(avr[na], b, sizeof(pt_t)); memcpy(&avr_feed[na], &f, sizeof(float)); avr_cond[na] = cond; }
       na++; pos = ftell(fo);
     }
+    unsigned avr_status = 0;
+    int summary = sscanf(o, " %u", &avr_status) == 1;
     fseek(fo, pos, SEEK_SET);
     float start[N_AXIS], wco[N_AXIS];
     memcpy(start, gc_state.position, sizeof start);
     for (int a = 0; a < N_AXIS; a++) wco[a] = gc_state.coord_system[a] + gc_state.coord_offset[a] + (a == Z_AXIS ? gc_state.tool_length_offset : 0);
     curve_t c = model_line(g, start, wco);
-    nseg = 0;
+    nseg = 0; parsed.ok = 0;
     uint8_t st = gc_execute_line(g);
     tb_drain();
-    if (!measure || !c.ok || st) continue;
+    if (!measure) continue;
+    if (strict && (st || !summary || avr_status || !c.ok || !parsed.ok || !na || na > MAXSEG)) {
+      printf("%s: FAIL status host %u avr %u (summary %d), model %d, parsed %d, targets %d\n", g, st, avr_status, summary, c.ok, parsed.ok, na);
+      curves++; bad++; continue;
+    }
+    if (!c.ok || st) continue;
+    if (strict) {
+      c = parsed;
+      printf("net");
+      for (int k = 0; k < 4; k++) printf(" (%.9g,%.9g)", c.p[k][0], c.p[k][1]);
+      printf(" budget %.9g dense %d\n", (double)TB_XY_BUDGET, DENSE);
+    }
     int n = na < MAXSEG ? na : MAXSEG, fin = 1;
     for (int k = 0; k < n; k++) for (int a = 0; a < N_AXIS; a++) fin &= isfinite(avr[k][a]);
-    if (!fin) { printf("%s: non-finite AVR target, skipped\n", g); continue; }
+    if (!fin) {
+      printf("%s: non-finite AVR target, %s\n", g, strict ? "FAIL" : "skipped");
+      if (strict) { curves++; bad++; }
+      continue;
+    }
     curves++;
     double hd = curve_dev(&c, start, seg, nseg < MAXSEG ? nseg : MAXSEG);
     double ad = na ? curve_dev(&c, start, avr, n) : 1e300;
-    int end = na && !memcmp(avr[n-1], gc_state.position, sizeof(pt_t));
+    int end = na && na <= MAXSEG && !memcmp(avr[n-1], gc_state.position, sizeof(pt_t));
     /* At the segment cap the tolerance is given up on purpose; the AVR must
        then still be as close as the host. */
     int cap = 0;
 #ifdef BEZIER_MAX_SEGMENTS
     cap = na >= BEZIER_MAX_SEGMENTS;
 #endif
-    const char *why = !end ? "end" : ad <= tol_for(&c) || (cap && ad <= hd * 1.001 + 1e-4) ? NULL : "tol";
+    const char *why = !end ? "end" : strict ? (ad <= TB_XY_BUDGET ? NULL : "tol") :
+      ad <= tol_for(&c) || (cap && ad <= hd * 1.001 + 1e-4) ? NULL : "tol";
     zerr_t z; memset(&z, 0, sizeof z);
     if (na) {                               /* poly[] is the AVR polyline now */
       z = z_check(&c, start, avr, n);
@@ -782,7 +831,8 @@ static void run_dump(const char *lines, const char *out)
       if (!why && m.inv && m.f > 0) why = g93_fail(&c, start, avr, avr_feed, avr_cond, n);
 #endif
     }
-    printf("%s host %d %.4f avr %d %.4f%s", g, nseg, hd, na, ad, cap ? " (cap)" : "");
+    if (strict) printf("%s host %d %.9g avr %d %.9g%s", g, nseg, hd, na, ad, cap ? " (cap)" : "");
+    else printf("%s host %d %.4f avr %d %.4f%s", g, nseg, hd, na, ad, cap ? " (cap)" : "");
     if (z.moves) printf(" z len %.1e arc %.1e par %.1e", z.len, z.arc, z.par);
     if (why) printf("  FAIL %s", why);
     printf("\n");
@@ -797,7 +847,8 @@ int main(int argc, char **argv)
 {
   setvbuf(stdout, NULL, _IONBF, 0);
   if (argc == 3 && !strcmp(argv[1], "--hash")) run_hash(argv[2]);
-  if (argc == 4 && !strcmp(argv[1], "--dump")) run_dump(argv[2], argv[3]);
+  if (argc == 4 && !strcmp(argv[1], "--dump")) run_dump(argv[2], argv[3], 0);
+  if (argc == 4 && !strcmp(argv[1], "--dump-strict")) run_dump(argv[2], argv[3], 1);
   if (argc == 4 && !strcmp(argv[1], "--random")) run_random(atol(argv[2]), strtoul(argv[3], NULL, 0));
   else for (int i = 1; i < argc; i++) run_file(argv[i]);
   printf("%d checks: %d pass, %d FAIL, %d xfail, %d XPASS\n", checks, n_pass, n_fail, n_xfail, n_xpass);

@@ -1,0 +1,6 @@
+# Run separately: the 2000-segment cap may give up the requested tolerance.
+# For an uncapped comparison repeat with BEZIER_MAX_SEGMENTS=20000 (host or AVR
+# bench only). At .004 mm sigma this curve needs about 6700 Wang segments.
+G21G17G90@MODE@
+G0X0Y0Z0
+*G5X10Y0I100000J0P1Q50000@Z@F@F@

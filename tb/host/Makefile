@@ -22,7 +22,7 @@ OBJECTS  := $(addprefix $(BUILD)/,$(addsuffix .o,$(FIRMWARE)) tb.o stubs.o)
 all: $(BUILD)/tb
 
 $(BUILD)/tb: $(OBJECTS)
-	$(CC) -o $@ $^ -Wl,--wrap=plan_buffer_line -lm
+	$(CC) -o $@ $^ -Wl,--wrap=plan_buffer_line -Wl,--wrap=mc_cubic_b_spline -lm
 
 $(BUILD)/%.o: $(GRBL)/%.c prelude.h | $(BUILD)
 	$(CC) $(CFLAGS) $(FWFLAGS) -c $< -o $@
