@@ -37,8 +37,8 @@ Decisions that tests encode:
 | 6  | G5/G5.1 without X/Y must not move to machine zero                      | host vectors          | defect                                  |
 | 7  | Negative P accepted                                                     | host vectors          | defect (error:4)                        |
 | 8  | Rejected line: nothing queued, parser state byte-identical            | host, every line      | defect: spline_pq written early         |
-| 9  | Worst-case generation time                                              | avr (641 segments)    | 1.12 s for one 641-segment line         |
-| 10 | Stack on ATmega328P: static chain and with interrupts                   | avr, avr dynamic      | defect: G5 needs ~443 of 403 bytes free |
+| 9  | Worst-case generation time                                              | avr (641 segments)    | 1.13 s for one 641-segment line         |
+| 10 | Stack on ATmega328P: static chain and with interrupts                   | avr, avr dynamic      | pass: G5 uses at most 363 of 403 bytes  |
 | 11 | Planner starvation while streaming curves at speed                     | avr dynamic           | pass: G5 never starves; G1/G2 do        |
 | 12 | Cusp: the planner stops at the reversal                                | host `junction`       | pass                                    |
 | 13 | Smooth chain with implicit I/J: no corner at the joins                 | host `set smooth`     | pass                                    |
@@ -86,13 +86,16 @@ stepper interrupt live; it plays a send-and-wait-for-ok host inside
 Timer2. simavr does not start the Timer1 CTC with OCR1A = 0, which Grbl
 leaves until its first stepper interrupt, so dyn.c presets OCR1A.
 
-- Stack: with G5 the deepest stack reaches 434-446 bytes (avr-gcc 7.3) and
-  425 (15.2); G1 329-347, G2 341-353. The firmware with G5+G5.1 has 403 bytes
-  of free RAM, so G5 overruns into `sys` at the top of .bss. Early dyn
-  builds with 416-434 free bytes showed exactly that: spurious resets, lost
-  F (error:22), ALARM. The static bench agrees: its G5 chain alone leaves
-  107 bytes of 574 untouched (80 of them its own line buffer, which is
-  static in the firmware) before any interrupt frame. Not seen on hardware.
+- Stack: with G5 the deepest stack reaches 351-363 bytes (avr-gcc 7.3) and
+  332-344 (15.2 to 17); G1 311-335, G2 329-337. The firmware with G5+G5.1
+  has 403 bytes of free RAM, 40 to spare. The walker computes each segment in
+  its own function, whose 77-byte frame is gone before mc_line() and the
+  planner run, and the control points are no longer copied into the parser's
+  frame. Before that G5 reached 425-446 bytes and overran into `sys` at the
+  top of .bss; dyn builds with 416-434 free bytes showed exactly that:
+  spurious resets, lost F (error:22), ALARM. Not seen on hardware. The static
+  bench's G5 chain leaves 192 bytes of 574 untouched (80 of them its own line
+  buffer, which is static in the firmware) before any interrupt frame.
 - Starvation: 120 programs (G5, G1 along the same chords, G2; 2 and 5 mm;
   F1000-5000; 500 and 2000 mm/s^2; 2 and 16 ms host latency). G5 keeps
   13-14 blocks queued; its speed is limited by chord geometry, not by
