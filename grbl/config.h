@@ -732,6 +732,11 @@
     #define BEZIER_MAX_SEGMENTS 2000 // Most segments per curve
   #endif
 
+  // Forward-only research alternative to equal Wang steps. Runtime tolerance is shared with
+  // the baseline through BEZIER_SIGMA; numeric-risk curves retain the original Wang points.
+  // The coordinate-scale error reserve is experimental, not a strict float32 proof.
+  // #define BEZIER_ADAPTIVE_LINES
+
   // Z word on G5/G5.1, the analog of a helix. Undefined: an axis word other than X and Y is
   // an error. 1: Z moves in proportion to the curve parameter. 2: in proportion to the length
   // travelled in XY, which takes a second pass over the points of the curve.

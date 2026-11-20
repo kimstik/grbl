@@ -390,6 +390,7 @@ void mc_reset()
 
 #ifdef ENABLE_CUBIC_SPLINES
 
+#ifndef BEZIER_ADAPTIVE_LINES
 // Execute a cubic Bezier curve from position to target with control points first and second.
 // Only X and Y follow the curve; the other axes stay at position, as the parser allows no others.
 // The curve is cut into a number of segments of equal step in the curve parameter t, chosen in
@@ -477,4 +478,146 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
   mc_line(p, pl_data);
 }
 
+#else // BEZIER_ADAPTIVE_LINES
+
+// Research alternative: inner control points must project inside the candidate chord. Their
+// normal distances bound the curve-to-chord and chord-to-curve distance by 3/4 of the maximum.
+// A .8 instead of .75 test constant leaves a geometric margin. The additional coordinate-scale
+// allowance below is a conservative experimental error budget, not a proof of float accuracy.
+// If that allowance consumes the tolerance, replay the original equal-step Wang generator.
+#ifndef BEZIER_ADAPTIVE_ROUNDOFF
+#define BEZIER_ADAPTIVE_ROUNDOFF 0.00000095367431640625f // 8 * FLT_EPSILON
+#endif
+
+#ifdef BEZIER_ADAPTIVE_TRACE
+uint16_t bezier_adaptive_trials;
+uint8_t bezier_adaptive_fallback;
+#endif
+
+static uint8_t bezier_finite(float x)
+{
+  union { float f; uint32_t u; } v = { x };
+  return (v.u & 0x7f800000UL) != 0x7f800000UL;
+}
+
+void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position,
+                       float *first, float *second)
+{
+  float p[N_AXIS], a = 0.0f, b = 0.0f, scale = 0.0f;
+  uint8_t i;
+  for (i = 0; i < 2; i++) {
+    float e0 = second[i] - 2.0f*first[i] + position[i];
+    float e1 = target[i] - 2.0f*second[i] + first[i];
+    a += e0*e0;
+    b += e1*e1;
+    scale += fabsf(position[i]) + fabsf(3.0f*(first[i] - position[i]))
+           + fabsf(3.0f*e0) + fabsf(e1 - e0);
+  }
+  float n = sqrtf(sqrtf(max(a, b))*(0.8f/BEZIER_SIGMA));
+  uint16_t segments = BEZIER_MAX_SEGMENTS;
+  if (n < BEZIER_MAX_SEGMENTS) { segments = 1 + n; }
+  float step = 1.0f/segments;
+  float s2 = BEZIER_SIGMA - BEZIER_ADAPTIVE_ROUNDOFF*scale;
+  uint8_t adaptive = bezier_finite(s2) && (s2 > 0.0f);
+  s2 *= s2;
+#ifdef BEZIER_ADAPTIVE_TRACE
+  bezier_adaptive_trials = 0;
+  bezier_adaptive_fallback = !adaptive;
+#endif
+
+  float length = 0.0f;
+#if BEZIER_Z_LINEAR == 2
+  float dz = target[Z_AXIS] - position[Z_AXIS];
+  uint8_t pass;
+  for (pass = 0; pass < 2; pass++) {
+#endif
+  float t = 0.0f, h = 2.0f*step, old[2] = {0.0f, 0.0f}, d[2];
+  float s = 1e-30f;
+  uint16_t j = 0;
+  memcpy(p, position, sizeof(p));
+  for (i = 0; i < 2; i++) { d[i] = 3.0f*(first[i] - position[i]); }
+  do {
+    float tn, q[2], e[2], f = 0.5f;
+    uint8_t floor = 0, accepted = 0, trials = 0;
+    do {
+      f = 0.5f;
+      protocol_execute_realtime();
+      if (sys.abort) { return; }
+      if (!adaptive) {
+        tn = (++j == segments) ? 1.0f : j*step;
+        accepted = 1;
+      } else {
+        // The floor decision precedes the end clamp: 1-t may round above step.
+        floor = h <= step;
+        tn = t + h;
+        if (!(tn < 1.0f) || j + 1 == segments) { tn = 1.0f; }
+        h = tn - t;
+      }
+      for (i = 0; i < 2; i++) {
+        float e0 = second[i] - 2.0f*first[i] + position[i];
+        float e1 = target[i] - 2.0f*second[i] + first[i];
+        q[i] = tn*(3.0f*(first[i] - position[i]) + tn*(3.0f*e0 + tn*(e1 - e0)));
+        e[i] = 3.0f*(first[i] - position[i]) + tn*(6.0f*e0 + tn*3.0f*(e1 - e0));
+      }
+      if (adaptive) {
+#ifdef BEZIER_ADAPTIVE_TRACE
+        bezier_adaptive_trials++;
+#endif
+        float cx = q[0] - old[0], cy = q[1] - old[1];
+        float cc = cx*cx + cy*cy, k = h*(1.0f/3.0f);
+        float ax = k*d[0], ay = k*d[1], bx = k*e[0], by = k*e[1];
+        float den = s2*cc, y1 = ax*cx + ay*cy, y2 = bx*cx + by*cy;
+        if ((den > 0.0f) && y1 >= 0.0f && y1 <= cc && y2 >= 0.0f && y2 <= cc) {
+          float x1 = ax*cy - ay*cx, x2 = bx*cy - by*cx;
+          float r = 0.64f*max(x1*x1, x2*x2)/den;
+          accepted = r <= 1.0f;
+          f = (1.25f - 0.25f*r)*0.95f;
+          if (!(f > 0.5f)) { f = 0.5f; }
+        }
+        // Finite-input rejections shrink by at least 5%. This integer guard also bounds
+        // invalid arithmetic: the next trial takes the floor, never an unbounded retry.
+        if (++trials == 191) { h = step; } else { h *= f; }
+        if (!(h > step)) { h = step; }
+        accepted |= floor;
+      }
+    } while (!accepted);
+
+    if (adaptive) { j++; }
+    for (i = 0; i < 2; i++) { p[i] = (tn == 1.0f) ? target[i] : position[i] + q[i]; }
+#if BEZIER_Z_LINEAR == 1
+    p[Z_AXIS] = position[Z_AXIS] + tn*(target[Z_AXIS] - position[Z_AXIS]);
+#elif BEZIER_Z_LINEAR == 2
+    // Recompute the previous absolute point by the same addition used to emit it.
+    // Replaying this loop from reset repeats every trial and every length sum bit for bit.
+    s += hypot_f(p[X_AXIS] - (position[X_AXIS] + old[X_AXIS]),
+                 p[Y_AXIS] - (position[Y_AXIS] + old[Y_AXIS]));
+    if (pass) { p[Z_AXIS] = (tn == 1.0f) ? target[Z_AXIS] : position[Z_AXIS] + s/length*dz; }
+#endif
+    t = tn;
+    memcpy(old, q, sizeof(old));
+    memcpy(d, e, sizeof(d));
+#if BEZIER_Z_LINEAR == 2
+    if (pass)
+#endif
+    { mc_line(p, pl_data); }
+    if (sys.abort) { return; }
+  } while (t < 1.0f);
+#if BEZIER_Z_LINEAR == 2
+  if (!pass) {
+#ifdef BEZIER_EXACT_INVERSE_TIME
+    if (pl_data->condition & PL_COND_FLAG_INVERSE_TIME) {
+      pl_data->feed_rate *= hypot_f(s, dz);
+      bit_false(pl_data->condition,PL_COND_FLAG_INVERSE_TIME);
+    }
+#endif
+    length = s*1.0000002f;
+  }
+  }
+#else
+  (void)length;
+  (void)s;
+#endif
+}
+
+#endif // BEZIER_ADAPTIVE_LINES
 #endif // ENABLE_CUBIC_SPLINES
