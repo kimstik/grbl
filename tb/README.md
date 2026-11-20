@@ -50,8 +50,8 @@ Decisions that tests encode:
 | 19 | Check mode, `$J=G5` rejection, mode changes before implicit I/J        | host vectors          | pass                                    |
 | 20 | Mutation testing                                                        | host `mutate.sh`      | 32 of 32 killed                         |
 | 21 | Random curves, failures shrunk to a minimal line                       | host `--random`       | pass (negative P skipped, see 7)        |
-| 22 | Host vs AVR: same segments                                              | CI simavr `= host`    | G5/G5.1 identical; G2 differs (sin/cos) |
-| 23 | Compiler vs compiler: same segments                                     | CI simavr per gcc     | G5/G5.1 identical on all four           |
+| 22 | Host vs AVR: same segments                                              | CI simavr `= host`    | G5.1, [1] and G2 differ (see below)     |
+| 23 | Compiler vs compiler: same segments                                     | CI simavr per gcc     | G5.1, [1]: 7.3 differs from 15-17       |
 | 24 | Denormal, near-zero and coincident handles                             | host vectors          | pass                                    |
 | 25 | Command spelling; G5.1 rejected when disabled                          | host, `cubic_only.vec`| pass                                    |
 | 26 | Number spelling: P.5, P+5, P5., P1E3, empty P                          | host vectors          | pass; P-.5 is defect 7                  |
@@ -87,7 +87,8 @@ Timer2. simavr does not start the Timer1 CTC with OCR1A = 0, which Grbl
 leaves until its first stepper interrupt, so dyn.c presets OCR1A.
 
 - Stack: the firmware with G5+G5.1 has 403 bytes of free RAM. The deepest
-  stack is 343 bytes with avr-gcc 7.3 (G5 341, G1 343, G2 343). It was 446
+  stack is 343 bytes with avr-gcc 7.3 (G5 341, G1 343, G2 343), 338 with
+  15.2, 16.2 and 17. It was 446
   for G5 with the adaptive walker, which overran into `sys` at the top of
   .bss; early dyn builds with 416-434 free bytes showed exactly that:
   spurious resets, lost F (error:22), ALARM. The generator now has one call
@@ -102,6 +103,15 @@ leaves until its first stepper interrupt, so dyn.c presets OCR1A.
   Final position exact in all runs.
 - Feed hold at 60-1000 ms into a G5 chain at F3000, resume 400 ms later:
   final position 0 steps off in all six.
+
+## 22, 23: same segments
+
+Every G5 line of `avr/lines.txt` gives the same segments on the host and on
+the four compilers, except two: G5.1 and the [1] curve. -ffast-math lets
+each compiler reassociate the inlined control point and Horner arithmetic
+in its own way (host experiments: dropping -ffast-math or tree vectorization
+each moves one of the two hashes onto the avr-gcc 7.3 one). Segment count and the
+exact end point are the same everywhere. G2 differs because sin/cos do.
 
 ## 37: grblHAL
 

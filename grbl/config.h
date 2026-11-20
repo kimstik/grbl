@@ -687,14 +687,15 @@
 
                         avr-gcc:  7.3.0   15.2.0   16.2.0   17 (20261115)
      Stock flags        off       29738   30066    29868    29846
-                        G5        32580   -        -        -
-                        G5+G5.1   -       -        -        -
+                        G5        31562   32388    31956    31932
+                        G5+G5.1   32132   -        32508    32482
      Makefile flags     off       28286   28444    27842    27782
-                        G5        30830   31052    30390    30354
-                        G5+G5.1   31610   31900    31244    31212
+                        G5        30176   30674    29890    29870
+                        G5+G5.1   30672   31152    30406    30388
 
-   With the stock flags G5 does not fit the bootloader limit with any compiler. The
-   size flags in the Makefile let G5 + G5.1 fit with every compiler listed. RAM grows
+   With the stock flags G5 fits the bootloader limit except with 15.2, and G5 + G5.1
+   only with 7.3. The size flags in the Makefile let G5 + G5.1 fit with every compiler
+   listed. RAM grows
    by 12 bytes with splines enabled (1633 -> 1645 bytes of data + bss).
 
    When BOTH DISABLED (default): built with the stock flags, the binary is identical
