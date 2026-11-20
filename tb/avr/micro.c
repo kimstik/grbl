@@ -62,6 +62,11 @@ uint8_t plan_buffer_line(float *target, plan_line_data_t *data)
   b=(const uint8_t *)&data->feed_rate;
   for (i=0; i<4; i++) { hash=(hash^b[i])*16777619UL; }
   hash=(hash^data->condition)*16777619UL;
+#ifdef TB_MICRO_DUMP
+  cli(); put('p');
+  for (i=0; i<N_AXIS; i++) { uint32_t u; memcpy(&u,&target[i],4); word(u); }
+  uint32_t f; memcpy(&f,&data->feed_rate,4); word(f); word(data->condition); newline(); sei();
+#endif
   count++;
   exit_time=now();
   return(1);
@@ -80,7 +85,12 @@ static uint16_t untouched(void)
   return(p-&__heap_start);
 }
 
-// Matching finite control nets for every generator. The final net deliberately hits a cap.
+// Generated from the actual host parser net of the shared corpus, not ideal decimal data.
+#ifdef TB_MICRO_NETS
+#define TB_STRINGIFY_(x) #x
+#define TB_STRINGIFY(x) TB_STRINGIFY_(x)
+#include TB_STRINGIFY(TB_MICRO_NETS)
+#else
 static const float nets[][6] PROGMEM = {
   {3,3, 13,3, 10,0},
   {-20,30, 15,30, -5,0},
@@ -92,6 +102,10 @@ static const float nets[][6] PROGMEM = {
   {-2361.66455,614.281433, -1883.65942,481.836395, -1973.58826,498.736633},
   {100000,100000, 100010,100000, 10,0}
 };
+#endif
+#ifndef TB_ARC_TOLERANCE
+#define TB_ARC_TOLERANCE 0.002f
+#endif
 
 int main(void)
 {
@@ -99,7 +113,7 @@ int main(void)
   UBRR0H=0; UBRR0L=8;
   UCSR0A=_BV(U2X0); UCSR0B=_BV(TXEN0); UCSR0C=_BV(UCSZ01)|_BV(UCSZ00);
   TCCR1A=0; TCCR1B=_BV(CS10); TIMSK1=_BV(TOIE1);
-  settings.arc_tolerance=0.002f;
+  settings.arc_tolerance=TB_ARC_TOLERANCE;
   sei();
   uint32_t t=now();
   __builtin_avr_delay_cycles(1000000);

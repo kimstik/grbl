@@ -726,7 +726,7 @@ static void run_random(long n, unsigned long seed)
 }
 
 /* Same lines and hash as tb/avr/bench.c, from machine zero: "line status seg hash". */
-static void run_hash(const char *path)
+static void run_hash(const char *path, int dump)
 {
   FILE *fp = fopen(path, "r");
   char raw[256];
@@ -742,6 +742,16 @@ static void run_hash(const char *path)
     nseg = 0;
     uint8_t st = gc_execute_line(g);
     tb_drain();
+    if (dump) {
+      printf("%s\n", g);
+      for (int k=0; k<nseg && k<MAXSEG; k++) {
+        uint32_t bits[N_AXIS], feed;
+        memcpy(bits,seg[k],sizeof(bits)); memcpy(&feed,&seg_feed[k],sizeof(feed));
+        printf("p %u %u %u %u %u\n",bits[0],bits[1],bits[2],feed,seg_cond[k]);
+      }
+      printf(" %u\n",st);
+      continue;
+    }
     if (!measure) continue;
     uint32_t h = 2166136261u;
     for (int k = 0; k < nseg && k < MAXSEG; k++) {
@@ -856,7 +866,8 @@ static void run_dump(const char *lines, const char *out, int strict)
 int main(int argc, char **argv)
 {
   setvbuf(stdout, NULL, _IONBF, 0);
-  if (argc == 3 && !strcmp(argv[1], "--hash")) run_hash(argv[2]);
+  if (argc == 3 && !strcmp(argv[1], "--hash")) run_hash(argv[2],0);
+  if (argc == 3 && !strcmp(argv[1], "--host-dump")) run_hash(argv[2],1);
   if (argc == 4 && !strcmp(argv[1], "--dump")) run_dump(argv[2], argv[3], 0);
   if (argc == 4 && !strcmp(argv[1], "--dump-strict")) run_dump(argv[2], argv[3], 1);
   if (argc == 4 && !strcmp(argv[1], "--random")) run_random(atol(argv[2]), strtoul(argv[3], NULL, 0));
