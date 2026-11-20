@@ -443,7 +443,12 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
 #elif BEZIER_Z_LINEAR == 2
     s += hypot_f(p[X_AXIS] - q[X_AXIS], p[Y_AXIS] - q[Y_AXIS]);
     memcpy(q, p, sizeof(q));
-    if (!pass) { continue; }
+    if (!pass) {
+      // Nothing is queued in this pass, so mc_line is not there to keep the stepper fed.
+      protocol_execute_realtime();
+      if (sys.abort) { return; }
+      continue;
+    }
     p[Z_AXIS] = position[Z_AXIS] + s/length*dz;
 #endif
     mc_line(p, pl_data);
@@ -458,7 +463,9 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
     bit_false(pl_data->condition,PL_COND_FLAG_INVERSE_TIME);
   }
 #endif
-  length = s;
+  // A hair over the sum, so no point before the last gets all of dz: position + dz can be a
+  // bit past the target, and the last segment would then take Z back.
+  length = s*1.0000002f;
   segments--;
   }
 #endif

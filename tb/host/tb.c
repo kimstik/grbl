@@ -17,8 +17,9 @@
                                offsets zero, F unset.
                                @bug: known open defect, failures count as XFAIL
                                @OPT, @!OPT: only for a firmware built with, without
-                               the option: z (BEZIER_Z_LINEAR), zlen (BEZIER_Z_LINEAR 2),
-                               g93 (BEZIER_EXACT_INVERSE_TIME)
+                               the option: tol (BEZIER_SIGMA is a variable, as with
+                               settings.arc_tolerance), z (BEZIER_Z_LINEAR), zlen
+                               (BEZIER_Z_LINEAR 2), g93 (BEZIER_EXACT_INVERSE_TIME)
      set KEY VALUE             soft 0|1, check 0|1, laser 0|1, tol MM, maxseg N,
                                smooth 0|1, steps N (all axes), rate MM/MIN, accel MM/S^2,
                                arctol MM ($12)
@@ -36,6 +37,8 @@
                                summed without sign, are at most MM mm
      power S                   every segment of the last line was queued with
                                spindle (laser) speed S
+     minutes LO HI             the blocks of the last line take LO to HI minutes at
+                               their programmed rates
      zlen LO HI                Z of the last curve is off the line in the length
      zarc LO HI                travelled (zlen) or in the arc length of the model
                                (zarc) by LO to HI of the Z travel at its worst point
@@ -49,8 +52,8 @@
      default BEZIER_SIGMA as the firmware has it, or what the segment cap
      leaves of it; Z never reverses, stays put without a Z word, and is linear
      in the length travelled (BEZIER_Z_LINEAR 2) or in the segment number (1);
-     G93 time == 1/F; G94 feed as programmed; smooth 1: no sharper corner at the join with the
-     previous curve than inside either curve. */
+     G93 time == 1/F; G94 feed as programmed; smooth 1: no sharper corner at
+     the join with the previous curve than inside either curve. */
 #include "grbl.h"
 #include <ctype.h>
 #include <float.h>
@@ -310,7 +313,7 @@ static zerr_t z_check(const curve_t *c, const float *start, pt_t *pts, int n)
   for (int k = 0; k < DENSE; k++) arc[k+1] = arc[k] + h/6*(speed(c, k*h) + 4*speed(c, (k + 0.5)*h) + speed(c, (k + 1)*h));
   for (int k = 1; k <= n; k++) len += hypot(poly[k][0] - poly[k-1][0], poly[k][1] - poly[k-1][1]);
   r.moves = dz != 0;
-  if (arc[DENSE] > 0) r.shrt = 1 - len/arc[DENSE];
+  if (len < arc[DENSE]) r.shrt = 1 - len/arc[DENSE];
   if (r.moves) r.noise = 4*FLT_EPSILON*((fabs(z0) + fabs(dz))/fabs(dz) + (len > 0 ? reach(c)/len : 0));
   int at = 0;
   for (int k = 1; k <= n; k++) {
@@ -497,6 +500,7 @@ static void run_file(const char *path)
       end_test();
       sscanf(s + 1, " %159[^\r\n]", name);
       static const struct { const char *tag; int on; } opt[] = {
+        { "tol", !__builtin_constant_p(BEZIER_SIGMA) },
 #ifdef BEZIER_Z_LINEAR
         { "z", 1 }, { "zlen", BEZIER_Z_LINEAR == 2 },
 #else
@@ -569,6 +573,9 @@ static void run_file(const char *path)
       if (a < 0 || a >= N_AXIS) { fprintf(stderr, "%s:%d: bad axis %c\n", path, lineno, ax); exit(2); }
       double mm = travel[a] / settings.steps_per_mm[a];
       if (mm > v[0] + 1e-9) fail("travel: axis %c moved %g mm (%u steps) > %g", "XYZ"[a], mm, travel[a], v[0]);
+    } else if (!strncmp(s, "minutes ", 8)) {
+      sscanf(s + 8, "%lf %lf", &v[0], &v[1]); checks++;
+      if (line_time < v[0] || line_time > v[1]) fail("minutes: %g, expected %g to %g", line_time, v[0], v[1]);
     } else if (!strncmp(s, "zlen ", 5) || !strncmp(s, "zarc ", 5)) {
       double e = s[1] == 'l' ? last_z.len : last_z.arc;
       sscanf(s + 5, "%lf %lf", &v[0], &v[1]); checks++;

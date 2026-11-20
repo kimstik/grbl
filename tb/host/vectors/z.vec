@@ -113,6 +113,19 @@ G10 L20 P1 X0 Y0 Z0
 F1000
 G5 X300 Y0 Z0.004 I100 J100 P100 Q100
 
+# Both control points on the end: the last chords are too short to count in a
+# sum of 20 m, so the last points have the whole length behind them. The
+# travel from Z-10 to Z0.3 has no exact float, and -10 plus it is past 0.3.
+= [52] chords lost in the sum: Z waits at the target, never past it @zlen
+F1000
+G5 X20000 Y-100 Z0.3 I20100 J0 P0 Q0
+G0 X-100 Y-100 Z-10
+G5 X20000 Y-100 Z0.1 I20100 J0 P0 Q0
+G0 X-100 Y-100 Z-10
+G5 X20000 Y-100 Z7.77 I20100 J0 P0 Q0
+G0 X-100 Y-100 Z-10
+G5 X20000 Y-100 Z-0.7 I20100 J0 P0 Q0
+
 # ---- degenerate curves [53] ---------------------------------------------------
 
 = [53] all points coincide: a plain Z move, nothing divided by zero @z

@@ -15,7 +15,7 @@
   host, injects feed hold and cycle start, and stops a program that hangs.
 
   Output lines (simavr prints UART lines to stderr, mixed with grbl's "ok"):
-    run    kind size_um F accel lat_ms seg len_um t_ms feed peak min min_full low stops dx dy stack
+    run    kind size_um F accel lat_ms seg len_um t_ms feed peak min min_full low stops cut cut_F dx dy stack
       kind      G5 cubic S-curves, G1 the same curves as straight segments
                 (same block count), G2 alternating G2/G3 half circles
       seg       blocks queued, len_um the programmed path length
@@ -25,10 +25,16 @@
       min_full  the same, counted only after the buffer was first full (- if never)
       low       times the planner fell to 0 or 1 block (same window as min)
       stops     times the machine went idle mid-program
+      cut       stops with blocks still queued: the main loop was too busy to
+                refill the step segment buffer, and the stepper stopped with
+                no deceleration
+      cut_F     the highest feed it was cut at, mm/min (entry speed of the
+                block in progress)
       dx dy     final sys_position minus the parser target, in steps
       stack     most stack used, in bytes below RAMEND, ISRs included
     hold   delay_ms state@hold x@hold state@resume suspend@resume dx dy dz t_ms stack
       x@hold    steps from the program start; 1250 steps per 5 mm curve
+                Built with BEZIER_Z_LINEAR, these curves also move Z, 0.2 mm each.
     stack  most stack used in all programs, bytes never touched
     timeout     a program hung, the bench stops
 
@@ -109,8 +115,16 @@ ISR(TIMER2_OVF_vect)
 
 // Probe state for one program.
 static uint8_t sampling, cycling, filled, low_now;
-static uint8_t peak, run_min, full_min, low, stops;
-static uint16_t seg;
+static uint8_t peak, run_min, full_min, low, stops, cut;
+static uint16_t seg, cut_feed;
+
+// Not inlined: the probe below keeps the frame it has without this.
+static void __attribute__((noinline)) cut_off(void)
+{
+  uint16_t f = lround(sqrtf(plan_get_current_block()->entry_speed_sqr));
+  cut++;
+  if (f > cut_feed) { cut_feed = f; }
+}
 
 // Called through a pointer, as with one caller left it would be inlined, and
 // the stack would no longer match the firmware's.
@@ -130,6 +144,7 @@ uint8_t __attribute__((noinline)) plan_buffer_line(float *target, plan_line_data
       if (n <= 1) { low += !low_now; low_now = 1; } else { low_now = 0; }
     } else if (cycling) {
       stops++;
+      if (n) { cut_off(); }
       cycling = 0;
     }
   }
@@ -156,7 +171,7 @@ static void chord(uint8_t j, uint8_t n)
 }
 
 // Line builder.
-static char line[40]; // The longest is G5I-2.500J2.500P2.500Q-2.500X-5.000
+static char line[48]; // The longest is G5I-2.500J2.500P2.500Q-2.500Z-0.200X-5.000
 static char *lp = line;
 
 static void put(const char *s) { while ((*lp = pgm_read_byte(s++))) { lp++; } }
@@ -195,6 +210,9 @@ static void make_line(void)
       if (pi == 1) { put_u('I', -h); put_u('J', h); }
       put_u('P', h);
       put_u('Q', -h);
+#ifdef BEZIER_Z_LINEAR
+      if (hold_ms) { put_u('Z', -200); }
+#endif
     } else {
       put((pi & 1) ? PSTR("G2") : PSTR("G3"));
       put_u('I', -h);
@@ -257,7 +275,7 @@ static uint8_t setup(void)
   plan_sync_position();
   gc_sync_position();
   sampling = 1; cycling = 0; filled = 0; low_now = 0;
-  peak = 0; run_min = 255; full_min = 255; low = 0; stops = 0;
+  peak = 0; run_min = 255; full_min = 255; low = 0; stops = 0; cut = 0; cut_feed = 0;
   seg = 0; pi = 0;
   cli();
   tick = 0;
@@ -299,7 +317,7 @@ static void report(void)
     field(len); field(t); field(len * 60 / t);
     field(peak); field(run_min);
     if (filled) { field(full_min); } else { printPgmString(PSTR(" -")); }
-    field(low); field(stops);
+    field(low); field(stops); field(cut); field(cut_feed);
   } else {
     printPgmString(PSTR("hold"));
     field(hold_ms);

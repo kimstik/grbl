@@ -261,8 +261,8 @@ jobs:
           {
             printf '\n### simavr motion, avr-gcc ${{ matrix.gcc }} ${{ matrix.opt }}\n\n'
             printf 'Most stack used %d bytes, firmware free RAM %d bytes.\n\n' $stack $free
-            printf '| kind | size um | F | accel | lat ms | seg | t ms | feed | peak | min | min full | low | stops | dx | dy | stack |\n'
-            printf '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n'
+            printf '| kind | size um | F | accel | lat ms | seg | t ms | feed | peak | min | min full | low | stops | cut | cut F | dx | dy | stack |\n'
+            printf '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n'
             awk '$1 == "run" { $1 = ""; $8 = ""; gsub(/ +/, " | "); print $0 " |" }' motion.txt
             printf '\n| hold ms | state | x steps | state at resume | suspend | dx | dy | dz | t ms | stack |\n'
             printf '|---|---|---|---|---|---|---|---|---|---|\n'

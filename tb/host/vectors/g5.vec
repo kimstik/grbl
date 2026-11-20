@@ -72,6 +72,31 @@ G10 L20 P1 X0 Y0 Z0
 F1000
 G5 X1000 Y0 I300 J300 P300 Q300
 
+# Built with BEZIER_SIGMA=settings.arc_tolerance the deviation is checked
+# against $12 as it stands. 11 segments is what 0.1 mm takes for this curve,
+# so maxseg shows that a coarser $12 is followed too.
+= [56] $12 is the tolerance of G5: default, coarse and fine @tol
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I3 J3 P3 Q3
+set arctol 0.1
+set maxseg 11
+G5 X20 Y0 I3 J3 P3 Q3
+set arctol 0.0001
+set maxseg 2000
+G5 X30 Y0 I3 J3 P3 Q3
+
+# 0.8/$12 is infinite, and not a number once multiplied by a zero bend: both
+# end at the cap.
+= [56] $12 = 0: the cap of 2000 segments, nothing divided by zero @tol
+G10 L20 P1 X0 Y0 Z0
+F1000
+set arctol 0
+G5 X10 Y0 I3 J3 P3 Q3
+G5.1 X20 Y0 I5 J5
+G5 X30 Y0 I0 J0 P0 Q0
+G5 X30 Y0 I0 J0 P0 Q0
+
 = [3] basic S rotated by 45 degrees
 G10 L20 P1 X0 Y0 Z0
 F1000
@@ -298,6 +323,21 @@ G5 X10 Y0 I3 J3 P3 Q3 F2
 G10 L20 P1 X0 Y0 Z0
 G93
 G5.1 X10 Y0 I5 J5 F2
+
+# The arcs of upstream Grbl for comparison: mc_arc multiplies F by the segment
+# count and clears the inverse time flag, so the arc runs at F*segments mm/min.
+# The half circle of radius 5 has 55 segments at $12 = 0.002 and takes 0.071 min.
+= [55] G93 G1 takes 1/F minutes
+G10 L20 P1 X0 Y0 Z0
+G93
+G1 X20 Y0 F2
+minutes 0.4999 0.5001
+
+= [55] G93 G2 takes 1/F minutes @bug
+G10 L20 P1 X0 Y0 Z0
+G93
+G2 X10 Y0 I5 J0 F4
+minutes 0.2499 0.2501
 
 # ---- spelling and forbidden combinations [25] [26] [27] [41] -----------------
 
