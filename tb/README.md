@@ -29,57 +29,64 @@ Decisions that tests encode:
 
 ## Catalog
 
-| ID | Test                                                                   | Where                 | Status                                  |
-|----|------------------------------------------------------------------------|-----------------------|-----------------------------------------|
-| 1  | Inflection on a probed midpoint does not hide the deviation            | host vector           | pass: 0.0029 mm with 276 segments       |
-| 2  | Long handles stay within the tolerance                                 | host vectors          | pass to 1e5; capped at 2000 segments    |
-| 3  | L1 metric: rotated curve within tolerance                              | host vector           | pass                                    |
-| 4  | Last segment bit-exact on the parser position under -ffast-math        | avr `end exact`       | pass on all four compilers              |
-| 5  | Non-finite or overflowing values never reach the planner               | host vector, avr      | defect, same class as G1 X1e35          |
-| 6  | G5/G5.1 without X/Y must not move to machine zero                      | host vectors          | defect                                  |
-| 7  | Negative P accepted                                                     | host vectors          | defect (error:4)                        |
-| 8  | Rejected line: nothing queued, parser state byte-identical            | host, every line      | defect: spline_pq written early         |
-| 9  | Worst-case generation time                                              | avr (2000 segments)   | 2.0 s at the cap of 2000 segments       |
-| 10 | Stack on ATmega328P: static chain and with interrupts                   | avr, avr dynamic      | pass: 343 of 403 bytes (7.3)            |
-| 11 | Planner starvation while streaming curves at speed                     | avr dynamic           | pass: G5 never starves; G1/G2 do        |
-| 12 | Cusp: the planner stops at the reversal                                | host `junction`       | pass                                    |
-| 13 | Smooth chain with implicit I/J: no corner at the joins                 | host `set smooth`     | pass                                    |
-| 14 | Handles on the chord: same as G1                                        | host vectors          | pass                                    |
-| 15 | G5.1 equals G5 with 2/3-rule handles                                    | host `same`           | pass                                    |
-| 16 | Quarter circle within the Bezier-circle error                          | host `circle`         | pass                                    |
-| 17 | Translation by G91/G92, G20 vs G21: same segments                      | host `same`           | pass                                    |
-| 18 | Reversed curve within tolerance                                         | host vector           | pass                                    |
-| 19 | Check mode, `$J=G5` rejection, mode changes before implicit I/J        | host vectors          | pass                                    |
-| 20 | Mutation testing                                                        | host `mutate.sh`      | 32 of 32 killed                         |
-| 21 | Random curves, failures shrunk to a minimal line                       | host `--random`       | pass (negative P skipped, see 7)        |
-| 22 | Host vs AVR: same segments                                              | CI simavr `= host`    | G5.1, [1] and G2 differ (see below)     |
-| 23 | Compiler vs compiler: same segments                                     | CI simavr per gcc     | G5.1, [1]: 7.3 differs from 15-17       |
-| 24 | Denormal, near-zero and coincident handles                             | host vectors          | pass                                    |
-| 25 | Command spelling; G5.1 rejected when disabled                          | host, `cubic_only.vec`| pass                                    |
-| 26 | Number spelling: P.5, P+5, P5., P1E3, empty P                          | host vectors          | pass; P-.5 is defect 7                  |
-| 27 | Forbidden combinations and unused words                                | host vectors          | pass                                    |
-| 28 | `$N` startup line with G5                                               | code reading          | same path as any line (system.c:262)    |
-| 29 | G93 needs F on every G5 block                                           | host vector           | pass                                    |
-| 30 | Modal continuation without the G5 word                                  | host vectors          | pass                                    |
-| 31 | Same line from the same point: same segments                           | host `same`           | pass                                    |
-| 32 | Machine settings: 1 and 1000 steps/mm, slow axes                       | host `set`            | pass                                    |
-| 33 | Tool length offset with G5                                              | host vector           | pass                                    |
-| 34 | Realtime latency: worst gap between segments                           | avr `worst gap`       | G5 up to 4.1k cycles (0.26 ms)          |
-| 35 | Feed hold and resume mid-curve, exact final position                   | avr dynamic           | pass: 0 steps off in 6 holds            |
-| 36 | Soft reset, then the same line: same segments                          | host `reset`          | pass                                    |
-| 37 | Differential against grblHAL G5                                         | one-off host run      | segments bit-identical, see below       |
-| 38 | LinuxCNC word rules                                                     | host vectors          | pass                                    |
-| 39 | G93 time on G5 multiplied by the segment count                         | host vectors          | defect (5.5 min for 0.5)                |
-| 40 | Soft limits: curve leaves the envelope between inside endpoints        | host vector           | defect: alarm after 11 segments         |
-| 41 | K word rejected in G17                                                  | host vector           | pass                                    |
-| 42 | 40-digit literal read as inf                                            | host vector, avr      | defect                                  |
-| 43 | Laser mode `$32=1`: G5/G5.1 burn at S like G1                           | host `power`          | defect: power 0 (gcode.c:992)           |
-| 44 | Implicit I/J across G20/G21; G54+G92+G20 stacked                        | host `same`           | pass                                    |
-| 45 | Out-and-back spike: the tip is reached, nothing overshoots              | host `travel`         | pass                                    |
-| 46 | Half-step boundary never steps; curve 60 m from origin                  | host `travel`         | pass                                    |
-| 47 | Series lifetime: G4, G28, G92, rejected line, reset, check mode         | host vectors          | pass                                    |
-| 48 | G4+G5 share P; G5.1 continuation rules; repeated Q; G93 F0              | host vectors          | pass                                    |
-| 49 | AVR segment targets within the tolerance, exact end                    | CI simavr `--dump`    | pass (cap line: as close as the host)   |
+| ID | Test                                                            | Where                  | Status                                     |
+|----|-----------------------------------------------------------------|------------------------|--------------------------------------------|
+| 1  | Inflection on a probed midpoint does not hide the deviation     | host vector            | pass: 0.0029 mm with 276 segments          |
+| 2  | Long handles stay within the tolerance                          | host vectors           | pass to 1e5; capped at 2000 segments       |
+| 3  | L1 metric: rotated curve within tolerance                       | host vector            | pass                                       |
+| 4  | Last segment bit-exact on the parser position under -ffast-math | avr `end exact`        | pass on all four compilers                 |
+| 5  | Non-finite or overflowing values never reach the planner        | host vector, avr       | defect, same class as G1 X1e35             |
+| 6  | G5/G5.1 without X/Y must not move to machine zero               | host vectors           | defect                                     |
+| 7  | Negative P accepted                                             | host vectors           | defect (error:4)                           |
+| 8  | Rejected line: nothing queued, parser state byte-identical      | host, every line       | defect: spline_pq written early            |
+| 9  | Generation time and delay before the first target               | avr (2000 segments)    | measured per option, see tables            |
+| 10 | Stack on ATmega328P: static chain and with interrupts           | avr, avr dynamic       | measured margin 52-65 bytes                |
+| 11 | Planner starvation while streaming curves at speed              | avr dynamic            | base: none; $12 + length: stops            |
+| 12 | Cusp: the planner stops at the reversal                         | host `junction`        | pass                                       |
+| 13 | Smooth chain with implicit I/J: no corner at the joins          | host `set smooth`      | pass                                       |
+| 14 | Handles on the chord: same as G1                                | host vectors           | pass                                       |
+| 15 | G5.1 equals G5 with 2/3-rule handles                            | host `same`            | pass                                       |
+| 16 | Quarter circle within the Bezier-circle error                   | host `circle`          | pass                                       |
+| 17 | Translation by G91/G92, G20 vs G21: same segments               | host `same`            | pass                                       |
+| 18 | Reversed curve within tolerance                                 | host vector            | pass                                       |
+| 19 | Check mode, `$J=G5` rejection, mode changes before implicit I/J | host vectors           | pass                                       |
+| 20 | Mutation testing                                                | host `mutate.sh`       | 53 of 53 killed, including options         |
+| 21 | Random curves, failures shrunk to a minimal line                | host `--random`        | pass (negative P skipped, see 7)           |
+| 22 | Host vs AVR: same segments                                      | CI simavr `= host`     | G5.1, [1] and G2 differ (see below)        |
+| 23 | Compiler vs compiler: same segments                             | CI simavr per gcc      | G5.1, [1]: 7.3 differs from 15-17          |
+| 24 | Denormal, near-zero and coincident handles                      | host vectors           | pass                                       |
+| 25 | Command spelling; G5.1 rejected when disabled                   | host, `cubic_only.vec` | pass                                       |
+| 26 | Number spelling: P.5, P+5, P5., P1E3, empty P                   | host vectors           | pass; P-.5 is defect 7                     |
+| 27 | Forbidden combinations and unused words                         | host vectors           | pass                                       |
+| 28 | `$N` startup line with G5                                       | code reading           | same path as any line (system.c:262)       |
+| 29 | G93 needs F on every G5 block                                   | host vector            | pass                                       |
+| 30 | Modal continuation without the G5 word                          | host vectors           | pass                                       |
+| 31 | Same line from the same point: same segments                    | host `same`            | pass                                       |
+| 32 | Machine settings: 1 and 1000 steps/mm, slow axes                | host `set`             | pass                                       |
+| 33 | Tool length offset with G5                                      | host vector            | pass                                       |
+| 34 | Realtime latency: worst gap between segments                    | avr `worst gap`        | measured per option; first pass separate   |
+| 35 | Feed hold and resume mid-curve, exact final position            | avr dynamic            | pass: 0 steps off in 6 holds               |
+| 36 | Soft reset, then the same line: same segments                   | host `reset`           | pass                                       |
+| 37 | Differential against grblHAL G5                                 | one-off host run       | segments bit-identical, see below          |
+| 38 | LinuxCNC word rules                                             | host vectors           | pass                                       |
+| 39 | G93 nominal time on G5 multiplied by the segment count          | host vectors           | existing defect; exact-G93 option fixes it |
+| 40 | Soft limits: curve leaves the envelope between inside endpoints | host vector            | defect: alarm after 11 segments            |
+| 41 | K word rejected in G17                                          | host vector            | pass                                       |
+| 42 | 40-digit literal read as inf                                    | host vector, avr       | defect                                     |
+| 43 | Laser mode `$32=1`: G5/G5.1 burn at S like G1                   | host `power`           | defect: power 0 (gcode.c:992)              |
+| 44 | Implicit I/J across G20/G21; G54+G92+G20 stacked                | host `same`            | pass                                       |
+| 45 | Out-and-back spike: the tip is reached, nothing overshoots      | host `travel`          | pass                                       |
+| 46 | Half-step boundary never steps; curve 60 m from origin          | host `travel`          | pass                                       |
+| 47 | Series lifetime: G4, G28, G92, rejected line, reset, check mode | host vectors           | pass                                       |
+| 48 | G4+G5 share P; G5.1 continuation rules; repeated Q; G93 F0      | host vectors           | pass                                       |
+| 49 | AVR targets: tolerance/cap/grid allowances, exact end           | CI simavr `--dump`     | pass; non-finite input explicitly skipped  |
+| 50 | Z word: G5/G5.1, units, offsets, continuation, exact end        | host `z.vec`, avr      | pass for both Z modes                      |
+| 51 | Z by parameter vs polyline and model arc length                 | host `z.vec`, random   | measured errors, see option tables         |
+| 52 | Float length sum up to 2000; tiny tail chords; monotone final Z | host `z.vec`, random   | pass with denominator reserve              |
+| 53 | Zero-length, pure Z, closed and sub-step curves                 | host `z.vec`           | pass with enabled Z option                 |
+| 54 | G93 one path feed; 3D length; no leak into G94                  | host `z.vec`, avr      | pass for exact-G93 option                  |
+| 55 | Existing G93 G1 and G2 nominal times                            | host `g5.vec`          | G1 pass; G2 defect unchanged               |
+| 56 | Runtime $12: coarse, fine and zero                              | host `g5.vec`          | pass; zero on AVR not verified             |
 
 ## 10, 11, 35: motion under simavr
 
@@ -89,23 +96,30 @@ stepper interrupt live; it plays a send-and-wait-for-ok host inside
 Timer2. simavr does not start the Timer1 CTC with OCR1A = 0, which Grbl
 leaves until its first stepper interrupt, so dyn.c presets OCR1A.
 
-- Stack: the firmware with G5+G5.1 has 403 bytes of free RAM. The deepest
-  stack is 343 bytes with avr-gcc 7.3 (G5 341, G1 343, G2 343), 338 with
-  15.2, 16.2 and 17. It was 446
-  for G5 with the adaptive walker, which overran into `sys` at the top of
-  .bss; early dyn builds with 416-434 free bytes showed exactly that:
-  spurious resets, lost F (error:22), ALARM. The generator now has one call
-  site, so it is inlined into `gc_execute_line` like `mc_arc` and shares its
-  frame. The static bench: the G5 chain leaves 212 bytes of 574 untouched
-  (107 with the walker; 80 of them its own line buffer, which is static in
-  the firmware) before any interrupt frame.
-- Starvation: 120 programs (G5, G1 along the same chords, G2; 2 and 5 mm;
-  F1000-5000; 500 and 2000 mm/s^2; 2 and 16 ms host latency). G5 keeps
-  13-14 blocks queued; its speed is limited by chord geometry, not by
-  generation. G1 starves at 16 ms latency, G2 on 2 mm arcs from F3000-4000.
-  Final position exact in all runs.
+- Stack: firmware with G5+G5.1 uses 1645 bytes of static RAM, leaving 403.
+  The tables below subtract the deepest dyn watermark from those 403
+  bytes, not from the instrumented bench's different data/bss. Measured
+  margins are positive for every tested compiler/option, 52-65 bytes;
+  this finite sweep is not a bound on every possible interrupt nesting.
+  The single G5/G5.1 call site lets LTO share the gc_execute_line frame,
+  as with mc_arc. An earlier adaptive walker used 446 bytes and overran
+  into sys; these results belong to the current equal-step generator.
+- Motion: 120 programs per option/compiler (40 G5, 40 G1 along the same
+  chords, 40 G2; 2 and 5 mm; F1000-5000; 500 and 2000 mm/s^2; 2 and
+  16 ms host latency). With 0.1 mm tolerance, base and both Z modes had
+  no intermediate G5 stops. With $12 = 0.002, the by-length first pass
+  delayed new blocks enough for stops; see the table below. G1/G2 also
+  starve in parts of this sweep. All reported final XY positions were
+  exact in steps. Ordinary sweep curves have no Z word; the hold programs
+  add Z when that option is enabled.
 - Feed hold at 60-1000 ms into a G5 chain at F3000, resume 400 ms later:
-  final position 0 steps off in all six.
+  six holds per option/compiler, all reported final XYZ step errors zero.
+  These are simavr results, not measurements on physical hardware.
+- `cut` counts stops while the planner still has a block; `cut_F` is that
+  block's entry feed, not instantaneous ISR speed. Current CI reports
+  cut_F = 0 for all such stops. It does not prove that no moving underflow
+  is possible: instantaneous speed and a deliberate stalled host were
+  not observed by this version of dyn.
 
 ## 22, 23: same segments
 
@@ -118,6 +132,280 @@ exact end point are the same everywhere. G2 differs because sin/cos do.
 Test 49 checks the differing points themselves: with avr-gcc 7.3 (local
 simavr) G5.1 deviates 0.0826 mm and [1] 0.0029 mm, the same as the host to
 four decimals.
+
+## Optional tolerance, Z and G93: measured costs
+
+Evidence: [CI run 44765744542](https://github.com/kimstik/grbl/actions/runs/44765744542),
+firmware 6bff342, 37 successful jobs. With new options off, `cmp` of the
+hex against 73c589e passes for G5 alone and G5+G5.1 on all four compilers.
+The comparison-corpus infrastructure added later does not change firmware.
+
+Option names used in CI and the tables:
+
+- `base`: both spline commands, no new options; BEZIER_SIGMA = 0.1 mm.
+- `tol`: `-DBEZIER_SIGMA=settings.arc_tolerance`; settings start at $12 = 0.002 mm.
+- `zt`: `-DBEZIER_Z_LINEAR=1`, Z linear in parameter t.
+- `zl`: `-DBEZIER_Z_LINEAR=2`, Z approximately linear in the XY polyline length.
+- `g93` suffix: `-DBEZIER_EXACT_INVERSE_TIME`, requires zl.
+
+**Every numeric result in the eight tables is measured**, not estimated.
+Flash is firmware text+data with G5+G5.1 and Makefile flags, delta against
+base built by the same compiler. `gen/seg` is sum(gen)/sum(segments), rounded
+to cycles, over finite accepted G5/G5.1 rows of avr/lines.txt with at least
+one target. It includes parsing, probe bookkeeping, mc_line and both
+passes, but excludes timed planner work. The accepted corpus differs when
+Z words are enabled, so it is a workload average, not an isolated kernel
+comparison. Stack is deepest dyn watermark / remaining firmware RAM;
+all variants use 1645 bytes static RAM and have 403 free before stack.
+
+Z errors are **host random measurements**, not AVR random measurements:
+per curve, the maximum endpoint error divided by absolute Z travel, then
+median/max over curves with Z travel. `len` compares with cumulative
+emitted XY chord length; `arc` uses Simpson integration of model speed on
+4000 intervals and a forward nearest-branch match. These are sampled
+metrics, especially approximate near loops/cusps, not certified maxima.
+Each host row gives generated cases / curves contributing Z statistics,
+seed 1. A dash is not applicable; random Z distributions for the four
+AVR compilers are **not verified**. All host runs in the tables had zero
+failures. CI has 5000 cases for zt/zl/zl-g93, 1000 for tol/tol-zl-g93;
+tol-zt and tol-zl were completed locally with 1000 each. Do not compare
+maxima from different sample counts as if they covered the same corpus.
+
+### base
+
+| Source                    | Flash bytes (delta) | gen/seg cycles | Stack used / margin B | Z len median/max | Z arc median/max |
+|---------------------------|---------------------|----------------|-----------------------|------------------|------------------|
+| avr-gcc 7.3.0             | 30672 (+0)          | 5125           | 343 / 60              | -                | -                |
+| avr-gcc 15.2.0            | 31152 (+0)          | 6282           | 338 / 65              | -                | -                |
+| avr-gcc 16.2.0            | 30406 (+0)          | 6153           | 338 / 65              | -                | -                |
+| avr-gcc 17-20261115       | 30388 (+0)          | 6159           | 338 / 65              | -                | -                |
+| Host CI, 5000 / 0         | -                   | -              | -                     | Z rejected       | Z rejected       |
+
+### tol
+
+| Source                    | Flash bytes (delta) | gen/seg cycles | Stack used / margin B | Z len median/max | Z arc median/max |
+|---------------------------|---------------------|----------------|-----------------------|------------------|------------------|
+| avr-gcc 7.3.0             | 30700 (+28)         | 5116           | 343 / 60              | -                | -                |
+| avr-gcc 15.2.0            | 31184 (+32)         | 6308           | 338 / 65              | -                | -                |
+| avr-gcc 16.2.0            | 30438 (+32)         | 6177           | 338 / 65              | -                | -                |
+| avr-gcc 17-20261115       | 30420 (+32)         | 6184           | 338 / 65              | -                | -                |
+| Host CI, 1000 / 0         | -                   | -              | -                     | Z rejected       | Z rejected       |
+
+### zt
+
+| Source                    | Flash bytes (delta) | gen/seg cycles | Stack used / margin B | Z len median/max | Z arc median/max |
+|---------------------------|---------------------|----------------|-----------------------|------------------|------------------|
+| avr-gcc 7.3.0             | 30764 (+92)         | 5411           | 343 / 60              | -                | -                |
+| avr-gcc 15.2.0            | 31228 (+76)         | 6524           | 338 / 65              | -                | -                |
+| avr-gcc 16.2.0            | 30488 (+82)         | 6406           | 338 / 65              | -                | -                |
+| avr-gcc 17-20261115       | 30468 (+80)         | 6411           | 338 / 65              | -                | -                |
+| Host CI, 5000 / 2569      | -                   | -              | -                     | .15 / .45        | .14 / .42        |
+
+### zl
+
+| Source                    | Flash bytes (delta) | gen/seg cycles | Stack used / margin B | Z len median/max | Z arc median/max |
+|---------------------------|---------------------|----------------|-----------------------|------------------|------------------|
+| avr-gcc 7.3.0             | 31148 (+476)        | 11809          | 347 / 56              | -                | -                |
+| avr-gcc 15.2.0            | 31708 (+556)        | 14397          | 342 / 61              | -                | -                |
+| avr-gcc 16.2.0            | 30892 (+486)        | 13991          | 344 / 59              | -                | -                |
+| avr-gcc 17-20261115       | 30872 (+484)        | 14000          | 348 / 55              | -                | -                |
+| Host CI, 5000 / 2569      | -                   | -              | -                     | 9.4e-7 / 8.4e-4  | 5.0e-4 / .38     |
+
+### zl-g93
+
+| Source                    | Flash bytes (delta) | gen/seg cycles | Stack used / margin B | Z len median/max | Z arc median/max |
+|---------------------------|---------------------|----------------|-----------------------|------------------|------------------|
+| avr-gcc 7.3.0             | 31258 (+586)        | 11828          | 351 / 52              | -                | -                |
+| avr-gcc 15.2.0            | 31802 (+650)        | 14357          | 344 / 59              | -                | -                |
+| avr-gcc 16.2.0            | 31014 (+608)        | 14023          | 344 / 59              | -                | -                |
+| avr-gcc 17-20261115       | 30982 (+594)        | 14077          | 344 / 59              | -                | -                |
+| Host CI, 5000 / 2562      | -                   | -              | -                     | 9.5e-7 / 4.3e-4  | 4.3e-4 / .26     |
+
+Exact G93 adds 110/94/122/110 flash bytes to zl on 7.3/15.2/16.2/17
+(measured). For the same S+Z G93 line at $12 = 0.002, gen changes by
+4114/-2025/3677/7131 cycles over 80 segments on those compilers; with
+0.1 mm by 1518/661/1471/1922 cycles over 12. This is the measured whole
+compiled line difference, including LTO layout effects, not a negative
+cost arithmetic operation on 15.2. G93 time is nominal feed time before
+acceleration and step rounding, not elapsed machine time.
+
+### tol-zt
+
+| Source                    | Flash bytes (delta) | gen/seg cycles | Stack used / margin B | Z len median/max | Z arc median/max |
+|---------------------------|---------------------|----------------|-----------------------|------------------|------------------|
+| avr-gcc 7.3.0             | 30792 (+120)        | 5386           | 343 / 60              | -                | -                |
+| avr-gcc 15.2.0            | 31260 (+108)        | 6529           | 338 / 65              | -                | -                |
+| avr-gcc 16.2.0            | 30520 (+114)        | 6411           | 338 / 65              | -                | -                |
+| avr-gcc 17-20261115       | 30500 (+112)        | 6417           | 338 / 65              | -                | -                |
+| Host local, 1000 / 524    | -                   | -              | -                     | .17 / .43        | .17 / .43        |
+
+### tol-zl
+
+| Source                    | Flash bytes (delta) | gen/seg cycles | Stack used / margin B | Z len median/max | Z arc median/max |
+|---------------------------|---------------------|----------------|-----------------------|------------------|------------------|
+| avr-gcc 7.3.0             | 31176 (+504)        | 11795          | 347 / 56              | -                | -                |
+| avr-gcc 15.2.0            | 31740 (+588)        | 14419          | 342 / 61              | -                | -                |
+| avr-gcc 16.2.0            | 30924 (+518)        | 14013          | 344 / 59              | -                | -                |
+| avr-gcc 17-20261115       | 30904 (+516)        | 14022          | 348 / 55              | -                | -                |
+| Host local, 1000 / 524    | -                   | -              | -                     | 2.5e-6 / 1.2e-3  | 4.3e-5 / .092    |
+
+### tol-zl-g93
+
+| Source                    | Flash bytes (delta) | gen/seg cycles | Stack used / margin B | Z len median/max | Z arc median/max |
+|---------------------------|---------------------|----------------|-----------------------|------------------|------------------|
+| avr-gcc 7.3.0             | 31286 (+614)        | 11808          | 351 / 52              | -                | -                |
+| avr-gcc 15.2.0            | 31834 (+682)        | 14379          | 344 / 59              | -                | -                |
+| avr-gcc 16.2.0            | 31048 (+642)        | 14045          | 344 / 59              | -                | -                |
+| avr-gcc 17-20261115       | 31016 (+628)        | 14099          | 344 / 59              | -                | -                |
+| Host CI, 1000 / 532       | -                   | -              | -                     | 2.3e-6 / 1.1e-3  | 4.1e-5 / .056    |
+
+All eight options fit the 32256-byte bootloader limit on all compilers;
+the tightest measured remaining flash is 422 bytes (15.2, tol-zl-g93).
+All 32 simavr option/compiler jobs completed: 3840 motion programs,
+192 holds, and 512 measured bench rows including G1/G2 and rejected lines.
+Every reported final endpoint was exact; regular dump had 10 or 13
+finite curves per job with zero failed. This does not mean every input
+met the requested tolerance: cap allowances and skipped non-finite cases
+are explicit below. A green job alone is not evidence of a geometric
+guarantee; raw status, counts and waived checks matter.
+
+Measured maximum finite G5 inter-target gap in microseconds (planner
+excluded), compiler order 7.3 / 15.2 / 16.2 / 17:
+base 252.69/350.00/341.88/342.31; tol 258.94/356.44/350.19/348.69;
+zt 270.31/364.19/357.56/357.94; zl 362.12/454.56/440.38/440.81;
+zl-g93 362.62/453.31/441.25/443.19; tol-zt 276.56/369.50/363.94/364.31;
+tol-zl 364.19/461.44/447.12/447.56; tol-zl-g93 364.00/458.25/447.81/451.56.
+This gap excludes the whole first pass, whose latency is separate below.
+
+53/53 mutants were killed in CI. The new mutants cover ignored runtime
+tolerance, Z formula/start/end/sign, float sum/replay, missing final chord,
+extra first-pass output, the end reserve, and inverse-time length/flag/feed.
+No mutant establishes responsiveness of pass 0: the host realtime stub
+does not model interrupts. That was checked separately with live simavr
+motion. Existing known-defect vectors remain XFAIL rather than being
+silently removed; no unrelated firmware defect was changed.
+
+### Tolerance, the cap, and what the tests allow
+
+Analytical calculation (exact arithmetic, not a measured error bound):
+with M the largest norm of a second control-polygon difference, Wang's
+n = sqrt(0.8*M/sigma). At N = 2000 the cap is reached at M about
+5e6*sigma: 500 m at 0.1 mm, 10 m at 0.002 mm, 0.5 m at 0.0001 mm.
+The uncapped exact-arithmetic chord error bound is 0.75*M/N^2; capping
+N loses the requested tolerance when that value is too large. Float
+roundoff adds another error, especially far from the origin.
+
+Measured: runtime $12 = .002/.1/.0001 gives 74/11/327 targets on
+G5 X10 Y0 I3 J3 P3 Q3. On the supplied [1] S, .1/.002 gives 276/1950.
+The 100000 mm handles line in avr/lines.txt hits 2000 with $12 = .002
+and deviates 0.0500 mm on 7.3; the 1e7-handle line deviates 1.6368 mm.
+Those are not .002 mm passes. The parser accepts $12 = 0; host tests
+then produce 2000 targets even for zero-bend/zero-length curves. This
+zero-tolerance behavior on AVR is **not verified**.
+
+Normal host checks now follow the tolerance actually compiled into the
+firmware instead of always assuming .1. By default they allow the larger
+of that tolerance and the analytical cap bound, plus
+4*FLT_EPSILON*largest-control-coordinate for float roundoff. The numeric
+factor 4 is an empirical test allowance, not a proof. An explicit
+`set tol` is absolute and bypasses those allowances; it keeps the existing
+overflow and on-chord adversarial checks meaningful. Dump mode also
+accepts a capped AVR result as close as the host (1.001*host + .0001 mm).
+Non-finite AVR targets are reported and skipped in the regular dump,
+not counted as successful finite curves. The strict comparison mode below
+does not grant these allowances.
+
+The cap policy has not changed. Choices for the owner, not silently
+selected here: keep the cap and accept a documented tolerance loss;
+raise the cap at greater time cost; reject an over-budget curve before
+motion; or impose a minimum effective tolerance and expose that loss.
+Raising the cap cannot cure float-grid errors. Rejecting a curve requires
+a new error path and a policy for already queued motion; neither its
+flash cost nor a safe implementation is verified here.
+
+### First-pass latency and motion
+
+All values in the following table are measured simavr `first` cycles
+converted at 16 MHz to ms, tol-zl, with the single-pass tol reference.
+The typical S is the 80-target G5I-5J5P5Q-5X-20Y0 from avr/lines.txt;
+[1] has 1950, the 1e7-handle cap line 2000. These lines have no Z word:
+zl currently pays for both passes even when Z travel is zero.
+
+| Compiler       | S, tol reference ms | S, tol-zl ms | [1], tol-zl ms | Cap, tol-zl ms |
+|----------------|---------------------|--------------|----------------|----------------|
+| 7.3.0          | 1.022               | 25.116       | 630.732        | 632.318        |
+| 15.2.0         | 1.130               | 31.590       | 797.386        | 787.229        |
+| 16.2.0         | 1.118               | 30.685       | 775.667        | 764.952        |
+| 17-20261115    | 1.100               | 30.684       | 776.019        | 765.315        |
+
+Pass 0 emits no new blocks. It calls protocol_execute_realtime at every
+point, allowing st_prep_buffer, holds and abort processing, but the
+planner can finish the preceding motion before the first new target.
+The largest first latency measured in this corpus is 797.386 ms, not
+the historical pre-refill 608.887 ms result. Generation work at the cap
+on 7.3 is 0.644 s for base versus 1.483 s for zl; total bench time
+including planner is 1.996 s versus 2.835 s. Those are not first latency
+or actual accelerated motion time.
+
+Measured G5 motion rows, 40 programs per compiler/option; order in each
+cell is 7.3 / 15.2 / 16.2 / 17. `Stops` excludes the expected final stop.
+
+| Option     | Programs with stops | Total stops      | Stops with queued block | Max queued entry feed |
+|------------|---------------------|------------------|-------------------------|-----------------------|
+| base       | 0 / 0 / 0 / 0       | 0 / 0 / 0 / 0    | 0 / 0 / 0 / 0           | 0                     |
+| zl         | 0 / 0 / 0 / 0       | 0 / 0 / 0 / 0    | 0 / 0 / 0 / 0           | 0                     |
+| tol        | 2 / 2 / 2 / 2       | 2 / 2 / 2 / 2    | 2 / 2 / 0 / 1           | 0                     |
+| tol-zl     | 9 / 13 / 10 / 11    | 57 / 86 / 90 / 93| 15 / 13 / 15 / 13       | 0                     |
+| tol-zl-g93 | 8 / 10 / 11 / 10    | 57 / 81 / 93 / 91| 16 / 10 / 13 / 11       | 0                     |
+
+In the tol-zl sweep the largest program-time increase over tol is
+609/728/670/679 ms. Before adding realtime work to pass 0, a separate
+local 7.3 short sweep had 10 stops with queued blocks at nonzero entry
+feeds, e.g. F3000 on 5 mm curves. With the fix, those short programs had
+no such nonzero-entry-feed events, but still had ordinary stops and some
+zero-entry-feed cuts. Final steps were exact in both. This identifies a
+real first-pass refill problem; `cut_F=0` is not proof about instantaneous
+speed or every starvation path. Additional ISR-level observation belongs
+to a separate instrumented test, not the production stack measurements.
+
+### Accuracy and numerical findings
+
+- The 99:1 straight-handle vector is 38% of Z travel off true arc length
+  with zt. Making XY segments finer does not cure that parameter-speed
+  mismatch. zl instead follows the travelled chords to float-sum accuracy.
+- Float accumulation is tested, not assumed: the maximum random zl length
+  error at .1 is 8.4e-4 of Z travel; at .002 the local 1000-case maximum
+  is 1.2e-3. Tiny XY paths far from the origin amplify the difference
+  between the first-pass Horner endpoint and the exact emitted endpoint.
+  Thus the implementation is not exactly linear in the actual polyline
+  in floating-point arithmetic. Short coarse curves also explain large
+  model-arc errors: a chord can be much shorter than the original curve.
+- When tiny tail chords vanish in the float sum, an interior share can
+  reach 1 and fl(z0+dz) can pass the target, followed by a reverse final
+  Z move. Four explicit long-handle vectors reproduce that without the
+  fix; 5000 random curves had missed it. `length = s*1.0000002f` reserves
+  two float ulps before the exact final Z; the new mutant removing the
+  reserve is killed by those vectors. It intentionally adds a tiny
+  systematic departure from exact length interpolation.
+- G93 now uses one 3D path feed, sqrt(Lxy^2+dz^2)*F. The bench checks the
+  nominal sum of segment times, step-rounded planner times, one feed,
+  and no leak into G94/G1. End snapping and roundoff remain; acceleration
+  is not included in the 1/F claim. A pure Z move is covered.
+- Existing mc_arc behavior was verified, not copied as a timing model:
+  G93 G1 X20 F2 takes .5 nominal minutes; a G2 half circle of radius 5
+  at F4 takes .071391 instead of .25 (55 segments). mc_arc multiplies F
+  by N and clears the inverse flag, so nominal time is L/(F*N), not 1/F.
+  This is unchanged from origin/master and is recorded as XFAIL [55].
+- An old random-test shrinker could alternate .05 and .1 forever, found
+  by attaching to a two-hour run. Candidates now shrink strictly in
+  magnitude. It was a bench hang, not a demonstrated firmware hang.
+
+Two measured local 7.3 alternatives were left out of the firmware: skipping
+pass 0 when dz=0 added 32 bytes to the early zl build (18 with exact G93),
+and equal time per segment while keeping the inverse flag added 26 bytes
+to base (46 over zt). These were scratch compile probes before the
+realtime-refill fix, not current production costs or verified alternatives
+with the full evidence suite. The cap/error/default choices remain open.
 
 ## Shared comparison corpus
 
@@ -178,9 +466,10 @@ parser arithmetic identically. The usual Z and enabled exact-G93 checks
 also run. A cap hit alone is reported, not rejected: it fails if it misses
 the final budget. Measure capped and uncapped performance separately.
 
-This remains a sampled diagnostic, not a Hausdorff proof: the model has
-TB_DENSE = 4000 parameter intervals, the reverse check samples emitted
-vertices, and curve Z is evaluated at segment ends. For a borderline or
+This remains a sampled diagnostic, not a two-sided Hausdorff proof:
+**dense curve to polyline, plus emitted vertices to dense curve**. The
+model has TB_DENSE = 4000 parameter intervals; the reverse check does not
+sample chord interiors, and curve Z is evaluated at segment ends. For a borderline or
 large-coordinate result repeat the host check with a fresh BUILD and
 `-DTB_DENSE=16000`, then use a certified bound before claiming a guarantee.
 Do not count a timeout as acceptable fallback or silently discard it.
@@ -199,12 +488,12 @@ exact net and another on this parser-rounded net. The following numbers
 are measured on the host build of this corpus, except the supplied exact
 reference (input data). Coordinates are mm:
 
-| Point | Supplied exact-float reference                 | Host parser net, printed to 9 significant digits |
-|-------|-----------------------------------------------|-------------------------------------------------|
-| P0    | (0, 0)                                        | (0, 0)                                          |
-| P1    | (-2361.66455078125, 614.281494140625)            | (-2361.66455, 614.281433)                         |
-| P2    | (-1883.6595458984375, 481.83642578125)           | (-1883.65942, 481.836395)                         |
-| P3    | (-1973.58837890625, 498.7366638183594)           | (-1973.58826, 498.736633)                         |
+| Point | Supplied exact-float reference         | Host parser net (9 significant digits) |
+|-------|----------------------------------------|----------------------------------------|
+| P0    | (0, 0)                                 | (0, 0)                                 |
+| P1    | (-2361.66455078125, 614.281494140625)  | (-2361.66455, 614.281433)              |
+| P2    | (-1883.6595458984375, 481.83642578125) | (-1883.65942, 481.836395)              |
+| P3    | (-1973.58837890625, 498.7366638183594) | (-1973.58826, 498.736633)              |
 
 A direct mc_cubic_b_spline call with the exact-float reference is a useful
 separate numeric test, not a serial/parser case. The supplied tall S is

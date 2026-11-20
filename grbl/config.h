@@ -702,7 +702,8 @@
    to vanilla Grbl with every compiler listed. G5/G5.1 return "Unsupported command".
 
    When ENABLED: Commands work in XY plane (G17) only. Each curve is cut into segments
-   of equal step of the curve parameter, as many as needed to stay within BEZIER_SIGMA.
+   of equal step of the curve parameter. Wang's bound sets the count for BEZIER_SIGMA,
+   subject to MAX_SEGMENTS and float roundoff; the tolerance is not unconditional.
 
    Usage:
      G5 X.. Y.. I.. J.. P.. Q..  - Cubic spline with two control points
@@ -717,12 +718,15 @@
 
 #ifdef ENABLE_CUBIC_SPLINES
   // Bezier curve interpolation parameters. These control the quality vs. performance tradeoff.
-  // SIGMA is the largest distance in mm between the curve and its segments, both ways. The
-  // segment count grows with 1/sqrt(SIGMA): 0.1 mm gives 11 for G5 X10 Y0 I3 J3 P3 Q3.
-  // MAX_SEGMENTS caps a single curve; only absurd handles reach it (1699 segments for handles
-  // 100 m long), and past it the tolerance is not met.
-  // SIGMA can be any float expression: -DBEZIER_SIGMA=settings.arc_tolerance makes G5 follow
-  // $12 as G2/G3 do. The default $12 of 0.002 mm takes 7 times the segments of 0.1 mm.
+  // SIGMA is the requested XY approximation tolerance in mm. The segment count grows with
+  // 1/sqrt(SIGMA): 0.1 mm gives 11 for G5 X10 Y0 I3 J3 P3 Q3. Float roundoff is additional.
+  // MAX_SEGMENTS caps a single curve and may give up the tolerance. At the default cap 2000,
+  // the largest second difference reaches the cap at 500 m for SIGMA 0.1, but at only 10 m
+  // for SIGMA 0.002. The policy at the cap is unchanged: emit 2000, do not reject the curve.
+  // -DBEZIER_SIGMA=settings.arc_tolerance makes G5 follow $12 as G2/G3 do; 0.002 mm takes
+  // about 7 times the segments of 0.1 mm. A compound expression needs outer parentheses.
+  // $12 = 0 is accepted by settings and selects the cap even for a degenerate curve (host
+  // test; AVR zero-tolerance behavior not verified). See tb/README.md for measured costs.
 
   #ifndef BEZIER_SIGMA
     #define BEZIER_SIGMA 0.1f        // Linear approximation tolerance (mm)
@@ -733,12 +737,18 @@
   #endif
 
   // Z word on G5/G5.1, the analog of a helix. Undefined: an axis word other than X and Y is
-  // an error. 1: Z moves in proportion to the curve parameter. 2: in proportion to the length
-  // travelled in XY, which takes a second pass over the points of the curve.
+  // an error. 1: Z moves in proportion to the curve parameter. 2: approximately proportional
+  // to XY polyline length (float sums, an end reserve and exact final Z). This is not true
+  // curve arc length. Mode 2 makes two passes on every curve, even without Z: the first
+  // queues no new blocks and delays the first target by up to 0.80 s in the measured corpus
+  // at 16 MHz. Realtime work runs during it, but the planner can drain and motion can stop.
   // #define BEZIER_Z_LINEAR 2
 
-  // G93 with BEZIER_Z_LINEAR 2: the whole curve takes 1/F minutes at one feed, each segment
-  // its share of the length. Undefined: every segment takes 1/F minutes.
+  // G93 with BEZIER_Z_LINEAR 2: convert inverse time to one 3D path feed using the summed
+  // XY chords and Z travel. Before acceleration and step rounding, the nominal total is
+  // 1/F minutes, each segment its length share. Float/end snapping add a small error;
+  // actual cycle time includes acceleration and axis limits. Undefined: each segment
+  // independently takes 1/F minutes at its nominal feed (the existing G5 behavior).
   // #define BEZIER_EXACT_INVERSE_TIME
 #endif
 
