@@ -167,6 +167,7 @@ jobs:
           fi
           set -- $(avr-size --format=berkeley build/circle/main.elf | tail -1)
           flash=$(( $1 + $2 ))
+          printf 'circle-size text=%s data=%s bss=%s flash=%s spare32256=%s\n' "$1" "$2" "$3" "$flash" "$((32256-flash))"
           printf '\n### circle prototype\n\nflash=%s, data=%s, bss=%s, spare(32256)=%s\n' "$flash" "$2" "$3" "$((32256-flash))" >> "$GITHUB_STEP_SUMMARY"
           if [ "$flash" -gt 32768 ]; then
             echo "::warning::circle prototype does not fit ATmega328P ($flash bytes)"
@@ -225,6 +226,7 @@ jobs:
         gcc: ['7.3.0', '15.2.0', '16.2.0', '17-20261115']
     name: generator micro ${{ matrix.gcc }}
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: bench-${{ matrix.gcc }}
@@ -232,11 +234,14 @@ jobs:
       - name: Install simavr
         run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends simavr
       - name: Isolated generator cost
+        shell: bash
         run: |
+          set -euo pipefail
           printf '### Isolated generator, avr-gcc ${{ matrix.gcc }}\n\nNo parser, planner, serial ISR or stepper. Stack figures apply only to this microbenchmark.\n\n' >> "$GITHUB_STEP_SUMMARY"
           for gen in wang circle; do
             timeout 600 simavr -m atmega328p -f 16000000 elf/micro-$gen/micro.elf 2>&1 | sed 's/\x1b\[[0-9;]*m//g; s/\.*$//' > micro-$gen.txt
             grep -qx done micro-$gen.txt
+            python -I tb/compare/micro_assert.py micro-$gen.txt --generator "$gen"
             cat micro-$gen.txt
             printf '\n%s: case status chords total dry first gap hash endpoint realtime untouched\n\n```\n' "$gen" >> "$GITHUB_STEP_SUMMARY"
             cat micro-$gen.txt >> "$GITHUB_STEP_SUMMARY"
@@ -246,6 +251,30 @@ jobs:
         with:
           name: micro-${{ matrix.gcc }}
           path: micro-*.txt
+
+  circle-common:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install compiler and simulator
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends gcc-avr avr-libc binutils-avr simavr
+      - name: Common captured nets, timed and dump images, both complete polylines
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -I tb/compare/audit.py --self-test
+          timeout 1200 nice -n 19 python -I tb/compare/circle_check.py /usr/bin/simavr --audit > circle-common.txt 2>&1
+          cat circle-common.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: circle-common
+          path: |
+            circle-common.txt
+            .tmp/circle-fit/common
+          include-hidden-files: true
 
   # Every compiler's benches under simavr, for every option combination:
   # cycles, stack, segments against the host bench built with the same options,

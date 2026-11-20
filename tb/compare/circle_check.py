@@ -18,6 +18,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("simavr", type=Path)
 parser.add_argument("--out", type=Path, default=Path(".tmp/circle-fit/common"))
 parser.add_argument("--tol", type=float, nargs="+", default=(0.002, 0.01, 0.1))
+parser.add_argument("--audit", action="store_true", help="also bound both complete polylines with audit.py")
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[2]
 out = (root / args.out).resolve()
@@ -140,7 +141,11 @@ for corpus in ("core", "stress"):
                     k += 1
             adump = out / f"{tag}-{gen}-avr.txt"
             adump.write_text("\n".join(converted) + "\n", encoding="utf-8")
-            check = run([hbin, "--dump-strict", lines, adump], log=out / f"{tag}-{gen}-avr-check.txt")
+            check_path = out / f"{tag}-{gen}-avr-check.txt"
+            check = run([hbin, "--dump-strict", lines, adump], log=check_path)
+            if args.audit:
+                run(["python", "-I", root / "tb/compare/audit.py", adump, check_path,
+                     "--budget", str(2*tol)], log=out / f"{tag}-{gen}-audit.txt")
             errors = [float(x) for x in re.findall(r" avr \d+ ([0-9.eE+-]+)", check)]
             if len(errors) != len(nets):
                 raise RuntimeError("missing strict measured curve")
