@@ -13,11 +13,15 @@
                                printed under simavr (OUT) against the model
 
    Vector file syntax, one statement per line, '#' starts a comment:
-     = name [@bug]             new test; machine at X-100 Y-100 Z-10 (mm), work
+     = name [@bug] [@OPT]...   new test; machine at X-100 Y-100 Z-10 (mm), work
                                offsets zero, F unset.
                                @bug: known open defect, failures count as XFAIL
+                               @OPT, @!OPT: only for a firmware built with, without
+                               the option: z (BEZIER_Z_LINEAR), zlen (BEZIER_Z_LINEAR 2),
+                               g93 (BEZIER_EXACT_INVERSE_TIME)
      set KEY VALUE             soft 0|1, check 0|1, laser 0|1, tol MM, maxseg N,
-                               smooth 0|1, steps N (all axes), rate MM/MIN, accel MM/S^2
+                               smooth 0|1, steps N (all axes), rate MM/MIN, accel MM/S^2,
+                               arctol MM ($12)
      reset                     soft reset: parser and planner re-initialized,
                                machine position kept
      GCODE [-> ok|error|error:N|any]   default expectation: ok
@@ -32,17 +36,24 @@
                                summed without sign, are at most MM mm
      power S                   every segment of the last line was queued with
                                spindle (laser) speed S
+     zlen LO HI                Z of the last curve is off the line in the length
+     zarc LO HI                travelled (zlen) or in the arc length of the model
+                               (zarc) by LO to HI of the Z travel at its worst point
 
    Checked on every line:
      rejected line: no segment queued and parser state byte-identical
    Checked on every accepted G5/G5.1:
      finite targets; last target == parser position (bit-exact); parser end ==
      model end; planner steps == parser position; segment count <= maxseg;
-     two-sided distance between polyline and the double model <= tol;
-     G93 time == 1/F; smooth 1: no sharper corner at the join with the
+     two-sided distance between polyline and the double model <= tol, by
+     default BEZIER_SIGMA as the firmware has it, or what the segment cap
+     leaves of it; Z never reverses, stays put without a Z word, and is linear
+     in the length travelled (BEZIER_Z_LINEAR 2) or in the segment number (1);
+     G93 time == 1/F; G94 feed as programmed; smooth 1: no sharper corner at the join with the
      previous curve than inside either curve. */
 #include "grbl.h"
 #include <ctype.h>
+#include <float.h>
 #include <stdarg.h>
 #include <stdio.h>
 
@@ -53,6 +64,8 @@ uint8_t __real_plan_buffer_line(float *target, plan_line_data_t *pl_data);
 #define MAXSEG 20000
 typedef float pt_t[N_AXIS];
 static pt_t seg[MAXSEG];                    /* targets queued by the current line */
+static float seg_feed[MAXSEG];              /* and the feed and condition they were queued with */
+static uint8_t seg_cond[MAXSEG];
 static pt_t curve[2][MAXSEG];               /* last accepted curve and the one before */
 static int nseg, ncurve[2];
 static int32_t steps[N_AXIS];               /* executed (drained) step position */
@@ -60,18 +73,21 @@ static uint32_t travel[N_AXIS];             /* executed steps of the current lin
 static double line_time, min_junction;      /* minutes; mm/min */
 static float power_min, power_max;          /* spindle speed of the segments of the current line */
 static int checks, line_fails;
-static double tol, maxseg;
+static double tol, maxseg;                  /* tol < 0: BEZIER_SIGMA */
 static int smooth;
 static double prev_dir[2], prev_turn;       /* last direction and sharpest turn of the previous curve */
 static int prev_curve;
 
 static const char *test = "";
-static int lineno, bug;
+static int lineno, bug, skip;
 static int n_pass, n_fail, n_xfail, n_xpass, test_fails, quiet;
 
 uint8_t __wrap_plan_buffer_line(float *target, plan_line_data_t *pl_data)
 {
-  if (nseg < MAXSEG) { memcpy(seg[nseg], target, sizeof(pt_t)); }
+  if (nseg < MAXSEG) {
+    memcpy(seg[nseg], target, sizeof(pt_t));
+    seg_feed[nseg] = pl_data->feed_rate; seg_cond[nseg] = pl_data->condition;
+  }
   if (pl_data->spindle_speed < power_min) { power_min = pl_data->spindle_speed; }
   if (pl_data->spindle_speed > power_max) { power_max = pl_data->spindle_speed; }
   if (++nseg > 1000000) { sys.abort = true; }  /* runaway guard; reported by the count check */
@@ -120,7 +136,7 @@ static void machine_reset(void)
   memset(tb_coord, 0, sizeof(tb_coord));      /* work offsets do not leak from the previous test */
   plan_reset(); plan_sync_position();
   gc_init(); gc_sync_position();
-  tol = 0.1; maxseg = 2000; smooth = 0; prev_curve = 0; nseg = ncurve[0] = ncurve[1] = 0;
+  tol = -1; maxseg = 2000; smooth = 0; prev_curve = 0; nseg = ncurve[0] = ncurve[1] = 0;
 }
 
 /* ---- independent model: LinuxCNC semantics of G5/G5.1 in the XY plane ---- */
@@ -215,6 +231,150 @@ static double curve_dev(const curve_t *c, const float *start, pt_t *pts, int n)
   return dev;
 }
 
+/* Largest second difference of the control polygon in XY: max|B''| / 6. */
+static double bend(const curve_t *c)
+{
+  double b = 0;
+  for (int k = 0; k < 2; k++) {
+    double d = hypot(c->p[k][0] - 2*c->p[k+1][0] + c->p[k+2][0], c->p[k][1] - 2*c->p[k+1][1] + c->p[k+2][1]);
+    if (d > b) b = d;
+  }
+  return b;
+}
+
+static double reach(const curve_t *c)  /* largest XY coordinate of the control points */
+{
+  double big = 0;
+  for (int k = 0; k < 4; k++) for (int a = 0; a < 2; a++) if (fabs(c->p[k][a]) > big) big = fabs(c->p[k][a]);
+  return big;
+}
+
+/* Deviation allowed for the curve: what the test set, else the tolerance in
+   force or what the segment cap leaves of it, plus the float grid. maxseg
+   equal steps of the parameter can promise no less than Wang's bound
+   0.75*bend/maxseg^2, and float arithmetic no less than a few last bits. */
+static double tol_for(const curve_t *c)
+{
+  double t = BEZIER_SIGMA, cap = 0.75*bend(c)/(maxseg*maxseg);
+  return tol >= 0 ? tol : (cap > t ? cap : t) + 4*FLT_EPSILON*reach(c);
+}
+
+static double speed(const curve_t *c, double t)  /* |B'(t)| in XY */
+{
+  double u = 1 - t, d[2];
+  for (int a = 0; a < 2; a++)
+    d[a] = 3*(u*u*(c->p[1][a] - c->p[0][a]) + 2*u*t*(c->p[2][a] - c->p[1][a]) + t*t*(c->p[3][a] - c->p[2][a]));
+  return hypot(d[0], d[1]);
+}
+
+/* Arc length of the model curve at its point nearest to q: the first close
+   local minimum of the distance from piece *at of dense[] on, so that a loop
+   or a cusp does not jump to another branch; the nearest piece if none is close. */
+static double arc[DENSE + 1];
+
+static double arc_at(const double *q, int *at, double close)
+{
+  int best = *at;
+  double bd = 1e300, prev = 1e300;
+  for (int i = *at; i < DENSE; i++) {
+    double d = seg_dist(q, dense[i], dense[i+1]);
+    if (d > prev && prev <= close) { best = i - 1; break; }
+    if (d < bd) { bd = d; best = i; }
+    prev = d;
+  }
+  const double *a = dense[best], *b = dense[best+1];
+  double dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx*dx + dy*dy;
+  double u = l2 > 0 ? ((q[0]-a[0])*dx + (q[1]-a[1])*dy) / l2 : 0;
+  if (u < 0) u = 0;
+  if (u > 1) u = 1;
+  *at = best;
+  return arc[best] + u*(arc[best+1] - arc[best]);
+}
+
+/* Z of the polyline start, pts[0..n) as a fraction of the Z travel, worst point:
+   len    off the line in the XY length travelled along the polyline
+   arc    off the line in the arc length of the model curve
+   par    off the line in the segment number
+   shrt   what the polyline is shorter than the curve, as a fraction of the curve
+   noise  what the float grid of Z, and of XY against the length, explains
+   back   segments that move Z against the travel, or at all without any.
+   Uses poly[] and dense[] as curve_dev left them. */
+typedef struct { double len, arc, par, shrt, noise; int back, moves; } zerr_t;
+
+static zerr_t z_check(const curve_t *c, const float *start, pt_t *pts, int n)
+{
+  zerr_t r; memset(&r, 0, sizeof r);
+  double z0 = start[Z_AXIS], dz = pts[n-1][Z_AXIS] - z0;
+  double close = 1e-5 + 4e-6*reach(c) + 1.5*bend(c)/((double)DENSE*DENSE), h = 1.0/DENSE, len = 0, s = 0, zp = z0;
+  arc[0] = 0;
+  for (int k = 0; k < DENSE; k++) arc[k+1] = arc[k] + h/6*(speed(c, k*h) + 4*speed(c, (k + 0.5)*h) + speed(c, (k + 1)*h));
+  for (int k = 1; k <= n; k++) len += hypot(poly[k][0] - poly[k-1][0], poly[k][1] - poly[k-1][1]);
+  r.moves = dz != 0;
+  if (arc[DENSE] > 0) r.shrt = 1 - len/arc[DENSE];
+  if (r.moves) r.noise = 4*FLT_EPSILON*((fabs(z0) + fabs(dz))/fabs(dz) + (len > 0 ? reach(c)/len : 0));
+  int at = 0;
+  for (int k = 1; k <= n; k++) {
+    double z = pts[k-1][Z_AXIS], e;
+    s += hypot(poly[k][0] - poly[k-1][0], poly[k][1] - poly[k-1][1]);
+    if (r.moves ? (z - zp)*dz < 0 : z != z0) r.back++;
+    zp = z;
+    if (!r.moves) continue;
+    if (len > 0 && (e = fabs(z - (z0 + dz*s/len))/fabs(dz)) > r.len) r.len = e;
+    if ((e = fabs(z - (z0 + dz*k/n))/fabs(dz)) > r.par) r.par = e;
+    if (arc[DENSE] > 0 && (e = fabs(z - (z0 + dz*(k < n ? arc_at(poly[k], &at, close)/arc[DENSE] : 1)))/fabs(dz)) > r.arc) r.arc = e;
+  }
+  return r;
+}
+
+/* What z_check found wrong for the firmware as built, or NULL. */
+static const char *z_fail(const zerr_t *z)
+{
+  if (z->back) return "Z reverses, or moves without a Z word";
+#if BEZIER_Z_LINEAR == 2
+  if (z->len > 1e-4 + z->noise) return "Z not linear in the length travelled";
+  if (z->arc > z->shrt + 2e-4 + z->noise) return "Z off the arc length by more than the polyline is short";
+#elif BEZIER_Z_LINEAR == 1
+  if (z->par > 1e-5 + z->noise) return "Z not linear in the segment number";
+#endif
+  return NULL;
+}
+
+#ifdef BEZIER_EXACT_INVERSE_TIME
+/* Minutes the segments were commanded to take; *one: all at one feed in mm/min. */
+static double feed_time(const float *start, pt_t *pts, const float *feed, const uint8_t *cond, int n, int *one, double *len)
+{
+  double t = 0;
+  *one = 1; *len = 0;
+  for (int k = 0; k < n; k++) {
+    const float *a = k ? pts[k-1] : start;
+    double d = sqrt(pow(pts[k][0] - a[0], 2) + pow(pts[k][1] - a[1], 2) + pow(pts[k][2] - a[2], 2));
+    if (cond[k] & PL_COND_FLAG_INVERSE_TIME) { t += 1.0/feed[k]; *one = 0; }
+    else t += d/feed[k];
+    if (feed[k] != feed[0]) *one = 0;
+    *len += d;
+  }
+  return t;
+}
+
+/* What is wrong with the time of a G93 curve, or NULL. The firmware measures
+   the length before the last point is snapped to the exact target, so a curve
+   of a few float steps has that much freedom. */
+static const char *g93_fail(const curve_t *c, const float *start, pt_t *pts, const float *feed, const uint8_t *cond, int n)
+{
+  static char why[80];
+  int one;
+  double len, t = feed_time(start, pts, feed, cond, n, &one, &len);
+  if (len <= 0) return NULL;
+  if (fabs(t*m.f - 1) > 1e-4 + 8*FLT_EPSILON*(reach(c) + fabs(start[2]) + fabs(pts[n-1][2]))/len) { sprintf(why, "G93 commanded time %.6g min, expected %g", t, 1/m.f); return why; }
+  return one ? NULL : "G93 feed differs between the segments of the curve";
+}
+#endif
+
+enum { Z_LEN, Z_ARC, Z_PAR, Z_STATS };
+static double *z_stat[Z_STATS];             /* --random: z_check of every curve with a Z move */
+static long n_stat, max_stat;
+static zerr_t last_z;
+
 static void check_curve(const curve_t *c, const float *start)
 {
   int n = nseg < MAXSEG ? nseg : MAXSEG;
@@ -230,8 +390,18 @@ static void check_curve(const curve_t *c, const float *start)
     if (steps[a] != want) fail("planner steps %d != parser position steps %d, axis %d", steps[a], want, a);
   }
   double dev = curve_dev(c, start, seg, n);
-  if (dev > tol) fail("deviation %.4f mm > tol %g (%d segments)", dev, tol, nseg);
-  if (m.inv && m.f > 0 && fabs(line_time*m.f - 1) > 0.02) fail("G93 time %g min, expected %g", line_time, 1/m.f);
+  if (dev > tol_for(c)) fail("deviation %.4f mm > tol %g (%d segments)", dev, tol_for(c), nseg);
+  zerr_t z = last_z = z_check(c, start, seg, n);
+  if (z_fail(&z)) fail("%s: len %.2e arc %.2e par %.2e short %.2e (%d segments)", z_fail(&z), z.len, z.arc, z.par, z.shrt, nseg);
+  if (z.moves && n_stat < max_stat) { z_stat[Z_LEN][n_stat] = z.len; z_stat[Z_ARC][n_stat] = z.arc; z_stat[Z_PAR][n_stat++] = z.par; }
+  /* The planner times the step-rounded blocks: up to a step each way per segment. */
+  double path = 0;
+  for (int k = 0; k < n; k++) { const float *a = k ? seg[k-1] : start; path += sqrt(pow(seg[k][0] - a[0], 2) + pow(seg[k][1] - a[1], 2) + pow(seg[k][2] - a[2], 2)); }
+  if (m.inv && m.f > 0 && line_time > 0 && fabs(line_time*m.f - 1) > 0.02 + 2*n/settings.steps_per_mm[0]/path) fail("G93 time %g min, expected %g", line_time, 1/m.f);
+  if (!m.inv) for (int k = 0; k < n; k++) if (seg_feed[k] != gc_state.feed_rate || (seg_cond[k] & PL_COND_FLAG_INVERSE_TIME)) { fail("G94 feed %g at segment %d, expected %g", seg_feed[k], k, gc_state.feed_rate); break; }
+#ifdef BEZIER_EXACT_INVERSE_TIME
+  if (m.inv && m.f > 0 && g93_fail(c, start, seg, seg_feed, seg_cond, n)) fail("%s", g93_fail(c, start, seg, seg_feed, seg_cond, n));
+#endif
   /* Corners: sharpest turn inside this curve and at the join with the previous one. */
   double d0[2] = {0, 0}, first[2] = {0, 0}, sharpest = 0; int have = 0;
   for (int k = 1; k <= n; k++) {
@@ -245,7 +415,11 @@ static void check_curve(const curve_t *c, const float *start)
     if (j > lim) fail("corner at the join %.3f deg > sharpest inside %.3f deg", j*180/M_PI, lim*180/M_PI);
   }
   prev_curve = have; prev_dir[0] = d0[0]; prev_dir[1] = d0[1]; prev_turn = sharpest;
-  if (!quiet) printf("    %-44s segs %4d dev %.4f\n", test, nseg, dev);
+  if (!quiet) {
+    printf("    %-44s segs %4d dev %.4f", test, nseg, dev);
+    if (z.moves) printf(" z len %.1e arc %.1e par %.1e", z.len, z.arc, z.par);
+    printf("\n");
+  }
 }
 
 static void normalize(const char *in, char *out)
@@ -322,12 +496,34 @@ static void run_file(const char *path)
       static char name[160];
       end_test();
       sscanf(s + 1, " %159[^\r\n]", name);
-      char *b = strstr(name, "@bug"); bug = b != NULL; if (b) { *b = 0; }
+      static const struct { const char *tag; int on; } opt[] = {
+#ifdef BEZIER_Z_LINEAR
+        { "z", 1 }, { "zlen", BEZIER_Z_LINEAR == 2 },
+#else
+        { "z", 0 }, { "zlen", 0 },
+#endif
+#ifdef BEZIER_EXACT_INVERSE_TIME
+        { "g93", 1 },
+#else
+        { "g93", 0 },
+#endif
+      };
+      bug = skip = 0;
+      for (char *t = strchr(name, '@'); t; t = strchr(t + 1, '@')) {
+        char tag[16] = ""; sscanf(t + 1, "%15s", tag);
+        int not = tag[0] == '!', k = 0, nopt = sizeof opt / sizeof *opt;
+        if (!strcmp(tag, "bug")) { bug = 1; continue; }
+        while (k < nopt && strcmp(tag + not, opt[k].tag)) k++;
+        if (k == nopt) { fprintf(stderr, "%s:%d: unknown tag @%s\n", path, lineno, tag); exit(2); }
+        if (opt[k].on == not) skip = 1;
+      }
+      if (strchr(name, '@')) *strchr(name, '@') = 0;
       for (char *e = name + strlen(name); e > name && isspace((unsigned char)e[-1]); ) *--e = 0;
-      test = name; test_fails = 0;
-      machine_reset(); memset(&m, 0, sizeof m);
+      test = skip ? "" : name; test_fails = 0;
+      machine_reset(); memset(&m, 0, sizeof m); memset(&last_z, 0, sizeof last_z);
       continue;
     }
+    if (skip) continue;
     double v[4] = {0};
     if (!strncmp(s, "set ", 4)) {
       char k[16]; sscanf(s + 4, "%15s %lf", k, &v[0]);
@@ -335,6 +531,7 @@ static void run_file(const char *path)
       else if (!strcmp(k, "check")) sys.state = v[0] ? STATE_CHECK_MODE : STATE_IDLE;
       else if (!strcmp(k, "laser")) { if (v[0]) settings.flags |= BITFLAG_LASER_MODE; else settings.flags &= ~BITFLAG_LASER_MODE; }
       else if (!strcmp(k, "tol")) tol = v[0];
+      else if (!strcmp(k, "arctol")) settings.arc_tolerance = v[0];
       else if (!strcmp(k, "maxseg")) maxseg = v[0];
       else if (!strcmp(k, "smooth")) smooth = (int)v[0];
       else if (!strcmp(k, "steps") || !strcmp(k, "rate") || !strcmp(k, "accel")) {
@@ -372,6 +569,11 @@ static void run_file(const char *path)
       if (a < 0 || a >= N_AXIS) { fprintf(stderr, "%s:%d: bad axis %c\n", path, lineno, ax); exit(2); }
       double mm = travel[a] / settings.steps_per_mm[a];
       if (mm > v[0] + 1e-9) fail("travel: axis %c moved %g mm (%u steps) > %g", "XYZ"[a], mm, travel[a], v[0]);
+    } else if (!strncmp(s, "zlen ", 5) || !strncmp(s, "zarc ", 5)) {
+      double e = s[1] == 'l' ? last_z.len : last_z.arc;
+      sscanf(s + 5, "%lf %lf", &v[0], &v[1]); checks++;
+      if (!last_z.moves) fail("%.4s: no Z travel", s);
+      else if (e < v[0] || e > v[1]) fail("%.4s: %.2e of the Z travel, expected %g to %g", s, e, v[0], v[1]);
     } else if (!strncmp(s, "power ", 6)) {
       sscanf(s + 6, "%lf", &v[0]); checks++;
       if (!nseg) fail("power: no segment queued");
@@ -390,13 +592,24 @@ static void run_file(const char *path)
 static uint64_t rng;
 static double urand(void) { rng = rng * 6364136223846793005ULL + 1442695040888963407ULL; return (rng >> 11) * (1.0 / 9007199254740992.0); }
 
-enum { RX, RY, RI, RJ, RP, RQ, RN };
-typedef struct { double v[RN]; int quad; } rcase_t;
+enum { RX, RY, RI, RJ, RP, RQ, RZ, RN };
+typedef struct { double v[RN]; int quad, z, inv; } rcase_t;
 
 static void rcase_line(const rcase_t *r, char *out)
 {
-  if (r->quad) sprintf(out, "G5.1X%.4fY%.4fI%.4fJ%.4f", r->v[RX], r->v[RY], r->v[RI], r->v[RJ]);
-  else sprintf(out, "G5X%.4fY%.4fI%.4fJ%.4fP%.4fQ%.4f", r->v[RX], r->v[RY], r->v[RI], r->v[RJ], r->v[RP], r->v[RQ]);
+  if (r->quad) out += sprintf(out, "G5.1X%.4fY%.4fI%.4fJ%.4f", r->v[RX], r->v[RY], r->v[RI], r->v[RJ]);
+  else out += sprintf(out, "G5X%.4fY%.4fI%.4fJ%.4fP%.4fQ%.4f", r->v[RX], r->v[RY], r->v[RI], r->v[RJ], r->v[RP], r->v[RQ]);
+  if (r->z) out += sprintf(out, "Z%.4f", r->v[RZ]);
+  if (r->inv) sprintf(out, "F2");
+}
+
+static void rcase_gcode(const rcase_t *r, const char *line)
+{
+  machine_reset(); memset(&m, 0, sizeof m);
+  run_gcode("G10L20P1X0Y0Z0", "ok");
+  run_gcode("F1000", "ok");
+  if (r->inv) run_gcode("G93", "ok");
+  run_gcode(line, "ok");
 }
 
 /* Returns the number of failed checks; known open defects are filtered out. */
@@ -406,14 +619,15 @@ static int rcase_run(const rcase_t *r)
   rcase_line(r, line);
   if (!r->quad && r->v[RP] < 0) return 0;  /* #7: negative P rejected, open defect */
   if (r->quad && fabs(r->v[RI]) < 5e-5 && fabs(r->v[RJ]) < 5e-5) return 0;  /* G5.1 I=J=0 is an error by spec */
-  quiet = 1; machine_reset(); memset(&m, 0, sizeof m);
-  line_fails = 0;
-  run_gcode("G10L20P1X0Y0Z0", "ok");
-  run_gcode("F1000", "ok");
-  run_gcode(line, "ok");
+  long stats = n_stat;
+  quiet = 1; line_fails = 0;
+  rcase_gcode(r, line);
   quiet = 0;
+  if (line_fails) n_stat = stats;
   return line_fails;
 }
+
+static int cmp_double(const void *a, const void *b) { return (*(double *)a > *(double *)b) - (*(double *)a < *(double *)b); }
 
 static double rmag(double lo, double hi) { return pow(10, lo + (hi - lo) * urand()); }
 
@@ -422,21 +636,30 @@ static void run_random(long n, unsigned long seed)
   long failed = 0;
   rng = seed;
   test = "random";
+  for (int k = 0; k < Z_STATS; k++) if (!(z_stat[k] = malloc(n * sizeof(double)))) exit(2);
+  max_stat = n;
   for (long i = 0; i < n; i++) {
     rcase_t r; memset(&r, 0, sizeof r);
     double scale = rmag(-2, 3);
     r.quad = urand() < 0.2;
     if (urand() > 0.1) { r.v[RX] = scale * (2*urand() - 1); r.v[RY] = scale * (2*urand() - 1); }
-    for (int k = RI; k < RN; k++) if (urand() > 0.1) r.v[k] = (urand() < 0.5 ? -1 : 1) * scale * rmag(-1.5, 1);
+    for (int k = RI; k < RZ; k++) if (urand() > 0.1) r.v[k] = (urand() < 0.5 ? -1 : 1) * scale * rmag(-1.5, 1);
+#ifdef BEZIER_Z_LINEAR
+    if ((r.z = urand() < 0.8)) r.v[RZ] = (urand() < 0.5 ? -1 : 1) * rmag(-1, 2);
+#endif
+#ifdef BEZIER_EXACT_INVERSE_TIME
+    r.inv = urand() < 0.3;
+#endif
     if (!rcase_run(&r)) continue;
     failed++;
-    /* Shrink: zero, round, halve each value while the case keeps failing. */
+    /* Shrink: zero, round, halve each value while the case keeps failing. Only toward
+       zero: rounding 0.05 up to 0.1 would undo a halving, and the two would alternate forever. */
     for (int changed = 1; changed; ) {
       changed = 0;
       for (int k = 0; k < RN; k++) {
         double was = r.v[k], cand[4] = {0, round(was), round(was * 10) / 10, was / 2};
         for (int j = 0; j < 4; j++) {
-          if (cand[j] == r.v[k]) continue;
+          if (fabs(cand[j]) >= fabs(was)) continue;
           r.v[k] = cand[j];
           if (rcase_run(&r)) { changed = 1; break; }
           r.v[k] = was;
@@ -444,11 +667,17 @@ static void run_random(long n, unsigned long seed)
       }
     }
     char line[160]; rcase_line(&r, line);
-    printf("  FAIL random case %ld, shrunk: %s\n", i, line);
-    machine_reset(); memset(&m, 0, sizeof m);
-    run_gcode("G10L20P1X0Y0Z0", "ok"); run_gcode("F1000", "ok"); run_gcode(line, "ok");
+    printf("  FAIL random case %ld, shrunk: %s%s\n", i, r.inv ? "G93 " : "", line);
+    rcase_gcode(&r, line);
+    n_stat = max_stat;                      /* the statistics cover only what passed */
   }
   printf("random: %ld cases, %ld failed (seed %lu)\n", n, failed, seed);
+  static const char *const name[Z_STATS] = { "polyline length", "arc length", "segment number" };
+  for (int k = 0; k < Z_STATS && n_stat && !failed; k++) {
+    qsort(z_stat[k], n_stat, sizeof(double), cmp_double);
+    printf("  Z off the line in the %-15s median %.1e  max %.1e of the Z travel (%ld curves)\n",
+           name[k], z_stat[k][n_stat/2], z_stat[k][n_stat-1], n_stat);
+  }
   n_fail += failed > 0; n_pass += failed == 0;
 }
 
@@ -484,9 +713,11 @@ static void run_hash(const char *path)
 /* Segment targets printed by tb/avr dump.elf for the lines of LINES, checked
    against the model: "line host-seg host-dev avr-seg avr-dev". The host runs
    every line too, to follow the parser state the next model line starts from.
-   Fails when an AVR curve misses its end or the tolerance; lines with a
-   non-finite target are skipped. */
+   Fails when an AVR curve misses its end, the tolerance, the Z line or the
+   G93 time; lines with a non-finite target are skipped. */
 static pt_t avr[MAXSEG];
+static float avr_feed[MAXSEG];
+static uint8_t avr_cond[MAXSEG];
 
 static void run_dump(const char *lines, const char *out)
 {
@@ -507,9 +738,10 @@ static void run_dump(const char *lines, const char *out)
     while (!found && fgets(o, sizeof o, fo)) { o[strcspn(o, "\r\n")] = 0; found = !strcmp(o, g); }
     if (!found) { printf("%s: not in %s\n", g, out); exit(2); }
     long pos = ftell(fo);
-    uint32_t b[N_AXIS];
-    while (fgets(o, sizeof o, fo) && sscanf(o, "p %u %u %u", &b[0], &b[1], &b[2]) == N_AXIS) {
-      if (na < MAXSEG) memcpy(avr[na], b, sizeof(pt_t));
+    uint32_t b[N_AXIS], f;
+    unsigned cond;
+    while (fgets(o, sizeof o, fo) && sscanf(o, "p %u %u %u %u %u", &b[0], &b[1], &b[2], &f, &cond) == N_AXIS + 2) {
+      if (na < MAXSEG) { memcpy(avr[na], b, sizeof(pt_t)); memcpy(&avr_feed[na], &f, sizeof(float)); avr_cond[na] = cond; }
       na++; pos = ftell(fo);
     }
     fseek(fo, pos, SEEK_SET);
@@ -534,10 +766,20 @@ static void run_dump(const char *lines, const char *out)
 #ifdef BEZIER_MAX_SEGMENTS
     cap = na >= BEZIER_MAX_SEGMENTS;
 #endif
-    int ok = end && (ad <= tol || (cap && ad <= hd * 1.001 + 1e-4));
-    printf("%s host %d %.4f avr %d %.4f%s%s\n", g, nseg, hd, na, ad, cap ? " (cap)" : "",
-           ok ? "" : end ? "  FAIL tol" : "  FAIL end");
-    bad += !ok;
+    const char *why = !end ? "end" : ad <= tol_for(&c) || (cap && ad <= hd * 1.001 + 1e-4) ? NULL : "tol";
+    zerr_t z; memset(&z, 0, sizeof z);
+    if (na) {                               /* poly[] is the AVR polyline now */
+      z = z_check(&c, start, avr, n);
+      if (!why) why = z_fail(&z);
+#ifdef BEZIER_EXACT_INVERSE_TIME
+      if (!why && m.inv && m.f > 0) why = g93_fail(&c, start, avr, avr_feed, avr_cond, n);
+#endif
+    }
+    printf("%s host %d %.4f avr %d %.4f%s", g, nseg, hd, na, ad, cap ? " (cap)" : "");
+    if (z.moves) printf(" z len %.1e arc %.1e par %.1e", z.len, z.arc, z.par);
+    if (why) printf("  FAIL %s", why);
+    printf("\n");
+    bad += why != NULL;
   }
   fclose(fl); fclose(fo);
   printf("dump: %d curves, %d failed\n", curves, bad);

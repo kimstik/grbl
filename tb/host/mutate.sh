@@ -3,24 +3,25 @@
 #
 # Applies each mutant from mutants.txt to a copy of the firmware sources,
 # rebuilds the bench and runs vectors plus random curves. A mutant the bench
-# does not notice is reported as SURVIVED and the script fails.
+# does not notice is reported as SURVIVED and the script fails. A line
+# "OPT<tab>flags" builds the mutants after it with these options (see Makefile).
 # Usage: mutate.sh [MUTANT-ID]
 set -u
 cd "$(dirname "$0")"
 GRBL=../../grbl
 W=build/mut
-survived=0 killed=0
+survived=0 killed=0 opt=
 tab=$(printf '\t') cr=$(printf '\r')
 while IFS="$tab" read -r id file from to; do
   to=${to%"$cr"}  # mutants.txt may be checked out with CRLF
-  case "$id" in ''|'#'*) continue ;; esac
+  case "$id" in ''|'#'*) continue ;; OPT) opt=${file%"$cr"}; continue ;; esac
   [ $# -gt 0 ] && [ "$1" != "$id" ] && continue
   rm -rf "$W/src" "$W/obj"; mkdir -p "$W"; cp -r "$GRBL" "$W/src"
   FROM="$from" TO="$to" perl -pi -e 's/\Q$ENV{FROM}\E/$ENV{TO}/g' "$W/src/$file"
   if cmp -s "$GRBL/$file" "$W/src/$file"; then
     echo "mutant $id: text not found in $file"; exit 2
   fi
-  if ! make -s GRBL="$W/src" BUILD="$W/obj" > "$W/build.log" 2>&1; then
+  if ! make -s GRBL="$W/src" BUILD="$W/obj" OPT="$opt" > "$W/build.log" 2>&1; then
     echo "mutant $id: does not compile"; cat "$W/build.log"; exit 2
   fi
   if timeout 120 "$W/obj/tb" vectors/*.vec > /dev/null 2>&1 &&

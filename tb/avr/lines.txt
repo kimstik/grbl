@@ -40,3 +40,14 @@ G0X0Y0
 G0X0Y0
 # overflowing literal [42]: AVR read_float behavior
 *G5X10Y0I1000000000000000000000000000000000000000J0P1Q1
+G0X0Y0
+# Z word [50], an error without BEZIER_Z_LINEAR; the gentle S again
+*G5I-5J5P5Q-5X-20Y0Z-3
+G0X0Y0Z0
+# Z on a straight line with both control points at its end [51]
+*G5X0Y100I0J99P0Q1Z10
+G0X0Y0Z0
+# inverse time [39] [54]
+G93
+*G5I-5J5P5Q-5X-20Y0Z-3F2
+G94F1000

@@ -23,9 +23,10 @@
   Last line: stack bytes never touched during the whole run.
 
   Built with -DTB_DUMP (make dump), the bench also prints every segment
-  target as "p X Y Z", each axis as the raw bits of its float in decimal,
-  after the line text on a line of its own. `tb --dump` checks those points
-  against the curve model on the host. Cycle counts are then not valid.
+  target as "p X Y Z F C", each axis and the feed rate as the raw bits of its
+  float in decimal, C the planner condition, after the line text on a line of
+  its own. `tb --dump` checks those points against the curve model on the
+  host. Cycle counts are then not valid.
 
   Part of Grbl. License: GPLv3, see grbl/grbl.h.
 */
@@ -70,6 +71,7 @@ uint8_t plan_buffer_line(float *target, plan_line_data_t *pl_data)
 #ifdef TB_DUMP
   serial_write('p');
   for (uint8_t i = 0; i < N_AXIS; i++) { field(((const uint32_t *)target)[i]); }
+  field(((const uint32_t *)&pl_data->feed_rate)[0]); field(pl_data->condition);
   printPgmString(PSTR("\r\n"));
 #endif
   uint32_t t1 = now();

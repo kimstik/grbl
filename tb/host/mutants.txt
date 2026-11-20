@@ -32,3 +32,27 @@ pq-required	gcode.c	if (bit_isfalse(value_words, bit(WORD_P)) || bit_isfalse(val
 first-ij	gcode.c	if (gc_state.modal.motion != MOTION_MODE_CUBIC_SPLINE) {	if (0) {
 quad-ij-zero	gcode.c	if (gc_block.values.ijk[X_AXIS] == 0.0f && gc_block.values.ijk[Y_AXIS] == 0.0f) {	if (0) {
 words-used	gcode.c	bit_false(value_words, (bit(WORD_P)|bit(WORD_Q)|bit(WORD_I)|bit(WORD_J)));	bit_false(value_words, (bit(WORD_P)|bit(WORD_Q)|bit(WORD_I)|bit(WORD_J)|bit(WORD_R)));
+OPT	-DBEZIER_SIGMA=settings.arc_tolerance
+tol-ignored	motion_control.c	(0.8f/BEZIER_SIGMA)	(0.8f/0.1f)
+OPT	-DBEZIER_Z_LINEAR=1
+zt-square	motion_control.c	p[Z_AXIS] = position[Z_AXIS] + t*(target[Z_AXIS] - position[Z_AXIS]);	p[Z_AXIS] = position[Z_AXIS] + t*t*(target[Z_AXIS] - position[Z_AXIS]);
+zt-no-start	motion_control.c	p[Z_AXIS] = position[Z_AXIS] + t*(target[Z_AXIS] - position[Z_AXIS]);	p[Z_AXIS] = t*(target[Z_AXIS] - position[Z_AXIS]);
+zt-end-inexact	motion_control.c	p[Z_AXIS] = target[Z_AXIS];	p[Z_AXIS] = position[Z_AXIS] + (target[Z_AXIS] - position[Z_AXIS])*0.999999f;
+zt-end-kept	motion_control.c	p[Z_AXIS] = target[Z_AXIS];	;
+OPT	-DBEZIER_Z_LINEAR=2
+zl-by-parameter	motion_control.c	s/length*dz	t*dz
+zl-x-only	motion_control.c	s += hypot_f(p[X_AXIS] - q[X_AXIS], p[Y_AXIS] - q[Y_AXIS]);	s += hypot_f(p[X_AXIS] - q[X_AXIS], 0);
+zl-from-start	motion_control.c	memcpy(q, p, sizeof(q));	;
+zl-no-restart	motion_control.c	s = 1e-30f;	if (!pass) { s = 1e-30f; }
+zl-length-off	motion_control.c	length = s;	length = s*1.001f;
+zl-no-last-chord	motion_control.c	segments++;	;
+zl-extra-point	motion_control.c	segments--;	;
+zl-sign	motion_control.c	+ s/length*dz	- s/length*dz
+zl-dz-absolute	motion_control.c	dz = target[Z_AXIS] - position[Z_AXIS]	dz = target[Z_AXIS]
+zl-first-pass-moves	motion_control.c	if (!pass) { continue; }	;
+zl-end-kept	motion_control.c	p[Z_AXIS] = target[Z_AXIS];	;
+OPT	-DBEZIER_Z_LINEAR=2 -DBEZIER_EXACT_INVERSE_TIME
+g93-xy-length	motion_control.c	pl_data->feed_rate *= hypot_f(s, dz);	pl_data->feed_rate *= s;
+g93-per-segment	motion_control.c	pl_data->feed_rate *= hypot_f(s, dz);	;
+g93-flag-kept	motion_control.c	bit_false(pl_data->condition,PL_COND_FLAG_INVERSE_TIME);	;
+g93-always	motion_control.c	if (pl_data->condition & PL_COND_FLAG_INVERSE_TIME) {	if (1) {

@@ -1,0 +1,174 @@
+# Z word on G5/G5.1 (BEZIER_Z_LINEAR) and exact G93 (BEZIER_EXACT_INVERSE_TIME).
+# Numbers in [] are catalog IDs from ../../README.md. Every accepted curve is
+# checked for a Z that never reverses and is linear in the length travelled
+# (BEZIER_Z_LINEAR 2) or in the segment number (1); zlen and zarc pin numbers.
+
+# ---- end point and modes [50] ------------------------------------------------
+
+= [50] Z word: G5 ends exactly at Z @z
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 Z-1 I3 J3 P3 Q3
+pos -90 -100 -11
+
+= [50] Z word: G5.1 ends exactly at Z @z
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5.1 X10 Y0 Z2.5 I5 J5
+pos -90 -100 -7.5
+
+= [50] Z up and down along a chain, implicit I/J @z
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 Z3 I3 J3 P3 Q-3
+G5 X20 Y0 Z-3 P3 Q3
+G5 X30 Y0 P3 Q-3
+pos -70 -100 -13
+
+= [50] Z in G91 and inches @z
+G10 L20 P1 X0 Y0 Z0
+F1000
+G91 G5 X10 Y0 Z-1 I3 J3 P3 Q3
+G5 X10 Y0 Z-1 P3 Q3
+pos -80 -100 -12
+G20 G5 X1 Y0 Z0.1 P0.1 Q0.1
+pos -54.6 -100 -9.46
+
+= [50] Z from a work offset far from the Z origin @z
+G10 L2 P1 X0 Y0 Z-300
+G0 Z0
+F1000
+G5 X10 Y0 Z0.05 I3 J3 P3 Q3
+pos 10 0 -299.95
+
+= [50] Z word outside the travel plane only with G17 @z
+G10 L20 P1 X0 Y0 Z0
+F1000
+G18 G5 X10 Y0 Z-1 I3 J3 P3 Q3 -> error
+G19 G5.1 X10 Y0 Z-1 I5 J5 -> error
+pos -100 -100 -10
+
+# ---- Z against the path [51] --------------------------------------------------
+
+# A straight line with both control points at its end: the parameter
+# covers most of the length early, so Z by parameter runs far ahead.
+= [51] handles 99:1 on a straight line, Z by length @zlen
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X100 Y0 Z10 I99 J0 P1 Q0
+zlen 0 1e-5
+zarc 0 1e-4
+
+= [51] handles 99:1 on a straight line, Z by parameter is off by a third of the travel @z @!zlen
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X100 Y0 Z10 I99 J0 P1 Q0
+zarc 0.3 0.45
+
+= [51] both handles at the start, quadratic with a far control point @zlen
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5.1 X10 Y0 Z-4 I40 J60
+zlen 0 1e-5
+zarc 0 2e-3
+G5 X0 Y0 Z4 I0 J0 P30 Q30
+zlen 0 1e-5
+zarc 0 2e-3
+
+= [51] loop and cusp: Z keeps climbing through the crossing @zlen
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 Z5 I20 J10 P10 Q10
+zlen 0 1e-5
+G5 X0 Y0 Z-5 I10 J10 P10 Q10
+zlen 0 1e-5
+
+= [51] symmetric arch: both variants within a tenth of the travel @z
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 Z1 I-3 J3 P3 Q3
+zarc 0 0.1
+
+# ---- float accumulation [52] --------------------------------------------------
+
+# The length is summed in single precision over every segment, twice. At the
+# cap that is 2000 additions of chords from 0.0002 mm to 30 mm.
+= [52] 2000 segments: the running length stays on the line @zlen
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 Z50 I100000 J0 P1 Q50000
+zlen 0 1e-5
+G5 X0 Y0 Z-50 I0.01 J0 P100000 Q7
+zlen 0 1e-5
+
+= [52] 2000 segments far from the origin @zlen
+G10 L2 P1 X0 Y0 Z0
+G0 X60000 Y-60000 Z-1000
+F1000
+G5 X60010 Y-60000 Z-1001 I30000 J0 P1 Q30000
+zlen 0 2e-3
+
+= [52] Z travel of one step on a long curve @zlen
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X300 Y0 Z0.004 I100 J100 P100 Q100
+
+# ---- degenerate curves [53] ---------------------------------------------------
+
+= [53] all points coincide: a plain Z move, nothing divided by zero @z
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X0 Y0 Z-3 I0 J0 P0 Q0
+pos -100 -100 -13
+
+= [53] closed curve with Z @z
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X0 Y0 Z2 I10 J0 P0 Q10
+pos -100 -100 -8
+
+= [53] curve shorter than a step with a long Z @z
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X0.001 Y0 Z8 I0.001 J0.001 P0.001 Q0.001
+pos -99.999 -100 -2
+
+# ---- exact G93 [39] [54] ------------------------------------------------------
+
+= [39] G93 G5 takes 1/F minutes @g93
+G10 L20 P1 X0 Y0 Z0
+G93
+G5 X10 Y0 I3 J3 P3 Q3 F2
+
+= [39] G93 G5.1 takes 1/F minutes @g93
+G10 L20 P1 X0 Y0 Z0
+G93
+G5.1 X10 Y0 I5 J5 F2
+
+= [54] G93 with Z: the time covers the 3D length @g93
+G10 L20 P1 X0 Y0 Z0
+G93
+G5 X10 Y0 Z-20 I3 J3 P3 Q3 F2
+G5.1 X20 Y0 Z0 I5 J5 F0.5
+
+= [54] G93 with unequal segments and at the cap @g93
+G10 L20 P1 X0 Y0 Z0
+G93
+G5 X100 Y0 Z10 I99 J0 P1 Q0 F4
+G5 X110 Y0 Z50 I100000 J0 P1 Q50000 F0.01
+
+= [54] G93 pure Z move through G5 @g93
+G10 L20 P1 X0 Y0 Z0
+G93
+G5 X0 Y0 Z-3 I0 J0 P0 Q0 F2
+pos -100 -100 -13
+
+= [54] G93 does not leak: G94 after the curve, G1 in G93 @g93
+G10 L20 P1 X0 Y0 Z0
+G93
+G5 X10 Y0 I3 J3 P3 Q3 F2
+G1 X20 F2
+G94
+F1000
+G5 X30 Y0 Z1 I3 J3 P3 Q3
+pos -70 -100 -9

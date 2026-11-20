@@ -113,6 +113,7 @@ G5 X10 Y0 I1000000000000000000000000000000000000000 J0 P1 Q1 -> error
 = [5] handles near float overflow: no garbage targets (same class as G1 X1e35) @bug
 G10 L20 P1 X0 Y0 Z0
 F1000
+set tol 0.1
 G5 X10 Y0 I100000000000000000000000000000000000 J0 P1 Q1 -> any
 
 # ---- geometry equivalences [12] [13] [14] [15] [16] [17] [18] [31] [36] -----
@@ -288,12 +289,12 @@ G10 L20 P1 X0 Y0 Z0
 G93
 G5 X10 Y0 I3 J3 P3 Q3 -> error
 
-= [39] G93 G5 takes 1/F minutes @bug
+= [39] G93 G5 takes 1/F minutes @bug @!g93
 G10 L20 P1 X0 Y0 Z0
 G93
 G5 X10 Y0 I3 J3 P3 Q3 F2
 
-= [39] G93 G5.1 takes 1/F minutes @bug
+= [39] G93 G5.1 takes 1/F minutes @bug @!g93
 G10 L20 P1 X0 Y0 Z0
 G93
 G5.1 X10 Y0 I5 J5 F2
@@ -331,11 +332,17 @@ G10 L20 P1 X0 Y0 Z0
 F1000
 G53 G5 X10 Y0 I3 J3 P3 Q3 -> error
 G5 G1 X10 Y0 I3 J3 P3 Q3 -> error
-G5 X10 Y0 Z-1 I3 J3 P3 Q3 -> error
 G18 G5 X10 Y0 I3 J3 P3 Q3 -> error
 G19 G5 X10 Y0 I3 J3 P3 Q3 -> error
 G18 G5.1 X10 Y0 I3 J3 -> error
 G28 G5 X10 Y0 I3 J3 P3 Q3 -> error
+pos -100 -100 -10
+
+= [27] Z word without BEZIER_Z_LINEAR @!z
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 Z-1 I3 J3 P3 Q3 -> error
+G5.1 X10 Y0 Z-1 I5 J5 -> error
 pos -100 -100 -10
 
 # The preceding G5 has the same P/Q, so the known spline_pq write [8] leaves
