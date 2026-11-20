@@ -1,0 +1,2 @@
+# Use with -DTB_EXACT_CUBIC. The original float32 net is passed directly after setup.
+G21G17G90G94

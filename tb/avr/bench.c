@@ -165,6 +165,38 @@ int main(void)
     }
 #endif
   }
+#ifdef TB_EXACT_CUBIC
+  // Bypass read_float only for this regression: retain the original binary32 control net.
+  // A decimal G-code reconstruction cannot necessarily preserve every control point bit.
+  {
+    float p0[N_AXIS] = {0.0f, 0.0f, 0.0f};
+    float p1[2] = {-2361.66455078125f, 614.281494140625f};
+    float p2[2] = {-1883.6595458984375f, 481.83642578125f};
+    float p3[N_AXIS] = {-1973.58837890625f, 498.736663818359375f, 0.0f};
+    plan_line_data_t data;
+    memset(&data, 0, sizeof(data));
+    data.feed_rate = 1000.0f;
+    memset(sys_position, 0, sizeof(sys_position));
+    plan_reset(); plan_sync_position();
+    printPgmString(PSTR("EXACT_CUBIC\r\n"));
+    while (serial_get_tx_buffer_count()) { }
+    seg = 0; nonfin = 0; plan = 0; first = 0; gap = 0; hash = 2166136261UL;
+    t_start = now();
+    mc_cubic_b_spline(p3, &data, p0, p1, p2);
+    uint32_t total = now() - t_start;
+    field(0); field(seg); field(total); field(plan); field(total - plan);
+    field(first); field(gap); field(seg && !memcmp(last, p3, sizeof(last)));
+    field(nonfin); field(hash);
+    printPgmString(PSTR("\r\n"));
+#ifdef BEZIER_ADAPTIVE_TRACE
+    extern uint16_t bezier_adaptive_trials;
+    extern uint8_t bezier_adaptive_fallback;
+    printPgmString(PSTR("adaptive"));
+    field(bezier_adaptive_trials); field(bezier_adaptive_fallback);
+    printPgmString(PSTR("\r\n"));
+#endif
+  }
+#endif
   printPgmString(PSTR("stack"));
   field(untouched());
   printPgmString(PSTR("\r\ndone\r\n"));

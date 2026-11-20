@@ -848,9 +848,70 @@ static void run_dump(const char *lines, const char *out, int strict)
   exit(bad != 0 || curves == 0);
 }
 
+/* Original binary32 regression net, called directly: decimal G-code cannot preserve it.
+   With no OUT, print a host dump and its check together; audit.py accepts that same file twice. */
+static void run_exact(const char *out)
+{
+  float p0[N_AXIS] = {0.0f, 0.0f, 0.0f};
+  float p1[2] = {-2361.66455078125f, 614.281494140625f};
+  float p2[2] = {-1883.6595458984375f, 481.83642578125f};
+  float p3[N_AXIS] = {-1973.58837890625f, 498.736663818359375f, 0.0f};
+  machine_reset(); memset(steps, 0, sizeof(steps)); memcpy(sys_position, steps, sizeof(steps));
+  plan_sync_position(); gc_sync_position();
+  plan_line_data_t data; memset(&data, 0, sizeof(data)); data.feed_rate = 1000.0f;
+  nseg = 0;
+  __wrap_mc_cubic_b_spline(p3, &data, p0, p1, p2);
+  tb_drain();
+  int na = nseg;
+  if (out) {
+    FILE *fo = fopen(out, "rb");
+    if (!fo) { perror(out); exit(2); }
+    char line[256]; int found = 0; na = 0;
+    while (fgets(line, sizeof(line), fo)) { if (!strncmp(line, "EXACT_CUBIC", 11)) { found = 1; break; } }
+    uint32_t bits[N_AXIS], feed; unsigned cond;
+    while (found && fgets(line, sizeof(line), fo) &&
+           sscanf(line, "p %u %u %u %u %u", &bits[0], &bits[1], &bits[2], &feed, &cond) == N_AXIS + 2) {
+      if (na < MAXSEG) { memcpy(avr[na], bits, sizeof(pt_t)); }
+      na++;
+    }
+    fclose(fo);
+    if (!found || !na || na > MAXSEG) { fprintf(stderr, "exact fixture missing/too large\n"); exit(2); }
+  } else {
+    memcpy(avr, seg, na*sizeof(pt_t));
+    printf("EXACT_CUBIC\n");
+    for (int k = 0; k < na; k++) {
+      uint32_t bits[N_AXIS]; memcpy(bits, seg[k], sizeof(bits));
+      printf("p %u %u %u 0 0\n", bits[0], bits[1], bits[2]);
+    }
+  }
+  int finite = 1;
+  uint32_t hash = 2166136261u;
+  for (int k = 0; k < na; k++) {
+    for (int a = 0; a < N_AXIS; a++) finite &= isfinite(avr[k][a]);
+    const uint8_t *b = (const uint8_t *)avr[k];
+    for (size_t i = 0; i < sizeof(pt_t); i++) hash = (hash ^ b[i])*16777619u;
+  }
+  int end = !memcmp(avr[na-1], p3, sizeof(pt_t));
+  double hd = curve_dev(&parsed, p0, seg, nseg), ad = curve_dev(&parsed, p0, avr, na);
+  printf("net");
+  for (int k = 0; k < 4; k++) printf(" (%.9g,%.9g)", parsed.p[k][0], parsed.p[k][1]);
+  printf(" budget %.9g dense %d\n", (double)TB_XY_BUDGET, DENSE);
+  printf("EXACT_CUBIC host %d %.9g avr %d %.9g\n", nseg, hd, na, ad);
+  printf("exact hash %u end %d finite %d\n", hash, end, finite);
+#ifdef BEZIER_ADAPTIVE_TRACE
+  extern uint8_t bezier_adaptive_fallback;
+  printf("exact fallback %u\n", bezier_adaptive_fallback);
+#endif
+  int bad = !finite || !end || !(ad <= TB_XY_BUDGET);
+  printf("dump: 1 curves, %d failed\n", bad);
+  exit(bad);
+}
+
 int main(int argc, char **argv)
 {
   setvbuf(stdout, NULL, _IONBF, 0);
+  if (argc == 2 && !strcmp(argv[1], "--exact")) run_exact(NULL);
+  if (argc == 3 && !strcmp(argv[1], "--exact")) run_exact(argv[2]);
   if (argc == 3 && !strcmp(argv[1], "--hash")) run_hash(argv[2]);
   if (argc == 4 && !strcmp(argv[1], "--dump")) run_dump(argv[2], argv[3], 0);
   if (argc == 4 && !strcmp(argv[1], "--dump-strict")) run_dump(argv[2], argv[3], 1);
