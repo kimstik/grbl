@@ -25,11 +25,10 @@
       min_full  the same, counted only after the buffer was first full (- if never)
       low       times the planner fell to 0 or 1 block (same window as min)
       stops     times the machine went idle mid-program
-      cut       stops with blocks still queued: the main loop was too busy to
-                refill the step segment buffer, and the stepper stopped with
-                no deceleration
-      cut_F     the highest feed it was cut at, mm/min (entry speed of the
-                block in progress)
+      cut       foreground observations of idle with planner blocks queued;
+                these are not by themselves a measurement of the stop speed
+      cut_F     highest entry speed of the current planner block at a cut,
+                mm/min; not the speed of the last step-segment
       dx dy     final sys_position minus the parser target, in steps
       stack     most stack used, in bytes below RAMEND, ISRs included
     hold   delay_ms state@hold x@hold state@resume suspend@resume dx dy dz t_ms stack
@@ -43,6 +42,13 @@
 
 #include "grbl.h"
 #include <avr/sleep.h>
+#ifdef TB_OBSERVE
+#include "observe.h"
+#endif
+
+#if defined(TB_OBSERVE_STALL_MS) && !defined(TB_OBSERVE)
+#error "The injected foreground stall belongs only in the observed build"
+#endif
 
 #define STEPS_PER_MM 250    // 6000 mm/min max rate -> 25 kHz step rate per axis
 #define MAX_RATE     6000
@@ -114,6 +120,9 @@ ISR(TIMER2_OVF_vect)
 }
 
 // Probe state for one program.
+#if defined(TB_OBSERVE_STALL_MS)
+static uint8_t stalled;
+#endif
 static uint8_t sampling, cycling, filled, low_now;
 static uint8_t peak, run_min, full_min, low, stops, cut;
 static uint16_t seg, cut_feed;
@@ -134,6 +143,14 @@ uint8_t __attribute__((noinline)) plan_buffer_line(float *target, plan_line_data
 {
   // The count only drops between two blocks, so its minimum is seen here.
   uint8_t n = plan_get_block_buffer_count();
+#if defined(TB_OBSERVE_STALL_MS)
+  // A deliberate foreground stall verifies that the ISR probe sees a missing
+  // continuation, not merely a slow host or the planned end of a program.
+  if (!stalled && sys.state == STATE_CYCLE && n >= 4) {
+    stalled = 1;
+    _delay_ms(TB_OBSERVE_STALL_MS);
+  }
+#endif
   if (n >= peak) { peak = n + 1; }
   if (n + 2 == BLOCK_BUFFER_SIZE) { filled = 1; }
   if (sampling) {
@@ -226,12 +243,25 @@ static void make_line(void)
 }
 
 // Program list.
+#ifdef TB_OBSERVE_QUICK
+static const uint16_t feeds[] PROGMEM = { 3000 };
+#else
 static const uint16_t feeds[] PROGMEM = { 1000, 2000, 3000, 4000, 5000 };
+#endif
+#ifdef TB_OBSERVE_QUICK
+static const uint16_t sizes[] PROGMEM = { 5000 };
+static const uint16_t accels[] PROGMEM = { 2000 };
+#else
 static const uint16_t sizes[] PROGMEM = { 2000, 5000 };
 static const uint16_t accels[] PROGMEM = { 500, 2000 };
+#endif
 // Host turnaround after the ok in ms: a quick USB serial adapter, an FTDI one
 // with its default 16 ms latency timer.
+#ifdef TB_OBSERVE_QUICK
+static const uint8_t lats[] PROGMEM = { 2 };
+#else
 static const uint8_t lats[] PROGMEM = { 2, 16 };
+#endif
 static const uint16_t holds[] PROGMEM = { 60, 150, 333, 500, 777, 1000 };
 #define N(a) (sizeof(a) / sizeof(a[0]))
 #define SWEEP (3 * N(lats) * N(feeds) * N(sizes) * N(accels))
@@ -247,7 +277,11 @@ static uint8_t setup(void)
     feed = pgm_read_word(feeds + p % N(feeds)); p /= N(feeds);
     size = pgm_read_word(sizes + p % N(sizes)); p /= N(sizes);
     accel = pgm_read_word(accels + p);
+#ifdef TB_OBSERVE_QUICK
+  } else if (0) { // The bounded probe smoke tests no hold/resume programs.
+#else
   } else if ((p -= SWEEP) < N(holds)) {
+#endif
     kind = G5; lat = 2; feed = 3000; size = 5000; accel = 500;
     hold_ms = pgm_read_word(holds + p);
   } else {
@@ -278,6 +312,12 @@ static uint8_t setup(void)
   peak = 0; run_min = 255; full_min = 255; low = 0; stops = 0; cut = 0; cut_feed = 0;
   seg = 0; pi = 0;
   cli();
+#ifdef TB_OBSERVE
+  tb_observe_reset();
+#endif
+#ifdef TB_OBSERVE_STALL_MS
+  stalled = 0;
+#endif
   tick = 0;
   TIMSK2 |= _BV(TOIE2);
   // simavr stops a CTC timer whose top is 0, the chip interrupts at once: give
@@ -330,6 +370,15 @@ static void report(void)
   if (hold_ms) { field(t); }
   field(stack_used());
   printPgmString(PSTR("\r\n"));
+#ifdef TB_OBSERVE
+  // Each program is complete here, so the ISR is no longer changing the probe.
+  // Keep the legacy run/hold columns intact; this is a separate output record.
+  printPgmString(PSTR("observe"));
+  field(prog); field(tb_observe.empty); field(tb_observe.queued);
+  field(tb_observe.moving); field(lround(tb_observe.max_exit * 1000.0f));
+  field(tb_observe.cycles); field(tb_observe.amass);
+  printPgmString(PSTR("\r\n"));
+#endif
 }
 
 static void finish(void)

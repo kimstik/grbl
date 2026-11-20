@@ -2,6 +2,9 @@ name: G5 build
 
 on:
   push:
+    # This test-only branch runs the focused observation controls instead of
+    # rebuilding the already measured, unchanged 32-option firmware matrix.
+    branches-ignore: [wip/dyn-observe]
   pull_request:
 
 # The options of the spline section of config.h in every combination: a name,

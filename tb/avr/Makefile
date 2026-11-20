@@ -23,10 +23,16 @@ dyn: $(BUILD)/dyn.elf
 # dump.elf: bench.elf that also prints every segment target, see bench.c.
 dump: $(BUILD)/dump.elf
 
+# Test-only ISR snapshots. This build is not a production stack/throughput probe.
+observe: $(BUILD)/observe.elf
+OBSERVE_DEFS ?=
+PYTHON ?= python3
+
 $(BUILD)/bench.elf: $(OBJECTS) $(BUILD)/bench.o
 $(BUILD)/dyn.elf: $(filter-out %/serial.o %/system.o,$(OBJECTS)) $(addprefix $(BUILD)/dyn-,serial.o system.o) $(BUILD)/dyn.o
 $(BUILD)/dump.elf: $(OBJECTS) $(BUILD)/dump.o
-$(BUILD)/bench.elf $(BUILD)/dyn.elf $(BUILD)/dump.elf:
+$(BUILD)/observe.elf: $(filter-out %/serial.o %/system.o %/stepper.o,$(OBJECTS)) $(addprefix $(BUILD)/dyn-,serial.o system.o) $(BUILD)/observe-stepper.o $(BUILD)/observe-dyn.o
+$(BUILD)/bench.elf $(BUILD)/dyn.elf $(BUILD)/dump.elf $(BUILD)/observe.elf:
 	$(CC) -o $@ $^ -lm -Wl,--gc-sections
 	avr-size $@
 	@set -- $$(avr-size $@ | tail -1); [ $$(($$1 + $$2)) -le 32768 ] || { echo "$@: $$(($$1 + $$2)) bytes do not fit 32768"; exit 1; }
@@ -60,6 +66,15 @@ $(BUILD)/dump.o: bench.c $(BUILD)/lines.h | $(BUILD)
 $(BUILD)/dyn.o: dyn.c | $(BUILD)
 	$(CC) -c $< -o $@
 
+$(BUILD)/observe-stepper.c: $(SRC)/stepper.c observe.py | $(BUILD)
+	$(PYTHON) observe.py $< $@
+
+$(BUILD)/observe-stepper.o: $(BUILD)/observe-stepper.c observe.h | $(BUILD)
+	$(CC) -I. -c $< -o $@
+
+$(BUILD)/observe-dyn.o: dyn.c observe.h | $(BUILD)
+	$(CC) -DTB_OBSERVE $(OBSERVE_DEFS) -c $< -o $@
+
 $(BUILD)/%.o: $(SRC)/%.c | $(BUILD)
 	$(CC) -c $< -o $@
 
@@ -75,4 +90,4 @@ run-dyn: $(BUILD)/dyn.elf
 clean:
 	rm -f $(BUILD)/*.o $(BUILD)/*.elf $(BUILD)/lines.h
 
-.PHONY: all dyn dump run run-dyn clean
+.PHONY: all dyn dump observe run run-dyn clean

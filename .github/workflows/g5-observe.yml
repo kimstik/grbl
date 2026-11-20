@@ -1,0 +1,57 @@
+name: G5 stepper observation
+
+on:
+  push:
+    branches: [wip/dyn-observe]
+  workflow_dispatch:
+
+jobs:
+  controls:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: AVR and simulator
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends gcc-avr avr-libc binutils-avr simavr
+          avr-gcc --version | head -1
+      - name: Build separate observed controls
+        run: |
+          FLAGS='-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=2'
+          make -s -C tb/avr observe BUILD=build/normal DEFS="$FLAGS" OBSERVE_DEFS=-DTB_OBSERVE_QUICK
+          make -s -C tb/avr observe BUILD=build/stall DEFS="$FLAGS" OBSERVE_DEFS='-DTB_OBSERVE_QUICK -DTB_OBSERVE_STALL_MS=100'
+          make -s -C tb/avr observe BUILD=build/full DEFS="$FLAGS"
+      - name: Positive and negative controls
+        run: |
+          timeout 180 simavr -m atmega328p -f 16000000 tb/avr/build/normal/observe.elf > normal.txt 2>&1
+          timeout 180 simavr -m atmega328p -f 16000000 tb/avr/build/stall/observe.elf > stall.txt 2>&1
+          python3 tb/avr/check-observe.py normal.txt --no-moving | tee normal-check.txt
+          python3 tb/avr/check-observe.py stall.txt --expect-moving | tee stall-check.txt
+          if python3 tb/avr/check-observe.py normal.txt --expect-moving; then
+            echo '::error::negative control unexpectedly passed'
+            exit 1
+          fi
+          sed '/^done/,$d' normal.txt > incomplete.txt
+          if python3 tb/avr/check-observe.py incomplete.txt; then
+            echo '::error::truncated log unexpectedly passed'
+            exit 1
+          fi
+      - name: Full by-length observation
+        run: |
+          timeout 1200 simavr -m atmega328p -f 16000000 tb/avr/build/full/observe.elf > full.txt 2>&1
+          python3 tb/avr/check-observe.py full.txt | tee full-check.txt
+          {
+            printf '### ISR shutdown observations, AVR GCC 7.3\n\n```text\n'
+            cat normal-check.txt stall-check.txt full-check.txt
+            printf '```\n\nObserved build only: added RAM/instructions alter scheduling. Endpoint speed is the last consumed segment\x27s planned speed, not a physical speed sensor.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stepper-observation
+          path: |
+            normal.txt
+            stall.txt
+            full.txt
+            *-check.txt
+            tb/avr/build/*/observe.elf
