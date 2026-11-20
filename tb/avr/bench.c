@@ -22,6 +22,11 @@
     hash    FNV-1a of all segment targets, comparable with `tb --hash`
   Last line: stack bytes never touched during the whole run.
 
+  Built with -DTB_DUMP (make dump), the bench also prints every segment
+  target as "p X Y Z", each axis as the raw bits of its float in decimal,
+  after the line text on a line of its own. `tb --dump` checks those points
+  against the curve model on the host. Cycle counts are then not valid.
+
   Part of Grbl. License: GPLv3, see grbl/grbl.h.
 */
 
@@ -48,6 +53,8 @@ static uint32_t t_start, t_exit, plan, first, gap, hash;
 static uint16_t seg, nonfin;
 static float last[N_AXIS];
 
+static void field(uint32_t v) { serial_write(' '); print_uint32_base10(v); }
+
 uint8_t plan_buffer_line(float *target, plan_line_data_t *pl_data)
 {
   uint32_t t0 = now();
@@ -60,6 +67,11 @@ uint8_t plan_buffer_line(float *target, plan_line_data_t *pl_data)
     if ((((const uint16_t *)&target[i])[1] & 0x7f80) == 0x7f80) { nonfin++; break; } // Exponent all ones.
   }
   memcpy(last, target, sizeof(last));
+#ifdef TB_DUMP
+  serial_write('p');
+  for (uint8_t i = 0; i < N_AXIS; i++) { field(((const uint32_t *)target)[i]); }
+  printPgmString(PSTR("\r\n"));
+#endif
   uint32_t t1 = now();
   uint8_t r = tb_plan_buffer_line(target, pl_data);
   if (plan_check_full_buffer()) { plan_discard_current_block(); }
@@ -68,8 +80,6 @@ uint8_t plan_buffer_line(float *target, plan_line_data_t *pl_data)
   plan += t_exit - t1;
   return r;
 }
-
-static void field(uint32_t v) { serial_write(' '); print_uint32_base10(v); }
 
 #define L(s) s "\0"
 static const char lines[] PROGMEM =
@@ -125,6 +135,9 @@ int main(void)
     uint8_t measure = (line[0] == '*');
     char *g = line + measure;
     printString(g);
+#ifdef TB_DUMP
+    printPgmString(PSTR("\r\n"));
+#endif
     while (serial_get_tx_buffer_count()) { } // No UART interrupts inside a measurement.
     seg = 0; nonfin = 0; plan = 0; first = 0; gap = 0; hash = 2166136261UL;
     t_start = now();

@@ -20,9 +20,13 @@ all: $(BUILD)/bench.elf
 # dyn.elf: the same firmware with the stepper running, see dyn.c.
 dyn: $(BUILD)/dyn.elf
 
+# dump.elf: bench.elf that also prints every segment target, see bench.c.
+dump: $(BUILD)/dump.elf
+
 $(BUILD)/bench.elf: $(OBJECTS) $(BUILD)/bench.o
 $(BUILD)/dyn.elf: $(filter-out %/serial.o %/system.o,$(OBJECTS)) $(addprefix $(BUILD)/dyn-,serial.o system.o) $(BUILD)/dyn.o
-$(BUILD)/bench.elf $(BUILD)/dyn.elf:
+$(BUILD)/dump.elf: $(OBJECTS) $(BUILD)/dump.o
+$(BUILD)/bench.elf $(BUILD)/dyn.elf $(BUILD)/dump.elf:
 	$(CC) -o $@ $^ -lm -Wl,--gc-sections
 	avr-size $@
 	@set -- $$(avr-size $@ | tail -1); [ $$(($$1 + $$2)) -le 32768 ] || { echo "$@: $$(($$1 + $$2)) bytes do not fit 32768"; exit 1; }
@@ -50,6 +54,9 @@ $(BUILD)/dyn-system.o: DYN = -Dsystem_execute_line=tb_system_execute_line
 $(BUILD)/dyn-%.o: $(SRC)/%.c | $(BUILD)
 	$(CC) $(DYN) -c $< -o $@
 
+$(BUILD)/dump.o: bench.c $(BUILD)/lines.h | $(BUILD)
+	$(CC) -DTB_DUMP -I$(BUILD) -c $< -o $@
+
 $(BUILD)/dyn.o: dyn.c | $(BUILD)
 	$(CC) -c $< -o $@
 
@@ -68,4 +75,4 @@ run-dyn: $(BUILD)/dyn.elf
 clean:
 	rm -f $(BUILD)/*.o $(BUILD)/*.elf $(BUILD)/lines.h
 
-.PHONY: all dyn run run-dyn clean
+.PHONY: all dyn dump run run-dyn clean

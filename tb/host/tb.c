@@ -7,6 +7,10 @@
    Usage:
      tb FILE.vec...            run vector files
      tb --random N SEED        N random curves, failures shrunk to a minimal line
+     tb --hash LINES           segment count and hash per measured line of
+                               tb/avr/lines.txt, as tb/avr/bench.c prints them
+     tb --dump LINES OUT       check the segment targets that tb/avr dump.elf
+                               printed under simavr (OUT) against the model
 
    Vector file syntax, one statement per line, '#' starts a comment:
      = name [@bug]             new test; machine at X-100 Y-100 Z-10 (mm), work
@@ -199,6 +203,18 @@ static double turn(const double *d0, const double *d1)  /* angle between two dir
 #define DENSE 4000
 static double dense[DENSE + 1][2], poly[MAXSEG + 1][2];
 
+/* Two-sided distance in XY between the polyline start, pts[0..n) and the model curve. */
+static double curve_dev(const curve_t *c, const float *start, pt_t *pts, int n)
+{
+  for (int k = 0; k <= DENSE; k++) { dense[k][0] = bez(c, 0, (double)k/DENSE); dense[k][1] = bez(c, 1, (double)k/DENSE); }
+  poly[0][0] = start[0]; poly[0][1] = start[1];
+  for (int k = 0; k < n; k++) { poly[k+1][0] = pts[k][0]; poly[k+1][1] = pts[k][1]; }
+  double dev = 0;
+  for (int k = 0; k <= DENSE; k++) { double d = dist_to_poly(dense[k], poly, n + 1); if (d > dev) dev = d; }
+  for (int k = 0; k <= n; k++) { double d = dist_to_poly(poly[k], dense, DENSE + 1); if (d > dev) dev = d; }
+  return dev;
+}
+
 static void check_curve(const curve_t *c, const float *start)
 {
   int n = nseg < MAXSEG ? nseg : MAXSEG;
@@ -213,13 +229,7 @@ static void check_curve(const curve_t *c, const float *start)
     int32_t want = (int32_t)lroundf(gc_state.position[a] * settings.steps_per_mm[a]);
     if (steps[a] != want) fail("planner steps %d != parser position steps %d, axis %d", steps[a], want, a);
   }
-  /* Two-sided distance in XY between the polyline and the model curve. */
-  for (int k = 0; k <= DENSE; k++) { dense[k][0] = bez(c, 0, (double)k/DENSE); dense[k][1] = bez(c, 1, (double)k/DENSE); }
-  poly[0][0] = start[0]; poly[0][1] = start[1];
-  for (int k = 0; k < n; k++) { poly[k+1][0] = seg[k][0]; poly[k+1][1] = seg[k][1]; }
-  double dev = 0;
-  for (int k = 0; k <= DENSE; k++) { double d = dist_to_poly(dense[k], poly, n + 1); if (d > dev) dev = d; }
-  for (int k = 0; k <= n; k++) { double d = dist_to_poly(poly[k], dense, DENSE + 1); if (d > dev) dev = d; }
+  double dev = curve_dev(c, start, seg, n);
   if (dev > tol) fail("deviation %.4f mm > tol %g (%d segments)", dev, tol, nseg);
   if (m.inv && m.f > 0 && fabs(line_time*m.f - 1) > 0.02) fail("G93 time %g min, expected %g", line_time, 1/m.f);
   /* Corners: sharpest turn inside this curve and at the join with the previous one. */
@@ -471,10 +481,74 @@ static void run_hash(const char *path)
   exit(0);
 }
 
+/* Segment targets printed by tb/avr dump.elf for the lines of LINES, checked
+   against the model: "line host-seg host-dev avr-seg avr-dev". The host runs
+   every line too, to follow the parser state the next model line starts from.
+   Fails when an AVR curve misses its end or the tolerance; lines with a
+   non-finite target are skipped. */
+static pt_t avr[MAXSEG];
+
+static void run_dump(const char *lines, const char *out)
+{
+  FILE *fl = fopen(lines, "r"), *fo = fopen(out, "rb");
+  char raw[256], o[256];
+  if (!fl) { perror(lines); exit(2); }
+  if (!fo) { perror(out); exit(2); }
+  quiet = 1; machine_reset(); memset(&m, 0, sizeof m);
+  memset(steps, 0, sizeof(steps)); memcpy(sys_position, steps, sizeof(steps));
+  plan_sync_position(); gc_sync_position();
+  int bad = 0, curves = 0;
+  while (fgets(raw, sizeof raw, fl)) {
+    raw[strcspn(raw, "\r\n")] = 0;
+    if (!*raw || *raw == '#') continue;
+    int measure = *raw == '*';
+    char *g = raw + measure;
+    int found = 0, na = 0;          /* the AVR echoes the line, then its targets */
+    while (!found && fgets(o, sizeof o, fo)) { o[strcspn(o, "\r\n")] = 0; found = !strcmp(o, g); }
+    if (!found) { printf("%s: not in %s\n", g, out); exit(2); }
+    long pos = ftell(fo);
+    uint32_t b[N_AXIS];
+    while (fgets(o, sizeof o, fo) && sscanf(o, "p %u %u %u", &b[0], &b[1], &b[2]) == N_AXIS) {
+      if (na < MAXSEG) memcpy(avr[na], b, sizeof(pt_t));
+      na++; pos = ftell(fo);
+    }
+    fseek(fo, pos, SEEK_SET);
+    float start[N_AXIS], wco[N_AXIS];
+    memcpy(start, gc_state.position, sizeof start);
+    for (int a = 0; a < N_AXIS; a++) wco[a] = gc_state.coord_system[a] + gc_state.coord_offset[a] + (a == Z_AXIS ? gc_state.tool_length_offset : 0);
+    curve_t c = model_line(g, start, wco);
+    nseg = 0;
+    uint8_t st = gc_execute_line(g);
+    tb_drain();
+    if (!measure || !c.ok || st) continue;
+    int n = na < MAXSEG ? na : MAXSEG, fin = 1;
+    for (int k = 0; k < n; k++) for (int a = 0; a < N_AXIS; a++) fin &= isfinite(avr[k][a]);
+    if (!fin) { printf("%s: non-finite AVR target, skipped\n", g); continue; }
+    curves++;
+    double hd = curve_dev(&c, start, seg, nseg < MAXSEG ? nseg : MAXSEG);
+    double ad = na ? curve_dev(&c, start, avr, n) : 1e300;
+    int end = na && !memcmp(avr[n-1], gc_state.position, sizeof(pt_t));
+    /* At the segment cap the tolerance is given up on purpose; the AVR must
+       then still be as close as the host. */
+    int cap = 0;
+#ifdef BEZIER_MAX_SEGMENTS
+    cap = na >= BEZIER_MAX_SEGMENTS;
+#endif
+    int ok = end && (ad <= tol || (cap && ad <= hd * 1.001 + 1e-4));
+    printf("%s host %d %.4f avr %d %.4f%s%s\n", g, nseg, hd, na, ad, cap ? " (cap)" : "",
+           ok ? "" : end ? "  FAIL tol" : "  FAIL end");
+    bad += !ok;
+  }
+  fclose(fl); fclose(fo);
+  printf("dump: %d curves, %d failed\n", curves, bad);
+  exit(bad != 0 || curves == 0);
+}
+
 int main(int argc, char **argv)
 {
   setvbuf(stdout, NULL, _IONBF, 0);
   if (argc == 3 && !strcmp(argv[1], "--hash")) run_hash(argv[2]);
+  if (argc == 4 && !strcmp(argv[1], "--dump")) run_dump(argv[2], argv[3]);
   if (argc == 4 && !strcmp(argv[1], "--random")) run_random(atol(argv[2]), strtoul(argv[3], NULL, 0));
   else for (int i = 1; i < argc; i++) run_file(argv[i]);
   printf("%d checks: %d pass, %d FAIL, %d xfail, %d XPASS\n", checks, n_pass, n_fail, n_xfail, n_xpass);

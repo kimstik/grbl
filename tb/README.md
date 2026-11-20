@@ -8,7 +8,9 @@ Two benches, both built from the real firmware sources, no copies:
   double model. `make -C tb/host test`, `tb/host/mutate.sh`.
 - `avr/` - the same sources for ATmega328P with the firmware flags, run under
   simavr in CI for every compiler of the matrix: cycle counts, stack use, and
-  whether the AVR emits the same segments as the host (`lines.txt`).
+  whether the AVR emits the same segments as the host (`lines.txt`). The
+  `dump` build prints every AVR segment target, `tb --dump` checks them
+  against the host model.
 
 Expectations are the specification (LinuxCNC G5/G5.1 semantics plus the
 decisions below), not what the current code does. A test that fails on a
@@ -77,6 +79,7 @@ Decisions that tests encode:
 | 46 | Half-step boundary never steps; curve 60 m from origin                  | host `travel`         | pass                                    |
 | 47 | Series lifetime: G4, G28, G92, rejected line, reset, check mode         | host vectors          | pass                                    |
 | 48 | G4+G5 share P; G5.1 continuation rules; repeated Q; G93 F0              | host vectors          | pass                                    |
+| 49 | AVR segment targets within the tolerance, exact end                    | CI simavr `--dump`    | pass (cap line: as close as the host)   |
 
 ## 10, 11, 35: motion under simavr
 
@@ -112,6 +115,9 @@ each compiler reassociate the inlined control point and Horner arithmetic
 in its own way (host experiments: dropping -ffast-math or tree vectorization
 each moves one of the two hashes onto the avr-gcc 7.3 one). Segment count and the
 exact end point are the same everywhere. G2 differs because sin/cos do.
+Test 49 checks the differing points themselves: with avr-gcc 7.3 (local
+simavr) G5.1 deviates 0.0826 mm and [1] 0.0029 mm, the same as the host to
+four decimals.
 
 ## 37: grblHAL
 

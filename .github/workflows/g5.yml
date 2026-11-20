@@ -119,6 +119,7 @@ jobs:
         run: |
           make -s -C tb/avr
           make -s -C tb/avr dyn || echo "::warning::dyn.elf does not build or fit with avr-gcc ${{ matrix.gcc }}"
+          make -s -C tb/avr dump
           set -- $(avr-size --format=berkeley build/main.elf | tail -1)
           echo $(( 2048 - $2 - $3 )) > tb/avr/build/free-ram.txt
       - uses: actions/upload-artifact@v4
@@ -127,6 +128,7 @@ jobs:
           path: |
             tb/avr/build/bench.elf
             tb/avr/build/dyn.elf
+            tb/avr/build/dump.elf
             tb/avr/build/free-ram.txt
 
   # Correctness on the PC: vectors, random curves, G5-only build, mutants.
@@ -183,6 +185,20 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           awk 'NR == FNR { h[$1] = $2 " " $3 " " $4; next }
                NF == 11 && h[$1] != $2 " " $3 " " $11 { print "::warning::segments differ from host on " $1 }' host.txt avr.txt
+      # The AVR segment targets themselves against the curve model: hashes
+      # that differ from the host must still be within the tolerance.
+      - name: Segment targets
+        run: |
+          timeout 600 simavr -m atmega328p -f 16000000 elf/dump.elf 2>&1 |
+            sed 's/\x1b\[[0-9;]*m//g; s/\.*$//' > dump.txt
+          grep -qx done dump.txt
+          tb/host/build/tb --dump tb/avr/lines.txt dump.txt | tee dump-check.txt
+          {
+            printf '\n### segment targets, avr-gcc ${{ matrix.gcc }}\n\n```\n'
+            cat dump-check.txt
+            printf '```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+          tail -1 dump-check.txt | grep -q ', 0 failed$'
       # Planner fill while streaming curves, feed hold and resume, stack depth
       # with the stepper and serial interrupts.
       - name: Motion
