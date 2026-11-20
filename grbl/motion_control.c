@@ -415,7 +415,7 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
   // Segments for a deviation of BEZIER_SIGMA at most: sqrt(0.75*max|P[k]-2P[k+1]+P[k+2]|/SIGMA),
   // with 0.8 for 0.75 to leave 6% of SIGMA to float rounding (a parabola meets the bound exactly).
   // Huge handles, inf and NaN fail the comparison and get the cap, never an undefined count.
-  float n = sqrtf(sqrtf(max(a, b))*(0.8f/BEZIER_SIGMA));
+  float n = sqrtf(sqrtf(max(a, b))*(0.8f/(BEZIER_SIGMA)));
   uint16_t segments = BEZIER_MAX_SEGMENTS;
   if (n < BEZIER_MAX_SEGMENTS) { segments = 1 + n; }
   float step = 1.0f/segments;
@@ -503,22 +503,25 @@ static uint8_t bezier_finite(float x)
 void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position,
                        float *first, float *second)
 {
-  float p[N_AXIS], a = 0.0f, b = 0.0f, scale = 0.0f;
+  float p[N_AXIS], c[2][3], a = 0.0f, b = 0.0f, scale = 0.0f;
   uint8_t i;
   for (i = 0; i < 2; i++) {
     float e0 = second[i] - 2.0f*first[i] + position[i];
     float e1 = target[i] - 2.0f*second[i] + first[i];
     a += e0*e0;
     b += e1*e1;
-    scale += fabsf(position[i]) + fabsf(3.0f*(first[i] - position[i]))
-           + fabsf(3.0f*e0) + fabsf(e1 - e0);
+    c[i][0] = 3.0f*(first[i] - position[i]);
+    c[i][1] = 3.0f*e0;
+    c[i][2] = e1 - e0;
+    scale += fabsf(position[i]) + fabsf(c[i][0]) + fabsf(c[i][1]) + fabsf(c[i][2]);
   }
-  float n = sqrtf(sqrtf(max(a, b))*(0.8f/BEZIER_SIGMA));
+  float s2 = (BEZIER_SIGMA) - BEZIER_ADAPTIVE_ROUNDOFF*scale;
+  uint8_t adaptive = bezier_finite(s2) && (s2 > 0.0f);
+  // The floor must satisfy the reduced geometric budget too, not just the external one.
+  float n = sqrtf(sqrtf(max(a, b))*(0.8f/(adaptive ? s2 : (BEZIER_SIGMA))));
   uint16_t segments = BEZIER_MAX_SEGMENTS;
   if (n < BEZIER_MAX_SEGMENTS) { segments = 1 + n; }
   float step = 1.0f/segments;
-  float s2 = BEZIER_SIGMA - BEZIER_ADAPTIVE_ROUNDOFF*scale;
-  uint8_t adaptive = bezier_finite(s2) && (s2 > 0.0f);
   s2 *= s2;
 #ifdef BEZIER_ADAPTIVE_TRACE
   bezier_adaptive_trials = 0;
@@ -535,7 +538,7 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
   float s = 1e-30f;
   uint16_t j = 0;
   memcpy(p, position, sizeof(p));
-  for (i = 0; i < 2; i++) { d[i] = 3.0f*(first[i] - position[i]); }
+  for (i = 0; i < 2; i++) { d[i] = c[i][0]; }
   do {
     float tn, q[2], e[2], f = 0.5f;
     uint8_t floor = 0, accepted = 0, trials = 0;
@@ -554,10 +557,8 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
         h = tn - t;
       }
       for (i = 0; i < 2; i++) {
-        float e0 = second[i] - 2.0f*first[i] + position[i];
-        float e1 = target[i] - 2.0f*second[i] + first[i];
-        q[i] = tn*(3.0f*(first[i] - position[i]) + tn*(3.0f*e0 + tn*(e1 - e0)));
-        e[i] = 3.0f*(first[i] - position[i]) + tn*(6.0f*e0 + tn*3.0f*(e1 - e0));
+        q[i] = tn*(c[i][0] + tn*(c[i][1] + tn*c[i][2]));
+        e[i] = c[i][0] + tn*(2.0f*c[i][1] + tn*3.0f*c[i][2]);
       }
       if (adaptive) {
 #ifdef BEZIER_ADAPTIVE_TRACE
