@@ -155,6 +155,15 @@ int main(void)
       field(nonfin); field(hash);
     }
     printPgmString(PSTR("\r\n"));
+#ifdef BEZIER_ADAPTIVE_TRACE
+    if (measure) {
+      extern uint16_t bezier_adaptive_trials;
+      extern uint8_t bezier_adaptive_fallback;
+      printPgmString(PSTR("adaptive"));
+      field(bezier_adaptive_trials); field(bezier_adaptive_fallback);
+      printPgmString(PSTR("\r\n"));
+    }
+#endif
   }
   printPgmString(PSTR("stack"));
   field(untouched());

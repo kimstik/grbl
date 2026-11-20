@@ -793,6 +793,11 @@ static void run_dump(const char *lines, const char *out, int strict)
     uint8_t st = gc_execute_line(g);
     tb_drain();
     if (!measure) continue;
+#ifdef BEZIER_ADAPTIVE_TRACE
+    extern uint16_t bezier_adaptive_trials;
+    extern uint8_t bezier_adaptive_fallback;
+    printf("adaptive %u %u\n", bezier_adaptive_trials, bezier_adaptive_fallback);
+#endif
     if (strict && (st || !summary || avr_status || !c.ok || !parsed.ok || !na || na > MAXSEG)) {
       printf("%s: FAIL status host %u avr %u (summary %d), model %d, parsed %d, targets %d\n", g, st, avr_status, summary, c.ok, parsed.ok, na);
       curves++; bad++; continue;

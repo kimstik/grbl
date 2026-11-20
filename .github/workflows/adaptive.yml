@@ -1,0 +1,75 @@
+name: Adaptive lines research
+
+on:
+  push:
+    branches: [wip/adaptive-lines]
+  workflow_dispatch:
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        tolerance:
+          - {tol: '.002', sigma: '.004'}
+          - {tol: '.01', sigma: '.02'}
+          - {tol: '.1', sigma: '.2'}
+        mode: [xy, zl, g93]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain and simulator
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends gcc-avr avr-libc binutils-avr simavr
+          avr-gcc --version
+      - name: Common corpus at the same final budget
+        id: corpus
+        continue-on-error: true
+        run: sh tb/compare/adaptive.sh '${{ matrix.tolerance.tol }}' '${{ matrix.tolerance.sigma }}' '${{ matrix.mode }}' core
+      - name: Full firmware sizes
+        if: always()
+        run: |
+          CC=$(make -s --no-print-directory --eval 'print-compile: ; @echo $(COMPILE)' print-compile)
+          mkdir -p tb/compare/build
+          printf '| method | flash | RAM | fits 32256 |\n|---|---|---|---|\n' >> "$GITHUB_STEP_SUMMARY"
+          case '${{ matrix.mode }}' in
+            zl) Z='-DBEZIER_Z_LINEAR=2' ;;
+            g93) Z='-DBEZIER_Z_LINEAR=2 -DBEZIER_EXACT_INVERSE_TIME' ;;
+            *) Z='' ;;
+          esac
+          for method in wang adaptive; do
+            EXTRA=''
+            [ "$method" = adaptive ] && EXTRA='-DBEZIER_ADAPTIVE_LINES'
+            mkdir -p build/size-$method
+            if timeout 300 nice -n 19 make -s BUILDDIR=build/size-$method COMPILE="$CC -DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES -DBEZIER_SIGMA=${{ matrix.tolerance.sigma }}f $Z $EXTRA" > tb/compare/build/size-$method.txt 2>&1; then
+              set -- $(avr-size build/size-$method/main.elf | tail -1)
+              flash=$(( $1 + $2 )); ram=$(( $2 + $3 ))
+              fit=no; [ "$flash" -le 32256 ] && fit=yes
+              printf '| %s | %d | %d | %s |\n' "$method" "$flash" "$ram" "$fit" >> "$GITHUB_STEP_SUMMARY"
+            else
+              printf '| %s | link failed | | no |\n' "$method" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+      - name: Result summary
+        if: always()
+        run: |
+          printf '\nGeometry and fit are separate outcomes; a failed comparison is preserved in the logs.\n\n' >> "$GITHUB_STEP_SUMMARY"
+          for f in tb/compare/build/*/*.strict; do
+            [ -f "$f" ] || continue
+            printf '\n### %s\n\n```\n' "$f" >> "$GITHUB_STEP_SUMMARY"
+            cat "$f" >> "$GITHUB_STEP_SUMMARY"
+            printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: adaptive-${{ matrix.tolerance.tol }}-${{ matrix.mode }}
+          path: |
+            tb/compare/build
+            tb/avr/build/compare-*/bench.elf
+            tb/avr/build/compare-*/dump.elf
+      - name: Preserve failed comparison status
+        if: steps.corpus.outcome == 'failure'
+        run: exit 1
