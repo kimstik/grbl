@@ -27,7 +27,7 @@ jobs:
       - name: Common corpus at the same final budget
         id: corpus
         continue-on-error: true
-        run: sh tb/compare/adaptive.sh '${{ matrix.tolerance.tol }}' '${{ matrix.tolerance.sigma }}' '${{ matrix.mode }}' core
+        run: METHODS='wang adaptive local' sh tb/compare/adaptive.sh '${{ matrix.tolerance.tol }}' '${{ matrix.tolerance.sigma }}' '${{ matrix.mode }}' core
       - name: Full firmware sizes
         if: always()
         run: |
@@ -39,9 +39,10 @@ jobs:
             g93) Z='-DBEZIER_Z_LINEAR=2 -DBEZIER_EXACT_INVERSE_TIME' ;;
             *) Z='' ;;
           esac
-          for method in wang adaptive; do
+          for method in wang adaptive local; do
             EXTRA=''
             [ "$method" = adaptive ] && EXTRA='-DBEZIER_ADAPTIVE_LINES'
+            [ "$method" = local ] && EXTRA='-DBEZIER_ADAPTIVE_LINES -DBEZIER_ADAPTIVE_LOCAL_WANG'
             mkdir -p build/size-$method
             if timeout 300 nice -n 19 make -s BUILDDIR=build/size-$method COMPILE="$CC -DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES -DBEZIER_SIGMA=${{ matrix.tolerance.sigma }}f $Z $EXTRA" > tb/compare/build/size-$method.txt 2>&1; then
               set -- $(avr-size build/size-$method/main.elf | tail -1)

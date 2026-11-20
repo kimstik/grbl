@@ -534,13 +534,19 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
   uint8_t pass;
   for (pass = 0; pass < 2; pass++) {
 #endif
-  float t = 0.0f, h = 2.0f*step, old[2] = {0.0f, 0.0f}, d[2];
+  float t = 0.0f, h = 2.0f*step, old[2] = {0.0f, 0.0f};
+#ifndef BEZIER_ADAPTIVE_LOCAL_WANG
+  float d[2];
+  for (i = 0; i < 2; i++) { d[i] = c[i][0]; }
+#endif
   float s = 1e-30f;
   uint16_t j = 0;
   memcpy(p, position, sizeof(p));
-  for (i = 0; i < 2; i++) { d[i] = c[i][0]; }
   do {
-    float tn, q[2], e[2], f = 0.5f;
+    float tn, q[2], f = 0.5f;
+#ifndef BEZIER_ADAPTIVE_LOCAL_WANG
+    float e[2];
+#endif
     uint8_t floor = 0, accepted = 0, trials = 0;
     do {
       f = 0.5f;
@@ -558,12 +564,28 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
       }
       for (i = 0; i < 2; i++) {
         q[i] = tn*(c[i][0] + tn*(c[i][1] + tn*c[i][2]));
+#ifndef BEZIER_ADAPTIVE_LOCAL_WANG
         e[i] = c[i][0] + tn*(2.0f*c[i][1] + tn*3.0f*c[i][2]);
+#endif
       }
       if (adaptive) {
 #ifdef BEZIER_ADAPTIVE_TRACE
         bezier_adaptive_trials++;
 #endif
+#ifdef BEZIER_ADAPTIVE_LOCAL_WANG
+        // E(u) = B''(u)/6 is affine. Its norm attains its maximum at a piece endpoint;
+        // .8*h^2*max|E| is a conservative (margin .75/.8) same-parameter chord bound.
+        float a = 0.0f, b = 0.0f;
+        for (i = 0; i < 2; i++) {
+          float e0 = c[i][1]*(1.0f/3.0f) + t*c[i][2];
+          float e1 = c[i][1]*(1.0f/3.0f) + tn*c[i][2];
+          a += e0*e0;
+          b += e1*e1;
+        }
+        float h2 = h*h;
+        accepted = 0.64f*(h2*h2)*max(a, b) <= s2;
+        f = accepted ? 2.0f : 0.5f;
+#else
         float cx = q[0] - old[0], cy = q[1] - old[1];
         float cc = cx*cx + cy*cy, k = h*(1.0f/3.0f);
         float ax = k*d[0], ay = k*d[1], bx = k*e[0], by = k*e[1];
@@ -575,6 +597,7 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
           f = (1.25f - 0.25f*r)*0.95f;
           if (!(f > 0.5f)) { f = 0.5f; }
         }
+#endif
         // Finite-input rejections shrink by at least 5%. This integer guard also bounds
         // invalid arithmetic: the next trial takes the floor, never an unbounded retry.
         if (++trials == 191) { h = step; } else { h *= f; }
@@ -596,7 +619,9 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
 #endif
     t = tn;
     memcpy(old, q, sizeof(old));
+#ifndef BEZIER_ADAPTIVE_LOCAL_WANG
     memcpy(d, e, sizeof(d));
+#endif
 #if BEZIER_Z_LINEAR == 2
     if (pass)
 #endif

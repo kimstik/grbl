@@ -1,6 +1,6 @@
 # Mutants for mutate.sh: id, file, exact text, replacement (tab-separated).
 # Every mutant must make the bench fail. Replacement applies to all occurrences.
-n-factor	motion_control.c	(0.8f/BEZIER_SIGMA)	(0.2f/BEZIER_SIGMA)
+n-factor	motion_control.c	(0.8f/(BEZIER_SIGMA))	(0.2f/(BEZIER_SIGMA))
 n-sqrt	motion_control.c	sqrtf(sqrtf(max(a, b))	sqrtf((max(a, b))
 n-first-only	motion_control.c	max(a, b)	a
 n-last-only	motion_control.c	max(a, b)	b
@@ -33,7 +33,7 @@ first-ij	gcode.c	if (gc_state.modal.motion != MOTION_MODE_CUBIC_SPLINE) {	if (0)
 quad-ij-zero	gcode.c	if (gc_block.values.ijk[X_AXIS] == 0.0f && gc_block.values.ijk[Y_AXIS] == 0.0f) {	if (0) {
 words-used	gcode.c	bit_false(value_words, (bit(WORD_P)|bit(WORD_Q)|bit(WORD_I)|bit(WORD_J)));	bit_false(value_words, (bit(WORD_P)|bit(WORD_Q)|bit(WORD_I)|bit(WORD_J)|bit(WORD_R)));
 OPT	-DBEZIER_SIGMA=settings.arc_tolerance
-tol-ignored	motion_control.c	(0.8f/BEZIER_SIGMA)	(0.8f/0.1f)
+tol-ignored	motion_control.c	(0.8f/(BEZIER_SIGMA))	(0.8f/0.1f)
 OPT	-DBEZIER_Z_LINEAR=1
 zt-square	motion_control.c	p[Z_AXIS] = position[Z_AXIS] + t*(target[Z_AXIS] - position[Z_AXIS]);	p[Z_AXIS] = position[Z_AXIS] + t*t*(target[Z_AXIS] - position[Z_AXIS]);
 zt-no-start	motion_control.c	p[Z_AXIS] = position[Z_AXIS] + t*(target[Z_AXIS] - position[Z_AXIS]);	p[Z_AXIS] = t*(target[Z_AXIS] - position[Z_AXIS]);

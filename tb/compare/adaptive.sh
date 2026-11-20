@@ -31,9 +31,14 @@ run_sim() {
     printf 'simulation did not reach done: %s\n' "$2" >&2; return 1
   fi
 }
-for kind in wang adaptive; do
+for kind in ${METHODS:-wang adaptive}; do
   extra=''
-  [ "$kind" = adaptive ] && extra='-DBEZIER_ADAPTIVE_LINES -DBEZIER_ADAPTIVE_TRACE'
+  case $kind in
+    adaptive) extra='-DBEZIER_ADAPTIVE_LINES -DBEZIER_ADAPTIVE_TRACE' ;;
+    local) extra='-DBEZIER_ADAPTIVE_LINES -DBEZIER_ADAPTIVE_LOCAL_WANG -DBEZIER_ADAPTIVE_TRACE' ;;
+    wang) ;;
+    *) printf 'unknown method: %s\n' "$kind" >&2; exit 2 ;;
+  esac
   defs="-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES -DBEZIER_SIGMA=${SIGMA}f -DTB_ARC_TOLERANCE=${TOL}f -DTB_XY_BUDGET=${SIGMA}f $zopt $extra"
   build=build/compare-$TAG-$kind
   printf '%s\n' "$CCLINE $defs" > "$OUT/$kind.flags"
@@ -50,6 +55,7 @@ for kind in wang adaptive; do
   run_sim "tb/avr/$build/dump.elf" "$OUT/$kind.dump" || { status=1; continue; }
   timeout 300 nice -n 19 "tb/host/$build/tb" --hash "$OUT/lines.txt" > "$OUT/$kind.host-hash"
   timeout 300 nice -n 19 "tb/host/$build/tb" --dump-strict "$OUT/lines.txt" "$OUT/$kind.dump.clean" > "$OUT/$kind.strict" 2>&1 || status=1
+  timeout 300 nice -n 19 python tb/compare/audit.py "$OUT/$kind.dump.clean" "$OUT/$kind.strict" --budget "$SIGMA" > "$OUT/$kind.audit" 2>&1 || status=1
   printf '%s: %s\n' "$kind" "$OUT/$kind.strict"
 done
 exit $status
