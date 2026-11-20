@@ -258,8 +258,13 @@ static double reach(const curve_t *c)  /* largest XY coordinate of the control p
    0.75*bend/maxseg^2, and float arithmetic no less than a few last bits. */
 static double tol_for(const curve_t *c)
 {
+#ifdef BEZIER_CIRCLE_FIT
+  /* No cap allowance: the fitter must reject before queuing if the bound fails. */
+  return tol >= 0 ? tol : 2*settings.arc_tolerance;
+#else
   double t = BEZIER_SIGMA, cap = 0.75*bend(c)/(maxseg*maxseg);
   return tol >= 0 ? tol : (cap > t ? cap : t) + 4*FLT_EPSILON*reach(c);
+#endif
 }
 
 static double speed(const curve_t *c, double t)  /* |B'(t)| in XY */
@@ -501,6 +506,11 @@ static void run_file(const char *path)
       sscanf(s + 1, " %159[^\r\n]", name);
       static const struct { const char *tag; int on; } opt[] = {
         { "tol", !__builtin_constant_p(BEZIER_SIGMA) },
+#ifdef BEZIER_CIRCLE_FIT
+        { "circle", 1 },
+#else
+        { "circle", 0 },
+#endif
 #ifdef BEZIER_Z_LINEAR
         { "z", 1 }, { "zlen", BEZIER_Z_LINEAR == 2 },
 #else

@@ -882,9 +882,11 @@ uint8_t gc_execute_line(char *line)
             gc_block.values.q *= MM_PER_INCH;
           }
 
+#ifndef BEZIER_CIRCLE_FIT
           // Store P,Q for next G5 command (for implicit I,J calculation)
           gc_state.spline_pq[X_AXIS] = gc_block.values.p;
           gc_state.spline_pq[Y_AXIS] = gc_block.values.q;
+#endif
 
           // Mark these words as used
           bit_false(value_words, (bit(WORD_P)|bit(WORD_Q)|bit(WORD_I)|bit(WORD_J)));
@@ -961,6 +963,32 @@ uint8_t gc_execute_line(char *line)
   }
   if (axis_command) { bit_false(value_words,(bit(WORD_X)|bit(WORD_Y)|bit(WORD_Z))); } // Remove axis words.
   if (value_words) { FAIL(STATUS_GCODE_UNUSED_WORDS); } // [Unused words]
+
+#ifdef BEZIER_CIRCLE_FIT
+  float spline_first[2], spline_second[2];
+  uint8_t spline_motion = axis_command == AXIS_COMMAND_MOTION_MODE &&
+      (gc_block.modal.motion == MOTION_MODE_CUBIC_SPLINE
+#ifdef ENABLE_QUADRATIC_SPLINES
+       || gc_block.modal.motion == MOTION_MODE_QUADRATIC_SPLINE
+#endif
+      );
+  if (spline_motion) {
+    uint8_t a;
+    for (a=0; a<2; a++) {
+      spline_first[a]=gc_state.position[a]+gc_block.values.ijk[a];
+      spline_second[a]=gc_block.values.xyz[a]+(a == X_AXIS ? gc_block.values.p : gc_block.values.q);
+#ifdef ENABLE_QUADRATIC_SPLINES
+      if (gc_block.modal.motion == MOTION_MODE_QUADRATIC_SPLINE) {
+        spline_second[a]=gc_block.values.xyz[a]+(2.0f/3.0f)*(spline_first[a]-gc_block.values.xyz[a]);
+        spline_first[a]=gc_state.position[a]+(2.0f/3.0f)*gc_block.values.ijk[a];
+      }
+#endif
+    }
+    // Check limits before STEP 4 changes modal state, feed, spindle or the motion queue.
+    uint8_t spline_status=mc_cubic_b_spline_validate(gc_block.values.xyz,gc_state.position,spline_first,spline_second);
+    if (spline_status || sys.abort) { return(spline_status); }
+  }
+#endif
 
   /* -------------------------------------------------------------------------------------
      STEP 4: EXECUTE!!
@@ -1191,6 +1219,13 @@ uint8_t gc_execute_line(char *line)
               || (gc_state.modal.motion == MOTION_MODE_QUADRATIC_SPLINE)
 #endif
               ) {
+#ifdef BEZIER_CIRCLE_FIT
+        if (gc_state.modal.motion == MOTION_MODE_CUBIC_SPLINE) {
+          gc_state.spline_pq[X_AXIS]=gc_block.values.p;
+          gc_state.spline_pq[Y_AXIS]=gc_block.values.q;
+        }
+        mc_cubic_b_spline(gc_block.values.xyz,pl_data,gc_state.position,spline_first,spline_second);
+#else
         // One call for G5 and G5.1: the compiler then inlines mc_cubic_b_spline here, as it does
         // mc_arc, and its locals share this frame instead of stacking a frame of their own on it.
         float cp1[2], cp2[2]; // X and Y only, the curve is planar
@@ -1231,6 +1266,7 @@ uint8_t gc_execute_line(char *line)
 
         // Execute the cubic Bezier spline
         mc_cubic_b_spline(gc_block.values.xyz, pl_data, gc_state.position, cp1, cp2);
+#endif // BEZIER_CIRCLE_FIT
 #endif // ENABLE_CUBIC_SPLINES
 
       } else {

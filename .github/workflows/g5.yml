@@ -156,6 +156,18 @@ jobs:
             echo $(( 2048 - ram )) > tb/avr/build/$name/free-ram.txt
           done
 
+      - name: Experimental circle fitter size
+        run: |
+          BRANCH=$(make -s --eval 'print-compile: ; @echo $(COMPILE)' print-compile)
+          mkdir -p build/circle
+          make -s BUILDDIR=build/circle COMPILE="$BRANCH -DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES -DBEZIER_CIRCLE_FIT" build/circle/main.elf
+          set -- $(avr-size --format=berkeley build/circle/main.elf | tail -1)
+          flash=$(( $1 + $2 ))
+          printf '\n### circle prototype\n\nflash=%s, data=%s, bss=%s, spare(32256)=%s\n' "$flash" "$2" "$3" "$((32256-flash))" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$flash" -gt 32768 ]; then
+            echo "::warning::circle prototype does not fit ATmega328P ($flash bytes)"
+          fi
+
       # The simavr benches of every option combination, branch flags.
       - name: Build AVR benches
         run: |
@@ -182,6 +194,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Bench
         run: make -s -j4 -O -C tb/host test
+      - name: Circle fitter C smoke
+        run: |
+          make -s -C tb/host BUILD=build-circle OPT=-DBEZIER_CIRCLE_FIT
+          tb/host/build-circle/tb tb/host/vectors/circle.vec
+          tb/host/build-circle/tb --random 1000 1
       - name: Mutation testing
         run: tb/host/mutate.sh
 

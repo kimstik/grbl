@@ -1,0 +1,55 @@
+# Experimental single-circle fitter. Total XY budget = 2*$12; no cap allowance.
+
+= three point circles S @circle
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I3 J3 P3 Q3
+pos -90 -100 -10
+
+= three point circles loop @circle
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X-5 Y0 I-20 J30 P20 Q30
+pos -105 -100 -10
+
+= collinear reversal must not skip hidden travel @circle
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X-10 Y0 I-30 J0 P40 Q0
+pos -110 -100 -10
+
+= coincident start handle @circle
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I0 J0 P2 Q4
+pos -90 -100 -10
+
+= near straight large radius takes line fallback @circle
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I3 J0.000001 P3 Q0.000001
+pos -90 -100 -10
+
+= tiny curve @circle
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X0.01 Y0 I0.003 J0.01 P0.003 Q0.01
+pos -99.99 -100 -10
+
+= hidden inflection with large endpoint @circle
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X-10 Y8550 I-3.3333 J16.6667 P3.3333 Q-9016.667
+pos -110 8450 -10
+
+= cap rejection queues nothing @circle
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 I100000 J100000 P100000 Q100000 -> error:38
+pos -100 -100 -10
+
+= supported G5.1 conversion @circle
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5.1 X10 Y0 I3 J4
+pos -90 -100 -10

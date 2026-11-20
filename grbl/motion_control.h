@@ -49,6 +49,9 @@ void mc_arc(float *target, plan_line_data_t *pl_data, float *position, float *of
 // Execute cubic B-spline interpolation. position == current xyz, target == target xyz,
 // first == first control point xy, second == second control point xy.
 // Uses equal parameter steps, as many as Wang's bound needs for BEZIER_SIGMA.
+#ifdef BEZIER_CIRCLE_FIT
+uint8_t mc_cubic_b_spline_validate(float *target, float *position, float *first, float *second);
+#endif
 void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position,
                        float *first, float *second);
 #endif

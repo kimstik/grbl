@@ -390,6 +390,190 @@ void mc_reset()
 
 #ifdef ENABLE_CUBIC_SPLINES
 
+#ifdef BEZIER_CIRCLE_FIT
+
+typedef struct { float x, y; } bezier_xy_t;
+typedef struct { bezier_xy_t origin, k1, k2, k3; } bezier_power_t;
+
+static uint8_t bezier_finite(float x)
+{
+  union { float f; uint32_t u; } v = { x };
+  return((v.u & 0x7f800000UL) != 0x7f800000UL);
+}
+
+static bezier_xy_t bezier_point(const bezier_power_t *c, float t)
+{
+  bezier_xy_t p = {
+    c->origin.x + t*(c->k1.x + t*(c->k2.x + t*c->k3.x)),
+    c->origin.y + t*(c->k1.y + t*(c->k2.y + t*c->k3.y))
+  };
+  return(p);
+}
+
+static bezier_xy_t bezier_derivative(const bezier_power_t *c, float t)
+{
+  bezier_xy_t p = {
+    c->k1.x + t*(2.0f*c->k2.x + 3.0f*t*c->k3.x),
+    c->k1.y + t*(2.0f*c->k2.y + 3.0f*t*c->k3.y)
+  };
+  return(p);
+}
+
+static float bezier_segment_distance2(bezier_xy_t w, bezier_xy_t b, float bb)
+{
+  float dot = w.x*b.x + w.y*b.y;
+  if (dot <= 0.0f) { return(w.x*w.x + w.y*w.y); }
+  if (dot >= bb) {
+    w.x -= b.x; w.y -= b.y;
+    return(w.x*w.x + w.y*w.y);
+  }
+  dot = w.x*b.y - w.y*b.x;
+  return(dot*dot/bb);
+}
+
+// A degree-six Bernstein hull bounds |B-c|^2-r^2 over the entire parameter interval.
+// The sector test additionally rules out points on the other side of the circle.
+// This is a real-arithmetic certificate; float rounding is measured separately.
+static float bezier_circle_bound(bezier_xy_t w1, bezier_xy_t w2, bezier_xy_t b,
+                                 bezier_xy_t o, float bb, float det)
+{
+  float v1 = -(o.x*w1.x + o.y*w1.y), v2 = -(o.x*w2.x + o.y*w2.y);
+  float v3 = -(o.x*b.x + o.y*b.y);
+  float g11 = 2.0f*v1 + w1.x*w1.x + w1.y*w1.y;
+  float g22 = 2.0f*v2 + w2.x*w2.x + w2.y*w2.y;
+  float e = fabsf(v1), f;
+  f = fabsf((2.0f*v2 + 3.0f*g11)*0.2f); e = max(e,f);
+  f = fabsf((v3 + 9.0f*(v1+v2+w1.x*w2.x+w1.y*w2.y))*0.1f); e = max(e,f);
+  f = fabsf((2.0f*(v1+v3+w1.x*b.x+w1.y*b.y) + 3.0f*g22)*0.2f); e = max(e,f);
+  f = fabsf(v2+v3+w2.x*b.x+w2.y*b.y); e = max(e,f);
+  f = fabsf(2.0f*v3+bb); e = max(e,f);
+  float c1 = o.y*w1.x-o.x*w1.y, c2 = o.y*w2.x-o.x*w2.y;
+  float c3 = o.y*b.x-o.x*b.y;
+  float e1 = c3-c1+w1.x*b.y-w1.y*b.x, e2 = c3-c2+w2.x*b.y-w2.y*b.x;
+  if (det < 0.0f) { c1=-c1; c2=-c2; e1=-e1; e2=-e2; }
+  if (!(c1 >= 0.0f && c2 >= 0.0f && e1 >= 0.0f && e2 >= 0.0f)) { return(-1.0f); }
+  return(e);
+}
+
+// Spline-only discretization: no change to G2/G3 or mc_arc. The sagitta is bounded
+// in real arithmetic by r*step^2/8. A 0.75*$12 budget leaves rounding headroom;
+// each point is rotated from the original radius, with no Taylor drift to accumulate.
+static uint16_t bezier_arc_segments(bezier_xy_t b, bezier_xy_t o, float r, float tol,
+                                    float *angle)
+{
+  *angle = atan2f(o.y*b.x-o.x*b.y, r*r-o.x*b.x-o.y*b.y);
+  float n = fabsf(*angle)*sqrtf(r/(6.0f*tol));
+  if (!bezier_finite(n) || !(n < BEZIER_MAX_SEGMENTS)) { return(0); }
+  return(1+(uint16_t)n);
+}
+
+static uint8_t bezier_walk(float *target, plan_line_data_t *pl_data, float *position,
+                           float *first, float *second, uint8_t dry)
+{
+  bezier_power_t c;
+  c.origin.x=position[X_AXIS]; c.origin.y=position[Y_AXIS];
+  c.k1.x=3.0f*(first[X_AXIS]-position[X_AXIS]);
+  c.k1.y=3.0f*(first[Y_AXIS]-position[Y_AXIS]);
+  c.k2.x=3.0f*(second[X_AXIS]-2.0f*first[X_AXIS]+position[X_AXIS]);
+  c.k2.y=3.0f*(second[Y_AXIS]-2.0f*first[Y_AXIS]+position[Y_AXIS]);
+  c.k3.x=target[X_AXIS]-3.0f*second[X_AXIS]+3.0f*first[X_AXIS]-position[X_AXIS];
+  c.k3.y=target[Y_AXIS]-3.0f*second[Y_AXIS]+3.0f*first[Y_AXIS]-position[Y_AXIS];
+  float tol=settings.arc_tolerance, t0=0.0f, h=1.0f;
+  bezier_xy_t p=c.origin, d0=c.k1;
+  uint16_t chords=0;
+  while (t0 < 1.0f) {
+    // Fitting and the dry pass can run without mc_line: keep realtime and the stepper alive.
+    protocol_execute_realtime();
+    if (sys.abort) { return(STATUS_OK); }
+    float t1=t0+h;
+    if (t1 > 1.0f) { t1=1.0f; }
+    float hh=t1-t0;
+    bezier_xy_t q;
+    if (t1 == 1.0f) { q.x=target[X_AXIS]; q.y=target[Y_AXIS]; }
+    else { q=bezier_point(&c,t1); }
+    bezier_xy_t d1=bezier_derivative(&c,t1), b={q.x-p.x,q.y-p.y};
+    bezier_xy_t w1={hh*(1.0f/3.0f)*d0.x,hh*(1.0f/3.0f)*d0.y};
+    bezier_xy_t w2={b.x-hh*(1.0f/3.0f)*d1.x,b.y-hh*(1.0f/3.0f)*d1.y};
+    float bb=b.x*b.x+b.y*b.y;
+    float e=bezier_segment_distance2(w1,b,bb), f=bezier_segment_distance2(w2,b,bb);
+    e=max(e,f);
+    uint8_t ok=0, grow=0;
+    uint16_t n=1;
+    bezier_xy_t o={0.0f,0.0f};
+    float angle=0.0f;
+    if (bezier_finite(e) && e <= 4.0f*tol*tol) {
+      ok=1; grow=16.0f*e <= 4.0f*tol*tol;
+    } else {
+      bezier_xy_t a=bezier_point(&c,t0+0.5f*hh);
+      a.x-=p.x; a.y-=p.y;
+      float aa=a.x*a.x+a.y*a.y, ab=a.x*b.x+a.y*b.y;
+      float det=2.0f*(a.x*b.y-a.y*b.x);
+      if (det != 0.0f && ab > aa && bb > ab) {
+        o.x=(b.y*aa-a.y*bb)/det; o.y=(a.x*bb-b.x*aa)/det;
+        float r=hypot_f(o.x,o.y);
+        if (r >= tol && r <= 1.0e5f*tol) {
+          e=bezier_circle_bound(w1,w2,b,o,bb,det);
+          float lim=tol*(2.0f*r-tol);
+          if (bezier_finite(e) && e >= 0.0f && e <= lim) {
+            n=bezier_arc_segments(b,o,r,tol,&angle);
+            if (n) { ok=2; grow=8.0f*e <= lim; }
+          }
+        }
+      }
+    }
+    if (!ok) {
+      if (0.5f*hh < (1.0f/2048.0f)) { return(STATUS_GCODE_MAX_VALUE_EXCEEDED); }
+      h=0.5f*hh;
+      continue;
+    }
+    if (n > BEZIER_MAX_SEGMENTS-chords) { return(STATUS_GCODE_MAX_VALUE_EXCEEDED); }
+    chords+=n;
+    if (!dry) {
+      float v[N_AXIS];
+      memcpy(v,position,sizeof(v));
+      if (ok == 2) {
+        uint16_t j;
+        float cx=p.x+o.x, cy=p.y+o.y, step=angle/n;
+        for (j=1; j<n; j++) {
+          float sn=sinf(j*step), cs=cosf(j*step);
+          v[X_AXIS]=cx-o.x*cs+o.y*sn;
+          v[Y_AXIS]=cy-o.x*sn-o.y*cs;
+          mc_line(v,pl_data);
+          if (sys.abort) { return(STATUS_OK); }
+        }
+      }
+      v[X_AXIS]=q.x; v[Y_AXIS]=q.y;
+      mc_line(v,pl_data);
+      if (sys.abort) { return(STATUS_OK); }
+    }
+    t0=t1; p=q; d0=d1;
+    h=grow ? 2.0f*hh : hh;
+  }
+  return(STATUS_OK);
+}
+
+uint8_t mc_cubic_b_spline_validate(float *target, float *position, float *first, float *second)
+{
+  uint8_t i;
+  if (!bezier_finite(settings.arc_tolerance) || !(settings.arc_tolerance > 0.0f)) {
+    return(STATUS_GCODE_INVALID_TARGET);
+  }
+  for (i=0; i<2; i++) {
+    if (!(bezier_finite(position[i]) && bezier_finite(target[i]) &&
+          bezier_finite(first[i]) && bezier_finite(second[i]))) { return(STATUS_GCODE_INVALID_TARGET); }
+  }
+  return(bezier_walk(target,NULL,position,first,second,1));
+}
+
+void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position,
+                       float *first, float *second)
+{
+  // The same deterministic walk was checked before parser state or peripherals changed.
+  bezier_walk(target,pl_data,position,first,second,0);
+}
+
+#else
+
 // Execute a cubic Bezier curve from position to target with control points first and second.
 // Only X and Y follow the curve; the other axes stay at position, as the parser allows no others.
 // The curve is cut into a number of segments of equal step in the curve parameter t, chosen in
@@ -477,4 +661,5 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
   mc_line(p, pl_data);
 }
 
+#endif // BEZIER_CIRCLE_FIT
 #endif // ENABLE_CUBIC_SPLINES

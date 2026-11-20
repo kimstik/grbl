@@ -740,6 +740,11 @@
   // G93 with BEZIER_Z_LINEAR 2: the whole curve takes 1/F minutes at one feed, each segment
   // its share of the length. Undefined: every segment takes 1/F minutes.
   // #define BEZIER_EXACT_INVERSE_TIME
+
+  // Experimental XY fitter: single circles through three curve points, with a separate
+  // arc emitter. Uses a total geometry budget of 2*$12, not BEZIER_SIGMA. A dry pass
+  // rejects a move that reaches the piece/chord cap before anything is queued.
+  // #define BEZIER_CIRCLE_FIT
 #endif
 
 // Dependency check: ENABLE_QUADRATIC_SPLINES requires ENABLE_CUBIC_SPLINES
@@ -748,6 +753,9 @@
 #endif
 #if defined(BEZIER_EXACT_INVERSE_TIME) && BEZIER_Z_LINEAR != 2
   #error "BEZIER_EXACT_INVERSE_TIME requires BEZIER_Z_LINEAR 2"
+#endif
+#if defined(BEZIER_CIRCLE_FIT) && defined(BEZIER_Z_LINEAR)
+  #error "BEZIER_CIRCLE_FIT currently supports XY only"
 #endif
 
 
