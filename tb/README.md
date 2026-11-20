@@ -119,6 +119,98 @@ Test 49 checks the differing points themselves: with avr-gcc 7.3 (local
 simavr) G5.1 deviates 0.0826 mm and [1] 0.0029 mm, the same as the host to
 four decimals.
 
+## Shared comparison corpus
+
+`compare/core.in` is eight finite curves, each restarted at machine (0,0,0):
+S, closed loop, cusp, collinear backtracking, nearly straight, quadratic,
+tight global counterexample, and a straight curve with unequal parameter
+speed. `stress.in` holds the supplied tall S. `cap.in` holds the 100000 mm
+handles; run it both with the normal cap and with a test-only cap of 20000.
+`invalid.in` is separate: non-finite input is not a performance sample.
+Do not put the extra corpus into the normal AVR bench: its string literals
+would change the flash headroom of that benchmark.
+
+Use identical rendered G-code, start, settings, Z mode and inverse-time mode
+for each implementation. The comparison uses a **final XY budget of 2*tol**,
+with tol = 0.002, 0.01 and 0.1 mm. Direct Wang and adaptive lines get
+BEZIER_SIGMA = 2*tol; a circle fit gets tol for fitting and tol for arc
+chording, with a line fallback bounded by 2*tol. Stage-only measurements at
+tol are useful, but must be labelled separately from this final-budget
+comparison. These are comparison settings, not a new firmware default.
+
+One smoke slice at tol = 0.002 mm, direct Wang, XY only, G94 (from the
+repository root, with avr-gcc and simavr in PATH):
+
+```sh
+python -I tb/compare/render.py tb/compare/core.in .tmp/compare-core.txt
+opts='-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES -DTB_ARC_TOLERANCE=.002f -DBEZIER_SIGMA=.004f -DTB_XY_BUDGET=.004f'
+timeout 240 nice -n 19 make -s -C tb/avr BUILD=build/compare LINES=../../.tmp/compare-core.txt DEFS="$opts" all dump
+timeout 120 nice -n 19 make -s -C tb/host BUILD=build/compare OPT="$opts"
+timeout 180 nice -n 19 simavr -m atmega328p -f 16000000 tb/avr/build/compare/dump.elf 2>&1 |
+  sed 's/\x1b\[[0-9;]*m//g; s/\.*$//' > .tmp/compare-dump.txt
+timeout 120 nice -n 19 tb/host/build/compare/tb --dump-strict .tmp/compare-core.txt .tmp/compare-dump.txt
+```
+
+Run `bench.elf` separately for cycles; dumping targets includes UART time
+and its cycle counts are not comparable. `LINES` is relative to `tb/avr`.
+Use a fresh BUILD directory for every source/flags/corpus combination: Make
+does not track changes to command-line options. For tol = 0.01 or 0.1,
+replace the three numeric test definitions with .01/.02/.02 or .1/.2/.2.
+For circle fitting use BEZIER_SIGMA = tol, keeping TB_XY_BUDGET = 2*tol.
+Use numeric definitions: an expression used as BEZIER_SIGMA needs outer
+parentheses, since the current generator divides by that macro.
+
+`render.py --z` adds the same Z-3 word to every curve; `--mode G93` uses
+G93 and F2 instead of G94 and F1000. Build all implementations with the
+same Z option, and with the exact inverse-time option for the exact-G93
+comparison. Adaptive implementations must not reuse the equal-t Z check
+as evidence that their own t values are correct. Keep XY-only, Z by-t,
+Z by-length, and Z by-length plus exact G93 as distinct rows.
+
+`TB_ARC_TOLERANCE` changes only bench settings, not firmware defaults.
+`--dump-strict` fails on a measured rejected line, missing/overflowing
+output, a non-finite target, a wrong endpoint, or sampled deviation above
+TB_XY_BUDGET. Unlike `--dump`, it grants neither a segment-cap nor a
+float-grid exemption. It prints the host float control net captured at
+the real mc_cubic_b_spline call. All implementations must see the same
+net; this is not evidence that every AVR compiler rounded intermediate
+parser arithmetic identically. The usual Z and enabled exact-G93 checks
+also run. A cap hit alone is reported, not rejected: it fails if it misses
+the final budget. Measure capped and uncapped performance separately.
+
+This remains a sampled diagnostic, not a Hausdorff proof: the model has
+TB_DENSE = 4000 parameter intervals, the reverse check samples emitted
+vertices, and curve Z is evaluated at segment ends. For a borderline or
+large-coordinate result repeat the host check with a fresh BUILD and
+`-DTB_DENSE=16000`, then use a certified bound before claiming a guarantee.
+Do not count a timeout as acceptable fallback or silently discard it.
+For cycles, aggregate gen/segment only over finite, accepted measured
+curves with at least one segment; report each curve's `first` and `gap`,
+all fallback/trial counters, peak stack, and firmware flash separately.
+The timed `gen` includes parsing, probe bookkeeping and mc_line overhead;
+it is not an isolated arithmetic kernel.
+
+### Decimal words and the tight reference
+
+`read_float` keeps at most eight significant digits. Long exact binary32
+decimals also exceed the 80-byte serial line buffer. The corpus fixes a
+short common G-code instead; do not compare one algorithm on the original
+exact net and another on this parser-rounded net. The following numbers
+are measured on the host build of this corpus, except the supplied exact
+reference (input data). Coordinates are mm:
+
+| Point | Supplied exact-float reference                 | Host parser net, printed to 9 significant digits |
+|-------|-----------------------------------------------|-------------------------------------------------|
+| P0    | (0, 0)                                        | (0, 0)                                          |
+| P1    | (-2361.66455078125, 614.281494140625)            | (-2361.66455, 614.281433)                         |
+| P2    | (-1883.6595458984375, 481.83642578125)           | (-1883.65942, 481.836395)                         |
+| P3    | (-1973.58837890625, 498.7366638183594)           | (-1973.58826, 498.736633)                         |
+
+A direct mc_cubic_b_spline call with the exact-float reference is a useful
+separate numeric test, not a serial/parser case. The supplied tall S is
+P0=(0,0), P1=(-3.3333,16.6667), P2=(-6.6667,-466.667), P3=(-10,8550);
+its G-code is fixed in stress.in and is rounded by the same parser.
+
 ## 37: grblHAL
 
 grblHAL core 3161cea. Its `mc_cubic_b_spline` is the adaptive walker this

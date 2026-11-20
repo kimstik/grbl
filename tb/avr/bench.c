@@ -111,6 +111,9 @@ int main(void)
   paint();
   serial_init();
   settings_init();
+#ifdef TB_ARC_TOLERANCE
+  settings.arc_tolerance = TB_ARC_TOLERANCE; // Test-only; the firmware default stays unchanged.
+#endif
   memset(sys_position, 0, sizeof(sys_position));
   sys.state = STATE_IDLE;
   gc_init();
