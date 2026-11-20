@@ -17,6 +17,16 @@ OBJECTS  := $(addprefix $(BUILD)/,$(addsuffix .o,$(FIRMWARE)) main.o planner.o)
 
 all: $(BUILD)/bench.elf
 
+# Isolated generator-only microbenchmark. Not a firmware/planner/stepper measurement.
+micro: $(BUILD)/micro.elf
+
+$(BUILD)/micro.elf: $(BUILD)/motion_control.o $(BUILD)/nuts_bolts.o $(BUILD)/micro.o
+	$(CC) -o $@ $^ -lm -Wl,--gc-sections
+	avr-size $@
+
+$(BUILD)/micro.o: micro.c | $(BUILD)
+	$(CC) -c $< -o $@
+
 # dyn.elf: the same firmware with the stepper running, see dyn.c.
 dyn: $(BUILD)/dyn.elf
 
@@ -75,4 +85,4 @@ run-dyn: $(BUILD)/dyn.elf
 clean:
 	rm -f $(BUILD)/*.o $(BUILD)/*.elf $(BUILD)/lines.h
 
-.PHONY: all dyn dump run run-dyn clean
+.PHONY: all micro dyn dump run run-dyn clean

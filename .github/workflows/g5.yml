@@ -160,13 +160,25 @@ jobs:
         run: |
           BRANCH=$(make -s --eval 'print-compile: ; @echo $(COMPILE)' print-compile)
           mkdir -p build/circle
-          make -s BUILDDIR=build/circle COMPILE="$BRANCH -DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES -DBEZIER_CIRCLE_FIT" build/circle/main.elf
+          CC="$BRANCH -DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES -DBEZIER_CIRCLE_FIT"
+          if ! make -s BUILDDIR=build/circle COMPILE="$CC" build/circle/main.elf; then
+            echo "::warning::normal circle link failed; the next link is SIZE-ONLY and must not be flashed"
+            make -s BUILDDIR=build/circle COMPILE="$CC -Wl,--defsym=__TEXT_REGION_LENGTH__=65536" build/circle/main.elf
+          fi
           set -- $(avr-size --format=berkeley build/circle/main.elf | tail -1)
           flash=$(( $1 + $2 ))
           printf '\n### circle prototype\n\nflash=%s, data=%s, bss=%s, spare(32256)=%s\n' "$flash" "$2" "$3" "$((32256-flash))" >> "$GITHUB_STEP_SUMMARY"
           if [ "$flash" -gt 32768 ]; then
             echo "::warning::circle prototype does not fit ATmega328P ($flash bytes)"
           fi
+
+      - name: Generator-only microbench builds
+        run: |
+          for gen in wang circle; do
+            opt='-DBEZIER_SIGMA=0.004f'
+            [ "$gen" = circle ] && opt='-DBEZIER_CIRCLE_FIT'
+            make -s -C tb/avr BUILD=build/micro-$gen DEFS="-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES $opt" micro
+          done
 
       # The simavr benches of every option combination, branch flags.
       - name: Build AVR benches
@@ -184,6 +196,7 @@ jobs:
             tb/avr/build/*/bench.elf
             tb/avr/build/*/dyn.elf
             tb/avr/build/*/dump.elf
+            tb/avr/build/*/micro.elf
             tb/avr/build/*/free-ram.txt
 
   # Correctness on the PC: vectors, random curves, G5-only build, the spline
@@ -201,6 +214,38 @@ jobs:
           tb/host/build-circle/tb --random 1000 1
       - name: Mutation testing
         run: tb/host/mutate.sh
+
+  micro:
+    needs: avr
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        gcc: ['7.3.0', '15.2.0', '16.2.0', '17-20261115']
+    name: generator micro ${{ matrix.gcc }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: bench-${{ matrix.gcc }}
+          path: elf
+      - name: Install simavr
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends simavr
+      - name: Isolated generator cost
+        run: |
+          printf '### Isolated generator, avr-gcc ${{ matrix.gcc }}\n\nNo parser, planner, serial ISR or stepper. Stack figures apply only to this microbenchmark.\n\n' >> "$GITHUB_STEP_SUMMARY"
+          for gen in wang circle; do
+            timeout 600 simavr -m atmega328p -f 16000000 elf/micro-$gen/micro.elf 2>&1 | sed 's/\x1b\[[0-9;]*m//g; s/\.*$//' > micro-$gen.txt
+            grep -qx done micro-$gen.txt
+            cat micro-$gen.txt
+            printf '\n%s: case status chords total dry first gap hash endpoint realtime untouched\n\n```\n' "$gen" >> "$GITHUB_STEP_SUMMARY"
+            cat micro-$gen.txt >> "$GITHUB_STEP_SUMMARY"
+            printf '```\n' >> "$GITHUB_STEP_SUMMARY"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: micro-${{ matrix.gcc }}
+          path: micro-*.txt
 
   # Every compiler's benches under simavr, for every option combination:
   # cycles, stack, segments against the host bench built with the same options,
