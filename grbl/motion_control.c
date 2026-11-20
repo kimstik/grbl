@@ -420,6 +420,17 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
   float step = 1.0f/segments;
 
   uint16_t j;
+#if BEZIER_Z_LINEAR == 2
+  // Two passes over the same points: the first sums the chords up to the end point, the second
+  // queues the points with Z at the share of that length travelled so far. The sum starts just
+  // above zero, so a curve whose points all coincide divides by that instead of by zero.
+  float q[2], s, length = 0.0f, dz = target[Z_AXIS] - position[Z_AXIS];
+  uint8_t pass;
+  segments++;
+  for (pass = 0; pass < 2; pass++) {
+  s = 1e-30f;
+  memcpy(q, position, sizeof(q));
+#endif
   for (j = 1; j < segments; j++) {
     float t = j*step;
     for (i = 0; i < 2; i++) {
@@ -427,11 +438,35 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
       float e1 = target[i] - 2.0f*second[i] + first[i];
       p[i] = position[i] + t*(3.0f*(first[i] - position[i]) + t*(3.0f*e0 + t*(e1 - e0)));
     }
+#if BEZIER_Z_LINEAR == 1
+    p[Z_AXIS] = position[Z_AXIS] + t*(target[Z_AXIS] - position[Z_AXIS]);
+#elif BEZIER_Z_LINEAR == 2
+    s += hypot_f(p[X_AXIS] - q[X_AXIS], p[Y_AXIS] - q[Y_AXIS]);
+    memcpy(q, p, sizeof(q));
+    if (!pass) { continue; }
+    p[Z_AXIS] = position[Z_AXIS] + s/length*dz;
+#endif
     mc_line(p, pl_data);
     if (sys.abort) { return; } // Bail mid-spline if system abort requested.
   }
+#if BEZIER_Z_LINEAR == 2
+#ifdef BEZIER_EXACT_INVERSE_TIME
+  // Inverse time: the feed that covers the whole polyline, Z included, in 1/F minutes. Every
+  // segment then takes its share of the length, not an equal share of the time.
+  if (pl_data->condition & PL_COND_FLAG_INVERSE_TIME) {
+    pl_data->feed_rate *= hypot_f(s, dz);
+    bit_false(pl_data->condition,PL_COND_FLAG_INVERSE_TIME);
+  }
+#endif
+  length = s;
+  segments--;
+  }
+#endif
   p[X_AXIS] = target[X_AXIS];
   p[Y_AXIS] = target[Y_AXIS];
+#ifdef BEZIER_Z_LINEAR
+  p[Z_AXIS] = target[Z_AXIS];
+#endif
   mc_line(p, pl_data);
 }
 

@@ -844,10 +844,12 @@ uint8_t gc_execute_line(char *line)
             FAIL(STATUS_GCODE_INVALID_TARGET); // [The active plane is not G17]
           }
 
+#ifndef BEZIER_Z_LINEAR
           // Verify only X,Y axis words are used (no Z)
           if (axis_words & ~((1<<X_AXIS)|(1<<Y_AXIS))) {
             FAIL(STATUS_GCODE_AXIS_COMMAND_CONFLICT); // [An axis other than X or Y is specified]
           }
+#endif
 
           // P and Q must both be specified
           if (bit_isfalse(value_words, bit(WORD_P)) || bit_isfalse(value_words, bit(WORD_Q))) {
@@ -902,10 +904,12 @@ uint8_t gc_execute_line(char *line)
             FAIL(STATUS_GCODE_INVALID_TARGET); // [The active plane is not G17]
           }
 
+#ifndef BEZIER_Z_LINEAR
           // Verify only X,Y axis words are used (no Z)
           if (axis_words & ~((1<<X_AXIS)|(1<<Y_AXIS))) {
             FAIL(STATUS_GCODE_AXIS_COMMAND_CONFLICT); // [An axis other than X or Y is specified]
           }
+#endif
 
           // I and J must both be specified
           if (bit_isfalse(value_words, bit(WORD_I)) || bit_isfalse(value_words, bit(WORD_J))) {

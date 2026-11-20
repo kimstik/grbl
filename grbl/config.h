@@ -721,6 +721,8 @@
   // segment count grows with 1/sqrt(SIGMA): 0.1 mm gives 11 for G5 X10 Y0 I3 J3 P3 Q3.
   // MAX_SEGMENTS caps a single curve; only absurd handles reach it (1699 segments for handles
   // 100 m long), and past it the tolerance is not met.
+  // SIGMA can be any float expression: -DBEZIER_SIGMA=settings.arc_tolerance makes G5 follow
+  // $12 as G2/G3 do. The default $12 of 0.002 mm takes 7 times the segments of 0.1 mm.
 
   #ifndef BEZIER_SIGMA
     #define BEZIER_SIGMA 0.1f        // Linear approximation tolerance (mm)
@@ -729,11 +731,23 @@
   #ifndef BEZIER_MAX_SEGMENTS
     #define BEZIER_MAX_SEGMENTS 2000 // Most segments per curve
   #endif
+
+  // Z word on G5/G5.1, the analog of a helix. Undefined: an axis word other than X and Y is
+  // an error. 1: Z moves in proportion to the curve parameter. 2: in proportion to the length
+  // travelled in XY, which takes a second pass over the points of the curve.
+  // #define BEZIER_Z_LINEAR 2
+
+  // G93 with BEZIER_Z_LINEAR 2: the whole curve takes 1/F minutes at one feed, each segment
+  // its share of the length. Undefined: every segment takes 1/F minutes.
+  // #define BEZIER_EXACT_INVERSE_TIME
 #endif
 
 // Dependency check: ENABLE_QUADRATIC_SPLINES requires ENABLE_CUBIC_SPLINES
 #if defined(ENABLE_QUADRATIC_SPLINES) && !defined(ENABLE_CUBIC_SPLINES)
   #error "ENABLE_QUADRATIC_SPLINES requires ENABLE_CUBIC_SPLINES to be enabled first"
+#endif
+#if defined(BEZIER_EXACT_INVERSE_TIME) && BEZIER_Z_LINEAR != 2
+  #error "BEZIER_EXACT_INVERSE_TIME requires BEZIER_Z_LINEAR 2"
 #endif
 
 
