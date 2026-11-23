@@ -749,6 +749,8 @@
   // if still too wide, another estimate is due with half the segments left. The gate bounds
   // Z error by BEZIER_SIGMA in exact arithmetic, not with float rounding of XY or the estimate.
   // It is not a firmware accuracy guarantee; see tb/README.md for measured errors and costs.
+  // Mode 3 is a prototype: as measured there, its deepest stack on ATmega328P is 24 to 46 bytes
+  // more than the RAM left free, and with G5.1 it can outgrow the flash beside a bootloader.
   // #define BEZIER_Z_LINEAR 2
 
   #ifndef BEZIER_Z_PIECES
@@ -763,7 +765,8 @@
   // 1/F minutes, each segment its length share. Float/end snapping add a small error;
   // actual cycle time includes acceleration and axis limits. Undefined: each segment
   // independently takes 1/F minutes at its nominal feed (the existing G5 behavior).
-  // With BEZIER_Z_LINEAR 3 the length is the first estimate, and the time is off by its error.
+  // With BEZIER_Z_LINEAR 3 the length is the first estimate, and the time is off by its error,
+  // which nothing bounds: up to 3.1% in the random curves of the host bench.
   // #define BEZIER_EXACT_INVERSE_TIME
 #endif
 

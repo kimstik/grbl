@@ -40,7 +40,7 @@ Decisions that tests encode:
 | 7  | Negative P accepted                                             | host vectors           | defect (error:4)                           |
 | 8  | Rejected line: nothing queued, parser state byte-identical      | host, every line       | defect: spline_pq written early            |
 | 9  | Generation time and delay before the first target               | avr (2000 segments)    | measured per option, see tables            |
-| 10 | Stack on ATmega328P: static chain and with interrupts           | avr, avr dynamic       | measured margin 52-65 bytes                |
+| 10 | Stack on ATmega328P: static chain and with interrupts           | avr, avr dynamic       | margin 52-65 bytes; Z estimate: negative   |
 | 11 | Planner starvation while streaming curves at speed              | avr dynamic            | base: none; $12 + length: stops            |
 | 12 | Cusp: the planner stops at the reversal                         | host `junction`        | pass                                       |
 | 13 | Smooth chain with implicit I/J: no corner at the joins          | host `set smooth`      | pass                                       |
@@ -50,7 +50,7 @@ Decisions that tests encode:
 | 17 | Translation by G91/G92, G20 vs G21: same segments               | host `same`            | pass                                       |
 | 18 | Reversed curve within tolerance                                 | host vector            | pass                                       |
 | 19 | Check mode, `$J=G5` rejection, mode changes before implicit I/J | host vectors           | pass                                       |
-| 20 | Mutation testing                                                | host `mutate.sh`       | 53 of 53 killed, including options         |
+| 20 | Mutation testing                                                | host `mutate.sh`       | 73 of 73 killed, including options         |
 | 21 | Random curves, failures shrunk to a minimal line                | host `--random`        | pass (negative P skipped, see 7)           |
 | 22 | Host vs AVR: same segments                                      | CI simavr `= host`     | G5.1, [1] and G2 differ (see below)        |
 | 23 | Compiler vs compiler: same segments                             | CI simavr per gcc      | G5.1, [1]: 7.3 differs from 15-17          |
@@ -87,6 +87,10 @@ Decisions that tests encode:
 | 54 | G93 one path feed; 3D length; no leak into G94                  | host `z.vec`, avr      | pass for exact-G93 option                  |
 | 55 | Existing G93 G1 and G2 nominal times                            | host `g5.vec`          | G1 pass; G2 defect unchanged               |
 | 56 | Runtime $12: coarse, fine and zero                              | host `g5.vec`          | pass; zero on AVR not verified             |
+| 57 | Z by estimate: bracket gate, pins, exact with a piece a segment | host `z.vec`, random   | pass; error measured, gate no guarantee    |
+| 58 | Z by estimate: open brackets estimated again; segment cap       | host `z.vec`, avr      | pass                                       |
+| 59 | Z by estimate: early end, lost first chord, far from origin     | host `z.vec`           | pass: never past the target or backwards   |
+| 60 | G93 by estimate: one feed, time off within the bracket          | host `z.vec`, avr      | pass; time off up to 3.1% in random curves |
 
 ## 10, 11, 35: motion under simavr
 
@@ -406,6 +410,256 @@ and equal time per segment while keeping the inverse flag added 26 bytes
 to base (46 over zt). These were scratch compile probes before the
 realtime-refill fix, not current production costs or verified alternatives
 with the full evidence suite. The cap/error/default choices remain open.
+
+## Z by an estimate of the length ahead: prototype, negative result
+
+`za` is `-DBEZIER_Z_LINEAR=3`, tried as a way to have the Z of `zl` without
+its first pass. **It does not fit an ATmega328P as it is**: in every
+measured build the deepest stack is larger than the RAM left free, by 24
+to 46 bytes. The measurements are kept as the record of the attempt.
+
+Evidence: [CI run 45190827894](https://github.com/kimstik/grbl/actions/runs/45190827894),
+firmware 75f4d1c on branch wip/z-aim. 22 of its 28 jobs succeed. The six
+that fail are the simavr jobs of `tol-za` and `tol-za-g93` on the three
+compilers, and each fails only at the stack margin test, after its other
+steps have run. The workflow of that branch is a reduced one: avr-gcc
+7.3.0, 15.2.0 and 16.2.0, the options base, tol, tol-zt, tol-zl,
+tol-zl-g93, tol-za and tol-za-g93, and a reduced motion driver. The
+sections above come from run 44765744542 and were not measured again.
+The firmware of the five earlier options is unchanged: `cmp` of the hex
+against 5601c12 passes for G5 alone and G5+G5.1 on each of the three
+compilers, 30 builds.
+
+How it works. Before the first target the length of the polyline is
+estimated. De Casteljau cuts the curve into pieces of a whole number of
+segments each; the chords of the pieces are no longer than the segments
+they span, their control polygons no shorter than the curve, so the two
+sums bracket the length. The estimate is halfway between them, the
+fourth-order rule for a cubic, and exact when a piece is one segment.
+Every segment then takes the share of the Z left that its chord is of the
+length left. If half the bracket over the length, times the Z left, may
+exceed BEZIER_SIGMA, the estimate is made again with twice the pieces,
+from BEZIER_Z_PIECES (8) to BEZIER_Z_PIECES_MAX (64). If the bracket is
+still too wide then, the estimate stays in force ("open") and the length
+is estimated again when half of the segments are left. Without a Z word,
+and without a G93 feed to convert, no estimate is made.
+
+The gate is algebra, not a guarantee. In exact arithmetic a bracket that
+passes keeps Z within BEZIER_SIGMA of the straight line through the
+length of the polyline. The firmware works in floats, so the tables give
+the error against the polyline actually emitted, with no allowance, and
+against a double model of the same polyline. The pass criteria of the
+vectors and of the dump check do add an allowance for the float grid of
+XY, 4*sqrt(segments)*FLT_EPSILON*reach/length of the Z travel, whose
+factor is calibrated, not derived.
+
+**Every number in the tables of this section is measured** in that run.
+Numbers marked local were measured with avr-gcc 7.3.0 and simavr on one
+PC and are in no CI artifact.
+
+### Sizes, cycles and stack of the prototype
+
+Flash is firmware text+data with G5+G5.1, delta against base of the same
+compiler; 32256 is the flash beside a 512-byte bootloader. `gen/seg` is
+sum(gen)/sum(segments) over the 10 finite accepted rows of avr/lines.txt
+without a Z word, and over the 4 with one in G94. Stack is the deepest
+watermark of the reduced motion driver against the RAM the production
+firmware leaves free: 403 bytes, and 380 with za, whose state is 23 bytes
+of static RAM.
+
+| Option     | avr-gcc | Flash bytes (delta) | Left of 32256 | RAM free | gen/seg no Z | gen/seg with Z | Stack used | Stack margin |
+|------------|---------|---------------------|---------------|----------|--------------|----------------|------------|--------------|
+| base       | 7.3.0   | 30672 (+0)          | 1584          | 403      | 5125         | -              | 343        | +60          |
+| base       | 15.2.0  | 31152 (+0)          | 1104          | 403      | 6282         | -              | 338        | +65          |
+| base       | 16.2.0  | 30406 (+0)          | 1850          | 403      | 6153         | -              | 338        | +65          |
+| tol        | 7.3.0   | 30700 (+28)         | 1556          | 403      | 5116         | -              | 343        | +60          |
+| tol        | 15.2.0  | 31184 (+32)         | 1072          | 403      | 6308         | -              | 338        | +65          |
+| tol        | 16.2.0  | 30438 (+32)         | 1818          | 403      | 6178         | -              | 338        | +65          |
+| tol-zt     | 7.3.0   | 30792 (+120)        | 1464          | 403      | 5398         | 5488           | 343        | +60          |
+| tol-zt     | 15.2.0  | 31260 (+108)        | 996           | 403      | 6546         | 6615           | 338        | +65          |
+| tol-zt     | 16.2.0  | 30520 (+114)        | 1736          | 403      | 6428         | 6497           | 338        | +65          |
+| tol-zl     | 7.3.0   | 31176 (+504)        | 1080          | 403      | 11833        | 12034          | 347        | +56          |
+| tol-zl     | 15.2.0  | 31740 (+588)        | 516           | 403      | 14469        | 14616          | 342        | +61          |
+| tol-zl     | 16.2.0  | 30924 (+518)        | 1332          | 403      | 14063        | 14210          | 344        | +59          |
+| tol-zl-g93 | 7.3.0   | 31286 (+614)        | 970           | 403      | 11846        | 12039          | 351        | +52          |
+| tol-zl-g93 | 15.2.0  | 31834 (+682)        | 422           | 403      | 14429        | 14576          | 344        | +59          |
+| tol-zl-g93 | 16.2.0  | 31048 (+642)        | 1208          | 403      | 14095        | 14242          | 344        | +59          |
+| tol-za     | 7.3.0   | 32198 (+1526)       | 58            | 380      | 6089         | 8877           | 422        | -42          |
+| tol-za     | 15.2.0  | 32384 (+1232)       | -128          | 380      | 6343         | 9106           | 404        | -24          |
+| tol-za     | 16.2.0  | 31650 (+1244)       | 606           | 380      | 6218         | 8924           | 406        | -26          |
+| tol-za-g93 | 7.3.0   | 32368 (+1696)       | -112          | 380      | 6089         | 8876           | 426        | -46          |
+| tol-za-g93 | 15.2.0  | 32534 (+1382)       | -278          | 380      | 6343         | 9106           | 404        | -24          |
+| tol-za-g93 | 16.2.0  | 31766 (+1360)       | 490           | 380      | 6218         | 8917           | 406        | -26          |
+
+tol-za does not fit beside the bootloader with avr-gcc 15.2.0, tol-za-g93
+neither with 7.3.0 nor with 15.2.0. Exact G93 costs 170 / 150 / 116 bytes
+over za. Largest gap between two targets in microseconds, planner
+excluded, 7.3 / 15.2 / 16.2: tol 258.94 / 356.44 / 350.19; tol-zt
+277.38 / 369.50 / 363.94; tol-zl 373.19 / 461.44 / 447.12; tol-za
+486.75 / 499.69 / 490.00. None of the bench lines leaves an estimate open,
+so no estimate in the middle of a curve is in these gaps; see below.
+
+### Delay before the first target
+
+Milliseconds at 16 MHz from the start of the line to the first target.
+S is `G5I-5J5P5Q-5X-20Y0`, the line `G5X0Y100I0J99P0Q1`, [1] and the cap
+line as above; "with Z" is the same line with a Z word. Target counts
+are for $12 = 0.002.
+
+| Option | avr-gcc | S (80) | S with Z | Line with Z (197) | [1] (1950) | [1] with Z | Cap (2000) | Cap with Z |
+|--------|---------|--------|----------|-------------------|------------|------------|------------|------------|
+| tol    | 7.3.0   | 1.022  | -        | -                 | 1.273      | -          | 1.147      | -          |
+| tol    | 15.2.0  | 1.130  | -        | -                 | 1.379      | -          | 1.213      | -          |
+| tol    | 16.2.0  | 1.118  | -        | -                 | 1.365      | -          | 1.198      | -          |
+| tol-zt | 7.3.0   | 1.039  | 1.125    | 1.044             | 1.290      | 1.379      | 1.167      | 1.253      |
+| tol-zt | 15.2.0  | 1.141  | 1.228    | 1.139             | 1.391      | 1.478      | 1.226      | 1.314      |
+| tol-zt | 16.2.0  | 1.133  | 1.218    | 1.127             | 1.380      | 1.470      | 1.213      | 1.302      |
+| tol-zl | 7.3.0   | 25.116 | 25.206   | 54.900            | 630.732    | 630.822    | 632.318    | 632.406    |
+| tol-zl | 15.2.0  | 31.590 | 31.680   | 68.973            | 797.386    | 797.478    | 787.229    | 787.320    |
+| tol-zl | 16.2.0  | 30.685 | 30.775   | 66.764            | 775.667    | 775.761    | 764.952    | 765.044    |
+| tol-za | 7.3.0   | 1.117  | 40.601   | 18.695            | 1.378      | 8.106      | 1.246      | 7.933      |
+| tol-za | 15.2.0  | 1.168  | 40.559   | 18.533            | 1.417      | 8.064      | 1.251      | 7.888      |
+| tol-za | 16.2.0  | 1.158  | 40.785   | 18.635            | 1.408      | 8.093      | 1.238      | 7.915      |
+
+za makes 3 estimates for S with Z (8, 16 and 32 pieces), 2 for the line
+and 1 for [1] and for the cap line. So it is 78 to 100 times sooner than
+zl on the two long curves, and later than zl on the short one. In G93 the
+S with Z waits 25.419 / 31.699 / 30.999 ms with zl and
+40.501 / 40.720 / 39.834 ms with za.
+
+Local: one estimate of 8 / 16 / 32 / 64 pieces delays the first target of
+[1] with Z by 8.04 / 13.98 / 26.00 / 49.20 ms (BEZIER_Z_PIECES and
+BEZIER_Z_PIECES_MAX both set to that number), about 12 thousand cycles a
+piece with realtime work serviced after each. When all four tries are
+needed (8+16+32+64 pieces) the wait is about 90 ms, and after an open
+bracket it was measured again in the middle of the curve:
+`G5X10Y0I3J12P3Q-12Z-3` (124 targets, 4 tries, passed) 89.8 ms before the
+first target; the same with `Z-30` (8 tries, 1 left open) 89.8 ms and a
+largest gap of 90.6 ms; `G5X1000Y0I300J1200P300Q-1200Z-500` (1238
+targets, 14 tries, 3 left open) 90.8 ms and 93.4 ms. Nothing is queued
+during an estimate.
+
+### Z error of the three modes
+
+Host bench in single precision, `--random 5000 1` for each tolerance
+(`-DTB_ARC_TOLERANCE`), 2569 curves with Z travel. Per curve the largest
+distance of Z from the straight line through the length travelled along
+the emitted polyline, at the segment ends, in mm and as a share of the Z
+travel. "Over" is the share of curves where that is more than
+BEZIER_SIGMA, with no allowance. Lead is Z travel over XY length; the
+random curves are adversarial there (0.1 to 100 mm of Z on 0.01 to 1000
+mm of XY scale), hence the three bands. The last column is the same
+error against a double model of the polyline.
+
+| BEZIER_SIGMA | Mode | Over SIGMA | Largest mm | Median / max of Z travel | Lead to 0.1: over, mm | Lead 0.1 to 1: over, mm | Lead over 1: over, mm | Double model: over, mm |
+|--------------|------|------------|------------|--------------------------|-----------------------|-------------------------|-----------------------|------------------------|
+| 0.002        | zt   | 99.6%      | 31         | 1.7e-1 / 4.3e-1          | 99.9%, 23             | 100%, 28                | 99.1%, 31             | 99.6%, 31              |
+| 0.002        | zl   | 4.9%       | 0.080      | 2.2e-6 / 1.7e-3          | 0, 0.000072           | 0, 0.000090             | 11.7%, 0.080          | 4.7%, 0.060            |
+| 0.002        | za   | 6.6%       | 0.082      | 2.6e-5 / 9.5e-3          | 0, 0.0019             | 0.4%, 0.0033            | 15.4%, 0.082          | 8.2%, 0.062            |
+| 0.01         | zt   | 96.8%      | 32         | 1.7e-1 / 4.5e-1          | 99.4%, 23             | 100%, 28                | 92.9%, 32             | 96.8%, 32              |
+| 0.01         | zl   | 0.6%       | 0.10       | 1.8e-6 / 1.6e-3          | 0, 0.000062           | 0, 0.000074             | 1.4%, 0.10            | 0.5%, 0.10             |
+| 0.01         | za   | 0.3%       | 0.032      | 3.6e-5 / 2.1e-2          | 0, 0.0077             | 0, 0.0074               | 0.7%, 0.032           | 0.5%, 0.027            |
+| 0.1          | zt   | 62.4%      | 32         | 1.5e-1 / 4.5e-1          | 60.3%, 23             | 72.3%, 28               | 59.8%, 32             | 62.4%, 32              |
+| 0.1          | zl   | 0          | 0.025      | 9.4e-7 / 8.4e-4          | 0, 0.000044           | 0, 0.000065             | 0, 0.025              | 0, 0.016               |
+| 0.1          | za   | 0          | 0.077      | 1.6e-5 / 3.8e-2          | 0, 0.049              | 0, 0.077                | 0, 0.028              | 0, 0.077               |
+
+With lead over 1 the curves over 0.002 mm are mostly tiny in XY (0.005
+to 0.6 mm) with tens of mm of Z, 100 mm from the machine origin: there
+the float grid of XY is in every chord, and zl, which sums the very
+chords it travels, is off as well. So the two length-based modes are
+alike there, and neither holds 0.002 mm.
+
+The bracket gate of za, same runs:
+
+| BEZIER_SIGMA | Gate passed          | Passed and over SIGMA     | Largest passed mm              | Open | Open and over SIGMA | Estimates mean / most | Early ends |
+|--------------|----------------------|---------------------------|--------------------------------|------|---------------------|-----------------------|------------|
+| 0.002        | 2168 of 2569 (84.4%) | 131, all with lead over 1 | 0.0819 (0.0013 with lead to 1) | 401  | 9.5%                | 3.17 / 16             | 15         |
+| 0.01         | 2454 of 2569 (95.5%) | 7, all with lead over 1   | 0.0317 (0.0077 with lead to 1) | 115  | 0.9%                | 2.02 / 8              | 27         |
+| 0.1          | 2569 of 2569         | 0                         | 0.0770                         | 0    | -                   | 1.12 / 4              | 26         |
+
+A bracket that passed did not keep Z within BEZIER_SIGMA in 131 curves at
+0.002 mm and 7 at 0.01 mm, all of them with lead over 1; with lead up to
+1 none of the 1196 and 1395 that passed was over. Curves left open
+have no bound from the gate at all; their measured errors are in the
+table above.
+
+On the AVR itself 13 curves with Z were checked on each of the three
+compilers: the 5 of avr/lines.txt with `tb --dump`, and the 8 of the
+shared core corpus with `Z-3`, BEZIER_SIGMA 0.004 and `tb --dump-strict`.
+None failed. In the core corpus Z is off the emitted polyline by 0.00016
+to 0.0020 mm after 1 to 4 estimates; in [1] with `Z-3` at 0.002 mm by
+0.0013 mm after one estimate of 8 pieces, whose bracket allows 0.0020.
+The three open curves above were checked locally with 7.3. The
+distribution over random curves on the AVR is **not verified**.
+
+G93 with za takes its feed from the first estimate that is not tried
+again, and nothing gates the error of the time. Host random curves in
+G93: the nominal time is off 1/F by at most 3.1% (median 1.7e-5, 969
+curves) at 0.1 mm and 1.2% (176 curves) at 0.002 mm, against 0.16% and
+0.018% with zl. In the core corpus on the AVR it is off by 5.6e-5 to
+6.5e-4. BEZIER_EXACT_INVERSE_TIME is not exact with mode 3.
+
+### Motion with the reduced driver
+
+`-DTB_DYN_SPLINES_ONLY` leaves the G1 and G2 reference programs out of
+dyn.c so that the image fits the flash with za: 40 G5 programs (2 and 5
+mm curves, F1000 to F5000, 500 and 2000 mm/s2, host latency 2 and 16 ms)
+and 6 feed holds, the same driver for every option, every curve with
+`Z-0.2` when a Z option is on. `check_dyn.py` requires all 40 + 6 rows
+and X, Y and Z of every end point exact: 840 runs and 126 holds, none off.
+The firmware under test is the production code; the numbers are not
+comparable with the full sweep of the sections above. Order in each cell
+7.3 / 15.2 / 16.2; `Stops` excludes the expected final stop, as before.
+
+| Option     | Programs with stops | Total stops  | Stops with queued block | Max queued entry feed |
+|------------|---------------------|--------------|-------------------------|-----------------------|
+| base       | 0 / 0 / 0           | 0 / 0 / 0    | 0 / 0 / 0               | 0 / 0 / 0             |
+| tol        | 0 / 2 / 2           | 0 / 3 / 2    | 0 / 3 / 1               | 0 / 0 / 0             |
+| tol-zt     | 2 / 2 / 1           | 11 / 4 / 1   | 1 / 0 / 0               | 0 / 0 / 0             |
+| tol-zl     | 8 / 9 / 7           | 50 / 69 / 58 | 14 / 8 / 11             | 0 / 0 / 0             |
+| tol-zl-g93 | 8 / 9 / 7           | 49 / 67 / 60 | 15 / 8 / 17             | 0 / 0 / 0             |
+| tol-za     | 1 / 2 / 1           | 2 / 3 / 1    | 0 / 2 / 1               | 0 / 2413 / 0          |
+| tol-za-g93 | 1 / 1 / 0           | 1 / 2 / 0    | 0 / 1 / 0               | 0 / 2413 / 0          |
+
+za stops far less often than zl, which waits out its whole first pass.
+But with avr-gcc 15.2.0 two of its stops came with a block still queued
+whose entry feed was 2413 mm/min (2 mm curves, 2000 mm/s2, F4000 and
+F5000); zl has no such stop at a nonzero entry feed in this sweep. Its
+mechanism is **not verified**, and the entry feed of a block is not the
+speed at the moment of the stop.
+
+### What the prototype shows
+
+- Stack. za needs 404 to 426 bytes where 380 are free. Local A/B with
+  7.3: with protocol_execute_realtime called between whole estimates
+  instead of after every piece the deepest stack is 353 bytes, a margin of
+  27; but then 19 of 21 stops in the sweep come with a block queued, at
+  entry feeds up to 3013 mm/min. So the frame of the estimator (the copy
+  of the control net and the sums) under the realtime path is what does
+  not fit, and taking the call out brings back the stops with a block
+  queued at a nonzero entry feed. An estimator that keeps its state
+  static and returns after every piece was not tried.
+- Flash. 1200 to 1498 bytes over tol, where zl costs 476 to 556.
+- Time. One estimate is cheap against a first pass over 2000 points, but
+  the doubling makes a short curve with Z wait longer than zl does, and
+  after an open bracket about 90 ms more were measured in the middle of
+  the curve. Without a Z word za still costs 973 cycles a segment over
+  tol with 7.3, and 35 and 40 with 15.2 and 16.2: every point goes through
+  the step function, Z or no Z.
+- Accuracy. Median error 12 to 20 times that of zl, largest error 6 to 45
+  times, as shares of the Z travel; both modes far below zt. In mm a
+  bracket that passed kept Z within BEZIER_SIGMA in every curve with lead
+  up to 1, and not in every one with lead over 1.
+- 73 of 73 mutants are killed, 20 of them in the code of mode 3: weights
+  of the estimate, the polygon sum, the part already travelled, the exact
+  case, the gate and its Z term, doubling, the next estimate, the early
+  end, the reserve at the start, the chord, the sign, the exact end, and
+  the G93 feed. One of them was first killed only by a counter; random
+  curves on the mutant then gave the out-and-back vector of [59], where
+  it takes Z 0.0165 mm past the target and back.
+- Not verified: hardware; avr-gcc 17; random curves on the AVR; $12 = 0
+  with za; whether a smaller estimator frame can be had without the flash
+  it would cost.
 
 ## Shared comparison corpus
 
