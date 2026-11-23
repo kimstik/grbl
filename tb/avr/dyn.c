@@ -355,7 +355,13 @@ static void report(void)
     field(hold_state); field(hold_x);
     field(resume_state); field(resume_suspend);
   }
-  for (uint8_t i = 0; i < (hold_ms ? N_AXIS : 2); i++) {
+  for (uint8_t i = 0; i <
+#ifdef TB_DYN_SPLINES_ONLY
+       N_AXIS
+#else
+       (hold_ms ? N_AXIS : 2)
+#endif
+       ; i++) {
     field(sys_position[i] - lround(gc_state.position[i] * settings.steps_per_mm[i]));
   }
   if (hold_ms) { field(t); }

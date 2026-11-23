@@ -68,7 +68,7 @@ jobs:
           mkdir -p raw
           for splines in '-DENABLE_CUBIC_SPLINES' '-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES'; do
             while read -r name opt; do
-              case $name in tol-za*) continue ;; esac
+              case $name in ''|tol-za*) continue ;; esac
               make -s clean
               make -s -C ../before clean
               make -s -C ../before COMPILE="$cc $splines $opt" > /dev/null
@@ -85,6 +85,7 @@ jobs:
           defs='-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES'
           printf 'option flash delta ram free_ram boot_margin fits_32k\n' > raw/sizes.txt
           while read -r name opt; do
+            [ -n "$name" ] || continue
             make -s clean
             if make -s COMPILE="$cc $defs $opt" > raw/firmware-$name.log 2>&1; then
               set -- $(avr-size build/main.elf | tail -1)
@@ -218,6 +219,8 @@ jobs:
               cat raw/bench.txt
             else
               cat raw/dyn.txt
+              python3 -I tb/avr/check_dyn.py raw/dyn.txt > raw/dyn-check.txt
+              cat raw/dyn-check.txt
               if [ -f "$ELF/free-ram.txt" ]; then
                 free=$(cat "$ELF/free-ram.txt")
                 stack=$(awk '$1 == "stack" {print $2}' raw/dyn.txt)

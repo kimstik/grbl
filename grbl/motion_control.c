@@ -390,6 +390,7 @@ void mc_reset()
 
 #ifdef ENABLE_CUBIC_SPLINES
 
+#if BEZIER_Z_LINEAR == 3
 // X and Y of the point of the curve at t, by Horner's rule relative to the start point.
 static void mc_spline_point(float *p, float t, float *position, float *first, float *second,
                             float *target)
@@ -402,7 +403,6 @@ static void mc_spline_point(float *p, float t, float *position, float *first, fl
   }
 }
 
-#if BEZIER_Z_LINEAR == 3
 #ifdef BEZIER_Z_TRACE
   // For the test benches only. Estimates made; those left too wide to vouch for Z; early ends of
   // Z; the bound of the Z error that follows from the brackets, mm; and the half bracket of the
@@ -580,7 +580,11 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
       if (sys.abort) { return; }
     }
 #else
-    mc_spline_point(p, t, position, first, second, target);
+    for (i = 0; i < 2; i++) {
+      float e0 = second[i] - 2.0f*first[i] + position[i];
+      float e1 = target[i] - 2.0f*second[i] + first[i];
+      p[i] = position[i] + t*(3.0f*(first[i] - position[i]) + t*(3.0f*e0 + t*(e1 - e0)));
+    }
 #endif
 #if BEZIER_Z_LINEAR == 1
     p[Z_AXIS] = position[Z_AXIS] + t*(target[Z_AXIS] - position[Z_AXIS]);

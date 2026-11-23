@@ -47,6 +47,11 @@ G0X0Y0Z0
 # Z on a straight line with both control points at its end [51]
 *G5X0Y100I0J99P0Q1Z10
 G0X0Y0Z0
+# The same [1] and cap curves WITH Z: estimate latency, not the no-Z skip path.
+*G5X-10Y8550I-3.3333J16.6667P3.3333Q-9016.667Z-3
+G0X0Y0Z0
+*G5X10Y0I10000000J10000000P10000000Q10000000Z-3
+G0X0Y0Z0
 # inverse time [39] [54]
 G93
 *G5I-5J5P5Q-5X-20Y0Z-3F2
