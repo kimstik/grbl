@@ -36,7 +36,7 @@ jobs:
         if: matrix.container
         run: |
           set -euo pipefail
-          pacman -Syu --noconfirm --needed git make diffutils bash
+          pacman -Syu --noconfirm --needed git make diffutils bash python
           a=https://archive.archlinux.org/packages/a
           pacman -U --noconfirm \
             $a/avr-binutils/avr-binutils-2.47-1-x86_64.pkg.tar.zst \
