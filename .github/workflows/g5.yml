@@ -117,6 +117,25 @@ jobs:
           done <<< "$OPTIONS"
           cat raw/sizes.txt
           cat raw/sizes.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Shared core corpus with Z
+        run: |
+          set -euo pipefail
+          for name in za za-g93; do
+            mode=G94; extra=''
+            if [ "$name" = za-g93 ]; then mode=G93; extra=-DBEZIER_EXACT_INVERSE_TIME; fi
+            # Shared protocol: tol .002, final XY budget and direct Wang SIGMA .004.
+            python3 -I tb/compare/render.py tb/compare/core.in raw/core-$name.txt --z --mode "$mode"
+            defs="-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES -DBEZIER_Z_LINEAR=3 -DTB_ARC_TOLERANCE=.002f -DBEZIER_SIGMA=.004f $extra"
+            mkdir -p elf/core-$name
+            for target in all dump; do
+              if make -s -C tb/avr BUILD=build/core-$name LINES=../../raw/core-$name.txt DEFS="$defs" "$target" > raw/build-core-$name-$target.log 2>&1; then
+                image=$target; [ "$image" != all ] || image=bench
+                cp tb/avr/build/core-$name/$image.elf elf/core-$name/
+              else
+                printf 'core-%s %s unavailable\n' "$name" "$target" >> raw/unavailable.txt
+              fi
+            done
+          done
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -231,6 +250,27 @@ jobs:
               fi
             fi
           done
+      - name: Shared corpus targets with Z and G93
+        if: ${{ !cancelled() && (matrix.opt == 'tol-za' || matrix.opt == 'tol-za-g93') }}
+        run: |
+          set -euo pipefail
+          mkdir -p raw
+          case '${{ matrix.opt }}' in
+            tol-za) core=za ;; tol-za-g93) core=za-g93 ;; *) exit 0 ;;
+          esac
+          extra=''; mode=G94
+          if [ "$core" = za-g93 ]; then extra=-DBEZIER_EXACT_INVERSE_TIME; mode=G93; fi
+          cp "input/raw/core-$core.txt" raw/core.txt
+          if [ -f "input/elf/core-$core/dump.elf" ]; then
+            make -s -C tb/host BUILD=build/core OPT="-DBEZIER_Z_LINEAR=3 -DTB_ARC_TOLERANCE=.002f -DBEZIER_SIGMA=.004f -DTB_XY_BUDGET=.004f $extra" > raw/core-host-build.txt 2>&1
+            timeout 600 nice -n 19 simavr -m atmega328p -f 16000000 "input/elf/core-$core/dump.elf" > raw/core-simavr.txt 2>&1
+            sed 's/\x1b\[[0-9;]*m//g; s/\.*$//' raw/core-simavr.txt > raw/core-dump.txt
+            grep -qx done raw/core-dump.txt
+            tb/host/build/core/tb --dump-strict raw/core.txt raw/core-dump.txt > raw/core-check.txt
+            cat raw/core-check.txt
+          else
+            printf 'NOT VERIFIED: core dump unavailable\n' | tee -a raw/unavailable.txt
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
