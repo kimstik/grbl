@@ -85,3 +85,6 @@ OPT	-DBEZIER_Z_LINEAR=3 -DBEZIER_EXACT_INVERSE_TIME
 za-g93-xy-length	motion_control.c	z->chord = z->poly = 0.0f;	z->chord = 0.0f; z->poly = z->u;
 za-g93-per-segment	motion_control.c	pl_data->feed_rate *= mc_spline_dist(&z->chord, &z->rest, &z->chord);	;
 za-g93-needs-z	motion_control.c	if (!(pl_data->condition & PL_COND_FLAG_INVERSE_TIME))	if (1)
+OPT	-DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3
+za-end-horner	motion_control.c	if (!z->todo) { memcpy(r, target, 2*sizeof(float)); }	if (0) { memcpy(r, target, 2*sizeof(float)); }
+za-end-each-piece	motion_control.c	if (!z->todo) { memcpy(r, target, 2*sizeof(float)); }	if (1) { memcpy(r, target, 2*sizeof(float)); }

@@ -498,6 +498,8 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
   b = (segments - z->todo)*z->step;
   mc_spline_point(q, a, b - a, net); // Its first two control points
   mc_spline_point(r, b, a - b, net); // and its last two, last first
+  // The last point of the polyline is target itself, which Horner's rule misses by a bit.
+  if (!z->todo) { memcpy(r, target, 2*sizeof(float)); }
   mc_spline_dist(&z->chord, r, q);
   if (z->next <= z->pieces) { // The pieces are the segments.
     mc_spline_dist(&z->poly, r, q);

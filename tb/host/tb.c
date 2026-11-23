@@ -348,7 +348,6 @@ typedef struct { double len, ref, arc, par, shrt, noise, dz, xy; int back, moves
 typedef struct { uint16_t estimates, open, ends; float bound, time; } ztrace_t;
 #if BEZIER_Z_LINEAR == 3
 extern ztrace_t bezier_z_trace;
-#define ZA_GRID 4                           /* float grid of XY in the lengths, see z_check */
 #else
 static ztrace_t bezier_z_trace;
 #endif
@@ -373,10 +372,15 @@ static zerr_t z_check(const curve_t *c, const float *start, pt_t *pts, int n)
   if (len < arc[DENSE]) r.shrt = 1 - len/arc[DENSE];
   if (r.moves) r.noise = 4*FLT_EPSILON*((fabs(z0) + fabs(dz))/fabs(dz) + (len > 0 ? reach(c)/len : 0));
 #if BEZIER_Z_LINEAR == 3
-  /* The length ahead is estimated from the curve, not summed over the points to
-     come: their rounding to the float grid, a random walk over the segments, and
-     that of the pieces of the estimate are not in its bracket. */
-  if (r.moves && len > 0) r.noise += ZA_GRID*sqrt(n)*FLT_EPSILON*reach(c)/len;
+  /* Mode 3 estimates the length between the very points that it then travels,
+     the target included, so the float grid of XY is not in the error. What is
+     left is the rounding of its running sums, taken all one way and at
+     FLT_EPSILON an operation: two a point for the Z left, as its error grows by
+     the rounding of the length left and of its own step, and shrinks with it
+     (2n + 2); one a term for the sum behind the estimate, the chords of the
+     segments or three legs a piece; 5.5 for the chords, the hair at the start
+     and the last subtraction. Ending Z early gives up 1e-6 of what is left. */
+  if (r.moves) r.noise = FLT_EPSILON*(2*n + 2 + fmin(n - 1, 3*BEZIER_Z_PIECES_MAX) + 5.5 + fmax(fabs(z0), fabs(z0 + dz))/fabs(dz)) + 1e-6;
 #endif
   int at = 0;
   for (int k = 1; k <= n; k++) {
@@ -430,23 +434,28 @@ static double feed_time(const float *start, pt_t *pts, const float *feed, const 
   return t;
 }
 
-/* What is wrong with the time of a G93 curve, or NULL. The firmware measures
-   the length before the last point is snapped to the exact target, so a curve
-   of a few float steps has that much freedom. */
+/* What is wrong with the time of a G93 curve, or NULL. The two-pass firmware
+   measures the length before the last point is snapped to the exact target, so
+   a curve of a few float steps has that much freedom. */
 static double time_off;                     /* of the last G93 curve, as a share of 1/F */
 
 static const char *g93_fail(const curve_t *c, const float *start, pt_t *pts, const float *feed, const uint8_t *cond, int n, const ztrace_t *tr)
 {
   static char why[80];
   int one;
-  double len, t = feed_time(start, pts, feed, cond, n, &one, &len), slack = 0;
+  double len, t = feed_time(start, pts, feed, cond, n, &one, &len), slack;
   if (len <= 0) return NULL;
 #if BEZIER_Z_LINEAR == 3
-  slack = tr->time + ZA_GRID*sqrt(n)*FLT_EPSILON*reach(c)/len;  /* the length is an estimate, within its bracket */
+  /* The length is an estimate within its bracket, between the points travelled;
+     its sums take three legs a piece at most, at FLT_EPSILON a term. */
+  slack = tr->time + (3*BEZIER_Z_PIECES_MAX + 8)*FLT_EPSILON;
+  (void)c;
+#else
+  slack = 1e-4 + 8*FLT_EPSILON*(reach(c) + fabs(start[2]) + fabs(pts[n-1][2]))/len;
 #endif
   (void)tr;
   time_off = fabs(t*m.f - 1);
-  if (time_off > 1e-4 + slack + 8*FLT_EPSILON*(reach(c) + fabs(start[2]) + fabs(pts[n-1][2]))/len) { sprintf(why, "G93 commanded time %.6g min, expected %g", t, 1/m.f); return why; }
+  if (time_off > slack) { sprintf(why, "G93 commanded time %.6g min, expected %g", t, 1/m.f); return why; }
   return one || n == 1 ? NULL : "G93 feed differs between the segments of the curve";
 }
 #endif

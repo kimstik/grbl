@@ -91,6 +91,7 @@ Decisions that tests encode:
 | 58 | Z by estimate: open brackets estimated again; segment cap       | host `z.vec`, avr      | pass                                       |
 | 59 | Z by estimate: early end, lost first chord, far from origin     | host `z.vec`           | pass: never past the target or backwards   |
 | 60 | G93 by estimate: one feed, time off within the bracket          | host `z.vec`, avr      | pass; time off up to 3.1% in random curves |
+| 61 | Z by estimate: the estimate ends at the target, as the polyline | host `z.vec`, random   | pass; no allowance for the grid of XY      |
 
 ## 10, 11, 35: motion under simavr
 

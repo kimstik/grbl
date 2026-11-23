@@ -264,13 +264,55 @@ G5 X-20000 Y-100 Z-10 I0 J0 P19900 Q0
 G0 X-100 Y-100 Z7.77
 G5 X-20000 Y-100 Z-10 I0 J0 P19900 Q0
 
-= [59] far from the origin: the float grid of XY is in the lengths @zaim
+# 60 m out the float grid is 0.004 mm. The estimate runs between the same rounded
+# points as the polyline, so the grid is in both and not between them.
+= [59] far from the origin, on a coarse float grid @zaim
 G10 L2 P1 X0 Y0 Z0
 G0 X60000 Y-60000 Z-1000
 F1000
 G5 X60010 Y-60000 Z-1001 I30000 J0 P1 Q30000
-zlen 0 2e-3
+zlen 0 5e-4
 G5 X60010.5 Y-60000 Z-1004 I0.3 J0.5 P0.2 Q0.5
+
+# ---- the length estimated is the length travelled [61] -------------------------
+
+# The last point of the polyline is the target, bit for bit. Horner's rule at
+# t = 1 lands next to it on the float grid: -ffast-math regroups P3 - 3 P2 +
+# 3 P1 - P0 into sums of four times the machine coordinate, whose grid is four
+# times as coarse. An estimate that ended there was off by that step, and with
+# L travelled and R estimated every Z is off by dz * x * (L - R) / (R * L).
+# P0 = P1 = P2 at machine X-100 and P3 1025 float steps of 7.63e-6 mm further
+# make two segments of 128 and 897 steps, and the estimate takes every point.
+# Ending one step short, at 1024, put the middle at 128/1024 of 100 mm instead
+# of 128/1025: 0.0122 mm off, six times $12. With the estimate ending at the
+# target, the rounding of two sums is left.
+= [61] the estimate ends at the target: no float step of XY in the length @zaim @tol
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X-0.00782 Y0 Z100 I0 J0 P0.00782 Q0
+zaim 1 0 0
+zmm 0 0.0002
+
+# The same curve where the grid is fine enough for Horner's rule to end on the
+# target anyway.
+= [61] the same curve at the machine origin @zaim @tol
+G10 L2 P1 X0 Y0 Z0
+G0 X0 Y0 Z0
+F1000
+G5 X-0.00782 Y0 Z100 I0 J0 P0.00782 Q0
+zaim 1 0 0
+zmm 0 0.0002
+
+# B(t) = -10000 t^3 along X: the chords and the control polygons of eight pieces
+# are the same 10 m, so the first estimate vouches for all of the segments, 2000
+# of them with $12 at 0.002. Each takes its share of the length and of the Z
+# left; their rounding is all there is, in 1 m of Z.
+= [61] every segment updates the length and the Z left: rounding only @zaim
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X-10000 Y0 Z1000 I0 J0 P10000 Q0
+zaim 1 0 0
+zmm 0 0.002
 
 # ---- exact G93 [39] [54] ------------------------------------------------------
 
