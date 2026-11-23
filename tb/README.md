@@ -438,10 +438,17 @@ compilers, for G5 alone and G5+G5.1: 30 hex comparisons.
 | tol-za-g93 | 15.2.0  | 32534 -> 32456      | 378      | 404 -> 334          | +44        | -200          |
 | tol-za-g93 | 16.2.0  | 31766 -> 31764      | 378      | 406 -> 334          | +44        | 492           |
 
-The stack blocker is removed in the measured sweep. With avr-gcc 7.3.0,
-za and za-g93 fit beside a 512-byte bootloader, the latter with 20 bytes
-left. avr-gcc 15.2.0 still exceeds that flash limit; 16.2.0 fits. This is
-not a hardware qualification or a worst-case stack proof.
+avr-gcc 16.2.0 is the main build for the comparison: za-g93 uses 31764
+bytes, leaving 492 beside a 512-byte bootloader, and 334 bytes of stack
+against 378 free, a measured margin of 44. za without the G93 conversion
+uses 31644 bytes, leaving 612, with the same stack margin. The stack
+blocker is removed in the measured sweep; this is not a hardware
+qualification or a worst-case stack proof.
+
+The 7.3.0 results are kept as a toolchain comparison: za-g93 fits with
+only 20 bytes of flash and 25 bytes of measured stack margin. avr-gcc
+15.2.0 still exceeds the bootloader flash limit by 96 / 200 bytes for
+za / za-g93, despite its positive stack margin.
 
 The new pieces cost more time. First-target delay, milliseconds at
 16 MHz, tol-za, the same lines with Z as in the older table below:
@@ -451,6 +458,11 @@ The new pieces cost more time. First-target delay, milliseconds at
 | 7.3.0   | 40.601 -> 56.882  | 8.106 -> 10.848     | 7.933 -> 10.444     | 1.134           | 6397 / 9377           | 510.88     |
 | 15.2.0  | 40.559 -> 59.438  | 8.064 -> 11.215     | 7.888 -> 10.780     | 1.187           | 6680 / 9671           | 527.56     |
 | 16.2.0  | 40.785 -> 58.283  | 8.093 -> 11.021     | 7.915 -> 10.586     | 1.179           | 6571 / 9484           | 518.69     |
+
+With 16.2.0 and G93 conversion enabled, first-target delays are 58.461 ms
+for S+Z, 11.029 ms for [1]+Z and 10.596 ms for cap+Z. The gain on the
+long curves comes with the short-S regression shown above, not a uniform
+latency improvement.
 
 The gate, doubling and halving schedule are unchanged. No vector pin was
 changed; the 26 rewritten mode-3 mutants and all 53 earlier ones are
