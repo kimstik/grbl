@@ -413,6 +413,10 @@ with the full evidence suite. The cap/error/default choices remain open.
 
 ## Z by an estimate of the length ahead: prototype, negative result
 
+This section describes the estimator as it was at 75f4d1c. It has since
+been rebuilt to take one piece at a call; the numbers below are not of
+the code in this tree.
+
 `za` is `-DBEZIER_Z_LINEAR=3`, tried as a way to have the Z of `zl` without
 its first pass. **It does not fit an ATmega328P as it is**: in every
 measured build the deepest stack is larger than the RAM left free, by 24

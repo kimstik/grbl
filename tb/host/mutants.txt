@@ -58,24 +58,30 @@ g93-per-segment	motion_control.c	pl_data->feed_rate *= hypot_f(s, dz);	;
 g93-flag-kept	motion_control.c	bit_false(pl_data->condition,PL_COND_FLAG_INVERSE_TIME);	;
 g93-always	motion_control.c	if (pl_data->condition & PL_COND_FLAG_INVERSE_TIME) {	if (1) {
 OPT	-DBEZIER_Z_LINEAR=3
-za-weights	motion_control.c	poly = 0.5f*(poly - chord);	poly = 0.6666667f*(poly - chord);
-za-polygon-whole	motion_control.c	poly += tau*mc_spline_dist(c + 2, c);	poly += mc_spline_dist(c + 2, c);
-za-done-counted	motion_control.c	if (n == left) { chord = 1e-30f; poly = 0.0f; }	if (n == left) { chord += 1e-30f; }
-za-pieces-inexact	motion_control.c	if (m == 1) { poly = 0.0f; }	;
-za-gate-off	motion_control.c	if (poly*(fabsf(z->u) + BEZIER_SIGMA) > BEZIER_SIGMA*chord) {	if (0) {
-za-gate-no-z	motion_control.c	if (poly*(fabsf(z->u) + BEZIER_SIGMA) > BEZIER_SIGMA*chord) {	if (poly*BEZIER_SIGMA > BEZIER_SIGMA*chord) {
-za-no-doubling	motion_control.c	if (z->pieces < BEZIER_Z_PIECES_MAX) { z->pieces <<= 1; return; }	;
-za-no-refine	motion_control.c	z->next = left >> 1;	z->next = 0;
-za-refine-each	motion_control.c	z->next = left >> 1;	z->next = left - 1;
+za-weights	motion_control.c	a = 0.5f*(z->poly - z->chord);	a = 0.6666667f*(z->poly - z->chord);
+za-slope-whole	motion_control.c	p[i+2] = p[i] + s*(g + t*(2.0f*e0 + w));	p[i+2] = p[i] + 3.0f*s*(g + t*(2.0f*e0 + w));
+za-slope-wrong	motion_control.c	p[i+2] = p[i] + s*(g + t*(2.0f*e0 + w));	p[i+2] = p[i] + s*(g + t*(3.0f*e0 + w));
+za-slope-short	motion_control.c	p[i+2] = p[i] + s*(g + t*(2.0f*e0 + w));	p[i+2] = p[i] + 0.3f*s*(g + t*(2.0f*e0 + w));
+za-control-outside	motion_control.c	mc_spline_point(r, b, a - b, net);	mc_spline_point(r, b, b - a, net);
+za-polygon-open	motion_control.c	mc_spline_dist(&z->poly, r + 2, q + 2);	;
+za-one-piece	motion_control.c	z->todo -= min(m, z->todo);	z->todo = 0;
+za-done-counted	motion_control.c	{ z->todo = z->next; z->chord = z->poly = 1e-30f; }	{ z->todo = segments; z->chord = z->poly = 1e-30f; }
+za-sums-kept	motion_control.c	{ z->todo = z->next; z->chord = z->poly = 1e-30f; }	{ z->todo = z->next; }
+za-pieces-inexact	motion_control.c	if (z->next <= z->pieces) {	if (0) {
+za-gate-off	motion_control.c	if (a*(fabsf(z->u) + BEZIER_SIGMA) > BEZIER_SIGMA*z->chord) {	if (0) {
+za-gate-no-z	motion_control.c	if (a*(fabsf(z->u) + BEZIER_SIGMA) > BEZIER_SIGMA*z->chord) {	if (a*BEZIER_SIGMA > BEZIER_SIGMA*z->chord) {
+za-no-doubling	motion_control.c	if (z->pieces < BEZIER_Z_PIECES_MAX) { z->pieces <<= 1; return(true); }	;
+za-no-refine	motion_control.c	z->next >>= 1;	z->next = 0;
+za-refine-each	motion_control.c	z->next >>= 1;	z->next--;
 za-pieces-kept	motion_control.c	z->pieces = BEZIER_Z_PIECES;	z->pieces = BEZIER_Z_PIECES_MAX;
 za-no-hair	motion_control.c	(target[Z_AXIS] - position[Z_AXIS])*0.9999999f	(target[Z_AXIS] - position[Z_AXIS])
-za-no-early-end	motion_control.c	if (f < 0.999999f) {	if (1) {
-za-rest-kept	motion_control.c	z->rest -= c; z->u -= f*z->u;	z->u -= f*z->u;
-za-from-start	motion_control.c	memcpy(z->q, p, sizeof(z->q));	;
-za-x-only	motion_control.c	return(hypot_f(a[X_AXIS] - b[X_AXIS], a[Y_AXIS] - b[Y_AXIS]));	return(hypot_f(a[X_AXIS] - b[X_AXIS], 0));
+za-no-early-end	motion_control.c	if (b < 0.999999f) {	if (1) {
+za-rest-kept	motion_control.c	z->rest -= a; z->u -= b*z->u;	z->u -= b*z->u;
+za-chord-from-start	motion_control.c	a = mc_spline_dist(&z->poly, q, p);	a = mc_spline_dist(&z->poly, q, position);
+za-x-only	motion_control.c	float d = hypot_f(a[X_AXIS] - b[X_AXIS], a[Y_AXIS] - b[Y_AXIS]);	float d = hypot_f(a[X_AXIS] - b[X_AXIS], 0);
 za-sign	motion_control.c	p[Z_AXIS] = target[Z_AXIS] - z->u;	p[Z_AXIS] = target[Z_AXIS] + z->u;
 za-end-kept	motion_control.c	p[Z_AXIS] = target[Z_AXIS];	;
 OPT	-DBEZIER_Z_LINEAR=3 -DBEZIER_EXACT_INVERSE_TIME
-za-g93-xy-length	motion_control.c	pl_data->feed_rate *= hypot_f(z->rest, z->u);	pl_data->feed_rate *= z->rest;
-za-g93-per-segment	motion_control.c	pl_data->feed_rate *= hypot_f(z->rest, z->u);	;
+za-g93-xy-length	motion_control.c	z->chord = z->poly = 0.0f;	z->chord = 0.0f; z->poly = z->u;
+za-g93-per-segment	motion_control.c	pl_data->feed_rate *= mc_spline_dist(&z->chord, &z->rest, &z->chord);	;
 za-g93-needs-z	motion_control.c	if (!(pl_data->condition & PL_COND_FLAG_INVERSE_TIME))	if (1)

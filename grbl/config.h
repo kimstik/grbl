@@ -746,11 +746,10 @@
   // of the XY polyline length left. The first estimate delays the first target; without Z
   // (and without G93 conversion) it is skipped, but helper/state overhead remains. Pieces
   // double from BEZIER_Z_PIECES to BEZIER_Z_PIECES_MAX until an algebraic bracket gate passes;
-  // if still too wide, another estimate is due with half the segments left. The gate bounds
-  // Z error by BEZIER_SIGMA in exact arithmetic, not with float rounding of XY or the estimate.
-  // It is not a firmware accuracy guarantee; see tb/README.md for measured errors and costs.
-  // Mode 3 is a prototype: as measured there, its deepest stack on ATmega328P is 24 to 46 bytes
-  // more than the RAM left free, and with G5.1 it can outgrow the flash beside a bootloader.
+  // if still too wide, another estimate is due with half the segments left. Realtime work is
+  // looked after between the pieces. The gate bounds Z error by BEZIER_SIGMA in exact
+  // arithmetic, not with float rounding of XY or the estimate. It is not a firmware accuracy
+  // guarantee; see tb/README.md for the measured errors, delays, stack and flash.
   // #define BEZIER_Z_LINEAR 2
 
   #ifndef BEZIER_Z_PIECES
