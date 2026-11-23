@@ -40,7 +40,7 @@ Decisions that tests encode:
 | 7  | Negative P accepted                                             | host vectors           | defect (error:4)                           |
 | 8  | Rejected line: nothing queued, parser state byte-identical      | host, every line       | defect: spline_pq written early            |
 | 9  | Generation time and delay before the first target               | avr (2000 segments)    | measured per option, see tables            |
-| 10 | Stack on ATmega328P: static chain and with interrupts           | avr, avr dynamic       | margin 52-65 bytes; Z estimate: negative   |
+| 10 | Stack on ATmega328P: static chain and with interrupts           | avr, avr dynamic       | measured margin 25-65 bytes, see tables    |
 | 11 | Planner starvation while streaming curves at speed              | avr dynamic            | base: none; $12 + length: stops            |
 | 12 | Cusp: the planner stops at the reversal                         | host `junction`        | pass                                       |
 | 13 | Smooth chain with implicit I/J: no corner at the joins          | host `set smooth`      | pass                                       |
@@ -50,7 +50,7 @@ Decisions that tests encode:
 | 17 | Translation by G91/G92, G20 vs G21: same segments               | host `same`            | pass                                       |
 | 18 | Reversed curve within tolerance                                 | host vector            | pass                                       |
 | 19 | Check mode, `$J=G5` rejection, mode changes before implicit I/J | host vectors           | pass                                       |
-| 20 | Mutation testing                                                | host `mutate.sh`       | 73 of 73 killed, including options         |
+| 20 | Mutation testing                                                | host `mutate.sh`       | 79 of 79 killed, including options         |
 | 21 | Random curves, failures shrunk to a minimal line                | host `--random`        | pass (negative P skipped, see 7)           |
 | 22 | Host vs AVR: same segments                                      | CI simavr `= host`     | G5.1, [1] and G2 differ (see below)        |
 | 23 | Compiler vs compiler: same segments                             | CI simavr per gcc      | G5.1, [1]: 7.3 differs from 15-17          |
@@ -411,11 +411,81 @@ to base (46 over zt). These were scratch compile probes before the
 realtime-refill fix, not current production costs or verified alternatives
 with the full evidence suite. The cap/error/default choices remain open.
 
-## Z by an estimate of the length ahead: prototype, negative result
+## Z by an estimate of the length ahead
 
-This section describes the estimator as it was at 75f4d1c. It has since
-been rebuilt to take one piece at a call; the numbers below are not of
-the code in this tree.
+### One piece at a call: measured fit
+
+[CI run 45219551226](https://github.com/kimstik/grbl/actions/runs/45219551226),
+firmware ca85492, completes all 28 jobs. The estimator now returns after
+one piece, and the generator services realtime work between calls, with
+none of the estimator frame under it. A piece's control points come from
+its ends and slopes in the original net, not a de Casteljau copy. The
+point helper is shared with emission, and only used by mode 3. Static
+state is 25 bytes, 2 more than before; RAM left free is 378 bytes.
+
+**All values in these tables are measured** in that run and in the
+previous run 45190827894 (75f4d1c). Flash is production text+data with
+G5+G5.1. Stack is the deepest reduced-dyn watermark against production
+free RAM. The older modes remain byte-identical to 5601c12 on all three
+compilers, for G5 alone and G5+G5.1: 30 hex comparisons.
+
+| Option     | avr-gcc | Flash before -> now | Free now | Stack before -> now | Margin now | Left of 32256 |
+|------------|---------|---------------------|----------|---------------------|------------|---------------|
+| tol-za     | 7.3.0   | 32198 -> 32140      | 378      | 422 -> 353          | +25        | 116           |
+| tol-za     | 15.2.0  | 32384 -> 32352      | 378      | 404 -> 334          | +44        | -96           |
+| tol-za     | 16.2.0  | 31650 -> 31644      | 378      | 406 -> 334          | +44        | 612           |
+| tol-za-g93 | 7.3.0   | 32368 -> 32236      | 378      | 426 -> 353          | +25        | 20            |
+| tol-za-g93 | 15.2.0  | 32534 -> 32456      | 378      | 404 -> 334          | +44        | -200          |
+| tol-za-g93 | 16.2.0  | 31766 -> 31764      | 378      | 406 -> 334          | +44        | 492           |
+
+The stack blocker is removed in the measured sweep. With avr-gcc 7.3.0,
+za and za-g93 fit beside a 512-byte bootloader, the latter with 20 bytes
+left. avr-gcc 15.2.0 still exceeds that flash limit; 16.2.0 fits. This is
+not a hardware qualification or a worst-case stack proof.
+
+The new pieces cost more time. First-target delay, milliseconds at
+16 MHz, tol-za, the same lines with Z as in the older table below:
+
+| avr-gcc | S+Z before -> now | [1]+Z before -> now | Cap+Z before -> now | S without Z now | gen/seg no Z / with Z | Max gap us |
+|---------|-------------------|---------------------|---------------------|-----------------|-----------------------|------------|
+| 7.3.0   | 40.601 -> 56.882  | 8.106 -> 10.848     | 7.933 -> 10.444     | 1.134           | 6397 / 9377           | 510.88     |
+| 15.2.0  | 40.559 -> 59.438  | 8.064 -> 11.215     | 7.888 -> 10.780     | 1.187           | 6680 / 9671           | 527.56     |
+| 16.2.0  | 40.785 -> 58.283  | 8.093 -> 11.021     | 7.915 -> 10.586     | 1.179           | 6571 / 9484           | 518.69     |
+
+The gate, doubling and halving schedule are unchanged. No vector pin was
+changed; the 26 rewritten mode-3 mutants and all 53 earlier ones are
+killed in CI. All dump checks (15 finite curves with Z enabled, 5 with
+nonzero Z) and the strict shared corpus (8 with Z, both G94 and G93)
+pass on all three compilers. The reduced motion sweep has 40 programs
+and 6 holds per job, every final XYZ exact.
+
+There are still stops with blocks queued: tol-za has 1 / 1 / 3 such
+stops on 7.3 / 15.2 / 16.2, with largest queued entry feed 2664 / 0 /
+2664 mm/min; tol-za-g93 has 1 / 2 / 5, entry feed 0 / 0 / 2664. Entry
+feed is not instantaneous speed. Local scratch instrumentation placed
+one nonzero-entry event at block 23 of the first 2 mm curve, with 7
+blocks queued. That curve has one completed estimate before its first
+target, so this event was not a mid-curve estimate. A 31.45 ms gap was
+seen between blocks 21 and 22; the responsible path inside
+mc_line/realtime/planner is **not verified**. More instrumentation moves
+or removes the event; the last bounded scratch sweep did not reproduce
+it. No production motion code or ISR was changed to hide it.
+
+Host random, 5000 curves per tolerance, seed 1 (2569 with Z), still
+shows the float-grid limitation. At .002 / .01 / .1, za exceeds SIGMA
+without allowance on 7.2% / 1.0% / 0 of curves; the largest errors are
+.0802 / .1024 / .0770 mm. The bracket passes on 2169 / 2454 / 2569
+curves, of which 147 / 25 / 0 exceed SIGMA, all with lead over 1. No
+bracket-accepted curve with lead up to 1 exceeds it. Thus fitting the
+stack does not turn the algebraic gate into a float-accuracy guarantee.
+The random artifacts retain the full lead bands and the separate double
+XY reference. Hardware and random Z distributions on AVR remain
+**not verified**.
+
+### Earlier estimator: negative result at 75f4d1c
+
+The rest of this section records the earlier implementation and its
+measurements, not the code now in this tree.
 
 `za` is `-DBEZIER_Z_LINEAR=3`, tried as a way to have the Z of `zl` without
 its first pass. **It does not fit an ATmega328P as it is**: in every
