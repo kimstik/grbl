@@ -50,7 +50,7 @@ Decisions that tests encode:
 | 17 | Translation by G91/G92, G20 vs G21: same segments               | host `same`            | pass                                       |
 | 18 | Reversed curve within tolerance                                 | host vector            | pass                                       |
 | 19 | Check mode, `$J=G5` rejection, mode changes before implicit I/J | host vectors           | pass                                       |
-| 20 | Mutation testing                                                | host `mutate.sh`       | 79 of 79 killed, including options         |
+| 20 | Mutation testing                                                | host `mutate.sh`       | 81 of 81 killed, including options         |
 | 21 | Random curves, failures shrunk to a minimal line                | host `--random`        | pass (negative P skipped, see 7)           |
 | 22 | Host vs AVR: same segments                                      | CI simavr `= host`     | G5.1, [1] and G2 differ (see below)        |
 | 23 | Compiler vs compiler: same segments                             | CI simavr per gcc      | G5.1, [1]: 7.3 differs from 15-17          |
@@ -414,6 +414,67 @@ with the full evidence suite. The cap/error/default choices remain open.
 
 ## Z by an estimate of the length ahead
 
+### The estimate ends at the target
+
+[CI run 45257065299](https://github.com/kimstik/grbl/actions/runs/45257065299),
+firmware 07ebf9a, completes all 28 jobs.
+
+At ca85492 the last piece of an estimate ended at Horner's rule for
+t = 1, while the polyline ends at the target itself. Under -ffast-math
+the two are about one float step of the machine coordinate apart: the
+third difference is regrouped into sums four times as large. The length
+estimated was off by that step even with a piece a segment, and Z by
+`|dz| * step / length`: more than 0.002 mm once the Z travel is 263 times
+the XY length at X-100. The bench hid it under an empirical allowance
+for the float grid of XY. What the section below calls the float-grid
+limitation was this defect, not a property of the method.
+
+The last piece now ends at the target. **Predicted** for the vector of
+[61] (P0 = P1 = P2 at machine X-100, the end 1025 float steps away, two
+segments, Z 100 mm): the middle point at 128/1024 of the travel instead
+of 128/1025, 0.0122 mm off, and rounding only once fixed. **Measured**
+on the host: 0.0122 mm, then 0.000011 mm. Host random, 5000 curves a
+tolerance, seed 1, 2569 with Z, error against the emitted polyline with
+no allowance, **measured** in CI runs 45219551226 and 45257065299:
+
+| $12   | Curves over $12 before -> now | Largest error mm before -> now | Bracket passed | Of those over $12 before -> now | Predicted |
+|-------|-------------------------------|--------------------------------|----------------|---------------------------------|-----------|
+| 0.002 | 7.2% -> 1.6%                  | 0.0802 -> 0.0098               | 2169           | 147 -> 0                        | about 0   |
+| 0.01  | 1.0% -> 0.04%                 | 0.1024 -> 0.0120               | 2454           | 25 -> 0                         | about 0   |
+| 0.1   | 0 -> 0                        | 0.0770 -> 0.0770               | 2569           | 0 -> 0                          | 0         |
+
+The 40 and 1 curves still over are those whose estimates stay open at
+64 pieces. The largest error of a curve whose bracket passed is 0.00166
+/ 0.00766 / 0.0770 mm.
+
+The test allowance of mode 3 is now derived instead of calibrated: the
+worst-case rounding of its running sums, `FLT_EPSILON * (2n + 2 +
+min(n - 1, 3 * BEZIER_Z_PIECES_MAX) + 5.5 + zmax/|dz|) + 1e-6` of the Z
+travel for n segments, see `z_check` in `host/tb.c`. It grows with n
+because it takes every rounding the same way: 5.0e-4 of the travel for
+2000 segments, where the 2000 updates of vector [61] measure 1.4e-6.
+The G93 time check of mode 3 lost its fixed 1e-4 and its grid term the
+same way. Under this bench the firmware of ca85492 fails vectors [59]
+and [61]. 81 of 81 mutants are killed; the dump checks (15 curves) and
+the strict shared corpus (8 with Z, G94 and G93) pass on all three
+compilers.
+
+**Measured** cost, production G5+G5.1. Stack is unchanged, the delays
+before the first target are within 0.06 ms of the table below, and the
+older modes remain byte-identical to 5601c12 (30 hex comparisons):
+
+| Option     | avr-gcc | Flash before -> now | Left of 32256 | Stack / free | Margin |
+|------------|---------|---------------------|---------------|--------------|--------|
+| tol-za     | 7.3.0   | 32140 -> 32176      | 80            | 353 / 378    | +25    |
+| tol-za     | 15.2.0  | 32352 -> 32388      | -132          | 334 / 378    | +44    |
+| tol-za     | 16.2.0  | 31644 -> 31678      | 578           | 334 / 378    | +44    |
+| tol-za-g93 | 7.3.0   | 32236 -> 32264      | -8            | 353 / 378    | +25    |
+| tol-za-g93 | 15.2.0  | 32456 -> 32490      | -234          | 334 / 378    | +44    |
+| tol-za-g93 | 16.2.0  | 31764 -> 31786      | 470           | 334 / 378    | +44    |
+
+The two-pass mode 2 has the same mismatch in its first pass, which sums
+the last chord up to Horner's rule at about 1. It is not changed here.
+
 ### One piece at a call: measured fit
 
 [CI run 45219551226](https://github.com/kimstik/grbl/actions/runs/45219551226),
@@ -493,7 +554,8 @@ bracket-accepted curve with lead up to 1 exceeds it. Thus fitting the
 stack does not turn the algebraic gate into a float-accuracy guarantee.
 The random artifacts retain the full lead bands and the separate double
 XY reference. Hardware and random Z distributions on AVR remain
-**not verified**.
+**not verified**. The 147 / 25 curves were the end-point defect fixed in
+07ebf9a, see above.
 
 ### Earlier estimator: negative result at 75f4d1c
 
