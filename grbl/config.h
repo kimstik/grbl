@@ -742,13 +742,28 @@
   // curve arc length. Mode 2 makes two passes on every curve, even without Z: the first
   // queues no new blocks and delays the first target by up to 0.80 s in the measured corpus
   // at 16 MHz. Realtime work runs during it, but the planner can drain and motion can stop.
+  // 3: one pass. Each segment takes the share of the Z left that its chord is of an estimate
+  // of the XY polyline length left. The first estimate delays the first target; without Z
+  // (and without G93 conversion) it is skipped, but helper/state overhead remains. Pieces
+  // double from BEZIER_Z_PIECES to BEZIER_Z_PIECES_MAX until an algebraic bracket gate passes;
+  // if still too wide, another estimate is due with half the segments left. The gate bounds
+  // Z error by BEZIER_SIGMA in exact arithmetic, not with float rounding of XY or the estimate.
+  // It is not a firmware accuracy guarantee; see tb/README.md for measured errors and costs.
   // #define BEZIER_Z_LINEAR 2
+
+  #ifndef BEZIER_Z_PIECES
+    #define BEZIER_Z_PIECES 8        // Mode 3: pieces of the first try at the length left,
+  #endif
+  #ifndef BEZIER_Z_PIECES_MAX
+    #define BEZIER_Z_PIECES_MAX 64   // and of the last, each try twice the one before; 128 at most
+  #endif
 
   // G93 with BEZIER_Z_LINEAR 2: convert inverse time to one 3D path feed using the summed
   // XY chords and Z travel. Before acceleration and step rounding, the nominal total is
   // 1/F minutes, each segment its length share. Float/end snapping add a small error;
   // actual cycle time includes acceleration and axis limits. Undefined: each segment
   // independently takes 1/F minutes at its nominal feed (the existing G5 behavior).
+  // With BEZIER_Z_LINEAR 3 the length is the first estimate, and the time is off by its error.
   // #define BEZIER_EXACT_INVERSE_TIME
 #endif
 
@@ -756,8 +771,13 @@
 #if defined(ENABLE_QUADRATIC_SPLINES) && !defined(ENABLE_CUBIC_SPLINES)
   #error "ENABLE_QUADRATIC_SPLINES requires ENABLE_CUBIC_SPLINES to be enabled first"
 #endif
-#if defined(BEZIER_EXACT_INVERSE_TIME) && BEZIER_Z_LINEAR != 2
-  #error "BEZIER_EXACT_INVERSE_TIME requires BEZIER_Z_LINEAR 2"
+#if defined(BEZIER_EXACT_INVERSE_TIME) && BEZIER_Z_LINEAR != 2 && BEZIER_Z_LINEAR != 3
+  #error "BEZIER_EXACT_INVERSE_TIME requires BEZIER_Z_LINEAR 2 or 3"
+#endif
+#if BEZIER_Z_LINEAR == 3
+  #if BEZIER_Z_PIECES < 1 || BEZIER_Z_PIECES > BEZIER_Z_PIECES_MAX || BEZIER_Z_PIECES_MAX > 128 || (BEZIER_Z_PIECES & (BEZIER_Z_PIECES-1)) || (BEZIER_Z_PIECES_MAX & (BEZIER_Z_PIECES_MAX-1))
+    #error "BEZIER_Z_PIECES and BEZIER_Z_PIECES_MAX must be powers of two, 1 <= pieces <= max <= 128"
+  #endif
 #endif
 
 

@@ -26,7 +26,7 @@ dump: $(BUILD)/dump.elf
 
 $(BUILD)/bench.elf: $(OBJECTS) $(BUILD)/bench.o
 $(BUILD)/dyn.elf: $(filter-out %/serial.o %/system.o,$(OBJECTS)) $(addprefix $(BUILD)/dyn-,serial.o system.o) $(BUILD)/dyn.o
-$(BUILD)/dump.elf: $(OBJECTS) $(BUILD)/dump.o
+$(BUILD)/dump.elf: $(filter-out %/motion_control.o,$(OBJECTS)) $(BUILD)/dump-motion_control.o $(BUILD)/dump.o
 $(BUILD)/bench.elf $(BUILD)/dyn.elf $(BUILD)/dump.elf:
 	$(CC) -o $@ $^ -lm -Wl,--gc-sections
 	avr-size $@
@@ -58,6 +58,10 @@ $(BUILD)/dyn-%.o: $(SRC)/%.c | $(BUILD)
 
 $(BUILD)/dump.o: bench.c $(BUILD)/lines.h | $(BUILD)
 	$(CC) -DTB_DUMP -I$(BUILD) -c $< -o $@
+
+# The dump also prints the trace of BEZIER_Z_LINEAR 3, which the timed bench must not carry.
+$(BUILD)/dump-motion_control.o: $(SRC)/motion_control.c | $(BUILD)
+	$(CC) -DBEZIER_Z_TRACE -c $< -o $@
 
 $(BUILD)/dyn.o: dyn.c | $(BUILD)
 	$(CC) -c $< -o $@

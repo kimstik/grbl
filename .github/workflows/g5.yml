@@ -1,193 +1,176 @@
-name: G5 build
+name: G5 Z aim prototype
 
 on:
   push:
   pull_request:
 
-# The options of the spline section of config.h in every combination: a name,
-# then the flags added to G5+G5.1.
+defaults:
+  run:
+    shell: bash
+
 env:
   OPTIONS: |
     base
     tol -DBEZIER_SIGMA=settings.arc_tolerance
-    zt -DBEZIER_Z_LINEAR=1
-    zl -DBEZIER_Z_LINEAR=2
-    zl-g93 -DBEZIER_Z_LINEAR=2 -DBEZIER_EXACT_INVERSE_TIME
     tol-zt -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=1
     tol-zl -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=2
     tol-zl-g93 -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=2 -DBEZIER_EXACT_INVERSE_TIME
+    tol-za -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3
+    tol-za-g93 -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3 -DBEZIER_EXACT_INVERSE_TIME
 
 jobs:
   avr:
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
-      # 7.3.0: Ubuntu package. 15.2.0: ZakKemble/avr-gcc-build prebuilt.
-      # 16.2.0: Arch Linux packages pinned from the Arch archive.
-      # 17-*: GCC weekly snapshot built here and cached.
       matrix:
         include:
           - gcc: '7.3.0'
           - gcc: '15.2.0'
           - gcc: '16.2.0'
             container: 'archlinux:latest'
-          - gcc: '17-20261115'
-            snapshot: true
     name: avr-gcc ${{ matrix.gcc }}
     container: ${{ matrix.container }}
     steps:
-      # The Arch image lacks git, which checkout needs for full history.
       - name: Arch packages
         if: matrix.container
         run: |
-          pacman -Syu --noconfirm --needed git make diffutils
+          set -euo pipefail
+          pacman -Syu --noconfirm --needed git make diffutils bash
           a=https://archive.archlinux.org/packages/a
           pacman -U --noconfirm \
             $a/avr-binutils/avr-binutils-2.47-1-x86_64.pkg.tar.zst \
             $a/avr-gcc/avr-gcc-16.2.0-1-x86_64.pkg.tar.zst \
             $a/avr-libc/avr-libc-2.3.2-4-any.pkg.tar.zst
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Ubuntu avr-gcc
         if: matrix.gcc == '7.3.0'
         run: |
+          set -euo pipefail
           sudo apt-get update -q
           sudo apt-get install -y -q --no-install-recommends gcc-avr avr-libc binutils-avr
-
       - name: ZakKemble avr-gcc
         if: matrix.gcc == '15.2.0'
         run: |
+          set -euo pipefail
           name=avr-gcc-${{ matrix.gcc }}-x64-linux
           curl -fsSL "https://github.com/ZakKemble/avr-gcc-build/releases/download/v${{ matrix.gcc }}-1/$name.tar.bz2" | tar -xj -C "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/$name/bin" >> "$GITHUB_PATH"
-
-      - name: Snapshot avr-gcc cache
-        if: matrix.snapshot
-        id: cache
-        uses: actions/cache@v4
-        with:
-          path: ~/avr-gcc-snapshot
-          key: avr-gcc-${{ matrix.gcc }}-${{ hashFiles('.github/build-avr-gcc.sh') }}
-
-      - name: Snapshot avr-gcc build
-        if: matrix.snapshot && steps.cache.outputs.cache-hit != 'true'
+          printf '%s\n' "$RUNNER_TEMP/$name/bin" >> "$GITHUB_PATH"
+      - name: Previous modes match 5601c12
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q --no-install-recommends libgmp-dev libmpfr-dev libmpc-dev texinfo
-          sh .github/build-avr-gcc.sh ~/avr-gcc-snapshot ${{ matrix.gcc }}
-
-      - name: Snapshot avr-gcc path
-        if: matrix.snapshot
-        run: echo ~/avr-gcc-snapshot/bin >> "$GITHUB_PATH"
-
-      - name: Toolchain version
-        run: avr-gcc --version | head -1
-
-      # Splines disabled with the stock flags must produce the vanilla binary.
-      - name: Splines off matches master
-        run: |
-          STOCK='avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -ffunction-sections -flto'
-          git worktree add -q ../master origin/master
-          make -s -C ../master COMPILE="$STOCK"
-          make -s COMPILE="$STOCK"
-          md5sum ../master/grbl.hex grbl.hex
-          cmp ../master/grbl.hex grbl.hex
-
-      # With none of the spline options set the firmware is the one before them.
-      - name: Options off match 73c589e
-        run: |
-          BRANCH=$(make -s --eval 'print-compile: ; @echo $(COMPILE)' print-compile)
-          git worktree add -q ../before 73c589e
-          for def in '-DENABLE_CUBIC_SPLINES' '-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES'; do
-            make -s clean
-            make -s -C ../before clean
-            make -s -C ../before COMPILE="$BRANCH $def"
-            make -s COMPILE="$BRANCH $def"
-            md5sum ../before/grbl.hex grbl.hex
-            cmp ../before/grbl.hex grbl.hex
-          done
-
-      # ATmega328P: 32768 bytes flash, 32256 with the 512-byte Uno bootloader.
-      # Then the spline options on top of G5+G5.1 with the branch flags, and
-      # the free RAM of each for the stack check of the simavr job.
-      - name: Size matrix
-        run: |
-          STOCK='avr-gcc -Wall -Os -DF_CPU=16000000 -mmcu=atmega328p -I. -ffunction-sections -flto'
-          BRANCH=$(make -s --eval 'print-compile: ; @echo $(COMPILE)' print-compile)
-          G5='-DENABLE_CUBIC_SPLINES'
-          G51='-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES'
-          printf '### avr-gcc ${{ matrix.gcc }}\n\n' >> "$GITHUB_STEP_SUMMARY"
-          printf '| flags | splines | flash | ram | free (32256) |\n|---|---|---|---|---|\n' >> "$GITHUB_STEP_SUMMARY"
-          for flags in stock branch; do
-            if [ $flags = stock ]; then cc="$STOCK"; else cc="$BRANCH"; fi
-            for cfg in off G5 G5+G5.1; do
-              case $cfg in off) def='' ;; G5) def="$G5" ;; *) def="$G51" ;; esac
+          set -euo pipefail
+          avr-gcc --version | head -1
+          git worktree add -q ../before 5601c12
+          cc=$(make -s --eval 'print-compile: ; @echo $(COMPILE)' print-compile)
+          mkdir -p raw
+          for splines in '-DENABLE_CUBIC_SPLINES' '-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES'; do
+            while read -r name opt; do
+              case $name in tol-za*) continue ;; esac
               make -s clean
-              if ! make -s COMPILE="$cc $def" > /dev/null 2>&1; then
-                printf '| %s | %s | link fails (> 32768) | | |\n' $flags $cfg | tee -a "$GITHUB_STEP_SUMMARY"
-                [ $flags = branch ] && [ $cfg = G5+G5.1 ] && exit 1
-                continue
-              fi
-              set --$(avr-size --format=berkeley build/main.elf | tail -1)
-              flash=$(( $1 + $2 )); ram=$(( $2 + $3 ))
-              printf '| %s | %s | %d | %d | %d |\n' $flags $cfg $flash $ram $(( 32256 - flash )) | tee -a "$GITHUB_STEP_SUMMARY"
-              if [ $flags = branch ] && [ $cfg = G5+G5.1 ] && [ $flash -gt 32256 ]; then
-                echo "::error::G5+G5.1 with branch flags does not fit 32256 bytes"
-                exit 1
+              make -s -C ../before clean
+              make -s -C ../before COMPILE="$cc $splines $opt" > /dev/null
+              make -s COMPILE="$cc $splines $opt" > /dev/null
+              cmp ../before/grbl.hex grbl.hex
+              printf '%s %s identical\n' "$splines" "$name" | tee -a raw/identity.txt
+            done <<< "$OPTIONS"
+          done
+      - name: Production sizes and AVR benches
+        run: |
+          set -euo pipefail
+          mkdir -p raw elf
+          cc=$(make -s --eval 'print-compile: ; @echo $(COMPILE)' print-compile)
+          defs='-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES'
+          printf 'option flash delta ram free_ram boot_margin fits_32k\n' > raw/sizes.txt
+          while read -r name opt; do
+            make -s clean
+            if make -s COMPILE="$cc $defs $opt" > raw/firmware-$name.log 2>&1; then
+              set -- $(avr-size build/main.elf | tail -1)
+              flash=$(($1+$2)); ram=$(($2+$3))
+              if [ "$name" = base ]; then base=$flash; fi
+              fit=yes; [ "$flash" -le 32768 ] || fit=no
+              printf '%s %d %+d %d %d %d %s\n' "$name" "$flash" "$((flash-base))" "$ram" "$((2048-ram))" "$((32256-flash))" "$fit" >> raw/sizes.txt
+              mkdir -p elf/$name
+              printf '%d\n' "$((2048-ram))" > elf/$name/free-ram.txt
+              cp build/main.elf elf/$name/firmware.elf
+            else
+              printf '%s link-failed\n' "$name" >> raw/sizes.txt
+              printf '::warning::Production %s does not link; see raw firmware log\n' "$name"
+            fi
+            for target in all dump dyn; do
+              extra=''; [ "$target" != dyn ] || extra=-DTB_DYN_SPLINES_ONLY
+              # Separate BUILD avoids reusing objects with different test-only defines.
+              dir=build/$name-$target
+              mkdir -p elf/$name
+              if make -s -C tb/avr BUILD="$dir" DEFS="$defs $opt $extra" "$target" > raw/build-$name-$target.log 2>&1; then
+                image=$target; [ "$image" != all ] || image=bench
+                cp tb/avr/$dir/$image.elf elf/$name/
+                avr-size tb/avr/$dir/$image.elf >> raw/bench-sizes.txt
+              else
+                printf '::warning::%s %s unavailable (build or 32768-byte limit); log retained\n' "$name" "$target"
+                printf '%s %s unavailable\n' "$name" "$target" >> raw/unavailable.txt
               fi
             done
-          done
-          printf '\n| options | flash | delta | ram | free (32256) |\n|---|---|---|---|---|\n' >> "$GITHUB_STEP_SUMMARY"
-          printf '%s' "$OPTIONS" | while read -r name opt; do
-            make -s clean
-            if ! make -s COMPILE="$BRANCH $G51 $opt" > /dev/null 2>&1; then
-              printf '| %s | link fails (> 32768) | | | |\n' $name | tee -a "$GITHUB_STEP_SUMMARY"
-              continue
-            fi
-            set -- $(avr-size --format=berkeley build/main.elf | tail -1)
-            flash=$(( $1 + $2 )); ram=$(( $2 + $3 ))
-            [ $name = base ] && base=$flash
-            printf '| %s | %d | %+d | %d | %d |\n' $name $flash $(( flash - base )) $ram $(( 32256 - flash )) | tee -a "$GITHUB_STEP_SUMMARY"
-            mkdir -p tb/avr/build/$name
-            echo $(( 2048 - ram )) > tb/avr/build/$name/free-ram.txt
-          done
-
-      # The simavr benches of every option combination, branch flags.
-      - name: Build AVR benches
-        run: |
-          printf '%s' "$OPTIONS" | while read -r name opt; do
-            set -- BUILD=build/$name DEFS="-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES $opt"
-            make -s -C tb/avr "$@"
-            make -s -C tb/avr "$@" dyn || echo "::warning::dyn.elf ($name) does not build or fit with avr-gcc ${{ matrix.gcc }}"
-            make -s -C tb/avr "$@" dump
-          done
+          done <<< "$OPTIONS"
+          cat raw/sizes.txt
+          cat raw/sizes.txt >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: bench-${{ matrix.gcc }}
+          name: avr-${{ matrix.gcc }}
           path: |
-            tb/avr/build/*/bench.elf
-            tb/avr/build/*/dyn.elf
-            tb/avr/build/*/dump.elf
-            tb/avr/build/*/free-ram.txt
+            elf
+            raw
 
-  # Correctness on the PC: vectors, random curves, G5-only build, the spline
-  # options, mutants.
   host:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Bench
-        run: make -s -j4 -O -C tb/host test
+      - name: Vectors and previous modes
+        run: |
+          set -euo pipefail
+          timeout 1800 nice -n 19 make -s -C tb/host test > host-test.txt 2>&1
+          cat host-test.txt
       - name: Mutation testing
-        run: tb/host/mutate.sh
+        run: |
+          set -euo pipefail
+          timeout 1800 nice -n 19 tb/host/mutate.sh > mutants.txt 2>&1
+          cat mutants.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: host-tests
+          path: |
+            host-test.txt
+            mutants.txt
 
-  # Every compiler's benches under simavr, for every option combination:
-  # cycles, stack, segments against the host bench built with the same options,
-  # and the real main loop with the stepper running.
+  random:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        tol: ['.002', '.01', '.1']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Same random curves in each Z mode
+        run: |
+          set -euo pipefail
+          for mode in 1 2 3; do
+            opt="-DBEZIER_SIGMA=settings.arc_tolerance -DTB_ARC_TOLERANCE=${{ matrix.tol }}f -DBEZIER_Z_LINEAR=$mode"
+            make -s -C tb/host BUILD=build/random-$mode OPT="$opt" > build-$mode.txt 2>&1
+            timeout 1800 nice -n 19 tb/host/build/random-$mode/tb --random 5000 1 > random-$mode.txt 2>&1
+            cat random-$mode.txt
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: random-${{ matrix.tol }}
+          path: |
+            build-*.txt
+            random-*.txt
+
   simavr:
     needs: avr
     if: ${{ !cancelled() }}
@@ -195,79 +178,58 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        gcc: ['7.3.0', '15.2.0', '16.2.0', '17-20261115']
-        opt: [base, tol, zt, zl, zl-g93, tol-zt, tol-zl, tol-zl-g93]
+        gcc: ['7.3.0', '15.2.0', '16.2.0']
+        opt: [base, tol, tol-zt, tol-zl, tol-zl-g93, tol-za, tol-za-g93]
     name: simavr ${{ matrix.gcc }} ${{ matrix.opt }}
     env:
-      ELF: elf/${{ matrix.opt }}
+      ELF: input/elf/${{ matrix.opt }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: bench-${{ matrix.gcc }}
-          path: elf
+          name: avr-${{ matrix.gcc }}
+          path: input
       - name: Install simavr
         run: |
+          set -euo pipefail
           sudo apt-get update -q
           sudo apt-get install -y -q --no-install-recommends simavr
-      - name: Segments and cycles
+      - name: Segments cycles targets and motion
         run: |
-          make -s -C tb/host OPT="$(printf '%s' "$OPTIONS" | sed -n 's/^${{ matrix.opt }} //p')" > /dev/null
-          tb/host/build/tb --hash tb/avr/lines.txt > host.txt
-          timeout 600 simavr -m atmega328p -f 16000000 $ELF/bench.elf 2>&1 |
-            sed 's/\x1b\[[0-9;]*m//g; s/\.*$//' > avr.txt
-          cat avr.txt
-          grep -qx done avr.txt
-          calib=$(awk '$1 == "calib" { print $2 }' avr.txt)
-          if [ "$calib" -lt 1000000 ] || [ "$calib" -gt 1001000 ]; then
-            echo "::error::cycle counter calibration off: $calib for 1000000"; exit 1
-          fi
-          {
-            printf '\n### avr-gcc ${{ matrix.gcc }} ${{ matrix.opt }}, stack never touched: %s bytes\n\n' "$(awk '$1 == "stack" { print $2 }' avr.txt)"
-            printf '| line | status | seg | total | planner | gen | gen/seg | first | worst gap | end exact | non-finite | = host |\n'
-            printf '|---|---|---|---|---|---|---|---|---|---|---|---|\n'
-            awk 'NR == FNR { h[$1] = $2 " " $3 " " $4; next }
-                 NF == 11 { printf "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n",
-                   $1, $2, $3, $4, $5, $6, ($3 ? int($6 / $3) : "-"), $7, $8, $9, $10,
-                   (h[$1] == $2 " " $3 " " $11) ? "yes" : "**no**" }' host.txt avr.txt
-          } >> "$GITHUB_STEP_SUMMARY"
-          awk 'NR == FNR { h[$1] = $2 " " $3 " " $4; next }
-               NF == 11 && h[$1] != $2 " " $3 " " $11 { print "::warning::segments differ from host on " $1 }' host.txt avr.txt
-      # The AVR segment targets themselves against the curve model: hashes
-      # that differ from the host must still be within the tolerance.
-      - name: Segment targets
-        run: |
-          timeout 600 simavr -m atmega328p -f 16000000 $ELF/dump.elf 2>&1 |
-            sed 's/\x1b\[[0-9;]*m//g; s/\.*$//' > dump.txt
-          grep -qx done dump.txt
-          tb/host/build/tb --dump tb/avr/lines.txt dump.txt | tee dump-check.txt
-          {
-            printf '\n### segment targets, avr-gcc ${{ matrix.gcc }} ${{ matrix.opt }}\n\n```\n'
-            cat dump-check.txt
-            printf '```\n'
-          } >> "$GITHUB_STEP_SUMMARY"
-          tail -1 dump-check.txt | grep -q ', 0 failed$'
-      # Planner fill while streaming curves, feed hold and resume, stack depth
-      # with the stepper and serial interrupts.
-      - name: Motion
-        if: ${{ hashFiles(format('elf/{0}/dyn.elf', matrix.opt)) != '' }}
-        run: |
-          timeout 1200 simavr -m atmega328p -f 16000000 $ELF/dyn.elf 2>&1 |
-            sed 's/\x1b\[[0-9;]*m//g; s/\.*$//' | grep -v '^ok$' > motion.txt
-          cat motion.txt
-          grep -qx done motion.txt
-          free=$(cat $ELF/free-ram.txt)
-          stack=$(awk '$1 == "stack" { print $2 }' motion.txt)
-          {
-            printf '\n### simavr motion, avr-gcc ${{ matrix.gcc }} ${{ matrix.opt }}\n\n'
-            printf 'Most stack used %d bytes, firmware free RAM %d bytes.\n\n' $stack $free
-            printf '| kind | size um | F | accel | lat ms | seg | t ms | feed | peak | min | min full | low | stops | cut | cut F | dx | dy | stack |\n'
-            printf '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n'
-            awk '$1 == "run" { $1 = ""; $8 = ""; gsub(/ +/, " | "); print $0 " |" }' motion.txt
-            printf '\n| hold ms | state | x steps | state at resume | suspend | dx | dy | dz | t ms | stack |\n'
-            printf '|---|---|---|---|---|---|---|---|---|---|\n'
-            awk '$1 == "hold" { $1 = ""; gsub(/ +/, " | "); print $0 " |" }' motion.txt
-          } >> "$GITHUB_STEP_SUMMARY"
-          if [ $stack -gt $free ]; then
-            echo "::warning::stack $stack bytes exceeds the firmware's free RAM $free bytes"
-          fi
+          set -euo pipefail
+          mkdir -p raw
+          opt=$(printf '%s\n' "$OPTIONS" | sed -n 's/^${{ matrix.opt }} //p')
+          make -s -C tb/host OPT="$opt" > raw/host-build.txt 2>&1
+          tb/host/build/tb --hash tb/avr/lines.txt > raw/host-hash.txt
+          for image in bench dump dyn; do
+            if [ ! -f "$ELF/$image.elf" ]; then
+              printf 'NOT VERIFIED: %s unavailable\n' "$image" | tee -a raw/unavailable.txt
+              continue
+            fi
+            timeout 1200 nice -n 19 simavr -m atmega328p -f 16000000 "$ELF/$image.elf" > raw/$image-simavr.txt 2>&1
+            sed 's/\x1b\[[0-9;]*m//g; s/\.*$//' raw/$image-simavr.txt > raw/$image.txt
+            grep -qx done raw/$image.txt
+            if [ "$image" = dump ]; then
+              tb/host/build/tb --dump tb/avr/lines.txt raw/dump.txt > raw/dump-check.txt
+              cat raw/dump-check.txt
+            elif [ "$image" = bench ]; then
+              calib=$(awk '$1 == "calib" {print $2}' raw/bench.txt)
+              test "$calib" -ge 1000000 && test "$calib" -le 1001000
+              cat raw/bench.txt
+            else
+              cat raw/dyn.txt
+              if [ -f "$ELF/free-ram.txt" ]; then
+                free=$(cat "$ELF/free-ram.txt")
+                stack=$(awk '$1 == "stack" {print $2}' raw/dyn.txt)
+                printf 'stack %s free %s margin %s\n' "$stack" "$free" "$((free-stack))" | tee raw/stack-margin.txt
+                test "$stack" -lt "$free"
+              else
+                printf 'NOT VERIFIED: production RAM unavailable\n' | tee -a raw/unavailable.txt
+              fi
+            fi
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: simavr-${{ matrix.gcc }}-${{ matrix.opt }}
+          path: raw

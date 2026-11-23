@@ -1,7 +1,9 @@
 # Z word on G5/G5.1 (BEZIER_Z_LINEAR) and exact G93 (BEZIER_EXACT_INVERSE_TIME).
 # Numbers in [] are catalog IDs from ../../README.md. Every accepted curve is
 # checked for a Z that never reverses and is linear in the length travelled
-# (BEZIER_Z_LINEAR 2) or in the segment number (1); zlen and zarc pin numbers.
+# (BEZIER_Z_LINEAR 2) or in the segment number (1), or off that line by no more
+# than the firmware can tell from its estimates (3); zlen, zarc, zmm and zaim
+# pin numbers.
 
 # ---- end point and modes [50] ------------------------------------------------
 
@@ -59,7 +61,7 @@ G5 X100 Y0 Z10 I99 J0 P1 Q0
 zlen 0 1e-5
 zarc 0 1e-4
 
-= [51] handles 99:1 on a straight line, Z by parameter is off by a third of the travel @z @!zlen
+= [51] handles 99:1 on a straight line, Z by parameter is off by a third of the travel @zpar
 G10 L20 P1 X0 Y0 Z0
 F1000
 G5 X100 Y0 Z10 I99 J0 P1 Q0
@@ -146,6 +148,130 @@ F1000
 G5 X0.001 Y0 Z8 I0.001 J0.001 P0.001 Q0.001
 pos -99.999 -100 -2
 
+# ---- Z by an estimate of the length ahead [57] [58] [59] ----------------------
+
+# BEZIER_Z_LINEAR 3 makes one pass: every segment takes the share of the Z left
+# that its chord is of an estimate of the length left. The estimate is halfway
+# between the chords and the control polygons of some pieces of the curve, and
+# the firmware vouches for BEZIER_SIGMA when that bracket is narrow enough.
+# zaim pins the estimates made, those left too wide, and early ends of Z.
+
+= [57] shallow Z: eight pieces are enough to vouch for 0.1 mm @zaim @!tol
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 Z-0.5 I3 J12 P3 Q-12
+zaim 1 0 0
+zmm 0.002 0.0045
+G5 X20 Y0 Z-3.5 I3 J12 P3 Q-12
+zaim 1 0 0
+zmm 0.012 0.027
+
+= [57] shallow Z: sixteen to sixty-four pieces vouch for 0.002 mm @zaim @tol
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 Z-0.5 I3 J12 P3 Q-12
+zaim 3 0 0
+zmm 0 0.0001
+G5 X20 Y0 Z-3.5 I3 J12 P3 Q-12
+zaim 4 0 0
+zmm 0 0.0005
+
+= [57] a handful of segments: the pieces are the segments, the length is exact @zaim
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X1 Y0 Z2 I0.3 J0.8 P0.3 Q-0.8
+zlen 0 1e-4
+
+= [57] handles 99:1 on a straight line: Z by estimate stays on the line @zaim
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X100 Y0 Z10 I99 J0 P1 Q0
+zlen 0 1e-3
+
+= [57] loop, cusp and a far control point @zaim
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 Z5 I20 J10 P10 Q10
+zlen 0 5e-3
+G5 X0 Y0 Z-5 I10 J10 P10 Q10
+zlen 0 5e-3
+G5.1 X10 Y0 Z-4 I40 J60
+zlen 0 5e-3
+
+# Steep Z: sixty-four pieces are still too wide, so the length is estimated again
+# with half of the segments left, and again, until the pieces are the segments.
+= [58] steep Z on a long curve: estimates left open, made again on the way @zaim @!tol
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X1000 Y0 Z-500 I300 J1200 P300 Q-1200
+zaim 7 1 0
+zmm 0.004 0.02
+
+= [58] steep Z: estimates left open, made again on the way @zaim @tol
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 Z-9 I3 J12 P3 Q-12
+zaim 7 1 0
+zmm 0.0001 0.0008
+G5 X20 Y0 Z-39 I3 J12 P3 Q-12
+zaim 8 1 0
+zmm 0.0004 0.0025
+
+= [58] steeper Z on few segments: the pieces double up to the segments @zaim @!tol
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 Z-9 I3 J12 P3 Q-12
+zaim 3 0 0
+zlen 0 1e-5
+
+= [58] the segment cap with Z @zaim
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 Z50 I100000 J0 P1 Q50000
+zlen 0 1e-4
+G5 X0 Y0 Z-50 I0.01 J0 P100000 Q7
+zlen 0 1e-3
+
+# Both control points on the end: the last chords are far shorter than what any
+# estimate of 20 m is off by, so Z is at its target before the curve is.
+= [59] chords shorter than the estimate is off: Z ends early, never past the target @zaim
+F1000
+G5 X20000 Y-100 Z0.3 I20100 J0 P0 Q0
+zaim 1 0 1
+G0 X-100 Y-100 Z-10
+G5 X20000 Y-100 Z-0.7 I20100 J0 P0 Q0
+zaim 1 0 1
+
+# A handle straight out and back, with the turn inside one of the eight pieces:
+# the estimate is short of the polyline, so the length runs out before the curve
+# does. Z is then at its target; going on would take it past and back.
+= [59] estimate short of the polyline: Z ends early, not past the target @zaim @!tol
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X0 Y0 Z-3 I0 J-131 P0 Q0
+zaim 1 0 1
+zmm 0.01 0.025
+
+# Both control points on the start: the first chord is too short to take any of
+# the Z left, and from Z0.3 to Z-10 the travel has no exact float. Without a hair
+# less than all of it left, the first point would be above the start.
+= [59] first chord too short to count: Z does not start backwards @zaim
+G0 Z0.3
+F1000
+G5 X-20000 Y-100 Z-10 I0 J0 P19900 Q0
+G0 X-100 Y-100 Z0.1
+G5 X-20000 Y-100 Z-10 I0 J0 P19900 Q0
+G0 X-100 Y-100 Z7.77
+G5 X-20000 Y-100 Z-10 I0 J0 P19900 Q0
+
+= [59] far from the origin: the float grid of XY is in the lengths @zaim
+G10 L2 P1 X0 Y0 Z0
+G0 X60000 Y-60000 Z-1000
+F1000
+G5 X60010 Y-60000 Z-1001 I30000 J0 P1 Q30000
+zlen 0 2e-3
+G5 X60010.5 Y-60000 Z-1004 I0.3 J0.5 P0.2 Q0.5
+
 # ---- exact G93 [39] [54] ------------------------------------------------------
 
 = [39] G93 G5 takes 1/F minutes @g93
@@ -185,3 +311,16 @@ G94
 F1000
 G5 X30 Y0 Z1 I3 J3 P3 Q3
 pos -70 -100 -9
+
+# ---- G93 by estimate [60] ------------------------------------------------------
+
+# With BEZIER_Z_LINEAR 3 the feed is taken from the first estimate of the length:
+# the time is off 1/F by no more than its bracket, which every G93 curve is
+# checked for. A curve of one segment keeps the inverse time of its only block.
+= [60] G93 by estimate: one feed, time within the bracket @zaim @g93
+G10 L20 P1 X0 Y0 Z0
+G93
+G5 X10 Y0 I3 J12 P3 Q-12 F2
+G5 X20 Y0 Z-20 I3 J12 P3 Q-12 F2
+G5 X20.001 Y0 Z-12 I0.001 J0.001 P0.001 Q0.001 F2
+pos -79.999 -100 -22

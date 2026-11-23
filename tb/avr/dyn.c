@@ -10,6 +10,11 @@
   plan_buffer_line() is renamed to tb_plan_buffer_line() in planner.c, so every
   block passes through the probe below.
 
+  TB_DYN_SPLINES_ONLY omits the G1/G2 reference programs and their chord
+  generator so the larger spline prototypes fit. All G5 runs then include
+  Z-0.2 when enabled. len_um and feed are projected X travel and speed, not
+  path length and feed; the firmware, planner and ISRs are unchanged.
+
   Timer2 keeps the setup of spindle_init() (fast PWM, prescaler 64), its
   overflow is a 1.024 ms clock, and the spindle stays off. Its ISR paces the
   host, injects feed hold and cycle start, and stops a program that hangs.
@@ -152,6 +157,7 @@ uint8_t __attribute__((noinline)) plan_buffer_line(float *target, plan_line_data
   return planner(target, pl_data);
 }
 
+#ifndef TB_DYN_SPLINES_ONLY
 // Cubic S-curve toward -X: P0 (0,0), P1 (-h,h), P2 (-h,-h), P3 (-s,0) with h = s/2.
 // The tangent at both ends is (-1,1), so implicit I,J continue it. P stays positive.
 // At t = j/n: x = -s (3/2 u t + t^3), y = 3/2 s u t (u - t), u = 1 - t.
@@ -169,6 +175,8 @@ static void chord(uint8_t j, uint8_t n)
     if (i) { dx -= x; dy -= y; } else { dx = x; dy = y; }
   }
 }
+
+#endif
 
 // Line builder.
 static char line[48]; // The longest is G5I-2.500J2.500P2.500Q-2.500Z-0.200X-5.000
@@ -200,23 +208,33 @@ static void make_line(void)
   if (pi == 0) {
     put(PSTR("G91G1F"));
     put_u(0, feed);
+#ifndef TB_DYN_SPLINES_ONLY
   } else if (kind == G1) {
     chord((pi - 1) % k + 1, k);
     put_u('X', dx);
     put_u('Y', dy);
+#endif
   } else {
+#ifndef TB_DYN_SPLINES_ONLY
     if (kind == G5) {
+#endif
       put(PSTR("G5"));
       if (pi == 1) { put_u('I', -h); put_u('J', h); }
       put_u('P', h);
       put_u('Q', -h);
 #ifdef BEZIER_Z_LINEAR
+#ifdef TB_DYN_SPLINES_ONLY
+      put_u('Z', -200);
+#else
       if (hold_ms) { put_u('Z', -200); }
 #endif
+#endif
+#ifndef TB_DYN_SPLINES_ONLY
     } else {
       put((pi & 1) ? PSTR("G2") : PSTR("G3"));
       put_u('I', -h);
     }
+#endif
     put_u('X', -(int32_t)size);
   }
   *lp++ = '\n';
@@ -234,7 +252,12 @@ static const uint16_t accels[] PROGMEM = { 500, 2000 };
 static const uint8_t lats[] PROGMEM = { 2, 16 };
 static const uint16_t holds[] PROGMEM = { 60, 150, 333, 500, 777, 1000 };
 #define N(a) (sizeof(a) / sizeof(a[0]))
-#define SWEEP (3 * N(lats) * N(feeds) * N(sizes) * N(accels))
+#ifdef TB_DYN_SPLINES_ONLY
+  #define KINDS 1
+#else
+  #define KINDS 3
+#endif
+#define SWEEP (KINDS * N(lats) * N(feeds) * N(sizes) * N(accels))
 
 // Sets up program prog (from 1), returns 0 past the end.
 static uint8_t setup(void)
@@ -242,7 +265,7 @@ static uint8_t setup(void)
   uint8_t p = prog - 1;
   hold_ms = 0;
   if (p < SWEEP) {
-    kind = p % 3; p /= 3;
+    kind = p % KINDS; p /= KINDS;
     lat = pgm_read_byte(lats + p % N(lats)); p /= N(lats);
     feed = pgm_read_word(feeds + p % N(feeds)); p /= N(feeds);
     size = pgm_read_word(sizes + p % N(sizes)); p /= N(sizes);
@@ -253,6 +276,10 @@ static uint8_t setup(void)
   } else {
     return 0;
   }
+#ifdef TB_DYN_SPLINES_ONLY
+  lines = 1 + CURVES;
+  len = (uint32_t)CURVES * size; // Projected X travel, not path length.
+#else
   if (kind == G1) { k = (seg + CURVES / 2) / CURVES; } // Blocks per curve of the G5 run before.
   lines = 1 + CURVES * (kind == G1 ? k : 1);
   float l = M_PI * size / 2;
@@ -265,6 +292,10 @@ static uint8_t setup(void)
     }
   }
   len = CURVES * l;
+#endif
+#ifdef TB_ARC_TOLERANCE
+  settings.arc_tolerance = TB_ARC_TOLERANCE;
+#endif
   for (uint8_t i = 0; i < N_AXIS; i++) {
     settings.steps_per_mm[i] = STEPS_PER_MM;
     settings.max_rate[i] = MAX_RATE;

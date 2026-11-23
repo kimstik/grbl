@@ -10,7 +10,7 @@ DEFS    ?= -DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES
 OPT     ?=
 RANDOM  ?= 5000
 CC       = gcc
-CFLAGS   = -std=gnu99 -O2 -g -Wall -I. -I$(GRBL) -include prelude.h $(DEFS) $(OPT)
+CFLAGS   = -std=gnu99 -O2 -g -Wall -I. -I$(GRBL) -include prelude.h $(DEFS) $(OPT) -DBEZIER_Z_TRACE
 # Firmware: single precision and -ffast-math, as on AVR. The bench keeps its
 # double model and a working isfinite().
 FWFLAGS  = -fsingle-precision-constant -ffast-math
@@ -41,9 +41,10 @@ check: $(BUILD)/tb
 # $$12 of 0.002 mm takes 7 times the segments, so fewer random curves there.
 TOL = -DBEZIER_SIGMA=settings.arc_tolerance
 ZL  = -DBEZIER_Z_LINEAR=2
-G93 = $(ZL) -DBEZIER_EXACT_INVERSE_TIME
+ZA  = -DBEZIER_Z_LINEAR=3
+G93 = -DBEZIER_EXACT_INVERSE_TIME
 
-test: check cubic tol zt zl zl-g93 tol-zl-g93
+test: check cubic tol zt zl zl-g93 tol-zl-g93 za za-g93 tol-za tol-za-g93
 
 cubic:
 	$(MAKE) BUILD=$(BUILD)/$@ DEFS=-DENABLE_CUBIC_SPLINES
@@ -55,11 +56,19 @@ zt:
 zl:
 	$(MAKE) BUILD=$(BUILD)/$@ OPT='$(ZL)' check
 zl-g93:
-	$(MAKE) BUILD=$(BUILD)/$@ OPT='$(G93)' check
+	$(MAKE) BUILD=$(BUILD)/$@ OPT='$(ZL) $(G93)' check
 tol-zl-g93:
-	$(MAKE) BUILD=$(BUILD)/$@ OPT='$(TOL) $(G93)' RANDOM=1000 check
+	$(MAKE) BUILD=$(BUILD)/$@ OPT='$(TOL) $(ZL) $(G93)' RANDOM=1000 check
+za:
+	$(MAKE) BUILD=$(BUILD)/$@ OPT='$(ZA)' check
+za-g93:
+	$(MAKE) BUILD=$(BUILD)/$@ OPT='$(ZA) $(G93)' check
+tol-za:
+	$(MAKE) BUILD=$(BUILD)/$@ OPT='$(TOL) $(ZA)' RANDOM=1000 check
+tol-za-g93:
+	$(MAKE) BUILD=$(BUILD)/$@ OPT='$(TOL) $(ZA) $(G93)' RANDOM=1000 check
 
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all check test clean cubic tol zt zl zl-g93 tol-zl-g93
+.PHONY: all check test clean cubic tol zt zl zl-g93 tol-zl-g93 za za-g93 tol-za tol-za-g93
