@@ -501,8 +501,19 @@ live scheduling measurements, not headless estimator costs.
 | S60/Z-30/F5000 | 144.258      | 9.866     | 9.876      |
 | S60/Z-30/F1000 | 110.378      | 48.398    | 48.435     |
 
-The long F1000 gap remains despite the absence of later estimates. The
-extra realtime call is not a general cure for target gaps or stops.
+A bounded read-only trace classifies the 48.4351875 ms F1000 gap, between
+points 12 and 13 of the last curve. Of its 774963 cycles, 739854 cycles
+(46.240875 ms) wait for room in the full planner. The helper takes only
+9540 cycles (0.59625 ms). Planner occupancy stays at 14-15 blocks, and
+the segment ring at 4-5 slots. Five segments are published and consumed,
+with no ISR empty event during the gap. This is producer backpressure,
+not stepper starvation; a large target gap alone is not a motion defect.
+
+The locally built observation ELF is byte-identical to the CI image.
+Observed and blind runs also match the CI final cycle and UART timing
+hash. The local simulator revision was not independently verified.
+This classifies one gap, not every remaining stop. The extra realtime
+call is not a general cure for the ordinary-motion regression.
 
 A separate bounded local trace of the same refill source reaches the
 end of ordinary program 27, 2 mm/F4000/acceleration 2000/latency 2 ms.
