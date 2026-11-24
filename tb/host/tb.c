@@ -371,6 +371,15 @@ static zerr_t z_check(const curve_t *c, const float *start, pt_t *pts, int n)
   r.moves = dz != 0; r.dz = dz; r.xy = len;
   if (len < arc[DENSE]) r.shrt = 1 - len/arc[DENSE];
   if (r.moves) r.noise = 4*FLT_EPSILON*((fabs(z0) + fabs(dz))/fabs(dz) + (len > 0 ? reach(c)/len : 0));
+#if BEZIER_Z_LINEAR == 2
+  /* Mode 2 sums the chords between the very points that it then travels, the
+     target included, twice by the same additions. What is left is rounding,
+     taken all one way and at FLT_EPSILON an operation: half a term of the sum
+     for what the sum at a point and the whole sum do not share; 8 for the
+     chords, the division, the product and the last addition; and the hair of
+     2.4e-7 that the whole length is stretched by. */
+  if (r.moves) r.noise = FLT_EPSILON*(0.5*n + 8 + fmax(fabs(z0), fabs(z0 + dz))/fabs(dz)) + 2.4e-7;
+#endif
 #if BEZIER_Z_LINEAR == 3
   /* Mode 3 estimates the length between the very points that it then travels,
      the target included, so the float grid of XY is not in the error. What is
@@ -402,7 +411,7 @@ static const char *z_fail(const zerr_t *z, const ztrace_t *t)
 {
   if (z->back) return "Z reverses, or moves without a Z word";
 #if BEZIER_Z_LINEAR == 2
-  if (z->len > 1e-4 + z->noise) return "Z not linear in the length travelled";
+  if (z->len > z->noise) return "Z not linear in the length travelled";
   if (z->arc > z->shrt + 2e-4 + z->noise) return "Z off the arc length by more than the polyline is short";
 #elif BEZIER_Z_LINEAR == 1
   if (z->par > 1e-5 + z->noise) return "Z not linear in the segment number";
@@ -434,9 +443,7 @@ static double feed_time(const float *start, pt_t *pts, const float *feed, const 
   return t;
 }
 
-/* What is wrong with the time of a G93 curve, or NULL. The two-pass firmware
-   measures the length before the last point is snapped to the exact target, so
-   a curve of a few float steps has that much freedom. */
+/* What is wrong with the time of a G93 curve, or NULL. */
 static double time_off;                     /* of the last G93 curve, as a share of 1/F */
 
 static const char *g93_fail(const curve_t *c, const float *start, pt_t *pts, const float *feed, const uint8_t *cond, int n, const ztrace_t *tr)
@@ -451,7 +458,10 @@ static const char *g93_fail(const curve_t *c, const float *start, pt_t *pts, con
   slack = tr->time + (3*BEZIER_Z_PIECES_MAX + 8)*FLT_EPSILON;
   (void)c;
 #else
-  slack = 1e-4 + 8*FLT_EPSILON*(reach(c) + fabs(start[2]) + fabs(pts[n-1][2]))/len;
+  /* The length is the sum of the chords between the points travelled: half a
+     term of it for the rounding, and 8 for the chords, the Z travel and the feed. */
+  slack = (0.5*n + 8)*FLT_EPSILON;
+  (void)c;
 #endif
   (void)tr;
   time_off = fabs(t*m.f - 1);
