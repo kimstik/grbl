@@ -41,7 +41,7 @@ for arm in "${arms[@]}"; do
     baseline=(--baseline "$out/baseline/observed.txt" \
       --baseline-uart "$out/baseline/observed-uart.txt")
     case $arm in
-      quadrature) baseline+=(--xy-only) ;;
+      quadrature|fixed) baseline+=(--xy-only) ;;
       *) baseline+=(--require-prefetch) ;;
     esac
   fi
