@@ -2,6 +2,10 @@
 # Read-only live observation and a blind control of the same AVR images.
 set -euo pipefail
 mode=$1
+shift
+arms=("$@")
+[ "${#arms[@]}" -gt 0 ] || arms=(baseline prefetch compact)
+[ "${arms[0]}" = baseline ]
 root=$PWD
 out="$root/raw/observe-$mode"
 sim=$(realpath simulator/simavr)
@@ -17,7 +21,7 @@ gcc -std=c99 -O2 -Wall -Wextra -Werror -I"$sim/sim" \
   $(pkg-config --libs libelf) -lm -o build/observe > "$out/observer-build.txt" 2>&1
 sha256sum tb/avr/observe.c build/observe > "$out/observer-sha256.txt"
 
-for arm in baseline prefetch compact; do
+for arm in "${arms[@]}"; do
   dir="$out/$arm"
   input="$root/input/$arm"
   elf="$input/elf/$mode/observer.elf"
@@ -35,7 +39,11 @@ for arm in baseline prefetch compact; do
   baseline=()
   if [ "$arm" != baseline ]; then
     baseline=(--baseline "$out/baseline/observed.txt" \
-      --baseline-uart "$out/baseline/observed-uart.txt" --require-prefetch)
+      --baseline-uart "$out/baseline/observed-uart.txt")
+    case $arm in
+      quadrature) baseline+=(--xy-only) ;;
+      *) baseline+=(--require-prefetch) ;;
+    esac
   fi
   python3 -I tb/compare/check_observe.py "$dir/observed.txt" "$dir/observed-uart.txt" \
     --blind "$dir/blind.txt" --blind-uart "$dir/blind-uart.txt" \

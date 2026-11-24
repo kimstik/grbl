@@ -75,7 +75,16 @@ def main():
                         row[7] = word(end)
 
         run('monotone-excess', change=monotone_excess, accept=True, excess=True)
-    print('observe controls: 11 passed; integrity defects rejected, raw excess retained')
+        xy = ('--baseline', str(source / 'observed.txt'),
+              '--baseline-uart', str(source / 'observed-uart.txt'), '--xy-only')
+        run('XY-only-baseline', accept=True, extra=xy)
+        run('XY-only-X-mismatch', change=lambda r: r[first].__setitem__(5, word(number(r[first][5]) + 1)), extra=xy)
+        run('XY-only-feed-mismatch', change=lambda r: r[first].__setitem__(8, word(number(r[first][8])*2)), extra=xy)
+        run('XY-only-condition-mismatch', change=lambda r: r[first].__setitem__(9, str(int(r[first][9]) ^ 16)), extra=xy)
+        run('XY-only-monotone-excess', change=monotone_excess, accept=True, excess=True, extra=xy)
+        run('XY-only-without-baseline', extra=('--xy-only',))
+        run('XY-only-with-prefetch', extra=(*xy, '--require-prefetch'))
+    print('observe controls: 18 passed; integrity defects rejected, raw excess retained')
 
 
 if __name__ == '__main__':

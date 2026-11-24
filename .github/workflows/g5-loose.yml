@@ -1,4 +1,4 @@
-name: G5 loose prefetch comparison
+name: G5 loose quadrature comparison
 
 on:
   push:
@@ -10,37 +10,6 @@ defaults:
     shell: bash
 
 jobs:
-  driver:
-    runs-on: ubuntu-24.04
-    name: native prefetch driver controls
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          ref: 1f19d74940551ecfaa0c38c17a318aeda931d795
-          path: source/baseline
-      - uses: actions/checkout@v4
-        with:
-          ref: 937229f0b9897cf0ad37f9d602b768ec985215e1
-          path: source/prefetch
-      - uses: actions/checkout@v4
-        with:
-          ref: 3947b1b553e566488d549bcf8665586610d63c69
-          path: source/compact
-      - name: Scripted queue, partial and ready prefetch, and abort controls
-        run: |
-          timeout 300 nice -n 19 python3 -I tb/compare/check_prefetch_driver.py \
-            --baseline source/baseline --prefetch source/prefetch --compact source/compact \
-            --output raw/driver > driver.txt 2>&1
-          cat driver.txt
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: loose-native-driver
-          path: |
-            raw
-            driver.txt
-
   avr:
     runs-on: ubuntu-24.04
     container: archlinux:latest
@@ -51,12 +20,9 @@ jobs:
           - arm: baseline
             ref: 1f19d74940551ecfaa0c38c17a318aeda931d795
             extra: ''
-          - arm: prefetch
-            ref: 937229f0b9897cf0ad37f9d602b768ec985215e1
-            extra: -DBEZIER_Z_PREFETCH
-          - arm: compact
-            ref: 3947b1b553e566488d549bcf8665586610d63c69
-            extra: -DBEZIER_Z_PREFETCH
+          - arm: quadrature
+            ref: fe8ab13071339dba50c3cefc560b24a40fc85f58
+            extra: -DBEZIER_Z_QUADRATURE
     name: avr 16.2 ${{ matrix.arm }}
     steps:
       - name: Pinned AVR tools
@@ -91,18 +57,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arm: [baseline, prefetch, compact]
+        arm: [baseline, quadrature]
         mode: [g94, g93]
         include:
           - arm: baseline
             ref: 1f19d74940551ecfaa0c38c17a318aeda931d795
             extra: ''
-          - arm: prefetch
-            ref: 937229f0b9897cf0ad37f9d602b768ec985215e1
-            extra: -DBEZIER_Z_PREFETCH
-          - arm: compact
-            ref: 3947b1b553e566488d549bcf8665586610d63c69
-            extra: -DBEZIER_Z_PREFETCH
+          - arm: quadrature
+            ref: fe8ab13071339dba50c3cefc560b24a40fc85f58
+            extra: -DBEZIER_Z_QUADRATURE
     name: simavr ${{ matrix.arm }} ${{ matrix.mode }}
     steps:
       - uses: actions/checkout@v4
@@ -135,7 +98,7 @@ jobs:
       fail-fast: false
       matrix:
         mode: [g94, g93]
-    name: live prefetch observation ${{ matrix.mode }}
+    name: live quadrature observation ${{ matrix.mode }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -149,19 +112,15 @@ jobs:
           path: input/baseline
       - uses: actions/download-artifact@v4
         with:
-          name: loose-avr-prefetch
-          path: input/prefetch
-      - uses: actions/download-artifact@v4
-        with:
-          name: loose-avr-compact
-          path: input/compact
+          name: loose-avr-quadrature
+          path: input/quadrature
       - name: Host observer dependencies
         run: |
           set -euo pipefail
           sudo apt-get update -q
           sudo apt-get install -y -q --no-install-recommends gcc make pkg-config libelf-dev gcc-avr avr-libc
-      - name: Observe uninstrumented live code and check blind controls
-        run: timeout 1800 nice -n 19 bash tb/compare/run_observe.sh '${{ matrix.mode }}'
+      - name: Observe changed Z policy with the same XY and check blind controls
+        run: timeout 1500 nice -n 19 bash tb/compare/run_observe.sh '${{ matrix.mode }}' baseline quadrature
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -160,10 +160,14 @@ def main():
     parser.add_argument('--baseline', type=Path)
     parser.add_argument('--baseline-uart', type=Path)
     parser.add_argument('--require-prefetch', action='store_true')
+    parser.add_argument('--xy-only', action='store_true',
+                        help='compare net/grid/XY and G94 feed; report changed Z independently')
     parser.add_argument('--output', type=Path)
     args = parser.parse_args()
     assert bool(args.blind) == bool(args.blind_uart), 'both blind files are required'
     assert bool(args.baseline) == bool(args.baseline_uart), 'both baseline files are required'
+    assert not args.xy_only or args.baseline, 'XY comparison requires baseline'
+    assert not (args.xy_only and args.require_prefetch), 'prefetch requires full target identity'
     trace = read_trace(args.trace, args.uart, args.blind, args.blind_uart)
     result = dict(state_bytes=trace['size'], stack=trace['stack'], curves=metrics(trace))
     if args.baseline:
@@ -171,8 +175,11 @@ def main():
         assert len(base['curves']) == len(trace['curves']), 'baseline curve count'
         for a, b in zip(base['curves'], trace['curves']):
             assert (a['program'], a['line'], a['segments'], a['net_bits']) == (b['program'], b['line'], b['segments'], b['net_bits']), 'baseline net/grid differs'
-            assert [(p['bits'], p['condition']) for p in a['points']] == [(p['bits'], p['condition']) for p in b['points']], 'prefetch changed XYZ/feed/condition bits'
-        result['baseline_targets_identical'] = True
+            if args.xy_only:
+                assert [(p['bits'][:2], p['bits'][3], p['condition']) for p in a['points']] == [(p['bits'][:2], p['bits'][3], p['condition']) for p in b['points']], 'baseline XY/feed/condition bits differ'
+            else:
+                assert [(p['bits'], p['condition']) for p in a['points']] == [(p['bits'], p['condition']) for p in b['points']], 'prefetch changed XYZ/feed/condition bits'
+        result['baseline_xy_feed_identical' if args.xy_only else 'baseline_targets_identical'] = True
     if args.require_prefetch:
         assert trace['size'] == 26, 'not the prefetch state'
         assert sum(c['optional_units'] for c in result['curves']) > 0, 'no live optional unit coverage'
