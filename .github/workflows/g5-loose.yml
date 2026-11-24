@@ -4,6 +4,11 @@ on:
   push:
     branches: [wip/z-loose-compare]
   workflow_dispatch:
+    inputs:
+      raw_run_id:
+        description: 'Check identity using existing raw artifacts only; empty runs the full comparison'
+        required: false
+        type: string
 
 defaults:
   run:
@@ -11,6 +16,7 @@ defaults:
 
 jobs:
   avr:
+    if: ${{ !inputs.raw_run_id }}
     runs-on: ubuntu-24.04
     container: archlinux:latest
     strategy:
@@ -58,7 +64,7 @@ jobs:
 
   simavr:
     needs: avr
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && !inputs.raw_run_id }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -102,9 +108,57 @@ jobs:
           name: loose-simavr-${{ matrix.arm }}-${{ matrix.mode }}
           path: raw
 
+  identity:
+    needs: simavr
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+    name: raw target identity
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: loose-simavr-*
+          path: input
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.raw_run_id || github.run_id }}
+      - name: Directed identity controls
+        run: timeout 120 nice -n 19 python3 -I tb/compare/check_loose_identity_controls.py input/loose-simavr-baseline-g94
+      - name: Check full outputs or XY, feed and condition against the frozen reference
+        run: |
+          set -euo pipefail
+          mkdir -p raw
+          failed=0
+          for mode in g94 g93; do
+            for arm in refill seed; do
+              reference=fixed
+              extra=()
+              if [ "$arm" = seed ]; then reference=refill; extra=(--xy-only); fi
+              current="input/loose-simavr-$arm-$mode"
+              previous="input/loose-simavr-$reference-$mode"
+              log="raw/identity-$arm-$mode.txt"
+              if ! cmp "$current/corpus.txt" "$previous/corpus.txt" > "$log" 2>&1; then
+                failed=1
+              elif ! python3 -I tb/compare/check_loose.py "$current/corpus.txt" "$current/bench.txt" \
+                  --dump "$current/dump.txt" --reference "$previous/dump.txt" "${extra[@]}" >> "$log" 2>&1; then
+                failed=1
+              fi
+              cat "$log"
+              cat "$log" >> "$GITHUB_STEP_SUMMARY"
+            done
+          done
+          exit "$failed"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: loose-identity
+          path: raw
+
   observe:
     needs: avr
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && !inputs.raw_run_id }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false

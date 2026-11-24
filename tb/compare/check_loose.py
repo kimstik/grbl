@@ -33,7 +33,7 @@ def bench(lines, commands, hostile):
     return rows
 
 
-def dump(lines, commands):
+def dump(lines, commands, *, include_points=False):
     assert lines.count("done") == 1, "missing or duplicate dump done"
     groups, cursor = [], 0
     for command in commands:
@@ -57,9 +57,32 @@ def dump(lines, commands):
                 for shift in (0, 8, 16, 24):
                     value = ((value ^ ((word >> shift) & 255)) * 16777619) & 0xffffffff
         assert summary[9] == value, f"dump hash: {command}"
-        groups.append(summary)
+        groups.append((points, summary) if include_points else summary)
         cursor += 1
     return groups
+
+
+def identity(groups, reference, commands, xy_only=False):
+    """Exclude only Z and estimator trace when a policy may change them."""
+    assert len(groups) == len(reference) == len(commands), "identity command count"
+    errors = []
+    for command, (points, summary), (old, old_summary) in zip(commands, groups, reference):
+        if len(points) != len(old):
+            errors.append(f"{command}: target count {len(old)} -> {len(points)}")
+            continue
+        fields = (0, 1, 3, 4) if xy_only else range(5)
+        for field in fields:
+            changed = [i for i, (a, b) in enumerate(zip(old, points), 1) if a[field] != b[field]]
+            if changed:
+                i = changed[0]
+                name = ("X", "Y", "Z", "feed", "condition")[field]
+                errors.append(f"{command}: {name} differs at {len(changed)} targets; "
+                              f"first {i}: {old[i-1][field]} -> {points[i-1][field]}")
+        if [summary[i] for i in (0, 1, 7, 8)] != [old_summary[i] for i in (0, 1, 7, 8)]:
+            errors.append(f"{command}: status/count/end/nonfinite differs")
+        if not xy_only and summary[10:] != old_summary[10:]:
+            errors.append(f"{command}: estimator trace differs")
+    assert not errors, "raw identity failed:\n" + "\n".join(errors)
 
 
 def main():
@@ -67,13 +90,20 @@ def main():
     parser.add_argument("lines", type=Path)
     parser.add_argument("bench", type=Path)
     parser.add_argument("--dump", type=Path)
+    parser.add_argument("--reference", type=Path, help="raw dump whose outputs must be preserved")
+    parser.add_argument("--xy-only", action="store_true", help="exclude Z and estimator trace, not feed")
     parser.add_argument("--hostile", action="store_true")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
+    if args.reference and not args.dump:
+        parser.error("--reference requires --dump")
+    if args.xy_only and not args.reference:
+        parser.error("--xy-only requires --reference")
     commands = [line[1:] for line in args.lines.read_text().splitlines() if line.startswith("*")]
     assert commands, "empty corpus"
     rows = bench(clean(args.bench), commands, args.hostile)
-    summaries = dump(clean(args.dump), commands) if args.dump else [None] * len(rows)
+    groups = dump(clean(args.dump), commands, include_points=True) if args.dump else []
+    summaries = [summary for _, summary in groups] if groups else [None] * len(rows)
     metrics = []
     for (command, row), summary in zip(rows, summaries):
         if summary is not None:
@@ -90,6 +120,11 @@ def main():
         args.output.write_text(json.dumps(metrics, indent=2) + "\n")
     print(f"bench: {len(rows)} commands, calibration/end/finite/accounting checked" +
           (", raw dump hashes and timed/dump targets agree" if args.dump else ""))
+    if args.reference:
+        reference = dump(clean(args.reference), commands, include_points=True)
+        identity(groups, reference, commands, args.xy_only)
+        fields = "XY/feed/condition" if args.xy_only else "XYZ/feed/condition/trace"
+        print(f"raw identity: {len(groups)} commands, {fields} identical")
 
 
 if __name__ == "__main__":
