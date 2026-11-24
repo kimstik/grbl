@@ -421,6 +421,110 @@ with the full evidence suite. The cap/error/default choices remain open.
 
 ## Z by an estimate of the length ahead
 
+### A2: prefetch without early adoption
+
+[CI run 45427709185](https://github.com/kimstik/grbl/actions/runs/45427709185),
+harness 367a78b, completes **8 of 8 jobs** on avr-gcc 16.2.0. The sources
+are baseline 1f19d74 and A2 937229f, `BEZIER_Z_PREFETCH`, both with the
+common **$12 = 0.002 mm** goal. The preceding run 45426867384 failed two
+host links: the shared no-stepper stub did not enable the prefetch symbol.
+367a78b fixes that test stub only; the candidate source is unchanged.
+
+A2 retains the baseline initial estimate, escalation, cost cutoff and
+G93 conversion. During a forced planner-full wait it may compute one
+piece of the first eight-piece pass for the next mandatory suffix.
+That suffix's origin, partition, order and float seed are fixed exactly
+as in the baseline. The staged sums do not change active remaining
+length, Z, the deadline, or emitted points. At the original deadline,
+a ready pass is consumed, or a partial pass is finished normally; only
+then does the old gate use the current remaining Z. No new checkpoint
+is created when the baseline has none. Exact segment sums are not
+prefetched. The same 5 ms future-segment snapshot gate as A1 remains a
+heuristic, not a WCET guarantee. No ISR is changed.
+
+A separate production-disassembly review found an ordering limitation:
+avr-gcc 16.2 moves the ordinary descriptor loads after the second volatile
+tail check. The two tail reads therefore do not bracket the descriptor
+read in this frozen binary. The descriptor is immutable without a
+foreground refill, but an ISR can advance the tail after both checks;
+a stable-after-scan time credit is not established. The successful live
+workload is not a proof against that race. Ordering needs a separate
+correction and code-generation check, not an undisclosed size change.
+
+#### Fit and headless checks
+
+| Source   | Flash G94 | Flash G93 | G93 boot margin | Static RAM | Measured stack | Stack margin |
+| -------- | --------- | --------- | --------------- | ---------- | -------------- | ------------ |
+| Baseline | 31850     | 31950     | 306             | 1670       | 334            | 44           |
+| A2       | 32202     | 32292     | -36             | 1671       | 334            | 43           |
+
+Flash is text+data; boot margin is against 32256 bytes. A2 fits 32768
+bytes, but its G93 build does not yet fit with the 512-byte bootloader.
+These are production section sizes and observed full-dyn watermarks,
+not a worst-case stack proof. Four macro-off images match the baseline.
+
+All four headless measurement sets pass the independent raw-data
+checks: 18 constructed curves, the original 18 timing probes, and the
+40 ordinary motion programs plus four steep-Z programs and six holds.
+Segment counts and raw Z errors match the baseline in both feed modes.
+The largest raw Z error remains **0.01323418 mm**, on the constructed
+256-segment turn: 1 of 18 curves exceeds 0.002 mm. A2 preserves that
+loose error; it does not fix it. Largest relative commanded G93 time
+error remains 0.000583304. The headless bench has no reserve, so it
+cannot demonstrate the benefit of prefetch. For example, S10/Z-3 first
+target delay slightly increases from 61.605 to 61.871 ms.
+
+#### Read-only observation during motion
+
+`avr/observe.c` observes entry and return PCs and SRAM from the host
+simulator, without inserting AVR trace instructions. The per-ELF ABI,
+state layout, source revision and ELF hash are checked. Each image also
+runs blind: UART bytes, the hash including each byte's simulated cycle,
+and the final simulated cycle must be identical with observation enabled
+and disabled. Simulator revision is pinned. Eleven directed checker
+controls reject damaged records and retain a monotone tolerance excess
+as data. This avoids the UART-per-point traffic that would change the
+opportunities being measured.
+
+The separate `TB_DYN_OBSERVE` workload has four three-curve chains:
+S10/Z-30/F5000, S20/Z-10/F5000, S60/Z-30/F5000 and S60/Z-30/F1000,
+acceleration 2000 and serial latency 2 ms. All commands are **G94**;
+G93-on/off below refers only to whether conversion is compiled in.
+This workload supplements, not replaces, the ordinary motion sweep.
+
+In each build A2 performs **48 optional pieces**, completes **6 passes**
+and uses all six ready passes at their original deadlines. No partial
+pass reaches a deadline in this live workload; partial completion is
+covered by the separate deterministic state test, not claimed as live
+coverage. All 12 curves have bit-identical XYZ/feed/condition sequences
+to the baseline, finite exact ends and monotone Z. The independent raw
+Z maximum is 0.000200194 mm for both sources. Observed stack is 334 bytes.
+
+Each cell below is **baseline / A2**, milliseconds; maxima over the
+three curves in that chain, without the G93 option.
+
+| Live chain       | Largest later estimate pause | Largest target gap |
+| ---------------- | ---------------------------- | ------------------ |
+| S60/Z-30/F5000   | 141.752 / 133.016            | 144.258 / 135.575  |
+| S60/Z-30/F1000   | 108.218 / 96.537             | 110.378 / 98.784   |
+
+With the G93 option the later pauses are 141.769 / 133.030 and
+108.259 / 96.575 ms respectively. S10/S20 already finish their initial
+segment sum with no later checkpoint, so neither has an optional unit.
+A2 does not remove their initial delay. It hides one future coarse pass,
+not subsequent escalation or exact sums; substantial pauses remain.
+
+On the ordinary 40-program sweep, stops / stops with planner blocks
+queued change from 4 / 3 to 6 / 5 without the G93 option, and from 9 / 5
+to 4 / 2 with it. All programs still issue G94. These mixed changes do
+not establish a general starvation improvement. Queued-block entry feed
+is not instantaneous stepper speed; the stop mechanism is unresolved.
+
+A2 demonstrates a limited scheduling gain without changing the tested
+path, not a new accuracy policy or a selected production default. The
+G93 boot overflow, initial delay, remaining long gaps and pre-existing
+loose error are still open. No candidate is merged.
+
 ### Matched loose experiments: scheduling, relative edges and global progress
 
 [CI run 45408953688](https://github.com/kimstik/grbl/actions/runs/45408953688),
