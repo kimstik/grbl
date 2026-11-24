@@ -533,18 +533,22 @@ clamping a rounded negative polygon width to zero is not such a proof.
 
 #### Live motion and inverse time
 
-Ordinary 40-program sweep; each cell is **stops / with planner blocks
-queued**. These are event counts, not instantaneous speed measurements.
+Ordinary 40-program sweep; each count cell is **stops / with planner
+blocks queued**. These are event counts, not instantaneous speed
+measurements. All live programs issue G94 commands. The two build
+columns differ in whether G93 conversion is compiled in; neither
+column measures live inverse-time motion.
 
-| Source   | G94 stops / queued | G93 stops / queued | S10 F5000 time ms | S20 F5000 time ms |
-| -------- | ------------------ | ------------------ | ----------------- | ----------------- |
-| Baseline | 4 / 3              | 9 / 5              | 2665              | 3013              |
-| A1       | 4 / 1              | 4 / 1              | 2439              | 2600              |
-| B2       | 3 / 3              | 6 / 1              | 2666              | 3015              |
-| C1       | 5 / 1              | 5 / 1              | 2847              | 3454              |
+| Source   | Without G93 option | With G93 option | S10 F5000 time ms | S20 F5000 time ms |
+| -------- | ------------------ | --------------- | ----------------- | ----------------- |
+| Baseline | 4 / 3              | 9 / 5           | 2665              | 3013              |
+| A1       | 4 / 1              | 4 / 1           | 2439              | 2600              |
+| B2       | 3 / 3              | 6 / 1           | 2666              | 3015              |
+| C1       | 5 / 1              | 5 / 1           | 2847              | 3454              |
 
-The last two columns are G94 six-curve steep-Z chains, Z-30 per S10
-curve and Z-10 per S20 curve. S20 intermediate stop counts are 4, 0,
+The last two columns use the build without the G93 option for six-curve
+steep-Z chains, Z-30 per S10 curve and Z-10 per S20 curve. S20
+intermediate stop counts are 4, 0,
 4 and 5 respectively, with no planner blocks queued in any of those
 steep-chain events. Exact XYZ and all six hold/resume endpoints pass.
 A1's improved motion times do not prove its live Z accuracy; queued
