@@ -28,7 +28,7 @@ void protocol_execute_realtime(void) { if (++tb_realtime_calls > 1000000) { sys.
 void protocol_auto_cycle_start(void) { tb_drain(); }     /* planner full: consume blocks */
 void protocol_buffer_synchronize(void) { tb_drain(); }
 void st_update_plan_block_parameters(void) {}
-#ifdef BEZIER_Z_SCHEDULE
+#if defined(BEZIER_Z_SCHEDULE) || defined(BEZIER_Z_PREFETCH)
 /* No stepper or future-segment runway exists in the ordinary host bench. */
 uint8_t st_has_compute_reserve(void) { return false; }
 #endif
