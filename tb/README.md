@@ -421,6 +421,104 @@ with the full evidence suite. The cap/error/default choices remain open.
 
 ## Z by an estimate of the length ahead
 
+### Postqueue refill: partial motion recovery
+
+[CI run 45470817521](https://github.com/kimstik/grbl/actions/runs/45470817521),
+harness f54f943, completes **11 of 11 jobs**. Frozen sources are baseline
+1f19d74, fixed a9b415f and refill 8672b8f, with the same avr-gcc 16.2.0
+and common **$12 = 0.002 mm** goal. Refill enables `BEZIER_Z_FIXED` and
+`BEZIER_Z_REFILL`; it changes scheduling, not the fixed length policy.
+
+The added call services `protocol_execute_realtime()` after an
+intermediate target has returned from `mc_line`, before calculating the
+next target. The existing abort check remains before the new call, and
+another follows it. All earlier prequeue, full-buffer and estimator
+realtime calls remain. No ISR, planner, geometry or mode-2 code is
+changed, and no state is added. This can prepare segments from the newly
+queued block earlier; it cannot guarantee publication before every ISR
+deadline or make the next curve's initial estimate free.
+
+#### Independent checks and fit
+
+Six production ELF sizes and six macro-off comparisons pass. Two
+additional REFILL-off images match the fixed production images. For
+both compile modes, all 18 headless curves have **bit-identical
+XYZ/feed/condition and estimator accounting to fixed**. The original
+18 timing probes, 40 ordinary programs, four steep-Z programs and six
+hold/resume cases pass their integrity and endpoint checks. This is not
+a separate runtime check-mode/reset suite or a worst-case safety proof.
+
+The read-only live observer checks 12 curves per source and compile
+mode. Refill matches fixed's full XYZ/feed/condition sequence, not only
+XY. Observed and blind runs of each image have identical UART bytes,
+per-byte cycle hash and final simulated cycle. Twenty directed controls
+reject integrity defects, including a changed Z target in a full-identity
+comparison, while retaining a monotone tolerance excess as data. No
+new random, mutation or hardware campaign is claimed.
+
+| Source   | Flash G94 | Flash G93 | G93 boot margin | Static RAM | Stack G94/G93 | Stack margin G94/G93 |
+| -------- | --------- | --------- | --------------- | ---------- | ------------- | -------------------- |
+| Baseline | 31850     | 31950     | 306             | 1670       | 334 / 334     | 44 / 44              |
+| Fixed    | 32546     | 32688     | -432            | 1670       | 344 / 350     | 34 / 28              |
+| Refill   | 32558     | 32700     | -444            | 1670       | 344 / 348     | 34 / 30              |
+
+Refill costs 12 bytes of flash and no static RAM over fixed. Both builds
+fit 32768 bytes, **not the 32256-byte application region with a 512-byte
+bootloader**. Stack values are observed ordinary/steep/hold watermarks,
+not universal bounds. The headless raw Z maximum remains 0.01222021 mm,
+with 2 of 18 curves over 0.002 mm. The live maximum remains 0.00236027 mm.
+No tolerance improvement is implied by servicing realtime earlier.
+
+#### Motion and target gaps
+
+Ordinary 40-program totals are below. A queued stop is the benchmark's
+sample of planner occupancy, not an ISR classification or measured
+instantaneous stop speed. All these motion commands are **G94**, even
+when G93 conversion is compiled in.
+
+| Source   | Stops G94 | Queued G94 | Stops G93 option | Queued G93 option | Max queued entry feed |
+| -------- | --------- | ---------- | ---------------- | ----------------- | --------------------- |
+| Baseline | 4         | 3          | 9                | 5                 | 2664                  |
+| Fixed    | 50        | 16         | 46               | 15                | 2664                  |
+| Refill   | 30        | 7          | 31               | 5                 | 0                     |
+
+Refill recovers part of the fixed policy's regression, but still stops
+more often than baseline. Zero queued entry feed does not certify the
+absence of every abrupt stop. The four steep-Z programs retain exact
+ends and zero counted stops; S20/F5000 takes 2655 ms with refill versus
+2646 ms with fixed and 3013 ms with baseline, without the G93 option.
+All six hold/resume endpoints pass.
+
+The table below gives largest target gaps in milliseconds over each
+three-curve live chain, without the G93 option. First-target maxima for
+refill are 43.793, 29.347, 36.640 and 31.391 ms respectively. These are
+live scheduling measurements, not headless estimator costs.
+
+| Live chain     | Baseline gap | Fixed gap | Refill gap |
+| -------------- | ------------ | --------- | ---------- |
+| S10/Z-30/F5000 | 11.023       | 10.981    | 10.954     |
+| S20/Z-10/F5000 | 7.805        | 7.811     | 6.812      |
+| S60/Z-30/F5000 | 144.258      | 9.866     | 9.876      |
+| S60/Z-30/F1000 | 110.378      | 48.398    | 48.435     |
+
+The long F1000 gap remains despite the absence of later estimates. The
+extra realtime call is not a general cure for target gaps or stops.
+
+A separate bounded local trace of the same refill source reaches the
+end of ordinary program 27, 2 mm/F4000/acceleration 2000/latency 2 ms.
+The earlier moving-queued empty is absent: the two ISR empties in that
+program have no planner blocks queued and saved consumed end speed zero.
+Counted stops change from three to one, and program time from 1747 to
+1688 ms. Observed and blind controls are identical. However, the next
+curve's initial estimate still permits a normal stop, and program 24
+retains late-block queued empties with consumed end speed zero. This
+classifies only the targeted events, not the complete motion sweep.
+
+**Result:** earlier refill is a small, path-preserving partial improvement.
+It does not close ordinary-motion regression, boot fit, loose Z error or
+exact G93. Fixed and refill remain comparison candidates, not selected
+defaults; no merge is made.
+
 ### Fixed coarse pass: faster start, worse ordinary motion
 
 [CI run 45464272357](https://github.com/kimstik/grbl/actions/runs/45464272357),
