@@ -24,7 +24,8 @@
                                the option: tol (BEZIER_SIGMA is a variable, as with
                                settings.arc_tolerance), z (BEZIER_Z_LINEAR), zpar,
                                zlen, zaim (BEZIER_Z_LINEAR 1, 2, 3), loose
-                               (BEZIER_Z_LOOSE), g93 (BEZIER_EXACT_INVERSE_TIME)
+                               (BEZIER_Z_LOOSE), zsigma (BEZIER_Z_SIGMA is not
+                               BEZIER_SIGMA), g93 (BEZIER_EXACT_INVERSE_TIME)
      set KEY VALUE             soft 0|1, check 0|1, laser 0|1, tol MM, maxseg N,
                                smooth 0|1, steps N (all axes), rate MM/MIN, accel MM/S^2,
                                arctol MM ($12)
@@ -63,7 +64,7 @@
      leaves of it; Z never reverses, stays put without a Z word, and is linear
      in the length travelled (BEZIER_Z_LINEAR 2) or in the segment number (1),
      or off that line by no more than the brackets of the firmware allow, and
-     than BEZIER_SIGMA if it left no estimate open, which it may only with
+     than BEZIER_Z_SIGMA if it left no estimate open, which it may only with
      BEZIER_Z_LOOSE (3); G93 time == 1/F, with 3 within the bracket of the
      estimate; the line ends; G94 feed as programmed; smooth 1: no
      sharper corner at the join with the previous curve than inside either curve. */
@@ -78,6 +79,8 @@ extern float tb_coord[N_COORDINATE_SYSTEM + 2][N_AXIS];
 uint8_t __real_plan_buffer_line(float *target, plan_line_data_t *pl_data);
 
 #define MAXSEG 20000
+#define TB_STR(x) #x
+#define TB_XSTR(x) TB_STR(x)                /* the text that a macro stands for */
 typedef float pt_t[N_AXIS];
 static pt_t seg[MAXSEG];                    /* targets queued by the current line */
 static float seg_feed[MAXSEG];              /* and the feed and condition they were queued with */
@@ -344,7 +347,7 @@ typedef struct { double len, ref, arc, par, shrt, noise, dz, xy; int back, moves
 
 /* What a firmware built with BEZIER_Z_TRACE tells of a curve under BEZIER_Z_LINEAR 3:
    estimates of the length ahead that it made; of them, sums of the segments, which
-   are exact; those it left too wide to vouch for Z within BEZIER_SIGMA; Z brought to
+   are exact; those it left too wide to vouch for Z within BEZIER_Z_SIGMA; Z brought to
    its end before the last point; pieces gone through and segments summed for all the
    estimates; the bound of the Z error that follows from its brackets, mm; the half
    bracket of the estimate behind the G93 feed, as a share of the length; and that of
@@ -353,10 +356,11 @@ typedef struct { uint16_t estimates, sums, open, ends, pieces, summed; float bou
 
 /* What a piece of an estimate, a segment summed by mode 3 and a segment of the
    first pass of mode 2 take on the ATmega328P at 16 MHz, ms: measured with
-   avr-gcc 16.2 under simavr, see README.md. --random turns the counts of the
-   trace into the delay before the first point that they stand for. */
+   avr-gcc 16.2 under simavr on S-shaped curves, see README.md; soft float
+   takes less with zeros and more with large numbers. --random turns the
+   counts of the trace into the delay before the first point that they stand for. */
 #ifndef TB_PIECE_MS
-  #define TB_PIECE_MS 1.02
+  #define TB_PIECE_MS 1.12
 #endif
 #ifndef TB_SUMMED_MS
   #define TB_SUMMED_MS 0.415
@@ -438,8 +442,8 @@ static const char *z_fail(const zerr_t *z, const ztrace_t *t)
   /* Z is between its ends, so it is never off by more than the travel. */
   double mm = z->len*fabs(z->dz), grid = z->noise*fabs(z->dz), bound = t->bound < fabs(z->dz) ? t->bound : fabs(z->dz);
   if (z->moves && mm > bound + grid) return "Z off the line in the length travelled by more than the brackets of the firmware allow";
-  if (z->moves && !t->open && mm > BEZIER_SIGMA + grid) return "Z off the line in the length travelled by more than BEZIER_SIGMA, which the firmware vouched for";
-  if (!t->open && t->bound > BEZIER_SIGMA*1.0001) return "the firmware vouched for Z with brackets wider than BEZIER_SIGMA";
+  if (z->moves && !t->open && mm > BEZIER_Z_SIGMA + grid) return "Z off the line in the length travelled by more than BEZIER_Z_SIGMA, which the firmware vouched for";
+  if (!t->open && t->bound > BEZIER_Z_SIGMA*1.0001) return "the firmware vouched for Z with brackets wider than BEZIER_Z_SIGMA";
 #ifndef BEZIER_Z_LOOSE
   if (t->open) return "an estimate of the length was left open";
 #endif
@@ -640,8 +644,13 @@ static void run_file(const char *path)
       static char name[160];
       end_test();
       sscanf(s + 1, " %159[^\r\n]", name);
-      static const struct { const char *tag; int on; } opt[] = {
+      const struct { const char *tag; int on; } opt[] = {
         { "tol", !__builtin_constant_p(BEZIER_SIGMA) },
+#if BEZIER_Z_LINEAR == 3
+        { "zsigma", strcmp(TB_XSTR(BEZIER_Z_SIGMA), TB_XSTR(BEZIER_SIGMA)) != 0 },
+#else
+        { "zsigma", 0 },
+#endif
 #ifdef BEZIER_Z_LINEAR
         { "z", 1 }, { "zpar", BEZIER_Z_LINEAR == 1 }, { "zlen", BEZIER_Z_LINEAR == 2 }, { "zaim", BEZIER_Z_LINEAR == 3 },
 #else
@@ -840,16 +849,22 @@ static void run_random(long n, unsigned long seed)
   /* Errors from emitted XY, and separately from double B(k/n), with NO grid
      allowance deducted. A curve is open if an estimate of it was left open,
      else summed if its length is a sum of the segments, else its bracket was
-     accepted, which is not float-certified. */
+     accepted, which is not float-certified. All curves are counted against
+     BEZIER_SIGMA, the three kinds against what mode 3 goes by, BEZIER_Z_SIGMA. */
+  double beta = BEZIER_SIGMA;
+#if BEZIER_Z_LINEAR == 3
+  beta = BEZIER_Z_SIGMA;
+#endif
   static const double lead[] = { 0, 0.1, 1, 1e301 };
   for (int k = -1; k < 3 && n_stat && !failed; k++) {
-    long in = 0, sure = 0, over = 0, accepted_over = 0, ref_over = 0, est = 0, most = 0, ends = 0, summed = 0, summed_over = 0;
+    long in = 0, sure = 0, over = 0, zover = 0, accepted_over = 0, ref_over = 0, est = 0, most = 0, ends = 0, summed = 0, summed_over = 0;
     double mm = 0, part = 0, ref_mm = 0, ref_part = 0, accepted_max = 0, summed_max = 0;
     for (long i = 0; i < n_stat; i++) {
       double l = z_stat[Z_LEAD][i];
       if (k >= 0 && !(l > lead[k] && l <= lead[k+1])) continue;
-      int off = z_stat[Z_MM][i] > BEZIER_SIGMA, open = z_stat[Z_OPEN][i] > 0, sum = !open && z_stat[Z_SUMS][i] > 0;
-      in++; over += off; sure += !open && !sum; accepted_over += off && !open && !sum; summed += sum; summed_over += off && sum;
+      int off = z_stat[Z_MM][i] > beta, open = z_stat[Z_OPEN][i] > 0, sum = !open && z_stat[Z_SUMS][i] > 0;
+      in++; over += z_stat[Z_MM][i] > BEZIER_SIGMA; zover += off;
+      sure += !open && !sum; accepted_over += off && !open && !sum; summed += sum; summed_over += off && sum;
       ref_over += z_stat[Z_REF_MM][i] > BEZIER_SIGMA;
       if (!open && !sum && z_stat[Z_MM][i] > accepted_max) accepted_max = z_stat[Z_MM][i];
       if (sum && z_stat[Z_MM][i] > summed_max) summed_max = z_stat[Z_MM][i];
@@ -870,7 +885,8 @@ static void run_random(long n, unsigned long seed)
     long open = in - sure - summed;
     printf("      bracket-accepted %.1f%%, summed %.1f%%, open %.1f%%, open over %.1f%%; estimates mean %.2f most %ld, early ends %ld\n",
            100.0*sure/in, 100.0*summed/in, 100.0*open/in,
-           open ? 100.0*(over - accepted_over - summed_over)/open : 0, (double)est/in, most, ends);
+           open ? 100.0*(zover - accepted_over - summed_over)/open : 0, (double)est/in, most, ends);
+    if (beta != BEZIER_SIGMA) printf("      BEZIER_Z_SIGMA %g: by more %.1f%%\n", beta, 100.0*zover/in);
     printf("      accepted AND emitted error > beta: %ld/%ld, accepted max %.6g mm (no allowance)\n", accepted_over, sure, accepted_max);
     printf("      summed AND emitted error > beta: %ld/%ld, summed max %.6g mm (no allowance)\n", summed_over, summed, summed_max);
 #endif

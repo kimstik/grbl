@@ -747,16 +747,21 @@
   // pieces of the curve where an algebraic bracket gate vouches for the estimate, summed over
   // the segments ahead where it does not. Realtime work is looked after between the pieces
   // and the segments. Without Z (and without G93 conversion) none of this is done, but
-  // helper/state overhead remains. The gate bounds the Z error by BEZIER_SIGMA in exact
+  // helper/state overhead remains. The gate bounds the Z error by BEZIER_Z_SIGMA in exact
   // arithmetic, not with float rounding; the sum is exact but for rounding. Neither is a
   // firmware accuracy guarantee; see tb/README.md for the measured errors, delays, stack
   // and flash.
   // BEZIER_Z_LOOSE with mode 3: no sum ahead. An estimate that BEZIER_Z_PIECES_MAX pieces
   // cannot vouch for is used as it is, and another is due with half the segments left: less
-  // delay before the first target, and Z off by more than BEZIER_SIGMA on some curves.
+  // delay before the first target, and Z off by more than BEZIER_Z_SIGMA on some curves.
   // #define BEZIER_Z_LINEAR 2
   // #define BEZIER_Z_LOOSE
 
+  #ifndef BEZIER_Z_SIGMA
+    // Mode 3: how far off the line an estimate may leave Z, mm. By default the tolerance of
+    // XY. A wider one lets fewer pieces vouch, and fewer curves need their segments summed.
+    #define BEZIER_Z_SIGMA BEZIER_SIGMA
+  #endif
   #ifndef BEZIER_Z_PIECES
     #define BEZIER_Z_PIECES 8        // Mode 3: pieces of the first try at the length left,
   #endif
@@ -764,8 +769,8 @@
     #define BEZIER_Z_PIECES_MAX 64   // and of the last; 64 at most
   #endif
   #ifndef BEZIER_Z_PIECE_COST
-    // A piece of an estimate takes the time of some 2.6 segments summed one by one: 1.02
-    // against 0.415 ms with avr-gcc 16.2, 1.09 against 0.405 ms with 7.3, at 16 MHz. Pieces
+    // A piece of an estimate takes the time of some 2.7 segments summed one by one: 1.12
+    // against 0.415 ms with avr-gcc 16.2, 1.10 against 0.405 ms with 7.3, at 16 MHz. Pieces
     // of no more than this many segments are not tried.
     #define BEZIER_Z_PIECE_COST 3
   #endif

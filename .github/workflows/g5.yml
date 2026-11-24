@@ -60,20 +60,23 @@ jobs:
           name=avr-gcc-${{ matrix.gcc }}-x64-linux
           curl -fsSL "https://github.com/ZakKemble/avr-gcc-build/releases/download/v${{ matrix.gcc }}-1/$name.tar.bz2" | tar -xj -C "$RUNNER_TEMP"
           printf '%s\n' "$RUNNER_TEMP/$name/bin" >> "$GITHUB_PATH"
-      - name: Previous modes match 5601c12 and 37235f2
+      - name: Previous modes match 5601c12, 37235f2 and f4f8349
         run: |
           set -euo pipefail
           avr-gcc --version | head -1
           # Modes 0 and 1 are as in 5601c12. Mode 2 is as in 37235f2, where its first pass
-          # came to end at the target. Mode 3 is the prototype and has no reference.
+          # came to end at the target. Mode 3 is as in f4f8349: BEZIER_Z_SIGMA, added since,
+          # changes nothing unless set.
           git worktree add -q ../before 5601c12
           git worktree add -q ../before2 37235f2
+          git worktree add -q ../before3 f4f8349
           cc=$(make -s --eval 'print-compile: ; @echo $(COMPILE)' print-compile)
           mkdir -p raw
           for splines in '-DENABLE_CUBIC_SPLINES' '-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES'; do
             while read -r name opt; do
               case $name in
-                ''|tol-za*) continue ;;
+                '') continue ;;
+                tol-za*) ref=../before3; was=f4f8349 ;;
                 tol-zl*) ref=../before2; was=37235f2 ;;
                 *) ref=../before; was=5601c12 ;;
               esac
@@ -123,8 +126,15 @@ jobs:
               fi
             done
           done <<< "$OPTIONS"
-          cat raw/sizes.txt
-          cat raw/sizes.txt >> "$GITHUB_STEP_SUMMARY"
+          # The size of mode 3 with a tolerance of its own for Z, a constant; no benches of it.
+          for g93 in '' -DBEZIER_EXACT_INVERSE_TIME; do
+            make -s clean
+            make -s COMPILE="$cc $defs -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3 -DBEZIER_Z_SIGMA=0.01f $g93" > "raw/firmware-tol-za-zs${g93:+-g93}.log" 2>&1
+            set -- $(avr-size build/main.elf | tail -1)
+            printf 'tol-za-zs%s %d %+d %d %d %d\n' "${g93:+-g93}" "$(($1+$2))" "$(($1+$2-base))" "$(($2+$3))" "$((2048-$2-$3))" "$((32256-$1-$2))" >> raw/sizes-zs.txt
+          done
+          cat raw/sizes.txt raw/sizes-zs.txt
+          cat raw/sizes.txt raw/sizes-zs.txt >> "$GITHUB_STEP_SUMMARY"
       - name: Shared core corpus with Z
         run: |
           set -euo pipefail
@@ -185,9 +195,12 @@ jobs:
       - name: Same random curves in each Z mode
         run: |
           set -euo pipefail
-          for mode in 1 2 3 3-loose; do
-            opt="-DBEZIER_SIGMA=settings.arc_tolerance -DTB_ARC_TOLERANCE=${{ matrix.tol }}f -DBEZIER_Z_LINEAR=${mode%-loose}"
-            [ "$mode" = "${mode%-loose}" ] || opt="$opt -DBEZIER_Z_LOOSE"
+          modes='1 2 3 3-loose'
+          # One more column where $12 is tightest: Z held to five times as much.
+          [ '${{ matrix.tol }}' != .002 ] || modes="$modes 3-zs"
+          for mode in $modes; do
+            opt="-DBEZIER_SIGMA=settings.arc_tolerance -DTB_ARC_TOLERANCE=${{ matrix.tol }}f -DBEZIER_Z_LINEAR=${mode%%-*}"
+            case $mode in *-loose) opt="$opt -DBEZIER_Z_LOOSE" ;; *-zs) opt="$opt -DBEZIER_Z_SIGMA=0.01f" ;; esac
             make -s -C tb/host BUILD=build/random-$mode OPT="$opt" > build-$mode.txt 2>&1
             timeout 1800 nice -n 19 tb/host/build/random-$mode/tb --random 5000 1 > random-$mode.txt 2>&1
             cat random-$mode.txt

@@ -197,7 +197,7 @@ G5 X1000 Y0 Z-5 I300 J1200 P300 Q-1200
 zaim 2 0 0 0
 zmm 0.0001 0.001
 
-= [57] shallow Z: the pieces jump to as many as the bracket asks for @zaim @tol
+= [57] shallow Z: the pieces jump to as many as the bracket asks for @zaim @tol @!zsigma
 G10 L20 P1 X0 Y0 Z0
 F1000
 G5 X10 Y0 Z-0.5 I3 J12 P3 Q-12
@@ -304,7 +304,7 @@ zmm 0.012 0.015
 # With 10 mm of Z a bracket will do, but one with a turn in it does not narrow
 # four times as the pieces double: the first jump falls short, the second does
 # not.
-= [58] a turn inside a piece: the pieces jump twice @zaim @tol
+= [58] a turn inside a piece: the pieces jump twice @zaim @tol @!zsigma
 G10 L20 P1 X0 Y0 Z0
 F1000
 G5 X-191.8125 Y-139.5 Z10 I68.0625 J49.5 P195.9375 Q142.5
@@ -382,6 +382,23 @@ F1000
 G5 X60010 Y-60000 Z-1001 I30000 J0 P1 Q30000
 zlen 0 5e-4
 G5 X60010.5 Y-60000 Z-1004 I0.3 J0.5 P0.2 Q0.5
+
+# ---- a tolerance of its own for Z [63] -----------------------------------------
+
+# BEZIER_Z_SIGMA is what an estimate may leave Z off by; it is BEZIER_SIGMA unless
+# set. With 0.01 mm against $12 = 0.002 the eight pieces that fell short above
+# will do, and the turn inside a piece takes one jump less: Z is then off by more
+# than $12 there, and by less than BEZIER_Z_SIGMA.
+= [63] BEZIER_Z_SIGMA 0.01: fewer pieces vouch, for that much @zaim @tol @zsigma
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 Z-0.5 I3 J12 P3 Q-12
+zaim 1 0 0 0
+zmm 0.0001 0.0006
+G0 X0 Y0 Z0
+G5 X-191.8125 Y-139.5 Z10 I68.0625 J49.5 P195.9375 Q142.5
+zaim 2 0 0 0
+zmm 0.002 0.01
 
 # ---- the length estimated is the length travelled [61] -------------------------
 

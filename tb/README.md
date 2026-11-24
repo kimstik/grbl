@@ -50,7 +50,7 @@ Decisions that tests encode:
 | 17 | Translation by G91/G92, G20 vs G21: same segments               | host `same`            | pass                                       |
 | 18 | Reversed curve within tolerance                                 | host vector            | pass                                       |
 | 19 | Check mode, `$J=G5` rejection, mode changes before implicit I/J | host vectors           | pass                                       |
-| 20 | Mutation testing                                                | host `mutate.sh`       | 93 of 93 killed, including options         |
+| 20 | Mutation testing                                                | host `mutate.sh`       | 94 of 94 killed, including options         |
 | 21 | Random curves, failures shrunk to a minimal line                | host `--random`        | pass (negative P skipped, see 7)           |
 | 22 | Host vs AVR: same segments                                      | CI simavr `= host`     | G5.1, [1] and G2 differ (see below)        |
 | 23 | Compiler vs compiler: same segments                             | CI simavr per gcc      | G5.1, [1]: 7.3 differs from 15-17          |
@@ -93,6 +93,7 @@ Decisions that tests encode:
 | 60 | G93 by estimate: one feed, time off within the bracket          | host `z.vec`, avr      | pass; time off up to 3.1% in random curves |
 | 61 | Z by length: the length summed or estimated ends at the target  | host `z.vec`, random   | pass; no allowance for the grid of XY      |
 | 62 | Every line ends: no estimate goes on for ever                   | host, every line       | pass; a million rounds of realtime work    |
+| 63 | BEZIER_Z_SIGMA: a tolerance of its own for Z by estimate        | host `z.vec`, random   | pass; over $12 by design, see below        |
 
 ## 10, 11, 35: motion under simavr
 

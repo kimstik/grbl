@@ -467,7 +467,7 @@ static float mc_spline_dist(float *sum, float *a, float *b)
 // segments, their control polygons no shorter than the curve, so the two sums bracket the
 // length; the estimate is halfway. Z is then off the straight line through the length travelled
 // by no more than half the bracket over the whole length, times the Z travel. If that may be
-// more than BEZIER_SIGMA, the pieces are gone through again: as many more as close the bracket
+// more than BEZIER_Z_SIGMA, the pieces are gone through again: as many more as close the bracket
 // if it narrows four times whenever they double, as it does on a smooth curve. Where that
 // takes more than BEZIER_Z_PIECES_MAX of them, or pieces of no more than BEZIER_Z_PIECE_COST
 // segments, the segments themselves are summed instead, one a call from point to point: the
@@ -547,8 +547,8 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     a = 0.5f*(z->poly - z->chord); // Half of the bracket
     z->rest = z->chord + a;
     Z_TRACE(half = a/z->chord);
-    b = BEZIER_SIGMA*z->chord;
-    if (a*(fabsf(z->u) + BEZIER_SIGMA) > b) { // Too wide to vouch for Z
+    b = BEZIER_Z_SIGMA*z->chord;
+    if (a*(fabsf(z->u) + BEZIER_Z_SIGMA) > b) { // Too wide to vouch for Z
 #ifdef BEZIER_Z_LOOSE
       if (z->pieces == BEZIER_Z_PIECES_MAX) {
         z->next >>= 1;
@@ -557,7 +557,7 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
 #endif
       {
         do { z->pieces <<= 1; b *= 4.0f; }
-        while (z->pieces < Z_PIECES_END && a*(fabsf(z->u) + BEZIER_SIGMA) > b);
+        while (z->pieces < Z_PIECES_END && a*(fabsf(z->u) + BEZIER_Z_SIGMA) > b);
         return(true);
       }
     } else {
