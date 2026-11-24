@@ -398,6 +398,10 @@ void mc_reset()
   // estimate that the inverse time feed was taken from, as a share of the length; and that of
   // the latest estimate.
   struct { uint16_t estimates, sums, open, ends, pieces, summed; float bound, time, half; } bezier_z_trace;
+#ifdef BEZIER_Z_EDGES
+  uint16_t bezier_z_edge_clamps;
+  float bezier_z_edge_gap;
+#endif
   #define Z_TRACE(what) bezier_z_trace.what
 #else
   #define Z_TRACE(what)
@@ -430,7 +434,7 @@ static spline_z_t spline_z;
 // X and Y of the point of the curve at t into p, by Horner's rule relative to the start point.
 // If s is not zero, p[2] and p[3] get the control point next to that point of the piece of the
 // curve that begins there and is s long in t, or ends there if s is negative: the point plus s
-// thirds of the derivative.
+// thirds of the derivative. BEZIER_Z_EDGES keeps just that relative edge in p[2:4].
 static void mc_spline_point(float *p, float t, float s, float **net)
                             __attribute__((noinline, noclone));
 static void mc_spline_point(float *p, float t, float s, float **net)
@@ -442,7 +446,13 @@ static void mc_spline_point(float *p, float t, float s, float **net)
     float e1 = target[i] - 2.0f*second[i] + first[i];
     float g = first[i] - position[i], w = t*(e1 - e0);
     p[i] = position[i] + t*(3.0f*g + t*(3.0f*e0 + w));
-    if (s != 0.0f) { p[i+2] = p[i] + s*(g + t*(2.0f*e0 + w)); }
+    if (s != 0.0f) {
+#ifdef BEZIER_Z_EDGES
+      p[i+2] = s*(g + t*(2.0f*e0 + w));
+#else
+      p[i+2] = p[i] + s*(g + t*(2.0f*e0 + w));
+#endif
+    }
   }
 }
 
@@ -538,12 +548,32 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     z->next = 0;
   } else {
     mc_spline_dist(&z->chord, r, q);
+#ifdef BEZIER_Z_EDGES
+    // End edges are relative: q[2:4] points forward, r[2:4] backward. The middle
+    // edge joins their tips using the actual rounded endpoints, final target included.
+    // This avoids slope + machine-coordinate cancellation, not interior float error.
+    q[0] = (r[0] - q[0]) + r[2] - q[2]; r[0] = 0.0f;
+    q[1] = (r[1] - q[1]) + r[3] - q[3]; r[1] = 0.0f;
+    mc_spline_dist(&z->poly, q + 2, r);
+    mc_spline_dist(&z->poly, q, r);
+    mc_spline_dist(&z->poly, r + 2, r);
+#else
     mc_spline_dist(&z->poly, q + 2, q);
     mc_spline_dist(&z->poly, r + 2, q + 2);
     mc_spline_dist(&z->poly, r, r + 2);
+#endif
     Z_TRACE(pieces++);
     if (z->todo) { return(true); }
     Z_TRACE(estimates++);
+#ifdef BEZIER_Z_EDGES
+    if (z->poly < z->chord) { // A negative width from rounding cannot certify an estimate.
+#ifdef BEZIER_Z_TRACE
+      bezier_z_edge_clamps++;
+      bezier_z_edge_gap = max(bezier_z_edge_gap, z->chord - z->poly);
+#endif
+      z->poly = z->chord;
+    }
+#endif
     a = 0.5f*(z->poly - z->chord); // Half of the bracket
     z->rest = z->chord + a;
     Z_TRACE(half = a/z->chord);

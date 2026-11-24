@@ -755,8 +755,13 @@
   // is used as it is, and another is due with half the segments left: less delay before the
   // first target, and Z off by more than BEZIER_Z_SIGMA on some curves. Short pieces still
   // switch to a segment sum by BEZIER_Z_PIECE_COST.
+  // BEZIER_Z_EDGES with mode 3: experimental relative control edges, reusing the same point
+  // and distance helpers. Chords still use the rounded Horner endpoints and final target. This
+  // changes float rounding of the control polygon, not the gate or the re-estimate policy;
+  // it is not a certificate for the rounded points inside each piece.
   // #define BEZIER_Z_LINEAR 2
   // #define BEZIER_Z_LOOSE
+  // #define BEZIER_Z_EDGES
 
   #ifndef BEZIER_Z_SIGMA
     // Mode 3: how far off the line an estimate may leave Z, mm. By default the tolerance of
