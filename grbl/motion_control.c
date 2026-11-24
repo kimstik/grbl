@@ -559,13 +559,16 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
   }
 #endif
 #ifdef BEZIER_Z_PREFETCH
-  if (j && z->prefetch == 2) { goto spline_bracket; }
+  if (z->prefetch == 2) {
+    if (!j) { return(false); }
+    goto spline_bracket;
+  }
 #endif
   m = (z->next + z->pieces - 1)/z->pieces; // Segments to a piece
   if (m <= BEZIER_Z_PIECE_COST || z->pieces > BEZIER_Z_PIECES_MAX) { m = 1; } // The segments
 #ifdef BEZIER_Z_PREFETCH
   if (!j) {
-    if (m == 1 || z->prefetch == 2) { return(false); } // Only the first bracket, never a sum.
+    if (m == 1) { return(false); } // Only the first bracket, never a sum.
     z->prefetch = 1;
   }
 #endif
@@ -725,11 +728,24 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
 #endif
   for (j = 1; j < segments; j++) {
 #if BEZIER_Z_LINEAR == 3
+#ifdef BEZIER_Z_PREFETCH
+    i = 0; // Mandatory point first; the same call site serves optional pieces after mc_line.
+  spline_next:
+    if (mc_spline_next(&spline_z, p, i ? 0 : j, segments, position, first, second, target, pl_data)) {
+      if (i) { goto spline_wait; }
+#else
     while (mc_spline_next(&spline_z, p, j, segments, position, first, second, target, pl_data)) {
+#endif
       // A piece of an estimate queues no block, so mc_line is not there to keep the stepper fed.
       protocol_execute_realtime();
       if (sys.abort) { return; }
+#ifdef BEZIER_Z_PREFETCH
+      goto spline_next;
+#endif
     }
+#ifdef BEZIER_Z_PREFETCH
+    if (i) { continue; } // An optional pass stopped: no point was produced.
+#endif
 #else
     float t = j*step;
     for (i = 0; i < 2; i++) {
@@ -759,17 +775,21 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
     // Only use a wait that mc_line would have to do anyway. Refill and handle realtime
     // before each unit, and stop immediately when the planner can accept another line.
 #ifdef BEZIER_Z_PREFETCH
-    while (spline_z.next && spline_z.u != 0.0f && plan_check_full_buffer()) {
+  spline_wait:
+    if (spline_z.next && spline_z.u != 0.0f && plan_check_full_buffer()) {
 #else
     while (spline_z.next && spline_z.remaining && spline_z.u != 0.0f && plan_check_full_buffer()) {
 #endif
       protocol_auto_cycle_start();
       protocol_execute_realtime();
       if (sys.abort) { return; }
-      if (!plan_check_full_buffer() || !st_has_compute_reserve()) { break; }
 #ifdef BEZIER_Z_PREFETCH
-      if (!mc_spline_next(&spline_z, p, 0, segments, position, first, second, target, pl_data)) { break; }
+      if (plan_check_full_buffer() && st_has_compute_reserve()) {
+        i = 1;
+        goto spline_next;
+      }
 #else
+      if (!plan_check_full_buffer() || !st_has_compute_reserve()) { break; }
       mc_spline_next(&spline_z, p, 0, segments, position, first, second, target, pl_data);
 #endif
     }
