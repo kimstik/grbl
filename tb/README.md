@@ -524,6 +524,17 @@ seed on this corpus. The independent verifier retains the identity
 failure; the comparison is not weakened to hide it. Live G94 identity
 checks cannot establish inverse-time feed identity.
 
+[Artifact-only CI run 45492761255](https://github.com/kimstik/grbl/actions/runs/45492761255),
+harness 34df820, adds the missing cross-arm acceptance check using the
+unchanged artifacts from run 45486002886. It **fails on seed/G93**:
+`feed differs at 124 targets; first 1: 1108815310 -> 1108822560`.
+Refill matches fixed in XYZ/feed/condition/trace for both compile modes;
+seed matches refill in XY/feed/condition for G94 only. Twenty-one directed
+identity controls pass. The XY-only comparison excludes Z and estimate
+trace, never feed or condition. Builds and simulations are skipped in
+this artifact-only run. The earlier 14/14 result is an integrity result,
+not acceptance of seed's planned identity contract.
+
 **Result:** seed is a measured tradeoff, not a Pareto winner. It recovers
 most ordinary stops but worsens steep-Z motion and first-target delay
 where both passes are needed. Boot fit, loose Z excess and exact G93
