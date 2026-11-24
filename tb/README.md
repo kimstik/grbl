@@ -421,6 +421,115 @@ with the full evidence suite. The cap/error/default choices remain open.
 
 ## Z by an estimate of the length ahead
 
+### Bounded initial seed: mixed motion results
+
+[CI run 45486002886](https://github.com/kimstik/grbl/actions/runs/45486002886),
+harness 7dae131, completes **14 of 14 jobs**. The frozen sources are
+baseline 1f19d74, fixed a9b415f, refill 8672b8f and seed fbea6f2. Tools
+remain avr-gcc 16.2.0, binutils 2.47, avr-libc 2.3.2 and the pinned
+simavr revision. The common goal remains **$12 = 0.002 mm**.
+
+Seed enables `BEZIER_Z_FIXED`, `BEZIER_Z_REFILL` and `BEZIER_Z_SEED`.
+It starts with approximately eight length pieces, retries with sixteen
+if the initial Z bracket is too wide, and retains the coordinate-risk
+fallback to actual chord sums. Reversal splitting and exact short
+pieces remain. The completed-pass gate is a separate leaf function;
+realtime service stays outside its stack frame. Four bytes hold the
+accumulated bracket width. No mid-curve estimate is introduced. Neither
+the smooth bracket nor the coordinate heuristic certifies rounded XY.
+
+#### Independent checks and fit
+
+Eight production ELF sizes and eight macro-off comparisons pass. Two
+REFILL-off images match fixed, and two SEED-off images match refill.
+For every source and compile mode, the 18 derived curves, 18 original
+timing probes, 40 ordinary programs, four steep-Z programs and six
+hold/resume cases pass their integrity and endpoint checks. Raw excess
+above the common Z goal remains reported, not waived. There is no new
+random, mutation or hardware campaign, or separate check-mode/reset
+runtime suite.
+
+The read-only observer checks 12 live curves per source and compile
+mode, including the seed's 29-byte state layout and register ABI.
+Observed and blind runs of each ELF have identical UART bytes,
+per-byte cycle hash and final cycle. Twenty-three directed controls
+pass, including accepted 29-byte state, rejected truncated state and
+rejected unknown layout. All live commands remain **G94**, including
+when inverse-time conversion is compiled in.
+
+| Source   | Flash G94 | Flash G93 | G93 boot margin | Static RAM | Stack G94/G93 | Stack margin G94/G93 |
+| -------- | --------- | --------- | --------------- | ---------- | ------------- | -------------------- |
+| Baseline | 31850     | 31950     | 306             | 1670       | 334 / 334     | 44 / 44              |
+| Fixed    | 32546     | 32688     | -432            | 1670       | 344 / 350     | 34 / 28              |
+| Refill   | 32558     | 32700     | -444            | 1670       | 344 / 348     | 34 / 30              |
+| Seed     | 32650     | 32754     | -498            | 1674       | 336 / 338     | 38 / 36              |
+
+Seed fits the full 32768-byte flash by only 14 bytes with G93, **not the
+32256-byte application region with a 512-byte bootloader**. Stack
+values are measured ordinary/steep/hold watermarks, not universal bounds.
+
+#### Motion and first-target delay
+
+| Source   | Stops G94 | Queued G94 | Stops G93 option | Queued G93 option | Steep ms / stops |
+| -------- | --------- | ---------- | ---------------- | ----------------- | ---------------- |
+| Baseline | 4         | 3          | 9                | 5                 | 3013 / 4         |
+| Fixed    | 50        | 16         | 46               | 15                | 2646 / 0         |
+| Refill   | 30        | 7          | 31               | 5                 | 2655 / 0         |
+| Seed     | 5         | 2          | 5                | 0                 | 2852 / 4         |
+
+Ordinary totals cover 40 programs; the last column is the separate
+20 mm/Z-10/F5000 steep-Z program. Seed largely recovers ordinary motion
+relative to refill, but the four steep-case stops return. The sum of
+ordinary G94 program times is 95994 ms, versus 95213 ms for baseline
+and 100111 ms for refill. This is a sum over separate tests, not a
+single continuous job. Queued-stop counts sample planner occupancy;
+zero queued stops does not prove the absence of every abrupt stop.
+All six hold/resume endpoints pass in both compile modes.
+
+The following are largest first-target delays and target gaps, in
+milliseconds, over each three-curve G94 live chain:
+
+| Live chain     | Baseline first / gap | Refill first / gap | Seed first / gap |
+| -------------- | -------------------- | ------------------ | ---------------- |
+| S10/Z-30/F5000 | 87.260 / 11.023      | 43.793 / 10.954    | 65.400 / 10.953  |
+| S20/Z-10/F5000 | 96.877 / 7.805       | 29.347 / 6.812     | 67.988 / 6.811   |
+| S60/Z-30/F5000 | 115.280 / 144.258    | 36.640 / 9.876     | 55.793 / 9.901   |
+| S60/Z-30/F1000 | 92.502 / 110.378     | 31.391 / 48.435    | 43.319 / 48.422  |
+
+All twelve observed seed curves retry from eight to sixteen pieces
+before emitting their first target. These cases pay for both passes;
+first-target maxima worsen in all four chains relative to refill.
+Headless S10/Z-3 similarly changes from 22.588 to 36.107 ms, while the
+turning case improves from 27.139 to 19.096 ms. A large target gap is
+not itself starvation: the separately traced 48.435 ms refill gap below
+was full-planner backpressure. That diagnosis is not transferred to
+other gaps or stops without a trace.
+
+#### Accuracy and the inverse-time identity failure
+
+On the 18 derived curves, seed's raw XYZ and condition sequences match
+refill in both compile modes. G94 feeds also match. Maximum raw Z error
+remains **0.01222021 mm**, with two curves above 0.002 mm. The live
+maximum remains **0.00236027 mm**. Thus this corpus shows no Z-accuracy
+improvement from the new initial policy.
+
+The stronger planned headless XY/feed/condition identity **fails** for
+G93 on the no-Z command `G5X10Y0I3J12P3Q-12F2`. All 124 feed values
+change from 37.79473114 to 37.82238770 mm/min; no coordinate or condition
+bits change. The retained coarse length is also used to convert G93
+feed, even when Z is constant. Seed uses nine polygon pieces here,
+versus sixteen for refill, so the feed changes by 0.073176%. Relative
+nominal-time error rises from 0.015338% to 0.088449%, the maximum for
+seed on this corpus. The independent verifier retains the identity
+failure; the comparison is not weakened to hide it. Live G94 identity
+checks cannot establish inverse-time feed identity.
+
+**Result:** seed is a measured tradeoff, not a Pareto winner. It recovers
+most ordinary stops but worsens steep-Z motion and first-target delay
+where both passes are needed. Boot fit, loose Z excess and exact G93
+remain unresolved. All candidates stay separate; no default or merge
+is selected.
+
 ### Postqueue refill: partial motion recovery
 
 [CI run 45470817521](https://github.com/kimstik/grbl/actions/runs/45470817521),
