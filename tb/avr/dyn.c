@@ -25,7 +25,7 @@
   host, injects feed hold and cycle start, and stops a program that hangs.
 
   Output lines (simavr prints UART lines to stderr, mixed with grbl's "ok"):
-    run    kind size_um F accel lat_ms seg len_um t_ms feed peak min min_full low stops cut cut_F dx dy stack
+    run    kind size_um F accel lat_ms seg len_um t_ms feed peak min min_full low stops cut cut_F dx dy dz stack
       kind      G5 cubic S-curves, G1 the same curves as straight segments
                 (same block count), G2 alternating G2/G3 half circles
       seg       blocks queued, len_um the programmed path length
@@ -35,12 +35,11 @@
       min_full  the same, counted only after the buffer was first full (- if never)
       low       times the planner fell to 0 or 1 block (same window as min)
       stops     times the machine went idle mid-program
-      cut       stops with blocks still queued: the main loop was too busy to
-                refill the step segment buffer, and the stepper stopped with
-                no deceleration
-      cut_F     the highest feed it was cut at, mm/min (entry speed of the
-                block in progress)
-      dx dy     final sys_position minus the parser target, in steps
+      cut       stops with planner blocks still queued; this probe does not
+                observe the last consumed step segment or prove its exit speed
+      cut_F     highest entry speed of the queued current block at such a stop,
+                mm/min, not the instantaneous stepper speed
+      dx dy dz  final sys_position minus the parser target, in steps
       stack     most stack used, in bytes below RAMEND, ISRs included
     hold   delay_ms state@hold x@hold state@resume suspend@resume dx dy dz t_ms stack
       x@hold    steps from the program start; 1250 steps per 5 mm curve

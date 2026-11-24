@@ -2,6 +2,7 @@ name: G5 Z aim prototype
 
 on:
   push:
+    branches-ignore: [wip/z-loose-compare]
   pull_request:
 
 defaults:

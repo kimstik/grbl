@@ -1,0 +1,103 @@
+name: G5 loose comparison
+
+on:
+  push:
+    branches: [wip/z-loose-compare]
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  avr:
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arm: baseline
+            ref: 1f19d74940551ecfaa0c38c17a318aeda931d795
+            extra: ''
+          - arm: schedule
+            ref: 53f5e100cffa49d431bd7e22b02b2db126914de6
+            extra: -DBEZIER_Z_SCHEDULE
+          - arm: edges
+            ref: ed67b0050537f0cccd7d4cd3232b06db390e1f96
+            extra: -DBEZIER_Z_EDGES
+          - arm: global
+            ref: f3beb5320bb8a278cfe6369caa77fbcf7617064e
+            extra: -DBEZIER_Z_GLOBAL
+    name: avr 16.2 ${{ matrix.arm }}
+    steps:
+      - name: Pinned AVR tools
+        run: |
+          set -euo pipefail
+          pacman -Syu --noconfirm --needed git make diffutils bash python
+          a=https://archive.archlinux.org/packages/a
+          pacman -U --noconfirm \
+            $a/avr-binutils/avr-binutils-2.47-1-x86_64.pkg.tar.zst \
+            $a/avr-gcc/avr-gcc-16.2.0-1-x86_64.pkg.tar.zst \
+            $a/avr-libc/avr-libc-2.3.2-4-any.pkg.tar.zst
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+          path: source
+      - name: Matched production images and measurement binaries
+        run: timeout 1200 nice -n 19 bash tb/compare/build_loose.sh '${{ matrix.arm }}' '${{ matrix.extra }}'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: loose-avr-${{ matrix.arm }}
+          path: |
+            elf
+            raw
+
+  simavr:
+    needs: avr
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        arm: [baseline, schedule, edges, global]
+        mode: [g94, g93]
+        include:
+          - arm: baseline
+            ref: 1f19d74940551ecfaa0c38c17a318aeda931d795
+            extra: ''
+          - arm: schedule
+            ref: 53f5e100cffa49d431bd7e22b02b2db126914de6
+            extra: -DBEZIER_Z_SCHEDULE
+          - arm: edges
+            ref: ed67b0050537f0cccd7d4cd3232b06db390e1f96
+            extra: -DBEZIER_Z_EDGES
+          - arm: global
+            ref: f3beb5320bb8a278cfe6369caa77fbcf7617064e
+            extra: -DBEZIER_Z_GLOBAL
+    name: simavr ${{ matrix.arm }} ${{ matrix.mode }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+          path: source
+      - uses: actions/download-artifact@v4
+        with:
+          name: loose-avr-${{ matrix.arm }}
+          path: input
+      - name: Install simavr
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends simavr
+      - name: Same corpus, raw accuracy, timing and live motion
+        run: timeout 3600 nice -n 19 bash tb/compare/run_loose.sh '${{ matrix.arm }}' '${{ matrix.mode }}' '${{ matrix.extra }}'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: loose-simavr-${{ matrix.arm }}-${{ matrix.mode }}
+          path: raw

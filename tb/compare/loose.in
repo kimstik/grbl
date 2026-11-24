@@ -1,0 +1,54 @@
+# Fixed hypotheses for the loose Z candidates, not a random search.
+# @MODE@: G94 or G93. @F@: 1000 or 2. Each curve keeps its own Z travel.
+G21G17G90@MODE@
+# Short S, then the larger Z lead that opens the length bracket.
+G0X0Y0Z0
+*G5X10Y0Z-3I3J12P3Q-12F@F@
+G0X0Y0Z0
+*G5X10Y0Z-30I3J12P3Q-12F@F@
+G0X0Y0Z0
+*G5X20Y0Z-10I6J24P6Q-24F@F@
+# Smooth long curve: high refinement cost without a local cusp to isolate.
+G0X0Y0Z0
+*G5X1000Y0Z-500I300J1200P300Q-1200F@F@
+# Unequal parameter speed, despite a straight monotone XY path.
+G0X0Y0Z0
+*G5X0Y100Z10I0J99P0Q1F@F@
+# Turn inside a 64-piece interval; 256 XY segments at sigma .002.
+# B(t)=(396,288)*(2*(33/128)*t-t*t); turn at t=33/128.
+G0X0Y0Z0
+*G5X-191.8125Y-139.5Z1000I68.0625J49.5P195.9375Q142.5F@F@
+# The cap is intentional: report XY error, do not waive or hide it.
+G0X0Y0Z0
+*G5X10Y0Z50I100000J0P1Q50000F@F@
+# Two-segment endpoint: an XY ulp amplified by a large Z/XY ratio.
+G0X-100Y-100Z0
+*G5X-100.00782Y-100Z100I0J0P.00782Q0F@F@
+# Translation must not mix ideal chords with the emitted float endpoint.
+G0X60000Y0Z0
+*G5X59996Y0Z1000I0J0P4Q0F@F@
+# The same relative path near the origin, for the float-grid comparison.
+G0X0Y0Z0
+*G5X-4Y0Z1000I0J0P4Q0F@F@
+# A diagonal staircase on the float grid: smooth relative edges miss its length.
+G0X60000Y60000Z0
+*G5X59996Y59998Z1000I0J0P4Q2F@F@
+G0X0Y0Z0
+*G5X-4Y-2Z1000I0J0P4Q2F@F@
+# Very short final chords and the corresponding slow start, opposite Z signs.
+G0X-100Y-100Z-10
+*G5X20000Y-100Z.3I20100J0P0Q0F@F@
+G0X-100Y-100Z.3
+*G5X-20000Y-100Z-10I0J0P19900Q0F@F@
+# Inherited lead before a turn: a new global length can reduce demanded Z.
+# x(t)=10000*t*(1/8-t), turn at 1/16; the governor must not reverse Z.
+G0X0Y0Z0
+*G5X-8750Y0Z76I416.66667J0P6250Q0F@F@
+G0X0Y0Z0
+*G5X-8750Y0Z-76I416.66667J0P6250Q0F@F@
+# XY length zero: no ratio s/L exists, but the Z endpoint must be finite/exact.
+G0X0Y0Z0
+*G5X0Y0Z10I0J0P0Q0F@F@
+# No Z travel: optional refinement must not invent Z motion.
+G0X0Y0Z0
+*G5X10Y0I3J12P3Q-12F@F@

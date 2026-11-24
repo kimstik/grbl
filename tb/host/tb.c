@@ -15,6 +15,10 @@
                                mc_cubic_b_spline call; no cap or float-grid waiver.
                                Budget: TB_XY_BUDGET, default BEZIER_SIGMA. This is a
                                sampled distance check, not a geometric proof.
+     tb --dump-report LINES OUT  report raw XY/Z error and commanded G93 time;
+                               count excess against $12 without a grid/cap waiver.
+                               Fail on malformed, non-finite or inexact endpoints,
+                               invalid feeds or reversed Z, not on policy bounds.
 
    Vector file syntax, one statement per line, '#' starts a comment:
      = name [@bug] [@OPT]...   new test; machine at X-100 Y-100 Z-10 (mm), work
@@ -453,7 +457,6 @@ static const char *z_fail(const zerr_t *z, const ztrace_t *t)
   return NULL;
 }
 
-#ifdef BEZIER_EXACT_INVERSE_TIME
 /* Minutes the segments were commanded to take; *one: all at one feed in mm/min. */
 static double feed_time(const float *start, pt_t *pts, const float *feed, const uint8_t *cond, int n, int *one, double *len)
 {
@@ -470,6 +473,7 @@ static double feed_time(const float *start, pt_t *pts, const float *feed, const 
   return t;
 }
 
+#ifdef BEZIER_EXACT_INVERSE_TIME
 /* What is wrong with the time of a G93 curve, or NULL. */
 static double time_off;                     /* of the last G93 curve, as a share of 1/F */
 
@@ -978,7 +982,7 @@ static void run_dump(const char *lines, const char *out, int strict)
   quiet = 1; machine_reset(); memset(&m, 0, sizeof m);
   memset(steps, 0, sizeof(steps)); memcpy(sys_position, steps, sizeof(steps));
   plan_sync_position(); gc_sync_position();
-  int bad = 0, curves = 0;
+  int bad = 0, curves = 0, report = strict == 2, xy_over = 0, z_over = 0;
   while (fgets(raw, sizeof raw, fl)) {
     raw[strcspn(raw, "\r\n")] = 0;
     if (!*raw || *raw == '#') continue;
@@ -988,16 +992,19 @@ static void run_dump(const char *lines, const char *out, int strict)
     while (!found && fgets(o, sizeof o, fo)) { o[strcspn(o, "\r\n")] = 0; found = !strcmp(o, g); }
     if (!found) { printf("%s: not in %s\n", g, out); exit(2); }
     long pos = ftell(fo);
-    uint32_t b[N_AXIS], f;
+    uint32_t b[N_AXIS], f, hash = 2166136261UL;
     unsigned cond;
     while (fgets(o, sizeof o, fo) && sscanf(o, "p %u %u %u %u %u", &b[0], &b[1], &b[2], &f, &cond) == N_AXIS + 2) {
       if (na < MAXSEG) { memcpy(avr[na], b, sizeof(pt_t)); memcpy(&avr_feed[na], &f, sizeof(float)); avr_cond[na] = cond; }
+      for (int a = 0; a < N_AXIS; a++) for (int byte = 0; byte < 4; byte++) hash = (hash ^ ((b[a] >> (8*byte)) & 255))*16777619UL;
       na++; pos = ftell(fo);
     }
-    unsigned avr_status = 0, at[6] = {0, 0, 0, 0, 0, 0};
+    unsigned fields[10] = {0}, at[6] = {0, 0, 0, 0, 0, 0};
     uint32_t ab[2] = {0, 0};                /* the trace follows the ten columns of bench.c, if built in */
-    int got = sscanf(o, " %u %*u %*u %*u %*u %*u %*u %*u %*u %*u %u %u %u %u %u %u %u %u", &avr_status, &at[0], &at[1], &at[2], &at[3], &at[4], &at[5], &ab[0], &ab[1]);
-    int summary = got >= 1;
+    int summary_bytes = 0;
+    int got = sscanf(o, " %u %u %u %u %u %u %u %u %u %u %n%u %u %u %u %u %u %u %u", &fields[0], &fields[1], &fields[2], &fields[3], &fields[4], &fields[5], &fields[6], &fields[7], &fields[8], &fields[9], &summary_bytes, &at[0], &at[1], &at[2], &at[3], &at[4], &at[5], &ab[0], &ab[1]);
+    unsigned avr_status = fields[0];
+    int summary = summary_bytes > 0;
     ztrace_t t = { at[0], at[1], at[2], at[3], at[4], at[5], 0, 0, 0 };
     memcpy(&t.bound, &ab[0], sizeof(float)); memcpy(&t.time, &ab[1], sizeof(float));
     fseek(fo, pos, SEEK_SET);
@@ -1017,9 +1024,11 @@ static void run_dump(const char *lines, const char *out, int strict)
     if (!c.ok || st) continue;
     if (strict) {
       c = parsed;
-      printf("net");
-      for (int k = 0; k < 4; k++) printf(" (%.9g,%.9g)", c.p[k][0], c.p[k][1]);
-      printf(" budget %.9g dense %d\n", (double)TB_XY_BUDGET, DENSE);
+      if (!report) {
+        printf("net");
+        for (int k = 0; k < 4; k++) printf(" (%.9g,%.9g)", c.p[k][0], c.p[k][1]);
+        printf(" budget %.9g dense %d\n", (double)TB_XY_BUDGET, DENSE);
+      }
     }
     int n = na < MAXSEG ? na : MAXSEG, fin = 1;
     for (int k = 0; k < n; k++) for (int a = 0; a < N_AXIS; a++) fin &= isfinite(avr[k][a]);
@@ -1038,13 +1047,35 @@ static void run_dump(const char *lines, const char *out, int strict)
 #ifdef BEZIER_MAX_SEGMENTS
     cap = na >= BEZIER_MAX_SEGMENTS;
 #endif
+    if (report) {
+      /* The candidates may deliberately retain an open bracket. Report their
+         raw errors against the same $12; do not borrow a policy's bound or
+         make an exceeded target pass by adding a float-grid allowance. */
+      zerr_t z = z_check(&c, start, avr, n, &t);
+      const char *why = !end ? "end" : z.back ? "Z reverses" :
+        fields[1] != (unsigned)na || fields[7] != 1 || fields[8] != 0 || fields[9] != hash ? "summary count, flags or hash" : NULL;
+      int one = 0, feeds = 1;
+      for (int k = 0; k < n; k++) feeds &= isfinite(avr_feed[k]) && avr_feed[k] > 0;
+      double length = 0, minutes = feeds ? feed_time(start, avr, avr_feed, avr_cond, n, &one, &length) : NAN;
+      double error = m.inv && m.f > 0 ? fabs(minutes*m.f - 1) : -1;
+      if (!why && (!feeds || !isfinite(minutes))) why = "invalid feed or time";
+      double mm = z.len*fabs(z.dz), goal = settings.arc_tolerance;
+      int xo = ad > goal, zo = mm > goal;
+      xy_over += xo; z_over += zo;
+      printf("%s n %d cap %d xy_mm %.9g z_mm %.9g xy_over %d z_over %d goal %.9g g93_rel %.9g one_feed %d path3d %.9g",
+             g, na, cap, ad, mm, xo, zo, goal, error, one, length);
+      if (why) printf("  FAIL %s", why);
+      printf("\n");
+      bad += why != NULL;
+      continue;
+    }
     const char *why = !end ? "end" : strict ? (ad <= TB_XY_BUDGET ? NULL : "tol") :
       ad <= tol_for(&c) || (cap && ad <= hd * 1.001 + 1e-4) ? NULL : "tol";
     zerr_t z; memset(&z, 0, sizeof z);
     if (na) {                               /* poly[] is the AVR polyline now */
       z = z_check(&c, start, avr, n, &t);
 #if BEZIER_Z_LINEAR == 3
-      if (!why && got < 9) why = "no trace of Z in the dump";
+      if (!why && got < 18) why = "no trace of Z in the dump";
 #endif
       if (!why) why = z_fail(&z, &t);
 #ifdef BEZIER_EXACT_INVERSE_TIME
@@ -1071,6 +1102,7 @@ static void run_dump(const char *lines, const char *out, int strict)
   }
   fclose(fl); fclose(fo);
   printf("dump: %d curves, %d failed\n", curves, bad);
+  if (report) printf("raw excess: XY %d Z %d of %d curves, no grid or cap waiver\n", xy_over, z_over, curves);
   exit(bad != 0 || curves == 0);
 }
 
@@ -1080,6 +1112,7 @@ int main(int argc, char **argv)
   if (argc == 3 && !strcmp(argv[1], "--hash")) run_hash(argv[2]);
   if (argc == 4 && !strcmp(argv[1], "--dump")) run_dump(argv[2], argv[3], 0);
   if (argc == 4 && !strcmp(argv[1], "--dump-strict")) run_dump(argv[2], argv[3], 1);
+  if (argc == 4 && !strcmp(argv[1], "--dump-report")) run_dump(argv[2], argv[3], 2);
   if (argc == 4 && !strcmp(argv[1], "--random")) run_random(atol(argv[2]), strtoul(argv[3], NULL, 0));
   else for (int i = 1; i < argc; i++) run_file(argv[i]);
   printf("%d checks: %d pass, %d FAIL, %d xfail, %d XPASS\n", checks, n_pass, n_fail, n_xfail, n_xpass);

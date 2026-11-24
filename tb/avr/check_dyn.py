@@ -31,4 +31,6 @@ for row in holds:
 assert 'done' in rows and not any('timeout' in s for s in rows), 'missing done or timeout'
 stack = [s.split() for s in rows if s.startswith('stack ')]
 assert len(stack) == 1 and len(stack[0]) == 3, 'stack footer'
+assert int(stack[0][1]) == max(int(row[-1]) for row in runs + holds), 'stack maximum'
+assert rows.count('done') == 1, 'duplicate done'
 print(f"dyn: {len(seen['G5'])} G5 programs, {len(seen['G5Z'])} with a steep Z, {len(holds)} holds, XYZ exact; stack {stack[0][1]} bytes")
