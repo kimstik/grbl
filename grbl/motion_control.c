@@ -520,8 +520,8 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
 #ifdef BEZIER_Z_SCHEDULE
       a = mc_spline_dist(&z->travelled, q, p);
 #elif defined(BEZIER_Z_PREFETCH)
-      q[2] = 0.0f; // Keep the first-pass sums intact; the rest of q is free here.
-      a = mc_spline_dist(q + 2, q, p);
+      // Keep the first-pass sums intact. Z is replaced below, so its old value is a scratch sum.
+      a = mc_spline_dist(p + Z_AXIS, q, p);
 #else
       a = mc_spline_dist(&z->poly, q, p); // The chord of the segment. The sum is not in use.
 #endif
