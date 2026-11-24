@@ -421,6 +421,142 @@ with the full evidence suite. The cap/error/default choices remain open.
 
 ## Z by an estimate of the length ahead
 
+### Fixed coarse pass: faster start, worse ordinary motion
+
+[CI run 45464272357](https://github.com/kimstik/grbl/actions/runs/45464272357),
+harness e82ec45, completes **8 of 8 jobs**. Frozen sources are baseline
+1f19d74 and fixed a9b415f, `BEZIER_Z_FIXED`, on avr-gcc 16.2.0, binutils
+2.47 and avr-libc 2.3.2. The common goal remains **$12 = 0.002 mm**.
+Success verifies measurement integrity, not that the motion or error
+requirements have been met.
+
+The fixed source makes one initial pass with approximately sixteen
+control-polygon pieces. A reversal test halves a piece; short pieces
+sum actual segment lengths. A coordinate-risk heuristic can request a
+full actual chord sum after that pass. It reuses the baseline point,
+distance, remaining-Z update and realtime service between estimator
+calls. There is no tolerance escalation or mid-curve re-estimate. The
+smooth polygon and coordinate heuristic do not certify rounded XY.
+
+Discrete Gauss quadrature was considered first, but its initial G94/G93
+production images were 33808/33926 bytes and failed to link for the
+328P in run 45458480422. Later local size-only refactors, including
+Simpson's rule, still exceeded 32768 bytes. No oversized AVR image was
+executed and no AVR timing is claimed for those alternatives. The fixed
+polygon pass was tested instead of continuing to optimize their size.
+
+#### Production fit and independent checks
+
+| Source   | Flash G94 | Flash G93 | G93 boot margin | Static RAM | Stack G94/G93 | Stack margin G94/G93 |
+| -------- | --------- | --------- | --------------- | ---------- | ------------- | -------------------- |
+| Baseline | 31850     | 31950     | 306             | 1670       | 334 / 334     | 44 / 44              |
+| Fixed    | 32546     | 32688     | -432            | 1670       | 344 / 350     | 34 / 28              |
+
+Flash is text+data independently decoded from production ELF sections;
+boot margin is against 32256 bytes. Fixed fits 32768 bytes, **not the
+application region with a 512-byte bootloader**. Stack is the largest
+observed ordinary/steep/hold watermark, not a worst-case bound.
+
+Four macro-off image comparisons pass. Independent checks cover all
+four G94/G93 raw measurement sets: 18 constructed curves, the original
+18 timing probes, 40 ordinary motion programs, four steep-Z programs
+and six holds. Counts, hashes, finite exact ends, monotone Z, commanded
+time and stack arithmetic pass. These are not new random or mutation
+campaigns. The changed Z policy is compared against cumulative length
+of its actual emitted XY polyline, without cap or float-grid waivers.
+
+#### Headless startup, gaps and error
+
+Milliseconds on a 16 MHz ATmega328P, without the G93 option. Each timing
+cell is **baseline / fixed**. These images do not execute the stepper.
+
+| Curve                     | First target    | Largest target gap | Fixed raw Z error mm |
+| ------------------------- | --------------- | ------------------ | -------------------- |
+| S10, Z-3                  | 61.605 / 22.588 | 0.482 / 0.486      | 0.00045325           |
+| S10, Z-30                 | 61.607 / 22.590 | 0.482 / 0.484      | 0.00453056           |
+| S20, Z-10                 | 82.666 / 21.709 | 0.485 / 0.486      | 0.00078820           |
+| S1000, Z-500              | 80.948 / 21.789 | 81.628 / 0.486     | 0.01222021           |
+| Collinear handles 99:1    | 38.992 / 20.701 | 0.446 / 0.446      | 0.00000381           |
+| Turn, 256 segments, Z1000 | 81.115 / 27.139 | 9.185 / 0.480      | 0.00031743           |
+| Cap, 2000 segments, Z50   | 82.674 / 21.761 | 82.297 / 0.493     | 0.00026054           |
+
+The largest raw Z error is 0.01222021 mm, with **2 of 18 curves over
+0.002 mm**, versus baseline 0.01323418 mm and 1 of 18. This improves the
+turn but spends accuracy on the two S curves; it does not meet a strict
+common tolerance. The sample is not a universal maximum. Translated
+risk cases keep the baseline Z output by summing actual segments, but
+can be slower: the translated axis example starts in 31.276 instead of
+8.524 ms because it sums 41 segments twice. Pure-Z and no-Z paths also
+pass. Largest relative commanded G93 time error is 0.000153383, versus
+baseline 0.000583304; mode 3 still does not provide exact inverse time.
+
+#### Read-only live observation and motion regression
+
+The same-ELF observer and blind controls pass for both compile modes:
+12 curves per source, identical parsed nets, XY/feed/condition bits and
+finite exact ends, with monotone Z. Source, ELF hash, ABI/state layout,
+UART bytes, per-byte cycle hash and final cycle are checked. The fixed
+live raw Z maximum is 0.00236027 mm, versus baseline 0.000200194 mm.
+No optional work or later estimate is performed by fixed. All live
+commands are **G94**, even with G93 conversion compiled in.
+
+Each timing cell below is **baseline / fixed**, maxima over a three-curve
+chain, without the G93 option. Target gaps include work outside the
+estimator; they are not synonymous with estimation pauses.
+
+| Live chain     | First target     | Largest target gap |
+| -------------- | ---------------- | ------------------ |
+| S10/Z-30/F5000 | 87.260 / 44.689  | 11.023 / 10.981    |
+| S20/Z-10/F5000 | 96.877 / 29.495  | 7.805 / 7.811      |
+| S60/Z-30/F5000 | 115.280 / 36.656 | 144.258 / 9.866    |
+| S60/Z-30/F1000 | 92.502 / 31.211  | 110.378 / 48.398   |
+
+The ordinary 40-program sweep regresses substantially: **stops / stops
+with planner blocks queued are 4 / 3 to 50 / 16** without the G93 option,
+and **9 / 5 to 46 / 15** with it. Queued-block entry feed reaches 2664
+mm/min; that field is not instantaneous stepper speed. Four steep-Z
+programs improve: S20/F5000 changes from 3013 ms and four stops to
+2646 ms and zero stops. All XYZ and hold endpoints pass, but endpoint
+correctness does not make the ordinary-motion regression acceptable.
+
+Fixed demonstrates a useful reduction in estimator startup and later
+work, **not a production-ready alternative or a general motion win**.
+It is retained for comparison. The next priority is timely stepper
+segment publication, not further byte optimization. No merge or new
+default is selected.
+
+### First queued-stop diagnosis in the baseline
+
+A bounded read-only local observation identifies the first queued stop
+in the exact baseline image used above. The fresh local dyn ELF is
+byte-identical to the CI baseline (SHA256
+`54d1705300896448edaead779b68cd9ae8d6085f3bd9d8ad1e50cd17c3d5e35a`).
+The downloaded image was read for comparison, not executed locally.
+Observed and blind runs have identical UART bytes and per-byte cycles,
+and end at cycle 963956879. No AVR instructions or state were injected.
+
+The event is ordinary program 27, 2 mm / F4000 / acceleration 2000 /
+latency 2 ms. Short planner chords end stepper segments before the
+nominal segment duration. After the last refill, the remaining segment
+buffer covers only 3.950313 ms, including the active segment remainder,
+although the planner is not empty. Ordinary planning and the next point
+helper take 2.940688 ms before the next `st_prep_buffer` call. That call
+has started, but cannot publish its first segment in the remaining
+1.009625 ms. The ISR sees empty at cycle 962356879 with **11 planner
+blocks queued**, interrupting rate math in `__mulsf3x` before publication.
+
+The consumed segment's saved planned end speed is 3319.86426 mm/min;
+it belongs to that published slot, not the current global prep state
+or the queued block's entry feed. The ISR then disables the timer
+without another deceleration segment. The initial length estimator had
+finished 55.135375 ms earlier. Most of the 31.424313 ms target gap is
+after starvation: `st_go_idle` spends the configured 25 ms idle-lock
+delay inside the ISR before foreground preparation can continue.
+
+This proves one concrete missed-publication deadline. It neither
+classifies all other queued stops nor proves the same cause for fixed,
+A2 or hardware. No refill or ISR fix is validated by this observation.
+
 ### Compact A2: measured boot fit with ordered reserve reads
 
 [CI run 45439717696](https://github.com/kimstik/grbl/actions/runs/45439717696),
@@ -499,8 +635,9 @@ In the ordinary 40-program sweep, stops / stops with planner blocks
 queued are baseline 4 / 3, A2 6 / 5, compact A2 9 / 7 without the
 G93 option; with it they are 9 / 5, 4 / 2 and 4 / 2. These mixed
 changes do not establish a general starvation improvement. Queued-block
-entry feed is not instantaneous stepper velocity; the mechanism remains
-unresolved. All motion and hold endpoints pass.
+entry feed is not instantaneous stepper velocity. The first baseline
+queued stop is diagnosed above; other events remain unclassified.
+All motion and hold endpoints pass.
 
 Production disassembly confirms the compiler ordering correction in
 both compact builds. For example, in G93 the first tail read at 0x5d46
