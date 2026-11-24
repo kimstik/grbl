@@ -30,6 +30,8 @@ for mode in g94 g93; do
   make -s -C source clean > "raw/production-$mode.log" 2>&1
   if make -s -C source COMPILE="$cc $opts $extra" >> "raw/production-$mode.log" 2>&1; then
     cp source/build/main.elf "elf/$mode/firmware.elf"
+    avr-nm -n -S "elf/$mode/firmware.elf" > "raw/production-symbols-$mode.txt"
+    avr-objdump -d "elf/$mode/firmware.elf" > "raw/production-disassembly-$mode.txt"
     set -- $(avr-size source/build/main.elf | tail -1)
     flash=$(($1+$2)); ram=$(($2+$3))
     fit=no; [ "$flash" -gt 32768 ] || fit=yes

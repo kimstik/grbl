@@ -17,7 +17,7 @@ gcc -std=c99 -O2 -Wall -Wextra -Werror -I"$sim/sim" \
   $(pkg-config --libs libelf) -lm -o build/observe > "$out/observer-build.txt" 2>&1
 sha256sum tb/avr/observe.c build/observe > "$out/observer-sha256.txt"
 
-for arm in baseline prefetch; do
+for arm in baseline prefetch compact; do
   dir="$out/$arm"
   input="$root/input/$arm"
   elf="$input/elf/$mode/observer.elf"
@@ -33,7 +33,7 @@ for arm in baseline prefetch; do
       "$dir/$control-uart.txt" 600000000 "${args[@]}" > "$dir/$control-run.txt" 2>&1
   done
   baseline=()
-  if [ "$arm" = prefetch ]; then
+  if [ "$arm" != baseline ]; then
     baseline=(--baseline "$out/baseline/observed.txt" \
       --baseline-uart "$out/baseline/observed-uart.txt" --require-prefetch)
   fi
