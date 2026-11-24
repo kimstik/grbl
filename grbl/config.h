@@ -757,6 +757,11 @@
   // switch to a segment sum by BEZIER_Z_PIECE_COST.
   // #define BEZIER_Z_LINEAR 2
   // #define BEZIER_Z_LOOSE
+  // Experimental mode 3 alternative: a discrete three-node Gauss estimate on sixteen
+  // intervals, split at detected reversals. It estimates the smooth chord sum, not the
+  // rounded XY staircase. A coordinate-risk heuristic can request the actual segment sum.
+  // No mid-curve re-estimation or tolerance certificate; G93 remains approximate.
+  // #define BEZIER_Z_QUADRATURE
 
   #ifndef BEZIER_Z_SIGMA
     // Mode 3: how far off the line an estimate may leave Z, mm. By default the tolerance of

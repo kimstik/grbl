@@ -455,6 +455,23 @@ static float mc_spline_dist(float *sum, float *a, float *b)
   return(d);
 }
 
+#ifdef BEZIER_Z_QUADRATURE
+// The average derivative over one XY segment, divided by three. At its midpoint t the
+// quadratic derivative needs h*h/12 added to t*t; its norm times 3*h is the chord length.
+// This smooth polynomial does not include rounding of the emitted XY coordinates.
+static void mc_spline_vector(float *p, float t, float h, float **net)
+                             __attribute__((noinline, noclone));
+static void mc_spline_vector(float *p, float t, float h, float **net)
+{
+  uint8_t i;
+  for (i = 0; i < 2; i++) {
+    float e0 = net[2][i] - 2.0f*net[1][i] + net[0][i];
+    float e1 = net[3][i] - 2.0f*net[2][i] + net[1][i];
+    p[i] = net[1][i] - net[0][i] + 2.0f*t*e0 + (t*t + h*h/12.0f)*(e1 - e0);
+  }
+}
+#endif
+
 // The next point p of the polyline, the j-th of segments: X and Y, and Z. The segment to it takes
 // the share of the Z left that its chord is of the length left; a chord as long as that length
 // takes it all, so Z never passes the target, nor turns back.
@@ -486,10 +503,14 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
   float q[4], r[4], a, b, *from;
   float *net[4] = { position, first, second, target };
   uint16_t m;
+#ifdef BEZIER_Z_QUADRATURE
+  if (!z->next) {
+#else
 #ifdef BEZIER_Z_LOOSE
   if (segments + 1 - j != z->next) { // Not where the length is found again
 #else
   if (!z->next) { // The length is found, or not asked for
+#endif
 #endif
     mc_spline_point(q, j*z->step, 0.0f, net);
     if (z->u != 0.0f) {
@@ -506,12 +527,83 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     z->todo = 0;
     z->step = 1.0f/segments;
     z->u = (target[Z_AXIS] - position[Z_AXIS])*0.9999999f;
+#ifdef BEZIER_Z_QUADRATURE
+    // Sixteen intervals, refined only where the chord-vector direction turns back.
+    z->pieces = 2;
+    z->rest = 1e-30f;
+    memcpy(&z->chord, p, 2*sizeof(float));
+#endif
 #ifdef BEZIER_EXACT_INVERSE_TIME
     if (!(pl_data->condition & PL_COND_FLAG_INVERSE_TIME))
 #endif
     if (z->u == 0.0f) { z->next = 0; } // No Z word, no estimate
     return(true); // Realtime work first: the line has taken its time to parse.
   }
+#ifdef BEZIER_Z_QUADRATURE
+  // Discrete Gauss rule for m evenly spaced segment midpoints. The weights
+  // integrate a polynomial through degree five exactly on those midpoints.
+  // Norms are not polynomials: this is a loose fixed-work estimate, not a bound.
+  m = min((segments + 15)/16, z->next);
+  if (z->todo) { m = z->todo; }
+  if (z->pieces == 1 || m <= 3) { m = 1; }
+  a = (segments - z->next)*z->step;
+  if (m == 1) {
+    b = (segments + 1 - z->next)*z->step;
+    mc_spline_point(q, b, 0.0f, net);
+    if (z->next == 1) { memcpy(q, target, 2*sizeof(float)); }
+    mc_spline_dist(&z->rest, q, &z->chord);
+    memcpy(&z->chord, q, 2*sizeof(float));
+    Z_TRACE(summed++);
+  } else {
+    b = a + 0.5f*m*z->step;
+    mc_spline_vector(q, a + 0.5f*z->step, z->step, net);
+    mc_spline_vector(r, a + (m - 0.5f)*z->step, z->step, net);
+    mc_spline_vector(q + 2, b, z->step, net);
+    // The middle Bernstein vector is twice the midpoint less half the ends.
+    // A reversal triggers subdivision down to individual segment lengths.
+    if (q[0]*r[0] + q[1]*r[1] < 0.0f ||
+        (2.0f*q[2] - 0.5f*(q[0] + r[0]))*(q[0] + r[0]) +
+        (2.0f*q[3] - 0.5f*(q[1] + r[1]))*(q[1] + r[1]) < 0.0f) {
+      z->todo = m/2;
+      return(true);
+    }
+    a = (float)m*m;
+    from = r + 2; // The weights are local to this interval.
+    from[0] = 5.0f*(a - 1.0f)/(6.0f*(3.0f*a - 7.0f));
+    a = sqrtf((3.0f*a - 7.0f)*0.05f)*z->step;
+    z->rest += 3.0f*m*z->step*(1.0f - 2.0f*from[0])*hypot_f(q[2], q[3]);
+    mc_spline_vector(q, b - a, z->step, net);
+    z->rest += 3.0f*m*z->step*from[0]*hypot_f(q[0], q[1]);
+    mc_spline_vector(q, b + a, z->step, net);
+    z->rest += 3.0f*m*z->step*from[0]*hypot_f(q[0], q[1]);
+    // Keep the actual endpoint for an exact last interval or a turn refinement.
+    mc_spline_point(q, (segments - z->next + m)*z->step, 0.0f, net);
+    memcpy(&z->chord, q, 2*sizeof(float));
+    Z_TRACE(pieces++);
+  }
+  z->todo = 0;
+  z->next -= m;
+  if (z->next) { return(true); }
+  Z_TRACE(estimates++);
+  Z_TRACE(half = 0.0f);
+  if (z->pieces == 2) {
+    // Test the coordinate-rounding risk against the whole path estimate, not its
+    // end-to-end chord: a long loop may have nearly coincident ends. This is a
+    // loose risk gate, not a bound on the rounded staircase or the quadrature.
+    a = 0.0f;
+    for (m = 0; m < 2; m++) {
+      a = max(a, max(fabsf(position[m]), fabsf(target[m])));
+      a = max(a, max(fabsf(first[m]), fabsf(second[m])));
+    }
+    if (a*fabsf(z->u)*0.000001f > BEZIER_Z_SIGMA*z->rest) {
+      z->pieces = 1;
+      z->next = segments;
+      z->rest = 1e-30f;
+      memcpy(&z->chord, position, 2*sizeof(float));
+      return(true);
+    }
+  }
+#else
   m = (z->next + z->pieces - 1)/z->pieces; // Segments to a piece
   if (m <= BEZIER_Z_PIECE_COST || z->pieces > BEZIER_Z_PIECES_MAX) { m = 1; } // The segments
   from = &z->chord; // The point before, if segments are summed
@@ -568,6 +660,7 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
 #ifdef BEZIER_Z_LOOSE
   z->pieces = BEZIER_Z_PIECES; // For the next estimate
 #endif
+#endif // BEZIER_Z_QUADRATURE
 #ifdef BEZIER_EXACT_INVERSE_TIME
   // Inverse time: the feed that covers the estimated length, Z included, in 1/F minutes. That
   // is how far the point (rest, u) is from the origin, which the sums are cleared to be.
