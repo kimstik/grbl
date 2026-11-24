@@ -393,6 +393,12 @@ void mc_reset()
 #if defined(BEZIER_Z_SCHEDULE) && (!defined(BEZIER_Z_LOOSE) || BEZIER_Z_LINEAR != 3)
   #error "BEZIER_Z_SCHEDULE requires BEZIER_Z_LOOSE and BEZIER_Z_LINEAR 3"
 #endif
+#if defined(BEZIER_Z_PREFETCH) && (!defined(BEZIER_Z_LOOSE) || BEZIER_Z_LINEAR != 3)
+  #error "BEZIER_Z_PREFETCH requires BEZIER_Z_LOOSE and BEZIER_Z_LINEAR 3"
+#endif
+#if defined(BEZIER_Z_PREFETCH) && defined(BEZIER_Z_SCHEDULE)
+  #error "BEZIER_Z_PREFETCH and BEZIER_Z_SCHEDULE are separate candidates"
+#endif
 
 #if BEZIER_Z_LINEAR == 3
 #ifdef BEZIER_Z_TRACE
@@ -424,6 +430,9 @@ typedef struct {
   float pending;  // Candidate length, separate from the active rest and u
   float travelled; // Emitted XY chords since that candidate's origin
   uint16_t remaining; // Segments at the current point, while next holds the origin
+#endif
+#ifdef BEZIER_Z_PREFETCH
+  uint8_t prefetch; // First pass for the next fixed origin: 0 idle, 1 partial, 2 ready
 #endif
 } spline_z_t;
 static spline_z_t spline_z;
@@ -499,6 +508,8 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
   // j == 0 is one optional unit during a forced planner-full wait. The initial seed
   // uses the ordinary calls, but never serially escalates before the first point.
   if (z->remaining && j) {
+#elif defined(BEZIER_Z_PREFETCH)
+  if (j && segments + 1 - j != z->next) { // A prefetched pass waits for the old deadline.
 #elif defined(BEZIER_Z_LOOSE)
   if (segments + 1 - j != z->next) { // Not where the length is found again
 #else
@@ -508,6 +519,9 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     if (z->u != 0.0f) {
 #ifdef BEZIER_Z_SCHEDULE
       a = mc_spline_dist(&z->travelled, q, p);
+#elif defined(BEZIER_Z_PREFETCH)
+      q[2] = 0.0f; // Keep the first-pass sums intact; the rest of q is free here.
+      a = mc_spline_dist(q + 2, q, p);
 #else
       a = mc_spline_dist(&z->poly, q, p); // The chord of the segment. The sum is not in use.
 #endif
@@ -544,12 +558,24 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     z->pending = z->chord = z->poly = 1e-30f;
   }
 #endif
+#ifdef BEZIER_Z_PREFETCH
+  if (j && z->prefetch == 2) { goto spline_bracket; }
+#endif
   m = (z->next + z->pieces - 1)/z->pieces; // Segments to a piece
   if (m <= BEZIER_Z_PIECE_COST || z->pieces > BEZIER_Z_PIECES_MAX) { m = 1; } // The segments
+#ifdef BEZIER_Z_PREFETCH
+  if (!j) {
+    if (m == 1 || z->prefetch == 2) { return(false); } // Only the first bracket, never a sum.
+    z->prefetch = 1;
+  }
+#endif
   from = &z->chord; // The point before, if segments are summed
   if (!z->todo) { // From the point in hand. The sums not zero: divisors.
     z->todo = z->next;
-#ifndef BEZIER_Z_SCHEDULE
+#ifdef BEZIER_Z_PREFETCH
+    z->chord = z->poly = 1e-30f; // The live rest is not part of the first-pass bracket.
+    if (m == 1) { z->rest = 1e-30f; }
+#elif !defined(BEZIER_Z_SCHEDULE)
     z->rest = z->chord = z->poly = 1e-30f;
 #endif
     from = p;
@@ -581,6 +607,11 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     mc_spline_dist(&z->poly, r, r + 2);
     Z_TRACE(pieces++);
     if (z->todo) { return(true); }
+#ifdef BEZIER_Z_PREFETCH
+    if (!j) { z->prefetch = 2; return(false); } // Publish no estimate before its deadline.
+  spline_bracket:
+    z->prefetch = 0;
+#endif
     Z_TRACE(estimates++);
     a = 0.5f*(z->poly - z->chord); // Half of the bracket
 #ifdef BEZIER_Z_SCHEDULE
@@ -688,6 +719,9 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
 #ifdef BEZIER_Z_SCHEDULE
   spline_z.remaining = 0;
 #endif
+#ifdef BEZIER_Z_PREFETCH
+  spline_z.prefetch = 0;
+#endif
 #endif
   for (j = 1; j < segments; j++) {
 #if BEZIER_Z_LINEAR == 3
@@ -721,15 +755,23 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
 #endif
     mc_line(p, pl_data);
     if (sys.abort) { return; } // Bail mid-spline if system abort requested.
-#ifdef BEZIER_Z_SCHEDULE
+#if defined(BEZIER_Z_SCHEDULE) || defined(BEZIER_Z_PREFETCH)
     // Only use a wait that mc_line would have to do anyway. Refill and handle realtime
     // before each unit, and stop immediately when the planner can accept another line.
+#ifdef BEZIER_Z_PREFETCH
+    while (spline_z.next && spline_z.u != 0.0f && plan_check_full_buffer()) {
+#else
     while (spline_z.next && spline_z.remaining && spline_z.u != 0.0f && plan_check_full_buffer()) {
+#endif
       protocol_auto_cycle_start();
       protocol_execute_realtime();
       if (sys.abort) { return; }
       if (!plan_check_full_buffer() || !st_has_compute_reserve()) { break; }
+#ifdef BEZIER_Z_PREFETCH
+      if (!mc_spline_next(&spline_z, p, 0, segments, position, first, second, target, pl_data)) { break; }
+#else
       mc_spline_next(&spline_z, p, 0, segments, position, first, second, target, pl_data);
+#endif
     }
 #endif
   }

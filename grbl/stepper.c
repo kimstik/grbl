@@ -1082,7 +1082,7 @@ void st_prep_buffer()
 }
 
 
-#ifdef BEZIER_Z_SCHEDULE
+#if defined(BEZIER_Z_SCHEDULE) || defined(BEZIER_Z_PREFETCH)
 // A lower bound on queued time at the snapshot, not a foreground CPU-time guarantee.
 // The last published segment must still be wholly ahead of the active tail. Ignoring
 // the non-AMASS prescaler only lowers the credit. Short end-of-block segments may fail.

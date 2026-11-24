@@ -56,7 +56,7 @@ void st_update_plan_block_parameters();
 // Called by realtime status reporting if realtime rate reporting is enabled in config.h.
 float st_get_realtime_rate();
 
-#ifdef BEZIER_Z_SCHEDULE
+#if defined(BEZIER_Z_SCHEDULE) || defined(BEZIER_Z_PREFETCH)
 uint8_t st_has_compute_reserve();
 #endif
 
