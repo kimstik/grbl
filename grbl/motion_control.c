@@ -390,6 +390,10 @@ void mc_reset()
 
 #ifdef ENABLE_CUBIC_SPLINES
 
+#if defined(BEZIER_Z_SCHEDULE) && (!defined(BEZIER_Z_LOOSE) || BEZIER_Z_LINEAR != 3)
+  #error "BEZIER_Z_SCHEDULE requires BEZIER_Z_LOOSE and BEZIER_Z_LINEAR 3"
+#endif
+
 #if BEZIER_Z_LINEAR == 3
 #ifdef BEZIER_Z_TRACE
   // For the test benches only. Estimates made; of them, sums of the segments; those left too
@@ -416,6 +420,11 @@ typedef struct {
   uint16_t next;   // Segments left when the length is estimated next; zero if never
   uint16_t todo;   // Estimate under way: segments not in its pieces yet; zero if none is
   uint8_t pieces;  // Pieces of the next estimate; zero before the first one
+#ifdef BEZIER_Z_SCHEDULE
+  float pending;  // Candidate length, separate from the active rest and u
+  float travelled; // Emitted XY chords since that candidate's origin
+  uint16_t remaining; // Segments at the current point, while next holds the origin
+#endif
 } spline_z_t;
 static spline_z_t spline_z;
 
@@ -486,19 +495,30 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
   float q[4], r[4], a, b, *from;
   float *net[4] = { position, first, second, target };
   uint16_t m;
-#ifdef BEZIER_Z_LOOSE
+#ifdef BEZIER_Z_SCHEDULE
+  // j == 0 is one optional unit during a forced planner-full wait. The initial seed
+  // uses the ordinary calls, but never serially escalates before the first point.
+  if (z->remaining && j) {
+#elif defined(BEZIER_Z_LOOSE)
   if (segments + 1 - j != z->next) { // Not where the length is found again
 #else
   if (!z->next) { // The length is found, or not asked for
 #endif
     mc_spline_point(q, j*z->step, 0.0f, net);
     if (z->u != 0.0f) {
+#ifdef BEZIER_Z_SCHEDULE
+      a = mc_spline_dist(&z->travelled, q, p);
+#else
       a = mc_spline_dist(&z->poly, q, p); // The chord of the segment. The sum is not in use.
+#endif
       b = a/z->rest;
       if (b < 0.999999f) { z->rest -= a; z->u -= b*z->u; } else { z->u = 0.0f; Z_TRACE(ends++); }
       p[Z_AXIS] = target[Z_AXIS] - z->u;
     }
     memcpy(p, q, 2*sizeof(float));
+#ifdef BEZIER_Z_SCHEDULE
+    z->remaining = segments - j;
+#endif
     return(false);
   }
   if (!z->pieces) { // Before the first point. A hair less than all of Z: no point before the start.
@@ -509,15 +529,29 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
 #ifdef BEZIER_EXACT_INVERSE_TIME
     if (!(pl_data->condition & PL_COND_FLAG_INVERSE_TIME))
 #endif
-    if (z->u == 0.0f) { z->next = 0; } // No Z word, no estimate
+    if (z->u == 0.0f) {
+      z->next = 0; // No Z word, no estimate
+#ifdef BEZIER_Z_SCHEDULE
+      z->remaining = segments;
+#endif
+    }
     return(true); // Realtime work first: the line has taken its time to parse.
   }
+#ifdef BEZIER_Z_SCHEDULE
+  if (!z->todo) {
+    if (!j) { z->next = z->remaining; }
+    z->travelled = 0.0f;
+    z->pending = z->chord = z->poly = 1e-30f;
+  }
+#endif
   m = (z->next + z->pieces - 1)/z->pieces; // Segments to a piece
   if (m <= BEZIER_Z_PIECE_COST || z->pieces > BEZIER_Z_PIECES_MAX) { m = 1; } // The segments
   from = &z->chord; // The point before, if segments are summed
   if (!z->todo) { // From the point in hand. The sums not zero: divisors.
     z->todo = z->next;
+#ifndef BEZIER_Z_SCHEDULE
     z->rest = z->chord = z->poly = 1e-30f;
+#endif
     from = p;
   }
   a = (segments - z->todo)*z->step; // The piece is from a to b, by the same products as the
@@ -528,7 +562,11 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
   // The last point of the polyline is target itself, which Horner's rule misses by a bit.
   if (!z->todo) { memcpy(r, target, 2*sizeof(float)); }
   if (m == 1) { // The segment itself, from the point before, which is in no use as sums.
+#ifdef BEZIER_Z_SCHEDULE
+    mc_spline_dist(&z->pending, r, from);
+#else
     mc_spline_dist(&z->rest, r, from);
+#endif
     memcpy(&z->chord, r, 2*sizeof(float));
     Z_TRACE(summed++);
     if (z->todo) { return(true); }
@@ -545,6 +583,16 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     if (z->todo) { return(true); }
     Z_TRACE(estimates++);
     a = 0.5f*(z->poly - z->chord); // Half of the bracket
+#ifdef BEZIER_Z_SCHEDULE
+    z->pending = z->chord + a;
+    Z_TRACE(half = a/(z->chord - z->travelled));
+    // Both bounds move by the emitted XY distance, not by the scan's progress.
+    b = z->chord - z->travelled;
+    if (b <= 0.0f || a*(fabsf(z->u) + BEZIER_Z_SIGMA) > BEZIER_Z_SIGMA*b) {
+      Z_TRACE(open++);
+    }
+    Z_TRACE(bound = max(bezier_z_trace.bound, a*(fabsf(z->u) + bezier_z_trace.bound)/b));
+#else
     z->rest = z->chord + a;
     Z_TRACE(half = a/z->chord);
     b = BEZIER_Z_SIGMA*z->chord;
@@ -564,8 +612,16 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
       z->next = 0;
     }
     Z_TRACE(bound = max(bezier_z_trace.bound, a*(fabsf(z->u) + bezier_z_trace.bound)/z->chord));
+#endif
   }
-#ifdef BEZIER_Z_LOOSE
+#ifdef BEZIER_Z_SCHEDULE
+  // Publishing changes only the future slope. Never change u or an emitted Z point.
+  a = z->pending - z->travelled;
+  if (a > 0.0f) { z->rest = a; }
+  if (j) { z->remaining = segments; }
+  if (m != 1 && z->pieces < BEZIER_Z_PIECES_MAX) { z->pieces <<= 1; }
+  else { z->next = 0; } // A completed sum or the cap ends optional refinement.
+#elif defined(BEZIER_Z_LOOSE)
   z->pieces = BEZIER_Z_PIECES; // For the next estimate
 #endif
 #ifdef BEZIER_EXACT_INVERSE_TIME
@@ -629,6 +685,9 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
   // first one is due at once, and finds out whether there is a Z word at all.
   spline_z.next = segments;
   spline_z.pieces = 0;
+#ifdef BEZIER_Z_SCHEDULE
+  spline_z.remaining = 0;
+#endif
 #endif
   for (j = 1; j < segments; j++) {
 #if BEZIER_Z_LINEAR == 3
@@ -662,6 +721,17 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
 #endif
     mc_line(p, pl_data);
     if (sys.abort) { return; } // Bail mid-spline if system abort requested.
+#ifdef BEZIER_Z_SCHEDULE
+    // Only use a wait that mc_line would have to do anyway. Refill and handle realtime
+    // before each unit, and stop immediately when the planner can accept another line.
+    while (spline_z.next && spline_z.remaining && spline_z.u != 0.0f && plan_check_full_buffer()) {
+      protocol_auto_cycle_start();
+      protocol_execute_realtime();
+      if (sys.abort) { return; }
+      if (!plan_check_full_buffer() || !st_has_compute_reserve()) { break; }
+      mc_spline_next(&spline_z, p, 0, segments, position, first, second, target, pl_data);
+    }
+#endif
   }
 #if BEZIER_Z_LINEAR == 2
 #ifdef BEZIER_EXACT_INVERSE_TIME

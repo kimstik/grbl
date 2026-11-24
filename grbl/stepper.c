@@ -1082,6 +1082,24 @@ void st_prep_buffer()
 }
 
 
+#ifdef BEZIER_Z_SCHEDULE
+// A lower bound on queued time at the snapshot, not a foreground CPU-time guarantee.
+// The last published segment must still be wholly ahead of the active tail. Ignoring
+// the non-AMASS prescaler only lowers the credit. Short end-of-block segments may fail.
+uint8_t st_has_compute_reserve()
+{
+  if (sys.state != STATE_CYCLE || sys.step_control || sys.suspend) { return(false); }
+  uint8_t tail = segment_buffer_tail, index = segment_buffer_head;
+  if (!index) { index = SEGMENT_BUFFER_SIZE; }
+  index--;
+  if (tail == segment_buffer_head || tail == index) { return(false); }
+  uint32_t cycles = (uint32_t)segment_buffer[index].n_step*segment_buffer[index].cycles_per_tick;
+  // Five ms admits one ~1.12 ms piece with margin for decisions, preemption and refill.
+  return(tail == segment_buffer_tail && !sys_rt_exec_state && cycles >= F_CPU/200);
+}
+#endif
+
+
 // Called by realtime status reporting to fetch the current speed being executed. This value
 // however is not exactly the current speed, but the speed computed in the last step segment
 // in the segment buffer. It will always be behind by up to the number of segment blocks (-1)
