@@ -1,4 +1,4 @@
-name: G5 loose comparison
+name: G5 loose prefetch comparison
 
 on:
   push:
@@ -20,15 +20,9 @@ jobs:
           - arm: baseline
             ref: 1f19d74940551ecfaa0c38c17a318aeda931d795
             extra: ''
-          - arm: schedule
-            ref: 53f5e100cffa49d431bd7e22b02b2db126914de6
-            extra: -DBEZIER_Z_SCHEDULE
-          - arm: edges
-            ref: ed67b0050537f0cccd7d4cd3232b06db390e1f96
-            extra: -DBEZIER_Z_EDGES
-          - arm: global
-            ref: f3beb5320bb8a278cfe6369caa77fbcf7617064e
-            extra: -DBEZIER_Z_GLOBAL
+          - arm: prefetch
+            ref: 937229f0b9897cf0ad37f9d602b768ec985215e1
+            extra: -DBEZIER_Z_PREFETCH
     name: avr 16.2 ${{ matrix.arm }}
     steps:
       - name: Pinned AVR tools
@@ -63,21 +57,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arm: [baseline, schedule, edges, global]
+        arm: [baseline, prefetch]
         mode: [g94, g93]
         include:
           - arm: baseline
             ref: 1f19d74940551ecfaa0c38c17a318aeda931d795
             extra: ''
-          - arm: schedule
-            ref: 53f5e100cffa49d431bd7e22b02b2db126914de6
-            extra: -DBEZIER_Z_SCHEDULE
-          - arm: edges
-            ref: ed67b0050537f0cccd7d4cd3232b06db390e1f96
-            extra: -DBEZIER_Z_EDGES
-          - arm: global
-            ref: f3beb5320bb8a278cfe6369caa77fbcf7617064e
-            extra: -DBEZIER_Z_GLOBAL
+          - arm: prefetch
+            ref: 937229f0b9897cf0ad37f9d602b768ec985215e1
+            extra: -DBEZIER_Z_PREFETCH
     name: simavr ${{ matrix.arm }} ${{ matrix.mode }}
     steps:
       - uses: actions/checkout@v4
@@ -100,4 +88,41 @@ jobs:
         if: always()
         with:
           name: loose-simavr-${{ matrix.arm }}-${{ matrix.mode }}
+          path: raw
+
+  observe:
+    needs: avr
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [g94, g93]
+    name: live prefetch observation ${{ matrix.mode }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: buserror/simavr
+          ref: 13d4ed32433ad7a37bb757b7e0f7dbb5373396c0
+          path: simulator
+      - uses: actions/download-artifact@v4
+        with:
+          name: loose-avr-baseline
+          path: input/baseline
+      - uses: actions/download-artifact@v4
+        with:
+          name: loose-avr-prefetch
+          path: input/prefetch
+      - name: Host observer dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends gcc make pkg-config libelf-dev gcc-avr avr-libc
+      - name: Observe uninstrumented live code and check blind controls
+        run: timeout 1800 nice -n 19 bash tb/compare/run_observe.sh '${{ matrix.mode }}'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: loose-observe-${{ matrix.mode }}
           path: raw

@@ -43,18 +43,24 @@ for mode in g94 g93; do
 
   python3 -I tb/compare/render.py tb/compare/loose.in "raw/corpus-$mode.txt" --mode "${mode^^}"
   defs="$opts $extra -DTB_ARC_TOLERANCE=.002f"
-  for image in bench dump standard dyn; do
+  for image in bench dump standard dyn observer; do
     target=all; lines="$root/raw/corpus-$mode.txt"; flags=$defs
     case $image in
       dump) target=dump ;;
       standard) lines="$root/tb/avr/lines.txt" ;;
       dyn) target=dyn; flags="$flags -DTB_DYN_SPLINES_ONLY" ;;
+      observer) target=dyn; flags="$flags -DTB_DYN_SPLINES_ONLY -DTB_DYN_OBSERVE" ;;
     esac
     dir="build/loose-$arm-$mode-$image"
     if make -s -C tb/avr ROOT="$source" BUILD="$dir" LINES="$lines" DEFS="$flags" "$target" > "raw/build-$mode-$image.log" 2>&1; then
-      built=$image; case $image in bench|standard) built=bench ;; esac
+      built=$image; case $image in bench|standard) built=bench ;; observer) built=dyn ;; esac
       cp "tb/avr/$dir/$built.elf" "elf/$mode/$image.elf"
       avr-size "elf/$mode/$image.elf" >> raw/bench-sizes.txt
+      if [ "$image" = observer ]; then
+        avr-nm -n -S "elf/$mode/$image.elf" > "raw/observer-symbols-$mode.txt"
+        avr-objdump -d "elf/$mode/$image.elf" > "raw/observer-disassembly-$mode.txt"
+        sha256sum "elf/$mode/$image.elf" > "raw/observer-sha256-$mode.txt"
+      fi
     else
       printf '%s %s unavailable\n' "$mode" "$image" >> raw/unavailable.txt
       failed=1

@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Read-only live observation and a blind control of the same AVR images.
+set -euo pipefail
+mode=$1
+root=$PWD
+out="$root/raw/observe-$mode"
+sim=$(realpath simulator/simavr)
+mkdir -p "$out" build
+
+git -C simulator rev-parse HEAD > "$out/simulator.txt"
+test "$(cat "$out/simulator.txt")" = 13d4ed32433ad7a37bb757b7e0f7dbb5373396c0
+gcc --version > "$out/host-compiler.txt"
+make -s -C "$sim" CC=gcc obj config > "$out/simulator-build.txt" 2>&1
+make -s -j2 -C "$sim" CC=gcc libsimavr >> "$out/simulator-build.txt" 2>&1
+gcc -std=c99 -O2 -Wall -Wextra -Werror -I"$sim/sim" \
+  tb/avr/observe.c "$sim/obj-$(gcc -dumpmachine)/libsimavr.a" \
+  $(pkg-config --libs libelf) -lm -o build/observe > "$out/observer-build.txt" 2>&1
+sha256sum tb/avr/observe.c build/observe > "$out/observer-sha256.txt"
+
+for arm in baseline prefetch; do
+  dir="$out/$arm"
+  input="$root/input/$arm"
+  elf="$input/elf/$mode/observer.elf"
+  mkdir -p "$dir"
+  test -f "$elf"
+  cp "$input/raw/source.txt" "$input/raw/compiler.txt" "$dir/"
+  cp "$input/raw/observer-disassembly-$mode.txt" "$dir/disassembly.txt"
+  cp "$input/raw/observer-symbols-$mode.txt" "$dir/symbols.txt"
+  sha256sum "$elf" > "$dir/elf-sha256.txt"
+  for control in observed blind; do
+    args=(); [ "$control" != blind ] || args=(--blind)
+    timeout 360 nice -n 19 build/observe "$elf" "$dir/$control.txt" \
+      "$dir/$control-uart.txt" 600000000 "${args[@]}" > "$dir/$control-run.txt" 2>&1
+  done
+  baseline=()
+  if [ "$arm" = prefetch ]; then
+    baseline=(--baseline "$out/baseline/observed.txt" \
+      --baseline-uart "$out/baseline/observed-uart.txt" --require-prefetch)
+  fi
+  python3 -I tb/compare/check_observe.py "$dir/observed.txt" "$dir/observed-uart.txt" \
+    --blind "$dir/blind.txt" --blind-uart "$dir/blind-uart.txt" \
+    "${baseline[@]}" --output "$dir/metrics.json" > "$dir/check.txt" 2>&1
+  cat "$dir/check.txt"
+  cat "$dir/check.txt" >> "$GITHUB_STEP_SUMMARY"
+  if [ "$arm" = baseline ]; then
+    python3 -I tb/compare/check_observe_controls.py "$dir" > "$dir/controls.txt" 2>&1
+    cat "$dir/controls.txt"
+  fi
+done
