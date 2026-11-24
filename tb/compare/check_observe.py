@@ -25,7 +25,7 @@ def read_trace(path, uart, blind=None, blind_uart=None):
     meta, end = list(map(int, rows[0][1:])), list(map(int, rows[-1][1:]))
     assert len(meta) == 9 and meta[:2] == [1, 16000000] and meta[-1] == 0, 'metadata'
     size = meta[5]
-    assert size in (25, 26, 35), 'unknown state layout'
+    assert size in (25, 26, 29, 35), 'unknown state layout'
     assert len(end) == 9 and end[1] == 6 and end[-2:] == [0, 0], 'incomplete simulation'
     data = uart.read_bytes()
     assert end[2] == len(data), 'UART byte count'

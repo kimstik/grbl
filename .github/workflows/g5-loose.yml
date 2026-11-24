@@ -1,4 +1,4 @@
-name: G5 loose refill comparison
+name: G5 loose seed comparison
 
 on:
   push:
@@ -26,6 +26,9 @@ jobs:
           - arm: refill
             ref: 8672b8f5091b0df7d0a8a34216d0cde8bb75d2ce
             extra: -DBEZIER_Z_FIXED -DBEZIER_Z_REFILL
+          - arm: seed
+            ref: fbea6f2456e48306d3bb8f6b5e49366b1ba94357
+            extra: -DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_Z_SEED
     name: avr 16.2 ${{ matrix.arm }}
     steps:
       - name: Pinned AVR tools
@@ -60,7 +63,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arm: [baseline, fixed, refill]
+        arm: [baseline, fixed, refill, seed]
         mode: [g94, g93]
         include:
           - arm: baseline
@@ -72,6 +75,9 @@ jobs:
           - arm: refill
             ref: 8672b8f5091b0df7d0a8a34216d0cde8bb75d2ce
             extra: -DBEZIER_Z_FIXED -DBEZIER_Z_REFILL
+          - arm: seed
+            ref: fbea6f2456e48306d3bb8f6b5e49366b1ba94357
+            extra: -DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_Z_SEED
     name: simavr ${{ matrix.arm }} ${{ matrix.mode }}
     steps:
       - uses: actions/checkout@v4
@@ -124,13 +130,17 @@ jobs:
         with:
           name: loose-avr-refill
           path: input/refill
+      - uses: actions/download-artifact@v4
+        with:
+          name: loose-avr-seed
+          path: input/seed
       - name: Host observer dependencies
         run: |
           set -euo pipefail
           sudo apt-get update -q
           sudo apt-get install -y -q --no-install-recommends gcc make pkg-config libelf-dev gcc-avr avr-libc
-      - name: Compare fixed policy and full refill target identity with blind controls
-        run: timeout 2400 nice -n 19 bash tb/compare/run_observe.sh '${{ matrix.mode }}' baseline fixed refill
+      - name: Compare initial-pass policies and refill identity with blind controls
+        run: timeout 3000 nice -n 19 bash tb/compare/run_observe.sh '${{ matrix.mode }}' baseline fixed refill seed
       - uses: actions/upload-artifact@v4
         if: always()
         with:

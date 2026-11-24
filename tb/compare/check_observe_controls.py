@@ -87,7 +87,25 @@ def main():
         run('XY-only-monotone-excess', change=monotone_excess, accept=True, excess=True, extra=xy)
         run('XY-only-without-baseline', extra=('--xy-only',))
         run('XY-only-with-prefetch', extra=(*xy, '--require-prefetch'))
-    print('observe controls: 20 passed; integrity defects rejected, raw excess retained')
+
+        def seed_layout(events):
+            events[0][6] = '29'
+            for row in events:
+                if row[0] == 'next':
+                    for field in (8, 9):
+                        row[field] += struct.pack('<f', 2.0).hex()
+
+        def seed_truncated(events):
+            seed_layout(events)
+            row = next(row for row in events if row[0] == 'next')
+            row[8] = row[8][:-2]
+
+        seed_blind = lambda r: r[0].__setitem__(6, '29')
+        run('seed-state-layout', change=seed_layout, blind_change=seed_blind, accept=True)
+        run('seed-state-truncated', change=seed_truncated, blind_change=seed_blind)
+        run('unknown-state-layout', change=lambda r: r[0].__setitem__(6, '30'),
+            blind_change=lambda r: r[0].__setitem__(6, '30'))
+    print('observe controls: 23 passed; integrity defects rejected, raw excess retained')
 
 
 if __name__ == '__main__':

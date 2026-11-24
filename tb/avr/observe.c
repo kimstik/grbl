@@ -133,7 +133,7 @@ int main(int argc, char **argv)
   const avr_symbol_t *next = symbol(&fw, "mc_spline_next");
   const avr_symbol_t *plan = symbol(&fw, "plan_buffer_line");
   const avr_symbol_t *z = symbol(&fw, "spline_z");
-  if ((z->size != 25 && z->size != 26 && z->size != STATE_MAX) ||
+  if ((z->size != 25 && z->size != 26 && z->size != 29 && z->size != STATE_MAX) ||
       next->addr > avr->flashend || plan->addr > avr->flashend) { die("unsupported spline layout or code address"); }
   uint16_t za = data_address(avr, z, z->size);
   uint16_t prog = data_address(avr, symbol(&fw, "prog"), 1);

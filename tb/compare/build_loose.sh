@@ -34,6 +34,13 @@ for mode in g94 g93; do
     cp source/grbl.hex "raw/refill-off-$mode.hex"
   fi
 
+  if [ "$arm" = seed ]; then
+    # Disabling only SEED must retain the frozen postqueue-refill image.
+    make -s -C source clean > "raw/seed-off-$mode.log" 2>&1
+    make -s -C source COMPILE="$cc $opts -DBEZIER_Z_FIXED -DBEZIER_Z_REFILL" >> "raw/seed-off-$mode.log" 2>&1
+    cp source/grbl.hex "raw/seed-off-$mode.hex"
+  fi
+
   make -s -C source clean > "raw/production-$mode.log" 2>&1
   if make -s -C source COMPILE="$cc $opts $extra" >> "raw/production-$mode.log" 2>&1; then
     cp source/build/main.elf "elf/$mode/firmware.elf"
