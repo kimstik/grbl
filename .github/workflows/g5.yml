@@ -68,7 +68,8 @@ jobs:
           mkdir -p raw
           for splines in '-DENABLE_CUBIC_SPLINES' '-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES'; do
             while read -r name opt; do
-              case $name in ''|tol-za*) continue ;; esac
+              # BEZIER_Z_LINEAR 2 is not as in 5601c12: its first pass ends at the target now.
+              case $name in ''|tol-za*|tol-zl*) continue ;; esac
               make -s clean
               make -s -C ../before clean
               make -s -C ../before COMPILE="$cc $splines $opt" > /dev/null

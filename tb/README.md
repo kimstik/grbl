@@ -91,7 +91,7 @@ Decisions that tests encode:
 | 58 | Z by estimate: open brackets estimated again; segment cap       | host `z.vec`, avr      | pass                                       |
 | 59 | Z by estimate: early end, lost first chord, far from origin     | host `z.vec`           | pass: never past the target or backwards   |
 | 60 | G93 by estimate: one feed, time off within the bracket          | host `z.vec`, avr      | pass; time off up to 3.1% in random curves |
-| 61 | Z by estimate: the estimate ends at the target, as the polyline | host `z.vec`, random   | pass; no allowance for the grid of XY      |
+| 61 | Z by length: the length summed or estimated ends at the target  | host `z.vec`, random   | pass; no allowance for the grid of XY      |
 
 ## 10, 11, 35: motion under simavr
 
@@ -472,8 +472,9 @@ older modes remain byte-identical to 5601c12 (30 hex comparisons):
 | tol-za-g93 | 15.2.0  | 32456 -> 32490      | -234          | 334 / 378    | +44    |
 | tol-za-g93 | 16.2.0  | 31764 -> 31786      | 470           | 334 / 378    | +44    |
 
-The two-pass mode 2 has the same mismatch in its first pass, which sums
-the last chord up to Horner's rule at about 1. It is not changed here.
+The two-pass mode 2 had the same mismatch in its first pass, which summed
+the last chord up to Horner's rule at about 1. Its first pass ends at the
+target as well since the commit after 07ebf9a.
 
 ### One piece at a call: measured fit
 

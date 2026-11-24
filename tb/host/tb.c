@@ -343,9 +343,9 @@ typedef struct { double len, ref, arc, par, shrt, noise, dz, xy; int back, moves
 /* What a firmware built with BEZIER_Z_TRACE tells of a curve under BEZIER_Z_LINEAR 3:
    estimates of the length ahead that it made; those it left too wide to vouch for Z
    within BEZIER_SIGMA; Z brought to its end before the last point; the bound of the
-   Z error that follows from its brackets, mm; and the half bracket of the estimate
-   behind the G93 feed, as a share of the length. */
-typedef struct { uint16_t estimates, open, ends; float bound, time; } ztrace_t;
+   Z error that follows from its brackets, mm; the half bracket of the estimate
+   behind the G93 feed, as a share of the length; and that of the latest estimate. */
+typedef struct { uint16_t estimates, open, ends; float bound, time, half; } ztrace_t;
 #if BEZIER_Z_LINEAR == 3
 extern ztrace_t bezier_z_trace;
 #else

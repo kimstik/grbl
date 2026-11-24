@@ -41,7 +41,7 @@ uint8_t tb_plan_buffer_line(float *target, plan_line_data_t *pl_data);
 
 #if defined(TB_DUMP) && BEZIER_Z_LINEAR == 3
   #define TB_Z_TRACE
-  extern struct { uint16_t estimates, open, ends; float bound, time; } bezier_z_trace;
+  extern struct { uint16_t estimates, open, ends; float bound, time, half; } bezier_z_trace;
 #endif
 
 static volatile uint16_t ovf;
