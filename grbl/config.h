@@ -781,8 +781,11 @@
   // 1/F minutes, each segment its length share. Float/end snapping add a small error;
   // actual cycle time includes acceleration and axis limits. Undefined: each segment
   // independently takes 1/F minutes at its nominal feed (the existing G5 behavior).
-  // With BEZIER_Z_LINEAR 3 the length is the first estimate, and the time is off by its error,
-  // which nothing bounds: up to 3.1% in the random curves of the host bench.
+  // With BEZIER_Z_LINEAR 3 the feed uses the first retained estimate or segment sum; with
+  // BEZIER_Z_LOOSE that estimate may be open. Its bracket describes XY length uncertainty,
+  // not a fixed relative time tolerance. With zero Z travel the Z gate does not constrain
+  // relative time. Mode 3 is approximate despite the option name; see tb/README.md for
+  // measured time errors.
   // #define BEZIER_EXACT_INVERSE_TIME
 #endif
 

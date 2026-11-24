@@ -97,6 +97,10 @@ Decisions that tests encode:
 
 ## 10, 11, 35: motion under simavr
 
+This section records run 44765744542 before mode 3 and the endpoint
+fix. For the current reduced sweep with Z, see
+[Current comparison: C1, C2 and C3](#current-comparison-c1-c2-and-c3).
+
 `avr/dyn.c` runs the real `main()` and `protocol_main_loop()` with the
 stepper interrupt live; it plays a send-and-wait-for-ok host inside
 `serial_read()` at 115200 baud and injects feed hold and cycle start from
@@ -123,7 +127,7 @@ leaves until its first stepper interrupt, so dyn.c presets OCR1A.
   six holds per option/compiler, all reported final XYZ step errors zero.
   These are simavr results, not measurements on physical hardware.
 - `cut` counts stops while the planner still has a block; `cut_F` is that
-  block's entry feed, not instantaneous ISR speed. Current CI reports
+  block's entry feed, not instantaneous ISR speed. That run reports
   cut_F = 0 for all such stops. It does not prove that no moving underflow
   is possible: instantaneous speed and a deliberate stalled host were
   not observed by this version of dyn.
@@ -153,7 +157,8 @@ Option names used in CI and the tables:
 - `tol`: `-DBEZIER_SIGMA=settings.arc_tolerance`; settings start at $12 = 0.002 mm.
 - `zt`: `-DBEZIER_Z_LINEAR=1`, Z linear in parameter t.
 - `zl`: `-DBEZIER_Z_LINEAR=2`, Z approximately linear in the XY polyline length.
-- `g93` suffix: `-DBEZIER_EXACT_INVERSE_TIME`, requires zl.
+- `g93` suffix: `-DBEZIER_EXACT_INVERSE_TIME`, requires zl in that run.
+  Mode 3 supports an approximate conversion, described in its current comparison.
 
 **Every numeric result in the eight tables is measured**, not estimated.
 Flash is firmware text+data with G5+G5.1 and Makefile flags, delta against
@@ -416,7 +421,223 @@ with the full evidence suite. The cap/error/default choices remain open.
 
 ## Z by an estimate of the length ahead
 
-### The estimate ends at the target
+### Current comparison: C1, C2 and C3
+
+Evidence: [CI run 45383191415](https://github.com/kimstik/grbl/actions/runs/45383191415),
+firmware bd3dd5d, **40 of 40 jobs successful**. The run includes eleven
+options on each of avr-gcc 7.3.0, 15.2.0 and 16.2.0, host vectors and
+mutants, and the random comparison. All 33 bench/dump/dyn sets were also
+checked independently: raw point hashes, command coverage, finite exact
+ends, monotone Z, the 40 ordinary programs, four steep-Z programs where
+Z is enabled, six holds, stack maxima and production RAM arithmetic.
+All 33 production size rows match their ELF sections. The 54 hex
+comparisons pass; all 94 mutants are killed.
+
+The target of the comparison remains **$12 = 0.002 mm**. An occasional
+larger Z error in return for useful latency is a tradeoff to measure, not
+a reason to change $12. There is no new runtime or EEPROM setting for
+G5. `BEZIER_Z_SIGMA` defaults to `BEZIER_SIGMA`; its 0.01 build below is
+an experimental comparison with a different acceptance threshold, not
+the proposed default or an implementation of the same 0.002 target.
+
+The changes and their reasons:
+
+- **C1, 37235f2:** the first pass of mode 2 ends at the actual target,
+  not Horner's value near t = 1. Mode 3 sums segments with one point and
+  one distance per call, reusing its existing state for the previous
+  point. Mode 2 keeps its in-place loop: a common leaf for both passes
+  measured larger, so sharing that helper was not retained.
+- **C2, f4f8349:** the default mode 3 never emits using an open bracket.
+  If pieces cannot vouch for the estimate, it sums the actual segments
+  before emitting. A piece-count jump avoids trying every doubling.
+  `BEZIER_Z_LOOSE` retains the alternative: use an open estimate at the
+  piece cap and estimate again with half the segments remaining.
+- **C3, 9e490ba:** a compile-time Z threshold can be varied independently
+  for the experiment. Leaving it undefined is byte-identical to C2.
+  bd3dd5d extends AVR CI to the 0.01 experiment and its G93 build, and
+  to loose G93. No wider threshold is selected for ordinary use.
+
+#### Analysis before measurements
+
+There were two different length errors, not an unexplained random
+failure rate. First, an estimate ended at Horner(about 1), while the
+polyline ends at target. One coordinate step of length error is
+magnified roughly by `|dz| / XY_length`. The constructed two-segment
+vector [61] predicted 0.0122 mm of Z error and measured 0.0122 mm; using
+target reduced it to 0.000011 mm. The same mismatch in mode 2 explains
+its former random outliers; C1 removes it there too.
+
+Second, a half-count re-estimation schedule does not enforce a Z budget.
+It can spend too much of Z before another estimate is due. A constructed
+collinear parabola with 256 segments and a reversal inside a piece
+predicted 0.01336 mm of error at the halfway update and measured about
+0.0132 mm. That is an open-bracket policy error, separate from endpoint
+rounding. C2 either closes the bracket or sums the segments; loose
+intentionally keeps this tradeoff.
+
+In exact geometry, let C be the sum of piece chords, P the sum of
+control-polygon lengths, `A = (P - C)/2` and `R = C + A`. The emitted
+polyline length L lies in [C, P]. With ideal proportional Z updates,
+no end reserve and no early completion, error at travelled length s is
+`|dz| * s * |L - R| / (L * R)`, at most `|dz| * A/R`. The implemented
+gate `A * (|u| + sigma) <= sigma * C` is conservative for this ideal
+case. It is not a proof for rounded control points, float sums, the
+small initial reserve or the early-completion threshold. The raw error
+statistics below subtract no allowance; passing the bench with its
+separate rounding allowance is not a universal float certificate.
+
+An estimated piece costs about 1.12 ms and a segment summed about
+0.415 ms on avr-gcc 16.2 at 16 MHz: ratio 2.7, hence the named
+`BEZIER_Z_PIECE_COST = 3`. This is a measured cost heuristic, not an
+identity for every geometry. A piece-count jump predicts a fourfold
+narrowing per doubling, then checks the resulting bracket. It can
+overshoot: on the collinear 99:1 line it jumps to 32 requested pieces
+where 16 would suffice. This explains the measured latency regression;
+it is not evidence against keeping the alternative.
+
+#### Measured first-target delay
+
+Milliseconds, ATmega328P at 16 MHz, avr-gcc 16.2. All columns use
+XY tolerance 0.002. These are individual AVR measurements, not the
+host work model below. Commands are the exact strings in `avr/lines.txt`.
+
+| Curve with Z                    | zl      | za fallback | za loose | za Z=0.01 experiment |
+| ------------------------------- | ------- | ----------- | -------- | -------------------- |
+| S, 80 segments                  | 30.878  | 43.098      | 43.129   | 28.020               |
+| Collinear handles 99:1          | 67.003  | 38.903      | 38.920   | 9.404                |
+| [1], 1950 segments              | 778.082 | 11.039      | 11.045   | 11.038               |
+| Large-handle cap, 2000 segments | 767.426 | 10.602      | 10.610   | 10.602               |
+
+C2 changes the S delay from 58.400 to 43.098 ms, but the 99:1 line
+from about 25.67 to 38.903 ms. There is no uniform latency win. The
+0.01 experiment explains a different tradeoff, not an increase in the
+required $12. Loose and fallback have similar times on these four
+curves because none needs an open estimate here.
+
+**Long first delays are not solved on every curve.** Where fallback
+sums, it pays for the failed estimate as well as the full sum. Local
+simavr probes, not the CI latency corpus, measured the following on
+avr-gcc 16.2: S 10 mm with Z-30, 61.50 ms; S 1 m with Z-500, 523.77 ms;
+a 2000-segment cap curve needing a sum, 852.89 ms. The corresponding
+loose long-S probe emitted first at 80.88 ms, but then had an 81.63 ms
+mid-curve gap. These probes show why neither policy is a finished
+bounded-latency solution. Realtime is serviced between estimator calls;
+using spare planner time to refine the estimate opportunistically is
+not implemented.
+
+#### Measured Z error and modeled work
+
+Host random: 5000 cases per tolerance, seed 1, 2569 with Z. Error is
+against cumulative length of the emitted XY polyline, not true Bezier
+arc length. Maxima below are measured with no allowance deducted.
+They are sample results, not bounds on all inputs or AVR distributions.
+
+| Mode                 | XY target | Z gate | Over XY target | Over Z gate | Largest Z error mm |
+| -------------------- | --------- | ------ | -------------- | ----------- | ------------------ |
+| zl                   | 0.002     | n/a    | 0              | n/a         | 0.000067           |
+| za fallback          | 0.002     | 0.002  | 0              | 0           | 0.001234           |
+| za loose             | 0.002     | 0.002  | 0.1%           | 0.1%        | 0.0033             |
+| za Z=0.01 experiment | 0.002     | 0.01   | 1.4%           | 0           | 0.006443           |
+
+At 0.002, fallback accepts a bracket on 835 curves and sums on 1734;
+none is open. Loose accepts 844, sums 1498 and leaves 227 open. The
+loose policy therefore still performs full sums on many curves: the
+short-piece cost cutoff applies to it too. Its small observed fraction
+over 0.002 does not impose a 0.01 or 0.02 upper bound. At XY/Z gates
+0.01 and 0.1, fallback has no observed excess, with maxima 0.00766 and
+0.0492 mm; these are different target settings, not evidence for 0.002.
+
+The following is a **work model**, not a measured AVR latency
+distribution: trace piece counts times 1.12 ms plus summed-segment counts
+times 0.415 ms, or 0.385 ms per segment for mode 2. It omits parsing
+and scheduling variation. For loose it includes work after the first
+point, so must not be called first-target delay.
+
+| Mode at XY target 0.002 | Mean ms | Median ms | 99th percentile ms | Largest ms |
+| ----------------------- | ------- | --------- | ------------------ | ---------- |
+| zl                      | 92.3    | 25.0      | 756                | 770        |
+| za fallback             | 51.2    | 25.1      | 567                | 839        |
+| za loose                | 36.3    | 25.1      | 184                | 261        |
+| za Z=0.01 experiment    | 30.5    | 9.0       | 406                | 839        |
+
+The 0.01 experiment still sums on 53.2% of these Z curves. Neither
+that threshold nor loose alone eliminates the slow cases.
+
+#### Measured fit and motion
+
+Production text+data, G5+G5.1. Left is against the 32256-byte limit with
+a 512-byte bootloader. All mode-3 rows use 1670 bytes of static RAM,
+leaving 378 before stack. Stack is the largest reduced-dyn watermark,
+not a bound on every interrupt nesting.
+
+| Option           | Flash 7.3 | Flash 15.2 | Flash 16.2 | Left 16.2 | Stack 16.2 | Stack margin 16.2 |
+| ---------------- | --------- | ---------- | ---------- | --------- | ---------- | ----------------- |
+| tol-za           | 32416     | 32538      | 31804      | 452       | 334        | 44                |
+| tol-za-g93       | 32426     | 32654      | 31912      | 344       | 334        | 44                |
+| tol-za-loose     | 32452     | 32556      | 31850      | 406       | 334        | 44                |
+| tol-za-loose-g93 | 32458     | 32652      | 31950      | 306       | 334        | 44                |
+| tol-za-zs        | 32396     | 32522      | 31796      | 460       | 334        | 44                |
+| tol-za-zs-g93    | 32418     | 32638      | 31904      | 352       | 334        | 44                |
+
+Every listed production image fits 32768 bytes without a bootloader;
+the mode-3 7.3 and 15.2 images do not fit beside the 512-byte bootloader.
+All mode-3 options have measured stack margins 25 / 44 / 44 bytes on
+7.3 / 15.2 / 16.2. For reference, 16.2 zl / zl-g93 use 31006 / 31108
+bytes, 1645 static RAM and a measured stack margin of 57 bytes.
+
+Ordinary motion sweep, avr-gcc 16.2, 40 G5 programs with Z enabled:
+
+| Option           | Intermediate stops | Of them with planner blocks queued |
+| ---------------- | ------------------ | ---------------------------------- |
+| tol-zl           | 59                 | 16                                 |
+| tol-zl-g93       | 57                 | 6                                  |
+| tol-za           | 5                  | 5                                  |
+| tol-za-g93       | 9                  | 5                                  |
+| tol-za-loose     | 6                  | 3                                  |
+| tol-za-loose-g93 | 7                  | 4                                  |
+| tol-za-zs        | 3                  | 3                                  |
+| tol-za-zs-g93    | 7                  | 3                                  |
+
+Mode-3 queued events include a block entry feed of 2664 mm/min. That
+is not instantaneous stepper speed; the mechanism remains unresolved.
+No claim of uninterrupted motion follows from green CI.
+
+The four added steep-Z programs are 10 and 20 mm S chains, six curves
+each, F1000/F5000, acceleration 2000, host latency 2 ms. All finish at
+exact XYZ. On 16.2, fallback and loose have no intermediate stops in
+the first three programs; the 20 mm F5000 program has four stops with
+no queued blocks. The 0.01 experiment has the same stop counts. At
+F5000 the 10 mm program takes 2665 ms with fallback or loose, versus
+2481 ms with zl; the 20 mm program takes 3013 versus 2893 ms. The
+0.01 experiment takes 2665 / 2923 ms. Thus the extra accuracy/latency
+work also changes whole-chain motion time, not just startup delay.
+
+#### G93 and remaining work
+
+Mode 2 with the option converts one path to one 3D feed; after C1 its
+host random nominal time error is at most 6.7e-7 at the coarse target
+(969 curves) and 1.3e-6 at 0.002 (176 curves). These sample maxima are
+not statements about acceleration or physical cycle time.
+
+Mode 3 uses its first retained estimate or segment sum for the feed;
+with loose that estimate may be open. It is approximate despite
+`BEZIER_EXACT_INVERSE_TIME`. Host random at
+0.002 measures maximum relative error 0.0025 for fallback and loose
+(176 curves each), and 0.0042 for the 0.01 experiment (176 curves).
+The AVR S+Z G93 example measures 8.33e-8 for fallback/loose and
+4.35e-5 for the 0.01 experiment. There is no fixed relative-time target:
+with zero Z, the Z-error gate cannot constrain relative length error.
+
+The original 7.2% observation was not a reason to abandon the method:
+analysis separated the endpoint mismatch from open-bracket error,
+and targeted vectors confirmed both mechanisms. C1/C2/C3 and their
+CI comparisons are complete, but bounded startup latency, spare-time
+refinement, a universally justified float error allowance and the
+queued-stop diagnosis are not. Random Z on AVR, physical hardware,
+worst-case stack and G18/G19 remain unverified here.
+No candidate or tolerance change is selected by these measurements.
+
+### Earlier endpoint fix at 07ebf9a
 
 [CI run 45257065299](https://github.com/kimstik/grbl/actions/runs/45257065299),
 firmware 07ebf9a, completes all 28 jobs.

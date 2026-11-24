@@ -357,8 +357,9 @@ typedef struct { uint16_t estimates, sums, open, ends, pieces, summed; float bou
 /* What a piece of an estimate, a segment summed by mode 3 and a segment of the
    first pass of mode 2 take on the ATmega328P at 16 MHz, ms: measured with
    avr-gcc 16.2 under simavr on S-shaped curves, see README.md; soft float
-   takes less with zeros and more with large numbers. --random turns the
-   counts of the trace into the delay before the first point that they stand for. */
+   takes less with zeros and more with large numbers. --random models total
+   length-finding work from the trace counts, not an AVR latency distribution.
+   In loose mode some of this work happens after the first point. */
 #ifndef TB_PIECE_MS
   #define TB_PIECE_MS 1.12
 #endif

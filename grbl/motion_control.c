@@ -471,7 +471,7 @@ static float mc_spline_dist(float *sum, float *a, float *b)
 // if it narrows four times whenever they double, as it does on a smooth curve. Where that
 // takes more than BEZIER_Z_PIECES_MAX of them, or pieces of no more than BEZIER_Z_PIECE_COST
 // segments, the segments themselves are summed instead, one a call from point to point: the
-// length to be travelled, to rounding, in no more time than such pieces take.
+// length to be travelled, to rounding. The cost cutoff is approximate, see config.h.
 //
 // With BEZIER_Z_LOOSE no more than those pieces are ever gone through ahead: a bracket that the
 // most of them leave too wide is used as it is, and the length is found again when half of the
