@@ -25,7 +25,7 @@ jobs:
           path: source/prefetch
       - uses: actions/checkout@v4
         with:
-          ref: 3e7d0296a74b0aee96f9cce4fa501bb3a3619f6c
+          ref: 3947b1b553e566488d549bcf8665586610d63c69
           path: source/compact
       - name: Scripted queue, partial and ready prefetch, and abort controls
         run: |
@@ -55,7 +55,7 @@ jobs:
             ref: 937229f0b9897cf0ad37f9d602b768ec985215e1
             extra: -DBEZIER_Z_PREFETCH
           - arm: compact
-            ref: 3e7d0296a74b0aee96f9cce4fa501bb3a3619f6c
+            ref: 3947b1b553e566488d549bcf8665586610d63c69
             extra: -DBEZIER_Z_PREFETCH
     name: avr 16.2 ${{ matrix.arm }}
     steps:
@@ -101,7 +101,7 @@ jobs:
             ref: 937229f0b9897cf0ad37f9d602b768ec985215e1
             extra: -DBEZIER_Z_PREFETCH
           - arm: compact
-            ref: 3e7d0296a74b0aee96f9cce4fa501bb3a3619f6c
+            ref: 3947b1b553e566488d549bcf8665586610d63c69
             extra: -DBEZIER_Z_PREFETCH
     name: simavr ${{ matrix.arm }} ${{ matrix.mode }}
     steps:
