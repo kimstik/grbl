@@ -762,6 +762,12 @@
   // A coordinate-risk heuristic may request actual segment lengths. Neither is a bound;
   // measured Z errors may exceed the common XY tolerance. G93 remains approximate.
   // #define BEZIER_Z_FIXED
+  // Experimental FIXED alternative for G94: choose eight or sixteen pieces once, using
+  // Wang's second differences and a smooth-curve length-width model. No trial pass or
+  // retry. A positive chord-projection filter rejects cusps in exact geometry, not float
+  // staircases. The selected pass and the existing coordinate-risk fallback are still
+  // heuristics, not a guarantee of BEZIER_Z_SIGMA. G93 retains the fixed-sixteen policy.
+  // #define BEZIER_Z_SELECT
   // Experimental mode 3 scheduling: service realtime after each intermediate target is
   // queued, before calculating the next one. The earlier realtime calls remain in place.
   // This changes foreground refill timing, not the path, and does not guarantee no stops.
@@ -804,6 +810,9 @@
 #endif
 #if defined(BEZIER_EXACT_INVERSE_TIME) && BEZIER_Z_LINEAR != 2 && BEZIER_Z_LINEAR != 3
   #error "BEZIER_EXACT_INVERSE_TIME requires BEZIER_Z_LINEAR 2 or 3"
+#endif
+#if defined(BEZIER_Z_SELECT) && (BEZIER_Z_LINEAR != 3 || !defined(BEZIER_Z_FIXED))
+  #error "BEZIER_Z_SELECT requires BEZIER_Z_LINEAR 3 and BEZIER_Z_FIXED"
 #endif
 #if BEZIER_Z_LINEAR == 3
   #if BEZIER_Z_PIECES < 1 || BEZIER_Z_PIECES > BEZIER_Z_PIECES_MAX || BEZIER_Z_PIECES_MAX > 64 || (BEZIER_Z_PIECES & (BEZIER_Z_PIECES-1)) || (BEZIER_Z_PIECES_MAX & (BEZIER_Z_PIECES_MAX-1))

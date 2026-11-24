@@ -455,6 +455,37 @@ static float mc_spline_dist(float *sum, float *a, float *b)
   return(d);
 }
 
+#ifdef BEZIER_Z_SELECT
+// One decision before the coarse pass. Wang's integrated second-difference energy models
+// the polygon/chord width; a global mean speed replaces the varying speed. This is not a bound.
+static uint8_t mc_spline_select(spline_z_t *z, float **net, uint16_t segments)
+                               __attribute__((noinline, noclone));
+static uint8_t mc_spline_select(spline_z_t *z, float **net, uint16_t segments)
+{
+  float length = 0.0f, projection, h;
+  uint8_t i, axis;
+  mc_spline_dist(&length, net[3], net[0]);
+  for (i = 0; i < 3; i++) {
+    projection = 0.0f;
+    for (axis = 0; axis < 2; axis++) {
+      projection += (net[3][axis] - net[0][axis])*(net[i+1][axis] - net[i][axis]);
+    }
+    // Positive chord projections exclude cusps in exact geometry, not float staircases.
+    if (!(projection >= 0.0f && projection < 3.402823466e38f) ||
+        (i != 1 && projection == 0.0f)) { return(16); }
+    mc_spline_dist(&length, net[i+1], net[i]);
+  }
+  // poly temporarily holds (a + b) + c from the driver's Wang loop.
+  h = ((segments + 7)/8)*z->step;
+  projection = h*h*z->poly*(fabsf(z->u) + 2.0f*BEZIER_Z_SIGMA);
+  // length is twice Lstar, so this is 2*sigma*Lstar^2, without division.
+  length *= length*(0.5f*BEZIER_Z_SIGMA);
+  if (projection >= 0.0f && projection <= length && length < 3.402823466e38f) { return(8); }
+  return(16);
+}
+
+#endif
+
 // The next point p of the polyline, the j-th of segments: X and Y, and Z. The segment to it takes
 // the share of the Z left that its chord is of the length left; a chord as long as that length
 // takes it all, so Z never passes the target, nor turns back.
@@ -483,8 +514,14 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
                               float *position, float *first, float *second, float *target,
                               plan_line_data_t *pl_data)
 {
+#ifdef BEZIER_Z_SELECT
+  float q[4], a, b;
+  float *net[4] = { position, first, second, target };
+  float r[4], *from;
+#else
   float q[4], r[4], a, b, *from;
   float *net[4] = { position, first, second, target };
+#endif
   uint16_t m;
 #ifdef BEZIER_Z_FIXED
   uint8_t axis;
@@ -513,7 +550,20 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     z->u = (target[Z_AXIS] - position[Z_AXIS])*0.9999999f;
 #ifdef BEZIER_Z_FIXED
     z->pieces = 2; // One fixed coarse pass; 1 requests actual segment lengths.
+#ifdef BEZIER_Z_SELECT
+    z->pieces = 16;
+#ifdef BEZIER_EXACT_INVERSE_TIME
+    if (!(pl_data->condition & PL_COND_FLAG_INVERSE_TIME))
+#endif
+    if (z->u != 0.0f && (segments + 7)/8 > BEZIER_Z_PIECE_COST) {
+      z->pieces = 4; // Selection is due after the initial realtime service.
+    }
+#endif
     z->rest = 1e-30f;
+#ifdef BEZIER_Z_SELECT
+    // Preserve the driver's energy in poly until selection; chord/poly then hold XY.
+    if (z->pieces != 4)
+#endif
     memcpy(&z->chord, p, 2*sizeof(float));
 #endif
 #ifdef BEZIER_EXACT_INVERSE_TIME
@@ -523,22 +573,43 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     return(true); // Realtime work first: the line has taken its time to parse.
   }
 #ifdef BEZIER_Z_FIXED
+#ifdef BEZIER_Z_SELECT
+  if (z->pieces == 4) {
+    z->pieces = mc_spline_select(z, net, segments);
+    memcpy(&z->chord, p, 2*sizeof(float));
+    return(true); // No trial pieces or feed change; realtime before the selected pass.
+  }
+#endif
   // One coarse pass, with smaller pieces only at a reversal. There is no bracket gate
   // escalation or mid-curve re-estimation. This is an accuracy/latency tradeoff, not a bound.
+#ifdef BEZIER_Z_SELECT
+  m = (z->pieces == 8) ? (segments + 7)/8 : (segments + 15)/16;
+  m = min(m, z->next);
+#else
   m = min((segments + 15)/16, z->next);
+#endif
   if (z->todo) { m = z->todo; }
   if (z->pieces == 1 || m <= BEZIER_Z_PIECE_COST) { m = 1; }
   a = (segments - z->next)*z->step;
   b = (segments - z->next + m)*z->step;
+#ifdef BEZIER_Z_SELECT
+  if (m == 1) { a = b; } else { mc_spline_point(q, a, b - a, net); }
+  mc_spline_point(r, b, a - b, net);
+  if (z->next == m) { memcpy(r, target, 2*sizeof(float)); }
+#endif
   if (m == 1) {
+#ifndef BEZIER_Z_SELECT
     mc_spline_point(r, b, 0.0f, net);
     if (z->next == 1) { memcpy(r, target, 2*sizeof(float)); }
+#endif
     mc_spline_dist(&z->rest, r, &z->chord);
     Z_TRACE(summed++);
   } else {
+#ifndef BEZIER_Z_SELECT
     mc_spline_point(q, a, b - a, net);
     mc_spline_point(r, b, a - b, net);
     if (z->next == m) { memcpy(r, target, 2*sizeof(float)); }
+#endif
     // The three control-polygon edge directions. Reject a piece that turns back.
     a = b = 0.0f;
     for (axis = 0; axis < 2; axis++) {
@@ -563,7 +634,7 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
   if (z->next) { return(true); }
   Z_TRACE(estimates++);
   Z_TRACE(half = 0.0f);
-  if (z->pieces == 2) {
+  if (z->pieces != 1) {
     a = 0.0f;
     for (axis = 0; axis < 2; axis++) {
       a = max(a, max(fabsf(position[axis]), fabsf(target[axis])));
@@ -665,12 +736,21 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
   float p[N_AXIS], a = 0.0f, b = 0.0f;
   uint8_t i;
   memcpy(p, position, sizeof(p));
+#ifdef BEZIER_Z_SELECT
+  spline_z.poly = 0.0f;
+#endif
   for (i = 0; i < 2; i++) {
     float e0 = second[i] - 2.0f*first[i] + position[i];
     float e1 = target[i] - 2.0f*second[i] + first[i];
     a += e0*e0;
     b += e1*e1;
+#ifdef BEZIER_Z_SELECT
+    spline_z.poly += e0*e1;
+#endif
   }
+#ifdef BEZIER_Z_SELECT
+  spline_z.poly += a + b; // Integrated second-difference energy for the initial selector.
+#endif
 
   // Segments for a deviation of BEZIER_SIGMA at most: sqrt(0.75*max|P[k]-2P[k+1]+P[k+2]|/SIGMA),
   // with 0.8 for 0.75 to leave 6% of SIGMA to float rounding (a parabola meets the bound exactly).
