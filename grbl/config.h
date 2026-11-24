@@ -751,9 +751,10 @@
   // arithmetic, not with float rounding; the sum is exact but for rounding. Neither is a
   // firmware accuracy guarantee; see tb/README.md for the measured errors, delays, stack
   // and flash.
-  // BEZIER_Z_LOOSE with mode 3: no sum ahead. An estimate that BEZIER_Z_PIECES_MAX pieces
-  // cannot vouch for is used as it is, and another is due with half the segments left: less
-  // delay before the first target, and Z off by more than BEZIER_Z_SIGMA on some curves.
+  // BEZIER_Z_LOOSE with mode 3: an estimate that BEZIER_Z_PIECES_MAX pieces cannot vouch for
+  // is used as it is, and another is due with half the segments left: less delay before the
+  // first target, and Z off by more than BEZIER_Z_SIGMA on some curves. Short pieces still
+  // switch to a segment sum by BEZIER_Z_PIECE_COST.
   // #define BEZIER_Z_LINEAR 2
   // #define BEZIER_Z_LOOSE
 

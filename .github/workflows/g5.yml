@@ -18,6 +18,9 @@ env:
     tol-za -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3
     tol-za-g93 -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3 -DBEZIER_EXACT_INVERSE_TIME
     tol-za-loose -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3 -DBEZIER_Z_LOOSE
+    tol-za-loose-g93 -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3 -DBEZIER_Z_LOOSE -DBEZIER_EXACT_INVERSE_TIME
+    tol-za-zs -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3 -DBEZIER_Z_SIGMA=0.01f
+    tol-za-zs-g93 -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3 -DBEZIER_Z_SIGMA=0.01f -DBEZIER_EXACT_INVERSE_TIME
 
 jobs:
   avr:
@@ -75,7 +78,7 @@ jobs:
           for splines in '-DENABLE_CUBIC_SPLINES' '-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES'; do
             while read -r name opt; do
               case $name in
-                '') continue ;;
+                ''|tol-za-zs*) continue ;;
                 tol-za*) ref=../before3; was=f4f8349 ;;
                 tol-zl*) ref=../before2; was=37235f2 ;;
                 *) ref=../before; was=5601c12 ;;
@@ -126,15 +129,8 @@ jobs:
               fi
             done
           done <<< "$OPTIONS"
-          # The size of mode 3 with a tolerance of its own for Z, a constant; no benches of it.
-          for g93 in '' -DBEZIER_EXACT_INVERSE_TIME; do
-            make -s clean
-            make -s COMPILE="$cc $defs -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3 -DBEZIER_Z_SIGMA=0.01f $g93" > "raw/firmware-tol-za-zs${g93:+-g93}.log" 2>&1
-            set -- $(avr-size build/main.elf | tail -1)
-            printf 'tol-za-zs%s %d %+d %d %d %d\n' "${g93:+-g93}" "$(($1+$2))" "$(($1+$2-base))" "$(($2+$3))" "$((2048-$2-$3))" "$((32256-$1-$2))" >> raw/sizes-zs.txt
-          done
-          cat raw/sizes.txt raw/sizes-zs.txt
-          cat raw/sizes.txt raw/sizes-zs.txt >> "$GITHUB_STEP_SUMMARY"
+          cat raw/sizes.txt
+          cat raw/sizes.txt >> "$GITHUB_STEP_SUMMARY"
       - name: Shared core corpus with Z
         run: |
           set -euo pipefail
@@ -221,7 +217,7 @@ jobs:
       fail-fast: false
       matrix:
         gcc: ['7.3.0', '15.2.0', '16.2.0']
-        opt: [base, tol, tol-zt, tol-zl, tol-zl-g93, tol-za, tol-za-g93, tol-za-loose]
+        opt: [base, tol, tol-zt, tol-zl, tol-zl-g93, tol-za, tol-za-g93, tol-za-loose, tol-za-loose-g93, tol-za-zs, tol-za-zs-g93]
     name: simavr ${{ matrix.gcc }} ${{ matrix.opt }}
     env:
       ELF: input/elf/${{ matrix.opt }}

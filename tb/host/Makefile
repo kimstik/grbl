@@ -46,7 +46,7 @@ G93 = -DBEZIER_EXACT_INVERSE_TIME
 LOOSE = -DBEZIER_Z_LOOSE
 ZS  = -DBEZIER_Z_SIGMA=0.01f
 
-test: check cubic tol zt zl zl-g93 tol-zl-g93 za za-g93 tol-za tol-za-g93 tol-za-loose tol-za-loose-g93 tol-za-zs
+test: check cubic tol zt zl zl-g93 tol-zl-g93 za za-g93 tol-za tol-za-g93 tol-za-loose tol-za-loose-g93 tol-za-zs tol-za-zs-g93
 
 cubic:
 	$(MAKE) BUILD=$(BUILD)/$@ DEFS=-DENABLE_CUBIC_SPLINES
@@ -75,8 +75,10 @@ tol-za-loose-g93:
 	$(MAKE) BUILD=$(BUILD)/$@ OPT='$(TOL) $(ZA) $(LOOSE) $(G93)' RANDOM=1000 check
 tol-za-zs:
 	$(MAKE) BUILD=$(BUILD)/$@ OPT='$(TOL) $(ZA) $(ZS)' RANDOM=1000 check
+tol-za-zs-g93:
+	$(MAKE) BUILD=$(BUILD)/$@ OPT='$(TOL) $(ZA) $(ZS) $(G93)' RANDOM=1000 check
 
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all check test clean cubic tol zt zl zl-g93 tol-zl-g93 za za-g93 tol-za tol-za-g93 tol-za-loose tol-za-loose-g93 tol-za-zs
+.PHONY: all check test clean cubic tol zt zl zl-g93 tol-zl-g93 za za-g93 tol-za tol-za-g93 tol-za-loose tol-za-loose-g93 tol-za-zs tol-za-zs-g93
