@@ -731,6 +731,11 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
 #endif
     mc_line(p, pl_data);
     if (sys.abort) { return; } // Bail mid-spline if system abort requested.
+#if BEZIER_Z_LINEAR == 3 && defined(BEZIER_Z_REFILL)
+    // Refill after queuing this target, before computing the next one.
+    protocol_execute_realtime();
+    if (sys.abort) { return; }
+#endif
   }
 #if BEZIER_Z_LINEAR == 2
 #ifdef BEZIER_EXACT_INVERSE_TIME
