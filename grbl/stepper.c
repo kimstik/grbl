@@ -1093,7 +1093,11 @@ uint8_t st_has_compute_reserve()
   if (!index) { index = SEGMENT_BUFFER_SIZE; }
   index--;
   if (tail == segment_buffer_head || tail == index) { return(false); }
+  // Keep ordinary descriptor reads between the volatile tail snapshots. The product
+  // must be ready before the second one; this orders the compiler, not interrupts.
+  __asm__ __volatile__("" ::: "memory");
   uint32_t cycles = (uint32_t)segment_buffer[index].n_step*segment_buffer[index].cycles_per_tick;
+  __asm__ __volatile__("" : : "r" (cycles) : "memory");
   // Five ms admits one ~1.12 ms piece with margin for decisions, preemption and refill.
   return(tail == segment_buffer_tail && !sys_rt_exec_state && cycles >= F_CPU/200);
 }
