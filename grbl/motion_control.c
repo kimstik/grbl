@@ -416,6 +416,9 @@ typedef struct {
   uint16_t next;   // Segments left when the length is estimated next; zero if never
   uint16_t todo;   // Estimate under way: segments not in its pieces yet; zero if none is
   uint8_t pieces;  // Pieces of the next estimate; zero before the first one
+#ifdef BEZIER_Z_SEED
+  float width;     // Control-polygon length minus chord length in the initial coarse pass
+#endif
 } spline_z_t;
 static spline_z_t spline_z;
 
@@ -454,6 +457,30 @@ static float mc_spline_dist(float *sum, float *a, float *b)
   *sum += d;
   return(d);
 }
+
+#if defined(BEZIER_Z_FIXED) && defined(BEZIER_Z_SEED)
+// Complete the initial pass: zero retains it; 1 or 16 requests a new pass.
+// Keep this gate out of the point helper's frame and register lifetimes.
+static uint8_t mc_spline_seed(spline_z_t *z, float **net) __attribute__((noinline, noclone));
+static uint8_t mc_spline_seed(spline_z_t *z, float **net)
+{
+  float a = 0.0f;
+  uint8_t point, axis;
+  if (z->pieces == 1) { return(0); }
+  for (point = 0; point < 4; point++) {
+    for (axis = 0; axis < 2; axis++) { a = max(a, fabsf(net[point][axis])); }
+  }
+  // Smooth geometry cannot certify a rounded XY staircase: retain the risk fallback.
+  if (a*fabsf(z->u)*0.000001f > BEZIER_Z_SIGMA*z->rest) { return(1); }
+  Z_TRACE(half = (0.5f*z->width)/(z->rest - 0.5f*z->width));
+  // A*(|u|+sigma) > sigma*C, with A=width/2 and C=rest-A.
+  if (z->width*(0.5f*fabsf(z->u) + BEZIER_Z_SIGMA) > BEZIER_Z_SIGMA*z->rest) {
+    if (z->pieces == 8) { return(16); }
+    Z_TRACE(open++);
+  }
+  return(0);
+}
+#endif
 
 // The next point p of the polyline, the j-th of segments: X and Y, and Z. The segment to it takes
 // the share of the Z left that its chord is of the length left; a chord as long as that length
@@ -512,7 +539,12 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     z->step = 1.0f/segments;
     z->u = (target[Z_AXIS] - position[Z_AXIS])*0.9999999f;
 #ifdef BEZIER_Z_FIXED
+#ifdef BEZIER_Z_SEED
+    z->pieces = 8; // At most one retry with sixteen pieces; 1 requests actual lengths.
+    z->width = 0.0f;
+#else
     z->pieces = 2; // One fixed coarse pass; 1 requests actual segment lengths.
+#endif
     z->rest = 1e-30f;
     memcpy(&z->chord, p, 2*sizeof(float));
 #endif
@@ -523,9 +555,15 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     return(true); // Realtime work first: the line has taken its time to parse.
   }
 #ifdef BEZIER_Z_FIXED
-  // One coarse pass, with smaller pieces only at a reversal. There is no bracket gate
-  // escalation or mid-curve re-estimation. This is an accuracy/latency tradeoff, not a bound.
+  // One coarse pass, with smaller pieces only at a reversal. SEED first tries eight
+  // pieces, then sixteen if their bracket is too wide. Neither pauses mid-curve.
+#ifdef BEZIER_Z_SEED
+  m = (segments + 7)/8;
+  if (z->pieces == 16) { m = (segments + 15)/16; }
+  m = min(m, z->next);
+#else
   m = min((segments + 15)/16, z->next);
+#endif
   if (z->todo) { m = z->todo; }
   if (z->pieces == 1 || m <= BEZIER_Z_PIECE_COST) { m = 1; }
   a = (segments - z->next)*z->step;
@@ -555,6 +593,9 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     mc_spline_dist(&b, r + 2, q + 2);
     mc_spline_dist(&b, r, r + 2);
     z->rest += 0.5f*(a + b);
+#ifdef BEZIER_Z_SEED
+    z->width += fabsf(b - a); // Rounding must not subtract uncertainty.
+#endif
     Z_TRACE(pieces++);
   }
   memcpy(&z->chord, r, 2*sizeof(float));
@@ -563,6 +604,12 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
   if (z->next) { return(true); }
   Z_TRACE(estimates++);
   Z_TRACE(half = 0.0f);
+#ifdef BEZIER_Z_SEED
+  m = mc_spline_seed(z, net);
+  if (m) {
+    z->pieces = m;
+    z->width = 0.0f;
+#else
   if (z->pieces == 2) {
     a = 0.0f;
     for (axis = 0; axis < 2; axis++) {
@@ -573,12 +620,15 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     // requests actual chord sums on sensitive coordinates; it is not a certificate.
     if (a*fabsf(z->u)*0.000001f > BEZIER_Z_SIGMA*z->rest) {
       z->pieces = 1;
+#endif
       z->next = segments;
       z->rest = 1e-30f;
       memcpy(&z->chord, position, 2*sizeof(float));
       return(true);
     }
+#ifndef BEZIER_Z_SEED
   }
+#endif
 #else
   m = (z->next + z->pieces - 1)/z->pieces; // Segments to a piece
   if (m <= BEZIER_Z_PIECE_COST || z->pieces > BEZIER_Z_PIECES_MAX) { m = 1; } // The segments

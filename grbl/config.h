@@ -762,6 +762,10 @@
   // A coordinate-risk heuristic may request actual segment lengths. Neither is a bound;
   // measured Z errors may exceed the common XY tolerance. G93 remains approximate.
   // #define BEZIER_Z_FIXED
+  // With FIXED: first try eight pieces. If the initial Z bracket gate fails, retry
+  // with sixteen once, then retain that estimate even if open. No mid-curve estimates.
+  // The same coordinate-risk heuristic may request a segment sum. Not an accuracy bound.
+  // #define BEZIER_Z_SEED
   // Experimental mode 3 scheduling: service realtime after each intermediate target is
   // queued, before calculating the next one. The earlier realtime calls remain in place.
   // This changes foreground refill timing, not the path, and does not guarantee no stops.
