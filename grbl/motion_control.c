@@ -391,6 +391,9 @@ void mc_reset()
 #ifdef ENABLE_CUBIC_SPLINES
 
 #if BEZIER_Z_LINEAR == 3
+#if defined(BEZIER_Z_GLOBAL) && !defined(BEZIER_Z_LOOSE)
+  #error "BEZIER_Z_GLOBAL requires BEZIER_Z_LOOSE"
+#endif
 #ifdef BEZIER_Z_TRACE
   // For the test benches only. Estimates made; of them, sums of the segments; those left too
   // wide to vouch for Z; early ends of Z; pieces gone through and segments summed for all of
@@ -413,6 +416,11 @@ typedef struct {
   float chord;     // Estimate under way: the chords of its pieces so far, summed,
   float poly;      // and their control polygons. Otherwise free, and a point as well:
                    // the one before, while segments are summed into rest itself.
+#ifdef BEZIER_Z_GLOBAL
+  // With BEZIER_Z_LOOSE: rest is the estimated total outside an estimate; chord is
+  // the free-point error per travelled mm, and poly the next XY update deadline.
+  float travelled;
+#endif
   uint16_t next;   // Segments left when the length is estimated next; zero if never
   uint16_t todo;   // Estimate under way: segments not in its pieces yet; zero if none is
   uint8_t pieces;  // Pieces of the next estimate; zero before the first one
@@ -493,9 +501,18 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
 #endif
     mc_spline_point(q, j*z->step, 0.0f, net);
     if (z->u != 0.0f) {
+#ifdef BEZIER_Z_GLOBAL
+      mc_spline_dist(&z->travelled, q, p);
+      // A new total may reduce the demanded progress, but cannot take Z back.
+      a = max(0.0f, 1.0f - z->travelled/z->rest)*(target[Z_AXIS] - position[Z_AXIS]);
+      if (fabsf(a) < fabsf(z->u)) { z->u = a; }
+      Z_TRACE(bound = max(bezier_z_trace.bound, z->chord*z->travelled));
+      if (z->next && z->travelled > 0.0f && z->travelled >= z->poly) { z->next = segments - j; }
+#else
       a = mc_spline_dist(&z->poly, q, p); // The chord of the segment. The sum is not in use.
       b = a/z->rest;
       if (b < 0.999999f) { z->rest -= a; z->u -= b*z->u; } else { z->u = 0.0f; Z_TRACE(ends++); }
+#endif
       p[Z_AXIS] = target[Z_AXIS] - z->u;
     }
     memcpy(p, q, 2*sizeof(float));
@@ -505,6 +522,9 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     z->pieces = BEZIER_Z_PIECES;
     z->todo = 0;
     z->step = 1.0f/segments;
+#ifdef BEZIER_Z_GLOBAL
+    z->travelled = 0.0f;
+#endif
     z->u = (target[Z_AXIS] - position[Z_AXIS])*0.9999999f;
 #ifdef BEZIER_EXACT_INVERSE_TIME
     if (!(pl_data->condition & PL_COND_FLAG_INVERSE_TIME))
@@ -536,6 +556,9 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     Z_TRACE(sums++);
     Z_TRACE(half = 0.0f);
     z->next = 0;
+#ifdef BEZIER_Z_GLOBAL
+    z->chord = z->poly = 0.0f;
+#endif
   } else {
     mc_spline_dist(&z->chord, r, q);
     mc_spline_dist(&z->poly, q + 2, q);
@@ -547,6 +570,27 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     a = 0.5f*(z->poly - z->chord); // Half of the bracket
     z->rest = z->chord + a;
     Z_TRACE(half = a/z->chord);
+#ifdef BEZIER_Z_GLOBAL
+    // For a fixed total T, the free Z at travelled s is off by at most k*s,
+    // k = |dz|*A/(T*(T-A)). The global origin includes the travelled prefix.
+    b = a > 0.0f ? fabsf(target[Z_AXIS] - position[Z_AXIS])*
+        (a/(z->travelled + z->chord))/(z->travelled + z->rest) : 0.0f;
+    mc_spline_point(q, j*z->step, 0.0f, net);
+    r[0] = z->travelled;
+    mc_spline_dist(r, q, p);
+    if (b*r[0] > BEZIER_Z_SIGMA && z->pieces < BEZIER_Z_PIECES_MAX) {
+      b *= r[0];
+      do { z->pieces <<= 1; b *= 0.25f; }
+      while (z->pieces < Z_PIECES_END && b > BEZIER_Z_SIGMA);
+      return(true);
+    }
+    z->chord = b;
+    // The doubled-prefix floor is a work limit, not a certificate: an open
+    // bracket may not certify even the next point. Always emit before retrying.
+    z->poly = b > 0.0f ? max(2.0f*z->travelled, BEZIER_Z_SIGMA/b) : 0.0f;
+    z->next = b*(z->travelled + z->rest) > BEZIER_Z_SIGMA ? 1 : 0;
+    if (z->next) { Z_TRACE(open++); }
+#else
     b = BEZIER_Z_SIGMA*z->chord;
     if (a*(fabsf(z->u) + BEZIER_Z_SIGMA) > b) { // Too wide to vouch for Z
 #ifdef BEZIER_Z_LOOSE
@@ -564,6 +608,7 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
       z->next = 0;
     }
     Z_TRACE(bound = max(bezier_z_trace.bound, a*(fabsf(z->u) + bezier_z_trace.bound)/z->chord));
+#endif
   }
 #ifdef BEZIER_Z_LOOSE
   z->pieces = BEZIER_Z_PIECES; // For the next estimate
@@ -573,10 +618,18 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
   // is how far the point (rest, u) is from the origin, which the sums are cleared to be.
   if (pl_data->condition & PL_COND_FLAG_INVERSE_TIME) {
     Z_TRACE(time = bezier_z_trace.half);
+#ifdef BEZIER_Z_GLOBAL
+    q[0] = q[1] = 0.0f;
+    pl_data->feed_rate *= mc_spline_dist(q, &z->rest, q);
+#else
     z->chord = z->poly = 0.0f;
     pl_data->feed_rate *= mc_spline_dist(&z->chord, &z->rest, &z->chord);
+#endif
     bit_false(pl_data->condition,PL_COND_FLAG_INVERSE_TIME);
   }
+#endif
+#ifdef BEZIER_Z_GLOBAL
+  z->rest += z->travelled;
 #endif
   return(true);
 }
