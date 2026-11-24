@@ -634,7 +634,11 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
   if (z->next) { return(true); }
   Z_TRACE(estimates++);
   Z_TRACE(half = 0.0f);
+#ifdef BEZIER_Z_SELECT
   if (z->pieces != 1) {
+#else
+  if (z->pieces == 2) {
+#endif
     a = 0.0f;
     for (axis = 0; axis < 2; axis++) {
       a = max(a, max(fabsf(position[axis]), fabsf(target[axis])));
