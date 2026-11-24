@@ -421,7 +421,148 @@ with the full evidence suite. The cap/error/default choices remain open.
 
 ## Z by an estimate of the length ahead
 
-### Current comparison: C1, C2 and C3
+### Matched loose experiments: scheduling, relative edges and global progress
+
+[CI run 45408953688](https://github.com/kimstik/grbl/actions/runs/45408953688),
+harness a77fa06, completes all **12 jobs**. Four frozen sources use the
+same avr-gcc 16.2.0, binutils 2.47 and avr-libc 2.3.2, the firmware
+compile flags, G5 and G5.1, and the common **$12 = 0.002 mm** target.
+No extra tolerance or production default is selected.
+
+The independent check covers eight production ELF section sizes, eight
+macro-off image comparisons, and eight G94/G93 measurement sets. Each
+set has 18 constructed curves with raw targets and a separate timed
+image, the original 18 timing probes, 40 ordinary motion programs,
+four steep-Z programs and six holds. Target counts and hashes, finite
+exact ends, monotone Z, commanded G93 time, motion coverage and stack
+footer arithmetic pass. Nine directed reporter controls check that
+corrupt data fail while a monotone tolerance excess remains visible.
+**Success here means measurement integrity, not compliance with $12.**
+These are fixed hypotheses, not a random error-rate sample. No new
+mutation score, hardware run or worst-case stack proof is claimed.
+
+The sources are separate, not combined:
+
+- **Baseline, 1f19d74:** the existing loose half-count re-estimates.
+- **A1, 53f5e10, `BEZIER_Z_SCHEDULE`:** start with eight pieces, then
+  refine one unit at a time only during a forced full-planner wait.
+  Active remaining length and Z stay separate from staged sums. The
+  last wholly future stepper segment provides a 5 ms snapshot gate;
+  this is not a foreground WCET guarantee. No ISR is changed.
+- **B2, ed67b00, `BEZIER_Z_EDGES`:** retain actual piece chords, but
+  form the polygon from relative endpoint tangent edges and a closing
+  middle edge. Four norms remain. This avoids some absolute-coordinate
+  additions, not the cost of the norms or their float-grid limitation.
+- **C1, f3beb53, `BEZIER_Z_GLOBAL`:** retain travelled XY length s and
+  a global total T = s + estimated remainder. Each free demand is
+  `|dz|*min(s/T, 1)`; a monotone governor keeps the largest demand already
+  issued. Update deadlines use length uncertainty and s rather than
+  only the remaining segment count. Doubling a missed deadline limits
+  repeated work; it is a loose heuristic, not a tolerance certificate.
+
+#### Fit and raw accuracy
+
+Flash is text+data; boot margin is against 32256 bytes. All images fit
+32768 bytes without a bootloader. Stack is the largest observed
+reduced-dyn watermark, 334 bytes in these builds, not a universal bound.
+
+| Source   | Flash G94 | Flash G93 | G93 boot margin | Static RAM | Measured stack margin | Largest raw Z error mm | Curves over 0.002 |
+| -------- | --------- | --------- | --------------- | ---------- | --------------------- | ---------------------- | ----------------- |
+| Baseline | 31850     | 31950     | 306             | 1670       | 44                    | 0.01323418             | 1 / 18            |
+| A1       | 32108     | 32188     | 68              | 1680       | 34                    | 0.84835024             | 7 / 18            |
+| B2       | 32160     | 32260     | -4              | 1670       | 44                    | 0.01323418             | 1 / 18            |
+| C1       | 32432     | 32526     | -270            | 1674       | 40                    | 0.04307448             | 2 / 18            |
+
+The accuracy columns are identical for G94 and G93. Raw Z is compared
+with cumulative length of the actual emitted XY polyline, using double
+arithmetic independently of the firmware bracket. No float-grid or
+segment-cap allowance is subtracted. Sampled XY deviation is reported
+separately, including cap excess; a small Z error is not an XY guarantee.
+
+The headless timing and dump images do not run the stepper. A1 has no
+compute reserve there, so its row measures the eight-piece seed without
+optional refinement. That is an important no-reserve case, not evidence
+of its accuracy when refinement actually runs. The live motion sweep
+checks timing, endpoints and holds, but does not yet record that live
+Z accuracy or the number of optional units completed.
+
+#### First target and largest gap
+
+Milliseconds on ATmega328P at 16 MHz; these are timed AVR measurements,
+not counts multiplied by a cost model. Each cell is **first / gap**.
+Commands and their resets are in `compare/loose.in`.
+
+| Curve                          | Baseline        | A1              | B2              | C1              |
+| ------------------------------ | --------------- | --------------- | --------------- | --------------- |
+| S 10 mm, Z-3                   | 61.605 / 0.482  | 10.408 / 0.492  | 62.040 / 0.483  | 10.954 / 28.579 |
+| S 10 mm, Z-30                  | 61.607 / 0.482  | 10.410 / 0.489  | 62.042 / 0.483  | 46.523 / 59.666 |
+| S 20 mm, Z-10                  | 82.666 / 0.485  | 10.404 / 0.491  | 83.249 / 0.484  | 29.421 / 46.802 |
+| S 1 m, Z-500                   | 80.948 / 81.628 | 10.514 / 0.493  | 81.082 / 81.076 | 47.691 / 83.221 |
+| Collinear handles 99:1, Z10    | 38.992 / 0.446  | 9.476 / 0.453   | 39.473 / 0.446  | 9.973 / 9.082   |
+| Turn, 256 segments, Z1000      | 81.115 / 9.185  | 10.445 / 0.486  | 81.403 / 9.278  | 28.938 / 9.477  |
+| Cap, 2000 segments, Z50        | 82.674 / 82.297 | 10.431 / 0.499  | 82.820 / 82.266 | 10.972 / 83.972 |
+
+A1 trades accuracy for the short seed in the no-reserve case: the
+1 m S is off by 0.759844 mm and the turn by 0.848350 mm. B2 has no
+useful general speed win on this toolchain and adds 310 bytes. C1
+improves several first delays but does not bound later gaps or total
+work: the long S uses 539 pieces instead of 234, with 1316 instead of
+952 ms of generator work. A shorter start alone is not a Pareto win.
+
+On the turn, C1 improves raw error from 0.01323418 to 0.00211364 mm
+and uses 32 pieces instead of 80. On a translated diagonal, however,
+`G0X60000Y60000Z0` followed by
+`G5X59996Y59998Z1000I0J0P4Q2F1000`, it gives 0.04307448 mm instead
+of the baseline's 0.00023078 mm. There are 43 segments; C1 starts at
+11.251 ms, later pauses for 20.306 ms, and eventually sums 26 segments.
+The smooth control polygon does not bound the length of the rounded
+XY staircase: raw Z is already 0.00201678 mm ahead at point 6, while
+the model allows only about 0.00011398 mm there. Checking a deadline
+after emission also admits a point beyond its model deadline, but that
+smaller effect does not explain the 0.04307448 mm error. A later sum
+cannot retract an emitted point; subsequent XY travel can catch up to
+the held Z demand. Neither the model deadline nor the monotone governor
+certifies the rounded path.
+
+B2's host float build previously measured 0.679152 mm on this same
+diagonal because its smooth edges did not bound the interior rounded
+staircase. That particular failure does **not** reproduce on AVR 16.2:
+the AVR build chooses a 43-segment sum and matches the baseline Z error.
+Compiler-dependent gate decisions do not establish a float certificate;
+clamping a rounded negative polygon width to zero is not such a proof.
+
+#### Live motion and inverse time
+
+Ordinary 40-program sweep; each cell is **stops / with planner blocks
+queued**. These are event counts, not instantaneous speed measurements.
+
+| Source   | G94 stops / queued | G93 stops / queued | S10 F5000 time ms | S20 F5000 time ms |
+| -------- | ------------------ | ------------------ | ----------------- | ----------------- |
+| Baseline | 4 / 3              | 9 / 5              | 2665              | 3013              |
+| A1       | 4 / 1              | 4 / 1              | 2439              | 2600              |
+| B2       | 3 / 3              | 6 / 1              | 2666              | 3015              |
+| C1       | 5 / 1              | 5 / 1              | 2847              | 3454              |
+
+The last two columns are G94 six-curve steep-Z chains, Z-30 per S10
+curve and Z-10 per S20 curve. S20 intermediate stop counts are 4, 0,
+4 and 5 respectively, with no planner blocks queued in any of those
+steep-chain events. Exact XYZ and all six hold/resume endpoints pass.
+A1's improved motion times do not prove its live Z accuracy; queued
+stops in other programs remain unexplained.
+
+Largest relative commanded G93 time error over these 18 fixed curves:
+baseline and B2 0.000583304, A1 0.002932723, C1 0.002932631. The
+baseline maximum is the short S without Z; A1/C1 maxima are the
+inherited-lead example. Feed conversion still uses the first retained
+length, while later Z correction can change the spatial path. These
+modes remain approximate despite the option's historical name.
+
+All three arms stay isolated. B2 has no measured speed advantage here;
+A1 needs live refinement observation and an accuracy-preserving seed/
+deadline design; C1 needs a before-emission error analysis and a smaller
+implementation. None is merged or declared the finished solution.
+
+### Earlier comparison: C1, C2 and C3 changes
 
 Evidence: [CI run 45383191415](https://github.com/kimstik/grbl/actions/runs/45383191415),
 firmware bd3dd5d, **40 of 40 jobs successful**. The run includes eleven
