@@ -14,6 +14,11 @@
   generator so the larger spline prototypes fit. All G5 runs then include
   Z-0.2 when enabled. len_um and feed are projected X travel and speed, not
   path length and feed; the firmware, planner and ISRs are unchanged.
+  Built with BEZIER_Z_LINEAR, four programs with a steep Z follow the sweep,
+  kind G5Z: six curves of 10 mm with Z-30 each, and of 20 mm with Z-10, at
+  F1000 and F5000 (the feed then being along X, Y and Z), acceleration 2000
+  and latency 2. These are the curves that BEZIER_Z_LINEAR 3 cannot vouch
+  for from a few pieces: it sums their segments before the first target.
 
   Timer2 keeps the setup of spindle_init() (fast PWM, prescaler 64), its
   overflow is a 1.024 ms clock, and the spindle stays off. Its ISR paces the
@@ -87,6 +92,10 @@ static uint8_t kind, k, lat, prog;
 static uint16_t pi, lines;
 static uint16_t size, feed, accel, hold_ms;
 static uint32_t len;
+#ifdef TB_DYN_SPLINES_ONLY
+static uint8_t curves;  // in the program
+static int16_t zstep;   // Z of each, um
+#endif
 
 // Timer2 clock since the program start, host pacing, hold injection.
 static volatile uint16_t tick;
@@ -179,7 +188,7 @@ static void chord(uint8_t j, uint8_t n)
 #endif
 
 // Line builder.
-static char line[48]; // The longest is G5I-2.500J2.500P2.500Q-2.500Z-0.200X-5.000
+static char line[56]; // The longest is G5I-10.000J10.000P10.000Q-10.000Z-10.000X-20.000
 static char *lp = line;
 
 static void put(const char *s) { while ((*lp = pgm_read_byte(s++))) { lp++; } }
@@ -224,7 +233,7 @@ static void make_line(void)
       put_u('Q', -h);
 #ifdef BEZIER_Z_LINEAR
 #ifdef TB_DYN_SPLINES_ONLY
-      put_u('Z', -200);
+      put_u('Z', zstep);
 #else
       if (hold_ms) { put_u('Z', -200); }
 #endif
@@ -258,27 +267,43 @@ static const uint16_t holds[] PROGMEM = { 60, 150, 333, 500, 777, 1000 };
   #define KINDS 3
 #endif
 #define SWEEP (KINDS * N(lats) * N(feeds) * N(sizes) * N(accels))
+#if defined(TB_DYN_SPLINES_ONLY) && defined(BEZIER_Z_LINEAR)
+  #define STEEP 4
+#else
+  #define STEEP 0
+#endif
 
 // Sets up program prog (from 1), returns 0 past the end.
 static uint8_t setup(void)
 {
   uint8_t p = prog - 1;
   hold_ms = 0;
+#ifdef TB_DYN_SPLINES_ONLY
+  curves = CURVES; zstep = -200;
+#endif
   if (p < SWEEP) {
     kind = p % KINDS; p /= KINDS;
     lat = pgm_read_byte(lats + p % N(lats)); p /= N(lats);
     feed = pgm_read_word(feeds + p % N(feeds)); p /= N(feeds);
     size = pgm_read_word(sizes + p % N(sizes)); p /= N(sizes);
     accel = pgm_read_word(accels + p);
+#if STEEP
+  } else if ((p -= SWEEP) < STEEP) {
+    kind = G5; lat = 2; accel = 2000; curves = 6;
+    feed = (p & 1) ? 5000 : 1000;
+    if (p & 2) { size = 20000; zstep = -10000; } else { size = 10000; zstep = -30000; }
+  } else if ((p -= STEEP) < N(holds)) {
+#else
   } else if ((p -= SWEEP) < N(holds)) {
+#endif
     kind = G5; lat = 2; feed = 3000; size = 5000; accel = 500;
     hold_ms = pgm_read_word(holds + p);
   } else {
     return 0;
   }
 #ifdef TB_DYN_SPLINES_ONLY
-  lines = 1 + CURVES;
-  len = (uint32_t)CURVES * size; // Projected X travel, not path length.
+  lines = 1 + curves;
+  len = (uint32_t)curves * size; // Projected X travel, not path length.
 #else
   if (kind == G1) { k = (seg + CURVES / 2) / CURVES; } // Blocks per curve of the G5 run before.
   lines = 1 + CURVES * (kind == G1 ? k : 1);
@@ -344,6 +369,9 @@ static void report(void)
     static const char kinds[] PROGMEM = "G5\0G1\0G2";
     printPgmString(PSTR("run "));
     printPgmString(kinds + 3 * kind);
+#if STEEP
+    if (zstep != -200) { serial_write('Z'); }
+#endif
     field(size); field(feed); field(accel); field(lat); field(seg);
     field(len); field(t); field(len * 60 / t);
     field(peak); field(run_min);

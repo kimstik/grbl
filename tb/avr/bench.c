@@ -28,8 +28,9 @@
   its own. `tb --dump` checks those points against the curve model on the
   host. Cycle counts are then not valid. With BEZIER_Z_LINEAR 3 the columns
   are followed by the trace of Z, see BEZIER_Z_TRACE in motion_control.c:
-  estimates made, those left too wide, early ends of Z, and the raw bits of
-  the two floats.
+  estimates made, sums of the segments among them, those left too wide, early
+  ends of Z, pieces gone through, segments summed, and the raw bits of the two
+  floats.
 
   Part of Grbl. License: GPLv3, see grbl/grbl.h.
 */
@@ -41,7 +42,7 @@ uint8_t tb_plan_buffer_line(float *target, plan_line_data_t *pl_data);
 
 #if defined(TB_DUMP) && BEZIER_Z_LINEAR == 3
   #define TB_Z_TRACE
-  extern struct { uint16_t estimates, open, ends; float bound, time, half; } bezier_z_trace;
+  extern struct { uint16_t estimates, sums, open, ends, pieces, summed; float bound, time, half; } bezier_z_trace;
 #endif
 
 static volatile uint16_t ovf;
@@ -165,7 +166,8 @@ int main(void)
       field(seg && !memcmp(last, gc_state.position, sizeof(last)));
       field(nonfin); field(hash);
 #ifdef TB_Z_TRACE
-      field(bezier_z_trace.estimates); field(bezier_z_trace.open); field(bezier_z_trace.ends);
+      field(bezier_z_trace.estimates); field(bezier_z_trace.sums); field(bezier_z_trace.open); field(bezier_z_trace.ends);
+      field(bezier_z_trace.pieces); field(bezier_z_trace.summed);
       field(*(const uint32_t *)&bezier_z_trace.bound); field(*(const uint32_t *)&bezier_z_trace.time);
 #endif
     }

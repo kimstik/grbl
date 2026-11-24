@@ -742,21 +742,32 @@
   // curve arc length. Mode 2 makes two passes on every curve, even without Z: the first
   // queues no new blocks and delays the first target by up to 0.80 s in the measured corpus
   // at 16 MHz. Realtime work runs during it, but the planner can drain and motion can stop.
-  // 3: one pass. Each segment takes the share of the Z left that its chord is of an estimate
-  // of the XY polyline length left. The first estimate delays the first target; without Z
-  // (and without G93 conversion) it is skipped, but helper/state overhead remains. Pieces
-  // double from BEZIER_Z_PIECES to BEZIER_Z_PIECES_MAX until an algebraic bracket gate passes;
-  // if still too wide, another estimate is due with half the segments left. Realtime work is
-  // looked after between the pieces. The gate bounds Z error by BEZIER_SIGMA in exact
-  // arithmetic, not with float rounding of XY or the estimate. It is not a firmware accuracy
-  // guarantee; see tb/README.md for the measured errors, delays, stack and flash.
+  // 3: one pass. Each segment takes the share of the Z left that its chord is of the XY
+  // polyline length left. That length is found before the first target: estimated from a few
+  // pieces of the curve where an algebraic bracket gate vouches for the estimate, summed over
+  // the segments ahead where it does not. Realtime work is looked after between the pieces
+  // and the segments. Without Z (and without G93 conversion) none of this is done, but
+  // helper/state overhead remains. The gate bounds the Z error by BEZIER_SIGMA in exact
+  // arithmetic, not with float rounding; the sum is exact but for rounding. Neither is a
+  // firmware accuracy guarantee; see tb/README.md for the measured errors, delays, stack
+  // and flash.
+  // BEZIER_Z_LOOSE with mode 3: no sum ahead. An estimate that BEZIER_Z_PIECES_MAX pieces
+  // cannot vouch for is used as it is, and another is due with half the segments left: less
+  // delay before the first target, and Z off by more than BEZIER_SIGMA on some curves.
   // #define BEZIER_Z_LINEAR 2
+  // #define BEZIER_Z_LOOSE
 
   #ifndef BEZIER_Z_PIECES
     #define BEZIER_Z_PIECES 8        // Mode 3: pieces of the first try at the length left,
   #endif
   #ifndef BEZIER_Z_PIECES_MAX
-    #define BEZIER_Z_PIECES_MAX 64   // and of the last, each try twice the one before; 128 at most
+    #define BEZIER_Z_PIECES_MAX 64   // and of the last; 64 at most
+  #endif
+  #ifndef BEZIER_Z_PIECE_COST
+    // A piece of an estimate takes the time of some 2.6 segments summed one by one: 1.02
+    // against 0.415 ms with avr-gcc 16.2, 1.09 against 0.405 ms with 7.3, at 16 MHz. Pieces
+    // of no more than this many segments are not tried.
+    #define BEZIER_Z_PIECE_COST 3
   #endif
 
   // G93 with BEZIER_Z_LINEAR 2: convert inverse time to one 3D path feed using the summed
@@ -777,8 +788,8 @@
   #error "BEZIER_EXACT_INVERSE_TIME requires BEZIER_Z_LINEAR 2 or 3"
 #endif
 #if BEZIER_Z_LINEAR == 3
-  #if BEZIER_Z_PIECES < 1 || BEZIER_Z_PIECES > BEZIER_Z_PIECES_MAX || BEZIER_Z_PIECES_MAX > 128 || (BEZIER_Z_PIECES & (BEZIER_Z_PIECES-1)) || (BEZIER_Z_PIECES_MAX & (BEZIER_Z_PIECES_MAX-1))
-    #error "BEZIER_Z_PIECES and BEZIER_Z_PIECES_MAX must be powers of two, 1 <= pieces <= max <= 128"
+  #if BEZIER_Z_PIECES < 1 || BEZIER_Z_PIECES > BEZIER_Z_PIECES_MAX || BEZIER_Z_PIECES_MAX > 64 || (BEZIER_Z_PIECES & (BEZIER_Z_PIECES-1)) || (BEZIER_Z_PIECES_MAX & (BEZIER_Z_PIECES_MAX-1))
+    #error "BEZIER_Z_PIECES and BEZIER_Z_PIECES_MAX must be powers of two, 1 <= pieces <= max <= 64"
   #endif
 #endif
 

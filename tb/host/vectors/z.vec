@@ -151,36 +151,68 @@ pos -99.999 -100 -2
 # ---- Z by an estimate of the length ahead [57] [58] [59] ----------------------
 
 # BEZIER_Z_LINEAR 3 makes one pass: every segment takes the share of the Z left
-# that its chord is of an estimate of the length left. The estimate is halfway
-# between the chords and the control polygons of some pieces of the curve, and
-# the firmware vouches for BEZIER_SIGMA when that bracket is narrow enough.
-# zaim pins the estimates made, those left too wide, and early ends of Z.
+# that its chord is of the length left, which is found before the first point.
+# An estimate halfway between the chords and the control polygons of some pieces
+# of the curve will do if that bracket is narrow enough for BEZIER_SIGMA. If it
+# is not, the pieces are as many more as would close it; where that takes pieces
+# of three segments or less, or more than 64 of them, the segments themselves
+# are summed instead. zaim pins the estimates made, the sums among them, those
+# left too wide (only with BEZIER_Z_LOOSE), and early ends of Z.
 
-= [57] shallow Z: eight pieces are enough to vouch for 0.1 mm @zaim @!tol
+# 24 segments are three to each of eight pieces: summed at once. 25 make pieces
+# of four: tried first, and with so little Z their bracket will do.
+= [57] pieces of three segments are not tried: the segments are summed @zaim @!tol
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X18 Y0 Z0.5 I5.4 J21.6 P5.4 Q-21.6
+zaim 1 1 0 0
+zlen 0 1e-5
+G0 X0 Y0 Z0
+G5 X19.5 Y0 Z0.5 I5.85 J23.4 P5.85 Q-23.4
+zaim 1 0 0 0
+zmm 0.001 0.0045
+
+= [57] pieces of three segments are not tried: the segments are summed @zaim @tol
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X0.36 Y0 Z0.05 I0.108 J0.432 P0.108 Q-0.432
+zaim 1 1 0 0
+zlen 0 1e-4
+G0 X0 Y0 Z0
+G5 X0.39 Y0 Z0.05 I0.117 J0.468 P0.117 Q-0.468
+zaim 1 0 0 0
+zmm 0.0001 0.00045
+
+# The bracket of eight pieces is too wide here, but it narrows four times
+# whenever the pieces double: they jump at once to as many as that takes, and
+# those vouch for Z.
+= [57] shallow Z: the pieces jump to as many as the bracket asks for @zaim @!tol
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X100 Y0 Z-5 I30 J120 P30 Q-120
+zaim 2 0 0 0
+zmm 0.0005 0.004
+G0 X0 Y0 Z0
+G5 X1000 Y0 Z-5 I300 J1200 P300 Q-1200
+zaim 2 0 0 0
+zmm 0.0001 0.001
+
+= [57] shallow Z: the pieces jump to as many as the bracket asks for @zaim @tol
 G10 L20 P1 X0 Y0 Z0
 F1000
 G5 X10 Y0 Z-0.5 I3 J12 P3 Q-12
-zaim 1 0 0
-zmm 0.002 0.0045
-G5 X20 Y0 Z-3.5 I3 J12 P3 Q-12
-zaim 1 0 0
-zmm 0.012 0.027
-
-= [57] shallow Z: sixteen to sixty-four pieces vouch for 0.002 mm @zaim @tol
-G10 L20 P1 X0 Y0 Z0
-F1000
-G5 X10 Y0 Z-0.5 I3 J12 P3 Q-12
-zaim 3 0 0
+zaim 2 0 0 0
+zmm 0.00001 0.0001
+G0 X0 Y0 Z0
+G5 X1000 Y0 Z-5 I300 J1200 P300 Q-1200
+zaim 2 0 0 0
 zmm 0 0.0001
-G5 X20 Y0 Z-3.5 I3 J12 P3 Q-12
-zaim 4 0 0
-zmm 0 0.0005
 
-= [57] a handful of segments: the pieces are the segments, the length is exact @zaim
+= [57] a handful of segments: summed, the length is exact @zaim
 G10 L20 P1 X0 Y0 Z0
 F1000
 G5 X1 Y0 Z2 I0.3 J0.8 P0.3 Q-0.8
-zlen 0 1e-4
+zlen 0 1e-5
 
 = [57] handles 99:1 on a straight line: Z by estimate stays on the line @zaim
 G10 L20 P1 X0 Y0 Z0
@@ -198,49 +230,126 @@ zlen 0 5e-3
 G5.1 X10 Y0 Z-4 I40 J60
 zlen 0 5e-3
 
-# Steep Z: sixty-four pieces are still too wide, so the length is estimated again
-# with half of the segments left, and again, until the pieces are the segments.
-= [58] steep Z on a long curve: estimates left open, made again on the way @zaim @!tol
+# Steep Z: no bracket of 64 pieces or fewer is narrow enough, so the segments
+# are summed before the first point, and Z is on the line to rounding.
+= [58] steep Z: the segments are summed @zaim @!tol
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X100 Y0 Z-50 I30 J120 P30 Q-120
+zaim 2 1 0 0
+zlen 0 1e-5
+G0 X0 Y0 Z0
+G5 X1000 Y0 Z-500 I300 J1200 P300 Q-1200
+zaim 2 1 0 0
+zlen 0 1e-5
+
+= [58] steep Z: the segments are summed @zaim @tol
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 Z-9 I3 J12 P3 Q-12
+zaim 2 1 0 0
+zlen 0 1e-5
+G0 X0 Y0 Z0
+G5 X20 Y0 Z-10 I6 J24 P6 Q-24
+zaim 2 1 0 0
+zlen 0 1e-5
+
+# Past 192 segments, three to each of 64 pieces, the two ways part. By default
+# the segments are summed, however many. With BEZIER_Z_LOOSE the 64 pieces are
+# tried, their bracket is used as it is, and the length is found again when
+# half of the segments are left.
+= [58] steep Z on a long curve: all of its segments are summed @zaim @tol @!loose
 G10 L20 P1 X0 Y0 Z0
 F1000
 G5 X1000 Y0 Z-500 I300 J1200 P300 Q-1200
-zaim 7 1 0
-zmm 0.004 0.02
-
-= [58] steep Z: estimates left open, made again on the way @zaim @tol
-G10 L20 P1 X0 Y0 Z0
-F1000
-G5 X10 Y0 Z-9 I3 J12 P3 Q-12
-zaim 7 1 0
-zmm 0.0001 0.0008
-G5 X20 Y0 Z-39 I3 J12 P3 Q-12
-zaim 8 1 0
-zmm 0.0004 0.0025
-
-= [58] steeper Z on few segments: the pieces double up to the segments @zaim @!tol
-G10 L20 P1 X0 Y0 Z0
-F1000
-G5 X10 Y0 Z-9 I3 J12 P3 Q-12
-zaim 3 0 0
+zaim 2 1 0 0
+zlen 0 1e-5
+G0 X0 Y0 Z0
+G5 X100 Y0 Z-50 I30 J120 P30 Q-120
+zaim 2 1 0 0
 zlen 0 1e-5
 
-= [58] the segment cap with Z @zaim
+= [58] steep Z on a long curve: estimates left open, made again on the way @zaim @tol @loose
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X1000 Y0 Z-500 I300 J1200 P300 Q-1200
+zaim 8 0 3 0
+zmm 0 0.002
+G0 X0 Y0 Z0
+G5 X100 Y0 Z-50 I30 J120 P30 Q-120
+zaim 7 1 2 0
+zmm 0 0.002
+
+# B(t) = (396, 288) * (2 * (33/128) t - t^2): out along a line and back, 256
+# segments at $12 = 0.002, the turn at vertex 66, inside one of 64 pieces of
+# four. Their chords are 301.8047 mm, their control polygons 301.8843 mm and
+# the polyline 301.8644 mm: a bracket of 0.08 mm that 1 m of Z cannot use.
+# Summed, Z is on the line. With the estimate of 301.8445 mm used as it is until
+# half of the segments are left, Z is off by dz * x * (L - R) / (R * L) for a
+# length L, an estimate R and x travelled: 0.0134 mm at vertex 128.
+= [58] a turn inside a piece: the segments are summed, Z is on the line @zaim @tol @!loose
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X-191.8125 Y-139.5 Z1000 I68.0625 J49.5 P195.9375 Q142.5
+zaim 2 1 0 0
+zmm 0 0.002
+
+= [58] a turn inside a piece: left open, Z is off by more than $12 @zaim @tol @loose
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X-191.8125 Y-139.5 Z1000 I68.0625 J49.5 P195.9375 Q142.5
+zaim 3 0 1 0
+zmm 0.012 0.015
+
+# With 10 mm of Z a bracket will do, but one with a turn in it does not narrow
+# four times as the pieces double: the first jump falls short, the second does
+# not.
+= [58] a turn inside a piece: the pieces jump twice @zaim @tol
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X-191.8125 Y-139.5 Z10 I68.0625 J49.5 P195.9375 Q142.5
+zaim 3 0 0 0
+zmm 0.0001 0.002
+
+= [58] the segment cap with Z @zaim @!tol
 G10 L20 P1 X0 Y0 Z0
 F1000
 G5 X10 Y0 Z50 I100000 J0 P1 Q50000
+zaim 2 0 0 0
 zlen 0 1e-4
 G5 X0 Y0 Z-50 I0.01 J0 P100000 Q7
+zaim 2 0 0 0
 zlen 0 1e-3
+
+= [58] the segment cap with Z: 2000 segments summed @zaim @tol @!loose
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 Z50 I100000 J0 P1 Q50000
+zaim 2 1 0 0
+zlen 0 1e-5
+G5 X0 Y0 Z-50 I0.01 J0 P100000 Q7
+zaim 2 1 0 0
+zlen 0 1e-5
+
+= [58] the segment cap with Z: estimates left open @zaim @tol @loose
+G10 L20 P1 X0 Y0 Z0
+F1000
+G5 X10 Y0 Z50 I100000 J0 P1 Q50000
+zaim 4 0 1 0
+zmm 0 0.002
+G5 X0 Y0 Z-50 I0.01 J0 P100000 Q7
+zaim 5 0 2 0
+zmm 0 0.002
 
 # Both control points on the end: the last chords are far shorter than what any
 # estimate of 20 m is off by, so Z is at its target before the curve is.
 = [59] chords shorter than the estimate is off: Z ends early, never past the target @zaim
 F1000
 G5 X20000 Y-100 Z0.3 I20100 J0 P0 Q0
-zaim 1 0 1
+zaim 1 0 0 1
 G0 X-100 Y-100 Z-10
 G5 X20000 Y-100 Z-0.7 I20100 J0 P0 Q0
-zaim 1 0 1
+zaim 1 0 0 1
 
 # A handle straight out and back, with the turn inside one of the eight pieces:
 # the estimate is short of the polyline, so the length runs out before the curve
@@ -249,7 +358,7 @@ zaim 1 0 1
 G10 L20 P1 X0 Y0 Z0
 F1000
 G5 X0 Y0 Z-3 I0 J-131 P0 Q0
-zaim 1 0 1
+zaim 1 0 0 1
 zmm 0.01 0.025
 
 # Both control points on the start: the first chord is too short to take any of
@@ -282,7 +391,7 @@ G5 X60010.5 Y-60000 Z-1004 I0.3 J0.5 P0.2 Q0.5
 # times as coarse. An estimate that ended there was off by that step, and with
 # L travelled and R estimated every Z is off by dz * x * (L - R) / (R * L).
 # P0 = P1 = P2 at machine X-100 and P3 1025 float steps of 7.63e-6 mm further
-# make two segments of 128 and 897 steps, and the estimate takes every point.
+# make two segments of 128 and 897 steps, which are summed one by one.
 # Ending one step short, at 1024, put the middle at 128/1024 of 100 mm instead
 # of 128/1025: 0.0122 mm off, six times $12. With the estimate ending at the
 # target, the rounding of two sums is left.
@@ -290,7 +399,7 @@ G5 X60010.5 Y-60000 Z-1004 I0.3 J0.5 P0.2 Q0.5
 G10 L20 P1 X0 Y0 Z0
 F1000
 G5 X-0.00782 Y0 Z100 I0 J0 P0.00782 Q0
-zaim 1 0 0
+zaim 1 1 0 0
 zmm 0 0.0002
 
 # The same curve where the grid is fine enough for Horner's rule to end on the
@@ -300,7 +409,7 @@ G10 L2 P1 X0 Y0 Z0
 G0 X0 Y0 Z0
 F1000
 G5 X-0.00782 Y0 Z100 I0 J0 P0.00782 Q0
-zaim 1 0 0
+zaim 1 1 0 0
 zmm 0 0.0002
 
 # The first pass of BEZIER_Z_LINEAR 2 summed its last chord up to Horner's rule
@@ -324,7 +433,7 @@ zmm 0 0.0002
 G10 L20 P1 X0 Y0 Z0
 F1000
 G5 X-10000 Y0 Z1000 I0 J0 P10000 Q0
-zaim 1 0 0
+zaim 1 0 0 0
 zmm 0 0.002
 
 # ---- exact G93 [39] [54] ------------------------------------------------------
@@ -369,9 +478,10 @@ pos -70 -100 -9
 
 # ---- G93 by estimate [60] ------------------------------------------------------
 
-# With BEZIER_Z_LINEAR 3 the feed is taken from the first estimate of the length:
-# the time is off 1/F by no more than its bracket, which every G93 curve is
-# checked for. A curve of one segment keeps the inverse time of its only block.
+# With BEZIER_Z_LINEAR 3 the feed is taken from the length that Z goes by, a sum
+# of the segments or an estimate: the time is off 1/F by no more than the bracket
+# of the estimate, which every G93 curve is checked for. A curve of one segment
+# keeps the inverse time of its only block.
 = [60] G93 by estimate: one feed, time within the bracket @zaim @g93
 G10 L20 P1 X0 Y0 Z0
 G93

@@ -23,7 +23,8 @@ static void unreachable(const char *who) { fprintf(stderr, "tb: unexpected call 
 /* --- reachable --- */
 uint8_t settings_read_coord_data(uint8_t i, float *v) { memcpy(v, tb_coord[i], sizeof(tb_coord[i])); return true; }
 void settings_write_coord_data(uint8_t i, float *v) { memcpy(tb_coord[i], v, sizeof(tb_coord[i])); }
-void protocol_execute_realtime(void) { tb_realtime_calls++; }
+/* Past a million calls for one line the line is not going to end: abort it, as a reset would. */
+void protocol_execute_realtime(void) { if (++tb_realtime_calls > 1000000) { sys.abort = true; } }
 void protocol_auto_cycle_start(void) { tb_drain(); }     /* planner full: consume blocks */
 void protocol_buffer_synchronize(void) { tb_drain(); }
 void st_update_plan_block_parameters(void) {}

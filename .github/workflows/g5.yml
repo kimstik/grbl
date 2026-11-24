@@ -17,6 +17,7 @@ env:
     tol-zl-g93 -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=2 -DBEZIER_EXACT_INVERSE_TIME
     tol-za -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3
     tol-za-g93 -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3 -DBEZIER_EXACT_INVERSE_TIME
+    tol-za-loose -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3 -DBEZIER_Z_LOOSE
 
 jobs:
   avr:
@@ -59,23 +60,29 @@ jobs:
           name=avr-gcc-${{ matrix.gcc }}-x64-linux
           curl -fsSL "https://github.com/ZakKemble/avr-gcc-build/releases/download/v${{ matrix.gcc }}-1/$name.tar.bz2" | tar -xj -C "$RUNNER_TEMP"
           printf '%s\n' "$RUNNER_TEMP/$name/bin" >> "$GITHUB_PATH"
-      - name: Previous modes match 5601c12
+      - name: Previous modes match 5601c12 and 37235f2
         run: |
           set -euo pipefail
           avr-gcc --version | head -1
+          # Modes 0 and 1 are as in 5601c12. Mode 2 is as in 37235f2, where its first pass
+          # came to end at the target. Mode 3 is the prototype and has no reference.
           git worktree add -q ../before 5601c12
+          git worktree add -q ../before2 37235f2
           cc=$(make -s --eval 'print-compile: ; @echo $(COMPILE)' print-compile)
           mkdir -p raw
           for splines in '-DENABLE_CUBIC_SPLINES' '-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES'; do
             while read -r name opt; do
-              # BEZIER_Z_LINEAR 2 is not as in 5601c12: its first pass ends at the target now.
-              case $name in ''|tol-za*|tol-zl*) continue ;; esac
+              case $name in
+                ''|tol-za*) continue ;;
+                tol-zl*) ref=../before2; was=37235f2 ;;
+                *) ref=../before; was=5601c12 ;;
+              esac
               make -s clean
-              make -s -C ../before clean
-              make -s -C ../before COMPILE="$cc $splines $opt" > /dev/null
+              make -s -C $ref clean
+              make -s -C $ref COMPILE="$cc $splines $opt" > /dev/null
               make -s COMPILE="$cc $splines $opt" > /dev/null
-              cmp ../before/grbl.hex grbl.hex
-              printf '%s %s identical\n' "$splines" "$name" | tee -a raw/identity.txt
+              cmp $ref/grbl.hex grbl.hex
+              printf '%s %s identical to %s\n' "$splines" "$name" "$was" | tee -a raw/identity.txt
             done <<< "$OPTIONS"
           done
       - name: Production sizes and AVR benches
@@ -178,8 +185,9 @@ jobs:
       - name: Same random curves in each Z mode
         run: |
           set -euo pipefail
-          for mode in 1 2 3; do
-            opt="-DBEZIER_SIGMA=settings.arc_tolerance -DTB_ARC_TOLERANCE=${{ matrix.tol }}f -DBEZIER_Z_LINEAR=$mode"
+          for mode in 1 2 3 3-loose; do
+            opt="-DBEZIER_SIGMA=settings.arc_tolerance -DTB_ARC_TOLERANCE=${{ matrix.tol }}f -DBEZIER_Z_LINEAR=${mode%-loose}"
+            [ "$mode" = "${mode%-loose}" ] || opt="$opt -DBEZIER_Z_LOOSE"
             make -s -C tb/host BUILD=build/random-$mode OPT="$opt" > build-$mode.txt 2>&1
             timeout 1800 nice -n 19 tb/host/build/random-$mode/tb --random 5000 1 > random-$mode.txt 2>&1
             cat random-$mode.txt
@@ -200,7 +208,7 @@ jobs:
       fail-fast: false
       matrix:
         gcc: ['7.3.0', '15.2.0', '16.2.0']
-        opt: [base, tol, tol-zt, tol-zl, tol-zl-g93, tol-za, tol-za-g93]
+        opt: [base, tol, tol-zt, tol-zl, tol-zl-g93, tol-za, tol-za-g93, tol-za-loose]
     name: simavr ${{ matrix.gcc }} ${{ matrix.opt }}
     env:
       ELF: input/elf/${{ matrix.opt }}
@@ -239,7 +247,9 @@ jobs:
               cat raw/bench.txt
             else
               cat raw/dyn.txt
-              python3 -I tb/avr/check_dyn.py raw/dyn.txt > raw/dyn-check.txt
+              # A build with a Z word also runs the programs with a steep Z.
+              steep=''; case '${{ matrix.opt }}' in *-z*) steep=--steep ;; esac
+              python3 -I tb/avr/check_dyn.py raw/dyn.txt $steep > raw/dyn-check.txt
               cat raw/dyn-check.txt
               if [ -f "$ELF/free-ram.txt" ]; then
                 free=$(cat "$ELF/free-ram.txt")

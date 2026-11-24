@@ -392,11 +392,12 @@ void mc_reset()
 
 #if BEZIER_Z_LINEAR == 3
 #ifdef BEZIER_Z_TRACE
-  // For the test benches only. Estimates made; those left too wide to vouch for Z; early ends of
-  // Z; the bound of the Z error that follows from the brackets, mm; the half bracket of the
+  // For the test benches only. Estimates made; of them, sums of the segments; those left too
+  // wide to vouch for Z; early ends of Z; pieces gone through and segments summed for all of
+  // that; the bound of the Z error that follows from the brackets, mm; the half bracket of the
   // estimate that the inverse time feed was taken from, as a share of the length; and that of
   // the latest estimate.
-  struct { uint16_t estimates, open, ends; float bound, time, half; } bezier_z_trace;
+  struct { uint16_t estimates, sums, open, ends, pieces, summed; float bound, time, half; } bezier_z_trace;
   #define Z_TRACE(what) bezier_z_trace.what
 #else
   #define Z_TRACE(what)
@@ -417,6 +418,14 @@ typedef struct {
   uint8_t pieces;  // Pieces of the next estimate; zero before the first one
 } spline_z_t;
 static spline_z_t spline_z;
+
+// Where the pieces of an estimate stop doubling: at the most of them, or one doubling on, which
+// stands for the segments summed.
+#ifdef BEZIER_Z_LOOSE
+  #define Z_PIECES_END BEZIER_Z_PIECES_MAX
+#else
+  #define Z_PIECES_END (2*BEZIER_Z_PIECES_MAX)
+#endif
 
 // X and Y of the point of the curve at t into p, by Horner's rule relative to the start point.
 // If s is not zero, p[2] and p[3] get the control point next to that point of the piece of the
@@ -450,18 +459,23 @@ static float mc_spline_dist(float *sum, float *a, float *b)
 // the share of the Z left that its chord is of the length left; a chord as long as that length
 // takes it all, so Z never passes the target, nor turns back.
 //
-// If the length left is to be estimated first, p stays as it is and true is returned: that was
-// one piece of the estimate, and the caller is to look after realtime work before the next call,
+// If the length left is to be found first, p stays as it is and true is returned: that was one
+// piece of an estimate, and the caller is to look after realtime work before the next call,
 // with none of this on the stack. The length is that of the last z->next segments. A piece of
 // the curve is a whole number of them; its ends are points of the polyline, and its two other
 // control points follow from the slopes there. The chords of the pieces are no longer than the
 // segments, their control polygons no shorter than the curve, so the two sums bracket the
 // length; the estimate is halfway. Z is then off the straight line through the length travelled
 // by no more than half the bracket over the whole length, times the Z travel. If that may be
-// more than BEZIER_SIGMA, the pieces are gone through again, twice as many, up to
-// BEZIER_Z_PIECES_MAX; if the bracket is still too wide then, the length is estimated again
-// with half of the segments left. Where a piece would be a segment, the segments themselves are
-// summed instead, one a call from point to point: the length to be travelled, to rounding.
+// more than BEZIER_SIGMA, the pieces are gone through again: as many more as close the bracket
+// if it narrows four times whenever they double, as it does on a smooth curve. Where that
+// takes more than BEZIER_Z_PIECES_MAX of them, or pieces of no more than BEZIER_Z_PIECE_COST
+// segments, the segments themselves are summed instead, one a call from point to point: the
+// length to be travelled, to rounding, in no more time than such pieces take.
+//
+// With BEZIER_Z_LOOSE no more than those pieces are ever gone through ahead: a bracket that the
+// most of them leave too wide is used as it is, and the length is found again when half of the
+// segments are left.
 static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segments,
                               float *position, float *first, float *second, float *target,
                               plan_line_data_t *pl_data) __attribute__((noinline, noclone));
@@ -472,7 +486,11 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
   float q[4], r[4], a, b, *from;
   float *net[4] = { position, first, second, target };
   uint16_t m;
-  if (segments + 1 - j != z->next) {
+#ifdef BEZIER_Z_LOOSE
+  if (segments + 1 - j != z->next) { // Not where the length is found again
+#else
+  if (!z->next) { // The length is found, or not asked for
+#endif
     mc_spline_point(q, j*z->step, 0.0f, net);
     if (z->u != 0.0f) {
       a = mc_spline_dist(&z->poly, q, p); // The chord of the segment. The sum is not in use.
@@ -495,6 +513,7 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     return(true); // Realtime work first: the line has taken its time to parse.
   }
   m = (z->next + z->pieces - 1)/z->pieces; // Segments to a piece
+  if (m <= BEZIER_Z_PIECE_COST || z->pieces > BEZIER_Z_PIECES_MAX) { m = 1; } // The segments
   from = &z->chord; // The point before, if segments are summed
   if (!z->todo) { // From the point in hand. The sums not zero: divisors.
     z->todo = z->next;
@@ -511,8 +530,10 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
   if (m == 1) { // The segment itself, from the point before, which is in no use as sums.
     mc_spline_dist(&z->rest, r, from);
     memcpy(&z->chord, r, 2*sizeof(float));
+    Z_TRACE(summed++);
     if (z->todo) { return(true); }
     Z_TRACE(estimates++);
+    Z_TRACE(sums++);
     Z_TRACE(half = 0.0f);
     z->next = 0;
   } else {
@@ -520,21 +541,33 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     mc_spline_dist(&z->poly, q + 2, q);
     mc_spline_dist(&z->poly, r + 2, q + 2);
     mc_spline_dist(&z->poly, r, r + 2);
+    Z_TRACE(pieces++);
     if (z->todo) { return(true); }
     Z_TRACE(estimates++);
     a = 0.5f*(z->poly - z->chord); // Half of the bracket
     z->rest = z->chord + a;
     Z_TRACE(half = a/z->chord);
-    if (a*(fabsf(z->u) + BEZIER_SIGMA) > BEZIER_SIGMA*z->chord) {
-      if (z->pieces < BEZIER_Z_PIECES_MAX) { z->pieces <<= 1; return(true); }
-      z->next >>= 1;
-      Z_TRACE(open++);
+    b = BEZIER_SIGMA*z->chord;
+    if (a*(fabsf(z->u) + BEZIER_SIGMA) > b) { // Too wide to vouch for Z
+#ifdef BEZIER_Z_LOOSE
+      if (z->pieces == BEZIER_Z_PIECES_MAX) {
+        z->next >>= 1;
+        Z_TRACE(open++);
+      } else
+#endif
+      {
+        do { z->pieces <<= 1; b *= 4.0f; }
+        while (z->pieces < Z_PIECES_END && a*(fabsf(z->u) + BEZIER_SIGMA) > b);
+        return(true);
+      }
     } else {
       z->next = 0;
     }
     Z_TRACE(bound = max(bezier_z_trace.bound, a*(fabsf(z->u) + bezier_z_trace.bound)/z->chord));
   }
-  z->pieces = BEZIER_Z_PIECES;
+#ifdef BEZIER_Z_LOOSE
+  z->pieces = BEZIER_Z_PIECES; // For the next estimate
+#endif
 #ifdef BEZIER_EXACT_INVERSE_TIME
   // Inverse time: the feed that covers the estimated length, Z included, in 1/F minutes. That
   // is how far the point (rest, u) is from the origin, which the sums are cleared to be.

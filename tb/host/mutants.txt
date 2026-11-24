@@ -74,12 +74,8 @@ za-sum-off	motion_control.c	if (m == 1) {	if (0) {
 za-sum-not-from-hand	motion_control.c	from = p;	;
 za-sum-point-kept	motion_control.c	memcpy(&z->chord, r, 2*sizeof(float));	;
 za-sum-elsewhere	motion_control.c	mc_spline_dist(&z->rest, r, from);	mc_spline_dist(&z->chord, r, from);
-za-gate-off	motion_control.c	if (a*(fabsf(z->u) + BEZIER_SIGMA) > BEZIER_SIGMA*z->chord) {	if (0) {
-za-gate-no-z	motion_control.c	if (a*(fabsf(z->u) + BEZIER_SIGMA) > BEZIER_SIGMA*z->chord) {	if (a*BEZIER_SIGMA > BEZIER_SIGMA*z->chord) {
-za-no-doubling	motion_control.c	if (z->pieces < BEZIER_Z_PIECES_MAX) { z->pieces <<= 1; return(true); }	;
-za-no-refine	motion_control.c	z->next >>= 1;	z->next = 0;
-za-refine-each	motion_control.c	z->next >>= 1;	z->next--;
-za-pieces-kept	motion_control.c	z->pieces = BEZIER_Z_PIECES;	z->pieces = BEZIER_Z_PIECES_MAX;
+za-gate-off	motion_control.c	if (a*(fabsf(z->u) + BEZIER_SIGMA) > b) {	if (0) {
+za-gate-no-z	motion_control.c	if (a*(fabsf(z->u) + BEZIER_SIGMA) > b) {	if (a*BEZIER_SIGMA > b) {
 za-no-hair	motion_control.c	(target[Z_AXIS] - position[Z_AXIS])*0.9999999f	(target[Z_AXIS] - position[Z_AXIS])
 za-no-early-end	motion_control.c	if (b < 0.999999f) {	if (1) {
 za-rest-kept	motion_control.c	z->rest -= a; z->u -= b*z->u;	z->u -= b*z->u;
@@ -94,3 +90,15 @@ za-g93-needs-z	motion_control.c	if (!(pl_data->condition & PL_COND_FLAG_INVERSE_
 OPT	-DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3
 za-end-horner	motion_control.c	if (!z->todo) { memcpy(r, target, 2*sizeof(float)); }	if (0) { memcpy(r, target, 2*sizeof(float)); }
 za-end-each-piece	motion_control.c	if (!z->todo) { memcpy(r, target, 2*sizeof(float)); }	if (1) { memcpy(r, target, 2*sizeof(float)); }
+za-cost-off	motion_control.c	if (m <= BEZIER_Z_PIECE_COST || z->pieces > BEZIER_Z_PIECES_MAX) { m = 1; }	if (m <= 1 || z->pieces > BEZIER_Z_PIECES_MAX) { m = 1; }
+za-sum-not-forced	motion_control.c	if (m <= BEZIER_Z_PIECE_COST || z->pieces > BEZIER_Z_PIECES_MAX) { m = 1; }	if (m <= BEZIER_Z_PIECE_COST) { m = 1; }
+za-jump-off	motion_control.c	do { z->pieces <<= 1; b *= 4.0f; }	do { z->pieces <<= 1; }
+za-jump-single	motion_control.c	while (z->pieces < Z_PIECES_END && a*(fabsf(z->u) + BEZIER_SIGMA) > b);	while (0);
+za-jump-fast	motion_control.c	do { z->pieces <<= 1; b *= 4.0f; }	do { z->pieces <<= 1; b *= 16.0f; }
+za-always-most	motion_control.c	#define Z_PIECES_END (2*BEZIER_Z_PIECES_MAX)	#define Z_PIECES_END BEZIER_Z_PIECES_MAX
+za-length-never	motion_control.c	if (!z->next) {	if (1) {
+OPT	-DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3 -DBEZIER_Z_LOOSE
+za-loose-no-refine	motion_control.c	z->next >>= 1;	z->next = 0;
+za-loose-refine-each	motion_control.c	z->next >>= 1;	z->next--;
+za-loose-never-open	motion_control.c	if (z->pieces == BEZIER_Z_PIECES_MAX) {	if (0) {
+za-loose-pieces-kept	motion_control.c	z->pieces = BEZIER_Z_PIECES; // For the next estimate	z->pieces = BEZIER_Z_PIECES_MAX;
