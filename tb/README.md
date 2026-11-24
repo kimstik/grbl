@@ -421,7 +421,101 @@ with the full evidence suite. The cap/error/default choices remain open.
 
 ## Z by an estimate of the length ahead
 
-### A2: prefetch without early adoption
+### Compact A2: measured boot fit with ordered reserve reads
+
+[CI run 45439717696](https://github.com/kimstik/grbl/actions/runs/45439717696),
+harness c34d36f, completes **12 of 12 jobs**. The frozen sources are
+baseline 1f19d74, A2 937229f and compact A2 3947b1b. The toolchain is
+avr-gcc 16.2.0, binutils 2.47 and avr-libc 2.3.2, with the same firmware
+flags and common **$12 = 0.002 mm** goal. No tolerance is widened.
+
+The compact source keeps A2's policy: prefetch only the first pass for
+an already scheduled suffix, and adopt it only at the old deadline.
+It adds compiler barriers around the reserve descriptor reads, shares
+the mandatory and optional nine-argument call site, and uses the old
+outgoing Z as the disposable distance sum immediately before replacing
+Z. The staged length sums, active remaining length and Z, partition,
+float seed, escalation, initial estimate and G93 conversion are unchanged.
+
+#### Production fit and independent checks
+
+| Source     | Flash G94 | Flash G93 | G93 boot margin | Static RAM | Measured stack | Stack margin |
+| ---------- | --------- | --------- | --------------- | ---------- | -------------- | ------------ |
+| Baseline   | 31850     | 31950     | 306             | 1670       | 334            | 44           |
+| A2         | 32202     | 32292     | -36             | 1671       | 334            | 43           |
+| Compact A2 | 32162     | 32252     | 4               | 1671       | 334            | 43           |
+
+Flash is text+data, checked independently against the production ELF
+sections. Compact A2 fits the **32256-byte** application region with
+both options. Four bytes of G93 headroom is a fit for this exact build,
+not a practical expansion budget or a promise about another toolchain.
+Stack margins use the largest observed motion watermark, not a
+worst-case stack proof. No hardware flash or motion run is claimed.
+
+Six macro-off image comparisons pass. All six headless G94/G93 sets
+pass raw-point, count, hash, finite/exact-end, monotone-Z and commanded-time
+checks, plus the original 18 timing probes and 40 ordinary motion programs,
+four steep-Z programs and six holds. XYZ endpoints and stack footer
+arithmetic pass. Segment counts and raw Z errors match the baseline:
+**0.01323418 mm maximum, 1 of 18 curves over 0.002 mm**. The largest
+relative commanded G93 time error remains 0.000583304. This is a fit
+and scheduling result, not a new accuracy bound or exact inverse time.
+
+The native whole-driver controls check 20 curves, three reserve scripts
+and three abort modes per source. XYZ/feed/condition/trace bits match;
+compact and frozen A2 also retain the same realtime/planner/reserve event
+sequences. These scripted tests cover partial and ready prefetch, but
+do not measure actual stepper timing.
+
+#### Observed benefit and limitations
+
+The separate read-only live observer described below runs the same
+four three-curve chains for all three sources, each with observation
+on and off. In both compile modes, each prefetch source performs
+**48 optional pieces**, completes **6 passes** and uses all six ready
+passes at their original deadlines. All 12 curves have bit-identical
+XYZ/feed/condition sequences to the baseline. The raw live Z maximum
+is 0.000200194 mm. Per-ELF ABI, source, hash, complete counters, UART
+bytes, per-byte cycle hash and final cycle agree with the blind control.
+No partial pass reaches its deadline in this live workload.
+
+All live commands are **G94**, even when G93 conversion is compiled in.
+Milliseconds below are maxima over each three-curve chain, without the
+G93 option; each cell is **baseline / compact A2**.
+
+| Live chain     | Largest later estimate pause  | Largest target gap |
+| -------------- | ----------------------------- | ------------------ |
+| S60/Z-30/F5000 | 141.752 / 133.016             | 144.258 / 135.576  |
+| S60/Z-30/F1000 | 108.218 / 96.537              | 110.378 / 98.784   |
+
+With the G93 option, the corresponding later pauses are
+141.769 / 133.031 and 108.259 / 96.575 ms. Initial delays are not
+removed. In the no-reserve timing bench S10/Z-3 first target is
+61.605 / 61.871 ms; S20/Z-10 is 82.666 / 83.034 ms. The live S10/S20
+chains have no later checkpoint to prefetch. Subsequent escalation
+and exact sums still run at their mandatory deadlines.
+
+In the ordinary 40-program sweep, stops / stops with planner blocks
+queued are baseline 4 / 3, A2 6 / 5, compact A2 9 / 7 without the
+G93 option; with it they are 9 / 5, 4 / 2 and 4 / 2. These mixed
+changes do not establish a general starvation improvement. Queued-block
+entry feed is not instantaneous stepper velocity; the mechanism remains
+unresolved. All motion and hold endpoints pass.
+
+Production disassembly confirms the compiler ordering correction in
+both compact builds. For example, in G93 the first tail read at 0x5d46
+precedes the descriptor loads at 0x5d6c..0x5d72 and product call at
+0x5d74, followed by the second tail read at 0x5d78. The barriers do not
+mask interrupts or establish WCET; the ISR can advance after the final
+sample. The 5 ms snapshot gate remains a heuristic, not a guarantee
+of enough foreground CPU time.
+
+Compact A2 is a measured, boot-fitting scheduling alternative that
+preserves the tested paths. Initial latency, substantial later pauses,
+loose tolerance excess and approximate G93 remain open. No candidate
+is selected as the production default or merged.
+
+### Earlier A2: prefetch without early adoption
 
 [CI run 45427709185](https://github.com/kimstik/grbl/actions/runs/45427709185),
 harness 367a78b, completes **8 of 8 jobs** on avr-gcc 16.2.0. The sources
