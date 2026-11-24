@@ -486,10 +486,15 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
   float q[4], r[4], a, b, *from;
   float *net[4] = { position, first, second, target };
   uint16_t m;
+#ifdef BEZIER_Z_FIXED
+  uint8_t axis;
+  if (!z->next) {
+#else
 #ifdef BEZIER_Z_LOOSE
   if (segments + 1 - j != z->next) { // Not where the length is found again
 #else
   if (!z->next) { // The length is found, or not asked for
+#endif
 #endif
     mc_spline_point(q, j*z->step, 0.0f, net);
     if (z->u != 0.0f) {
@@ -506,12 +511,75 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     z->todo = 0;
     z->step = 1.0f/segments;
     z->u = (target[Z_AXIS] - position[Z_AXIS])*0.9999999f;
+#ifdef BEZIER_Z_FIXED
+    z->pieces = 2; // One fixed coarse pass; 1 requests actual segment lengths.
+    z->rest = 1e-30f;
+    memcpy(&z->chord, p, 2*sizeof(float));
+#endif
 #ifdef BEZIER_EXACT_INVERSE_TIME
     if (!(pl_data->condition & PL_COND_FLAG_INVERSE_TIME))
 #endif
     if (z->u == 0.0f) { z->next = 0; } // No Z word, no estimate
     return(true); // Realtime work first: the line has taken its time to parse.
   }
+#ifdef BEZIER_Z_FIXED
+  // One coarse pass, with smaller pieces only at a reversal. There is no bracket gate
+  // escalation or mid-curve re-estimation. This is an accuracy/latency tradeoff, not a bound.
+  m = min((segments + 15)/16, z->next);
+  if (z->todo) { m = z->todo; }
+  if (z->pieces == 1 || m <= BEZIER_Z_PIECE_COST) { m = 1; }
+  a = (segments - z->next)*z->step;
+  b = (segments - z->next + m)*z->step;
+  if (m == 1) {
+    mc_spline_point(r, b, 0.0f, net);
+    if (z->next == 1) { memcpy(r, target, 2*sizeof(float)); }
+    mc_spline_dist(&z->rest, r, &z->chord);
+    Z_TRACE(summed++);
+  } else {
+    mc_spline_point(q, a, b - a, net);
+    mc_spline_point(r, b, a - b, net);
+    if (z->next == m) { memcpy(r, target, 2*sizeof(float)); }
+    // The three control-polygon edge directions. Reject a piece that turns back.
+    a = b = 0.0f;
+    for (axis = 0; axis < 2; axis++) {
+      float e0 = q[axis + 2] - q[axis];
+      float e1 = r[axis + 2] - q[axis + 2];
+      float e2 = r[axis] - r[axis + 2];
+      a += e0*e2;
+      b += e1*(e0 + e2);
+    }
+    if (a < 0.0f || b < 0.0f) { z->todo = m/2; return(true); }
+    a = b = 0.0f;
+    mc_spline_dist(&a, r, q);
+    mc_spline_dist(&b, q + 2, q);
+    mc_spline_dist(&b, r + 2, q + 2);
+    mc_spline_dist(&b, r, r + 2);
+    z->rest += 0.5f*(a + b);
+    Z_TRACE(pieces++);
+  }
+  memcpy(&z->chord, r, 2*sizeof(float));
+  z->next -= m;
+  z->todo = 0;
+  if (z->next) { return(true); }
+  Z_TRACE(estimates++);
+  Z_TRACE(half = 0.0f);
+  if (z->pieces == 2) {
+    a = 0.0f;
+    for (axis = 0; axis < 2; axis++) {
+      a = max(a, max(fabsf(position[axis]), fabsf(target[axis])));
+      a = max(a, max(fabsf(first[axis]), fabsf(second[axis])));
+    }
+    // Smooth geometry cannot certify the rounded XY staircase. This risk heuristic
+    // requests actual chord sums on sensitive coordinates; it is not a certificate.
+    if (a*fabsf(z->u)*0.000001f > BEZIER_Z_SIGMA*z->rest) {
+      z->pieces = 1;
+      z->next = segments;
+      z->rest = 1e-30f;
+      memcpy(&z->chord, position, 2*sizeof(float));
+      return(true);
+    }
+  }
+#else
   m = (z->next + z->pieces - 1)/z->pieces; // Segments to a piece
   if (m <= BEZIER_Z_PIECE_COST || z->pieces > BEZIER_Z_PIECES_MAX) { m = 1; } // The segments
   from = &z->chord; // The point before, if segments are summed
@@ -568,6 +636,7 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
 #ifdef BEZIER_Z_LOOSE
   z->pieces = BEZIER_Z_PIECES; // For the next estimate
 #endif
+#endif // BEZIER_Z_FIXED
 #ifdef BEZIER_EXACT_INVERSE_TIME
   // Inverse time: the feed that covers the estimated length, Z included, in 1/F minutes. That
   // is how far the point (rest, u) is from the origin, which the sums are cleared to be.

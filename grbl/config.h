@@ -757,6 +757,11 @@
   // switch to a segment sum by BEZIER_Z_PIECE_COST.
   // #define BEZIER_Z_LINEAR 2
   // #define BEZIER_Z_LOOSE
+  // Experimental mode 3 alternative: sixteen coarse control-polygon pieces, halved at
+  // detected reversals. One initial estimate, no tolerance escalation or mid-curve pause.
+  // A coordinate-risk heuristic may request actual segment lengths. Neither is a bound;
+  // measured Z errors may exceed the common XY tolerance. G93 remains approximate.
+  // #define BEZIER_Z_FIXED
 
   #ifndef BEZIER_Z_SIGMA
     // Mode 3: how far off the line an estimate may leave Z, mm. By default the tolerance of
