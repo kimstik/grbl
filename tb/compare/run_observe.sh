@@ -38,10 +38,17 @@ for arm in "${arms[@]}"; do
   done
   baseline=()
   if [ "$arm" != baseline ]; then
-    baseline=(--baseline "$out/baseline/observed.txt" \
-      --baseline-uart "$out/baseline/observed-uart.txt")
+    reference=baseline
+    if [ "$arm" = refill ]; then
+      reference=fixed
+      cmp "$root/input/refill/raw/refill-off-$mode.hex" "$root/input/fixed/raw/production-$mode.hex"
+      printf 'REFILL-off image identical to fixed %s\n' "$mode" > "$dir/refill-identity.txt"
+    fi
+    baseline=(--baseline "$out/$reference/observed.txt" \
+      --baseline-uart "$out/$reference/observed-uart.txt")
     case $arm in
       quadrature|fixed) baseline+=(--xy-only) ;;
+      refill) ;; # Scheduling only: require the fixed arm's full target identity.
       *) baseline+=(--require-prefetch) ;;
     esac
   fi

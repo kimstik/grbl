@@ -178,7 +178,7 @@ def main():
             if args.xy_only:
                 assert [(p['bits'][:2], p['bits'][3], p['condition']) for p in a['points']] == [(p['bits'][:2], p['bits'][3], p['condition']) for p in b['points']], 'baseline XY/feed/condition bits differ'
             else:
-                assert [(p['bits'], p['condition']) for p in a['points']] == [(p['bits'], p['condition']) for p in b['points']], 'prefetch changed XYZ/feed/condition bits'
+                assert [(p['bits'], p['condition']) for p in a['points']] == [(p['bits'], p['condition']) for p in b['points']], 'baseline XYZ/feed/condition bits differ'
         result['baseline_xy_feed_identical' if args.xy_only else 'baseline_targets_identical'] = True
     if args.require_prefetch:
         assert trace['size'] == 26, 'not the prefetch state'

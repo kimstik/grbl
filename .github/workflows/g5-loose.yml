@@ -1,4 +1,4 @@
-name: G5 loose fixed comparison
+name: G5 loose refill comparison
 
 on:
   push:
@@ -23,6 +23,9 @@ jobs:
           - arm: fixed
             ref: a9b415f1c120fa9e12156f8456984e0e32e38112
             extra: -DBEZIER_Z_FIXED
+          - arm: refill
+            ref: 8672b8f5091b0df7d0a8a34216d0cde8bb75d2ce
+            extra: -DBEZIER_Z_FIXED -DBEZIER_Z_REFILL
     name: avr 16.2 ${{ matrix.arm }}
     steps:
       - name: Pinned AVR tools
@@ -57,7 +60,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arm: [baseline, fixed]
+        arm: [baseline, fixed, refill]
         mode: [g94, g93]
         include:
           - arm: baseline
@@ -66,6 +69,9 @@ jobs:
           - arm: fixed
             ref: a9b415f1c120fa9e12156f8456984e0e32e38112
             extra: -DBEZIER_Z_FIXED
+          - arm: refill
+            ref: 8672b8f5091b0df7d0a8a34216d0cde8bb75d2ce
+            extra: -DBEZIER_Z_FIXED -DBEZIER_Z_REFILL
     name: simavr ${{ matrix.arm }} ${{ matrix.mode }}
     steps:
       - uses: actions/checkout@v4
@@ -98,7 +104,7 @@ jobs:
       fail-fast: false
       matrix:
         mode: [g94, g93]
-    name: live fixed observation ${{ matrix.mode }}
+    name: live refill observation ${{ matrix.mode }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -114,13 +120,17 @@ jobs:
         with:
           name: loose-avr-fixed
           path: input/fixed
+      - uses: actions/download-artifact@v4
+        with:
+          name: loose-avr-refill
+          path: input/refill
       - name: Host observer dependencies
         run: |
           set -euo pipefail
           sudo apt-get update -q
           sudo apt-get install -y -q --no-install-recommends gcc make pkg-config libelf-dev gcc-avr avr-libc
-      - name: Observe changed Z policy with the same XY and check blind controls
-        run: timeout 1500 nice -n 19 bash tb/compare/run_observe.sh '${{ matrix.mode }}' baseline fixed
+      - name: Compare fixed policy and full refill target identity with blind controls
+        run: timeout 2400 nice -n 19 bash tb/compare/run_observe.sh '${{ matrix.mode }}' baseline fixed refill
       - uses: actions/upload-artifact@v4
         if: always()
         with:

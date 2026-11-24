@@ -27,9 +27,17 @@ for mode in g94 g93; do
   cmp "raw/baseline-$mode.hex" source/grbl.hex
   printf '%s %s macro-off identical\n' "$arm" "$mode" >> raw/identity.txt
 
+  if [ "$arm" = refill ]; then
+    # The scheduling gate alone must leave the fixed policy's image unchanged.
+    make -s -C source clean > "raw/refill-off-$mode.log" 2>&1
+    make -s -C source COMPILE="$cc $opts -DBEZIER_Z_FIXED" >> "raw/refill-off-$mode.log" 2>&1
+    cp source/grbl.hex "raw/refill-off-$mode.hex"
+  fi
+
   make -s -C source clean > "raw/production-$mode.log" 2>&1
   if make -s -C source COMPILE="$cc $opts $extra" >> "raw/production-$mode.log" 2>&1; then
     cp source/build/main.elf "elf/$mode/firmware.elf"
+    cp source/grbl.hex "raw/production-$mode.hex"
     avr-nm -n -S "elf/$mode/firmware.elf" > "raw/production-symbols-$mode.txt"
     avr-objdump -d "elf/$mode/firmware.elf" > "raw/production-disassembly-$mode.txt"
     set -- $(avr-size source/build/main.elf | tail -1)
