@@ -421,6 +421,77 @@ with the full evidence suite. The cap/error/default choices remain open.
 
 ## Z by an estimate of the length ahead
 
+### Parser scratch: identical native outputs, still too large
+
+[CI run 45530663881](https://github.com/kimstik/grbl/actions/runs/45530663881),
+harness 92f8e08, is **failed**: native identity passes, while both AVR
+jobs fail the boot-region fit gate. Frozen sources are selector 452c70d
+and parser scratch 210e4a4. This bounded run checks storage and call
+layout, not another length policy. The common goal remains
+**$12 = 0.002 mm**; simulations and motion jobs are deliberately skipped.
+
+`BEZIER_PARSER_SCRATCH` reuses consumed I,J and P,Q storage for the two
+planar control points, after the implicit-G5 offsets have been saved.
+It keeps the spline driver out of the parser frame and passes one local
+control-point pointer array to the estimator. It adds no persistent
+state. Arithmetic, endpoint copies, selector decisions, G93 conversion
+and realtime service after each leaf returns are unchanged. Separate
+nested frames are not evidence of a lower full-stack peak.
+
+#### Production size and flag-off identity
+
+Pinned avr-gcc 16.2.0, binutils 2.47 and avr-libc 2.3.2 use the actual
+production Makefile options. Every normal link fails in the full
+32768-byte flash region. The same objects are then relinked with a
+larger region solely for static inspection. No HEX is produced and no
+oversized or downloaded executable is run locally.
+
+| Compile mode | Selector flash | Scratch flash | Saved | Scratch boot margin | Scratch full margin | Static RAM |
+| ------------ | -------------- | ------------- | ----- | ------------------- | ------------------- | ---------- |
+| G94          | 33310          | 32932         | 378   | -676                | -164                | 1670       |
+| G93          | 33450          | 33052         | 398   | -796                | -284                | 1670       |
+
+Boot margins use 32256 bytes; full margins use 32768. Free RAM before
+stack is unchanged at 378 bytes. An independent data-only reader checks
+all six ELF section sizes, the exact normal-link overflow messages and
+both complete flag-off ELF identities against selector. The saving is
+real, but neither enabled build fits even without a bootloader. Stack
+high-water, startup, motion stops and AVR timing remain unmeasured.
+
+#### Native parser identity and remaining error
+
+Reference, scratch-off and scratch each emit 136 curves and 27528
+targets: 33 ordinary/steep, 18 derived and 17 directed cases under each
+of actual G94 and G93. Directed cases include G5.1, modal and implicit
+I/J/P/Q handling, G20, G91, G92 and constant Z. Thirty-two negative
+controls and two identity-mode positive controls pass.
+
+Independent verification covers **408 curves and 82584 targets**,
+including frozen revisions and input/executable hashes. Every raw XYZ,
+feed and condition word, parsed start/control net and all twelve
+summary words match selector. There is no XY-only or eight-piece
+identity waiver for parser scratch. Native execution is headless, not
+an ISR scheduling test.
+
+| Corpus         | Curves per mode | Maximum raw Z error, mm | Curves above 0.002 | Maximum G93 relative time error |
+| -------------- | --------------- | ----------------------- | ----------------- | ------------------------------- |
+| Ordinary/steep | 33              | 0.00236027308           | 3                 | 0.000154632                     |
+| Derived        | 18              | 0.01222020580           | 2                 | 0.000153383                     |
+| Directed       | 17              | 0.00009336692           | 0                 | 0.000094527                     |
+
+Z errors use the actual emitted XY chord lengths, without a rounding
+allowance or cap waiver. These unchanged excesses and nonzero G93 time
+errors are not acceptance of the common tolerance or exact inverse
+time. All three general vector runs also retain the same failing
+diagnostics, with exit status 1:
+`675 checks: 75 pass, 19 FAIL, 12 xfail, 0 XPASS`.
+Diagnostic identity is not an all-tests-pass result.
+
+**Result:** parser storage reuse saves 378 / 398 flash bytes without
+changing the checked native outputs. It does not make this selector
+runnable on ATmega328P. Startup, non-backpressure gaps and ordinary-motion
+recovery remain unresolved; no Pareto winner, default or merge is chosen.
+
 ### One-pass selector: native policy checks pass, AVR fit fails
 
 [CI run 45517272539](https://github.com/kimstik/grbl/actions/runs/45517272539),
