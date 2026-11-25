@@ -1,6 +1,7 @@
 /* Read-only, host-side observer for an uninstrumented dyn.elf.
  * The AVR ABI and spline state layout below must be checked against each build.
  * Run with --blind as a control: UART bytes, their cycles and final cycle must match.
+ * --net-abi selects the six-argument parser-scratch ABI; nine arguments are the default.
  * No SRAM, flash, register or peripheral state is written by the observer.
  */
 #include <inttypes.h>
@@ -71,9 +72,9 @@ static uint16_t word(const avr_t *avr, unsigned address)
   return avr->data[address] | (uint16_t)avr->data[address + 1] << 8;
 }
 
-static uint16_t pointer(const avr_t *avr, unsigned reg, unsigned size)
+static uint16_t pointer(const avr_t *avr, unsigned source, unsigned size)
 {
-  uint16_t address = word(avr, reg);
+  uint16_t address = word(avr, source);
   if (address < 0x100 || (uint32_t)address + size > (uint32_t)avr->ramend + 1) {
     die("argument outside SRAM; check the ELF ABI");
   }
@@ -104,14 +105,19 @@ typedef struct {
 
 int main(int argc, char **argv)
 {
-  if (argc < 5 || argc > 6 || (argc == 6 && strcmp(argv[5], "--blind"))) {
-    fprintf(stderr, "usage: observe dyn.elf events.txt uart.txt max_cycles [--blind]\n");
+  if (argc < 5 || argc > 7) {
+    fprintf(stderr, "usage: observe dyn.elf events.txt uart.txt max_cycles [--blind] [--net-abi]\n");
     return 2;
+  }
+  int blind = 0, net_abi = 0;
+  for (int i = 5; i < argc; i++) {
+    if (!strcmp(argv[i], "--blind") && !blind) { blind = 1; }
+    else if (!strcmp(argv[i], "--net-abi") && !net_abi) { net_abi = 1; }
+    else { fprintf(stderr, "observe: unknown or duplicate flag %s\n", argv[i]); return 2; }
   }
   char *end;
   uint64_t limit = strtoull(argv[4], &end, 10);
   if (!limit || *end) { die("invalid cycle limit"); }
-  int blind = argc == 6;
   elf_firmware_t fw = {0};
   if (elf_read_firmware(argv[1], &fw)) { die("cannot load ELF"); }
   avr_t *avr = avr_make_mcu_by_name("atmega328p");
@@ -169,10 +175,13 @@ int main(int argc, char **argv)
           in_curve = 1; curve++; point = 0; segments = call.segments;
           fprintf(events, "curve %" PRIu32 " %u %u %" PRIu64 " %u", curve,
                   avr->data[prog], word(avr, pi), (uint64_t)avr->cycle, segments);
-          raw_floats(avr, pointer(avr, 16, 12), 3); /* position */
-          raw_floats(avr, pointer(avr, 14, 8), 2);  /* first */
-          raw_floats(avr, pointer(avr, 12, 8), 2);  /* second */
-          raw_floats(avr, pointer(avr, 10, 12), 3); /* target */
+          /* position, first, second, target; AVR pointers are two bytes. */
+          const unsigned count[4] = {3, 2, 2, 3};
+          uint16_t control[4], net = net_abi ? pointer(avr, 16, 8) : 0;
+          for (unsigned i = 0; i < 4; i++) {
+            control[i] = pointer(avr, net_abi ? net + 2*i : 16 - 2*i, 4*count[i]);
+          }
+          for (unsigned i = 0; i < 4; i++) { raw_floats(avr, control[i], count[i]); }
           fputc('\n', events);
         }
         if (!in_curve || call.segments != segments) { die("helper outside known curve"); }

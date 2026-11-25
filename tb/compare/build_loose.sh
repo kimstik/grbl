@@ -17,6 +17,7 @@ failed=0
 for mode in g94 g93; do
   inverse=''; [ "$mode" != g93 ] || inverse=-DBEZIER_EXACT_INVERSE_TIME
   opts="$common $inverse"
+  printf '%s %s\n' "$mode" "$opts $extra" >> raw/options.txt
   mkdir -p "elf/$mode" "source/build"
   # With the experiment disabled, each arm must retain the baseline image.
   make -s clean > "raw/identity-base-$mode.log" 2>&1

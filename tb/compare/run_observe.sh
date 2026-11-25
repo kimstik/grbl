@@ -32,7 +32,9 @@ for arm in "${arms[@]}"; do
   cp "$input/raw/observer-symbols-$mode.txt" "$dir/symbols.txt"
   sha256sum "$elf" > "$dir/elf-sha256.txt"
   for control in observed blind; do
-    args=(); [ "$control" != blind ] || args=(--blind)
+    args=()
+    [ "$arm" != square ] || args+=(--net-abi)
+    [ "$control" != blind ] || args+=(--blind)
     timeout 360 nice -n 19 build/observe "$elf" "$dir/$control.txt" \
       "$dir/$control-uart.txt" 600000000 "${args[@]}" > "$dir/$control-run.txt" 2>&1
   done
@@ -52,7 +54,7 @@ for arm in "${arms[@]}"; do
     baseline=(--baseline "$out/$reference/observed.txt" \
       --baseline-uart "$out/$reference/observed-uart.txt")
     case $arm in
-      quadrature|fixed|seed) baseline+=(--xy-only) ;;
+      quadrature|fixed|seed|square) baseline+=(--xy-only) ;;
       refill) ;; # Scheduling only: require the fixed arm's full target identity.
       *) baseline+=(--require-prefetch) ;;
     esac

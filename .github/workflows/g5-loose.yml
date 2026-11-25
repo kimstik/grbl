@@ -34,6 +34,11 @@ on:
         required: false
         type: boolean
         default: false
+      square_motion:
+        description: 'Frozen square startup, raw accuracy and live motion against baseline/fixed/refill'
+        required: false
+        type: boolean
+        default: false
 
 defaults:
   run:
@@ -41,29 +46,29 @@ defaults:
 
 jobs:
   square:
-    if: ${{ inputs.square }}
+    if: ${{ inputs.square && !inputs.square_motion }}
     uses: ./.github/workflows/g5-parser.yml
     with:
       family: square
 
   chords:
-    if: ${{ inputs.chords && !inputs.square }}
+    if: ${{ inputs.chords && !inputs.square && !inputs.square_motion }}
     uses: ./.github/workflows/g5-parser.yml
     with:
       family: chords
 
   rms:
-    if: ${{ inputs.rms && !inputs.chords && !inputs.square }}
+    if: ${{ inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion }}
     uses: ./.github/workflows/g5-parser.yml
     with:
       family: rms
 
   parser-scratch:
-    if: ${{ inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square }}
+    if: ${{ inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion }}
     uses: ./.github/workflows/g5-parser.yml
 
   avr:
-    if: ${{ !inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square }}
+    if: ${{ inputs.square_motion || (!inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square) }}
     runs-on: ubuntu-24.04
     container: archlinux:latest
     strategy:
@@ -79,20 +84,26 @@ jobs:
           - arm: refill
             ref: 8672b8f5091b0df7d0a8a34216d0cde8bb75d2ce
             extra: -DBEZIER_Z_FIXED -DBEZIER_Z_REFILL
-          - arm: seed
-            ref: fbea6f2456e48306d3bb8f6b5e49366b1ba94357
-            extra: -DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_Z_SEED
+          - arm: ${{ inputs.square_motion && 'square' || 'seed' }}
+            ref: ${{ inputs.square_motion && 'a783b670fb96484c8bcd6e7aea94adb8b5172bf0' || 'fbea6f2456e48306d3bb8f6b5e49366b1ba94357' }}
+            extra: ${{ inputs.square_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS' || '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_Z_SEED' }}
     name: avr 16.2 ${{ matrix.arm }}
     steps:
       - name: Pinned AVR tools
         run: |
           set -euo pipefail
-          pacman -Syu --noconfirm --needed git make diffutils bash python
+          pacman -Syu --noconfirm --needed git make diffutils bash python curl
           a=https://archive.archlinux.org/packages/a
-          pacman -U --noconfirm \
-            $a/avr-binutils/avr-binutils-2.47-1-x86_64.pkg.tar.zst \
-            $a/avr-gcc/avr-gcc-16.2.0-1-x86_64.pkg.tar.zst \
-            $a/avr-libc/avr-libc-2.3.2-4-any.pkg.tar.zst
+          mkdir -p "$RUNNER_TEMP/avr-packages"
+          for package in \
+            avr-binutils/avr-binutils-2.47-1-x86_64.pkg.tar.zst \
+            avr-gcc/avr-gcc-16.2.0-1-x86_64.pkg.tar.zst \
+            avr-libc/avr-libc-2.3.2-4-any.pkg.tar.zst; do
+            curl --fail --location --ipv4 --http1.1 --retry 2 --retry-delay 5 \
+              --connect-timeout 20 --max-time 120 \
+              --output "$RUNNER_TEMP/avr-packages/${package##*/}" "$a/$package"
+          done
+          pacman -U --noconfirm "$RUNNER_TEMP"/avr-packages/*.pkg.tar.zst
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -101,6 +112,17 @@ jobs:
           path: source
       - name: Matched production images and measurement binaries
         run: timeout 1200 nice -n 19 bash tb/compare/build_loose.sh '${{ matrix.arm }}' '${{ matrix.extra }}'
+      - name: Require square boot-region fit separately from motion evidence
+        if: ${{ inputs.square_motion && matrix.arm == 'square' }}
+        run: |
+          python3 -I - <<'PY'
+          from pathlib import Path
+          rows = [line.split() for line in Path('raw/sizes.txt').read_text().splitlines()[1:]]
+          assert len(rows) == 2 and {row[1] for row in rows} == {'g94', 'g93'}
+          for row in rows:
+              print(f'{row[1]}: flash={row[2]}, boot margin={row[5]}, full fit={row[6]}, boot fit={row[7]}', flush=True)
+          assert all(row[0] == 'square' and int(row[2]) <= 32256 and row[6:] == ['yes', 'yes'] for row in rows), 'square exceeds ATmega328P boot flash region'
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -111,12 +133,12 @@ jobs:
 
   simavr:
     needs: avr
-    if: ${{ !cancelled() && !inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square }}
+    if: ${{ !cancelled() && (inputs.square_motion || (!inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)) }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        arm: [baseline, fixed, refill, seed]
+        arm: ${{ fromJSON(inputs.square_motion && '["baseline","fixed","refill","square"]' || '["baseline","fixed","refill","seed"]') }}
         mode: [g94, g93]
         include:
           - arm: baseline
@@ -128,9 +150,9 @@ jobs:
           - arm: refill
             ref: 8672b8f5091b0df7d0a8a34216d0cde8bb75d2ce
             extra: -DBEZIER_Z_FIXED -DBEZIER_Z_REFILL
-          - arm: seed
-            ref: fbea6f2456e48306d3bb8f6b5e49366b1ba94357
-            extra: -DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_Z_SEED
+          - arm: ${{ inputs.square_motion && 'square' || 'seed' }}
+            ref: ${{ inputs.square_motion && 'a783b670fb96484c8bcd6e7aea94adb8b5172bf0' || 'fbea6f2456e48306d3bb8f6b5e49366b1ba94357' }}
+            extra: ${{ inputs.square_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS' || '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_Z_SEED' }}
     name: simavr ${{ matrix.arm }} ${{ matrix.mode }}
     steps:
       - uses: actions/checkout@v4
@@ -157,7 +179,7 @@ jobs:
 
   identity:
     needs: simavr
-    if: ${{ !cancelled() && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square }}
+    if: ${{ !cancelled() && (inputs.square_motion || (!inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)) }}
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -178,11 +200,17 @@ jobs:
           set -euo pipefail
           mkdir -p raw
           failed=0
+          arms=(refill seed)
+          if [ '${{ inputs.square_motion }}' = true ]; then arms=(refill square); fi
           for mode in g94 g93; do
-            for arm in refill seed; do
+            for arm in "${arms[@]}"; do
               reference=fixed
               extra=()
               if [ "$arm" = seed ]; then reference=refill; extra=(--xy-only); fi
+              if [ "$arm" = square ]; then
+                reference=refill
+                [ "$mode" != g94 ] || extra=(--xy-only)
+              fi
               current="input/loose-simavr-$arm-$mode"
               previous="input/loose-simavr-$reference-$mode"
               log="raw/identity-$arm-$mode.txt"
@@ -205,7 +233,7 @@ jobs:
 
   observe:
     needs: avr
-    if: ${{ !cancelled() && !inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square }}
+    if: ${{ !cancelled() && (inputs.square_motion || (!inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)) }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -233,15 +261,15 @@ jobs:
           path: input/refill
       - uses: actions/download-artifact@v4
         with:
-          name: loose-avr-seed
-          path: input/seed
+          name: loose-avr-${{ inputs.square_motion && 'square' || 'seed' }}
+          path: input/${{ inputs.square_motion && 'square' || 'seed' }}
       - name: Host observer dependencies
         run: |
           set -euo pipefail
           sudo apt-get update -q
           sudo apt-get install -y -q --no-install-recommends gcc make pkg-config libelf-dev gcc-avr avr-libc
       - name: Compare initial-pass policies and refill identity with blind controls
-        run: timeout 3000 nice -n 19 bash tb/compare/run_observe.sh '${{ matrix.mode }}' baseline fixed refill seed
+        run: timeout 3000 nice -n 19 bash tb/compare/run_observe.sh '${{ matrix.mode }}' baseline fixed refill '${{ inputs.square_motion && 'square' || 'seed' }}'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -249,7 +277,7 @@ jobs:
           path: raw
 
   selector-native:
-    if: ${{ inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square }}
+    if: ${{ inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     name: selector native identity
@@ -283,7 +311,7 @@ jobs:
           path: raw/native
 
   selector-avr:
-    if: ${{ inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square }}
+    if: ${{ inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion }}
     runs-on: ubuntu-24.04
     container: archlinux:latest
     timeout-minutes: 20
@@ -296,12 +324,18 @@ jobs:
       - name: Pinned AVR tools
         run: |
           set -euo pipefail
-          pacman -Syu --noconfirm --needed git make diffutils bash python
+          pacman -Syu --noconfirm --needed git make diffutils bash python curl
           a=https://archive.archlinux.org/packages/a
-          pacman -U --noconfirm \
-            $a/avr-binutils/avr-binutils-2.47-1-x86_64.pkg.tar.zst \
-            $a/avr-gcc/avr-gcc-16.2.0-1-x86_64.pkg.tar.zst \
-            $a/avr-libc/avr-libc-2.3.2-4-any.pkg.tar.zst
+          mkdir -p "$RUNNER_TEMP/avr-packages"
+          for package in \
+            avr-binutils/avr-binutils-2.47-1-x86_64.pkg.tar.zst \
+            avr-gcc/avr-gcc-16.2.0-1-x86_64.pkg.tar.zst \
+            avr-libc/avr-libc-2.3.2-4-any.pkg.tar.zst; do
+            curl --fail --location --ipv4 --http1.1 --retry 2 --retry-delay 5 \
+              --connect-timeout 20 --max-time 120 \
+              --output "$RUNNER_TEMP/avr-packages/${package##*/}" "$a/$package"
+          done
+          pacman -U --noconfirm "$RUNNER_TEMP"/avr-packages/*.pkg.tar.zst
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
