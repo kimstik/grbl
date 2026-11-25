@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Full raw identity for parser scratch; not AVR timing or tolerance certification."""
+"""Full corpus identity for parser scratch or RMS; not AVR timing or certification."""
 import argparse
 import hashlib
 import importlib.util
@@ -53,6 +53,7 @@ def main():
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--make', default='make')
     parser.add_argument('--cc', default='gcc')
+    parser.add_argument('--family', choices=('parser', 'rms'), default='parser')
     args = parser.parse_args()
     checker.controls()
     out = args.output.resolve()
@@ -77,14 +78,23 @@ def main():
         return process.stdout.decode('ascii')
 
     result = {'notice': 'Native raw identity only; no AVR timing, stack or tolerance certificate.',
+              'family': args.family,
               'controls': '32 negative and two positive controls passed', 'sigma_mm': checker.SIGMA,
               'source': {}, 'corpora': {}, 'vectors': {}}
     result['harness'] = success(['git', '-C', HERE, 'rev-parse', 'HEAD'], 'harness').strip()
     success([args.cc, '--version'], 'compiler')
     success([args.make, '--version'], 'make')
     executables = {}
-    variants = (('reference', args.reference, ''), ('scratch-off', args.candidate, ''),
-                ('scratch', args.candidate, ' -DBEZIER_PARSER_SCRATCH'))
+    if args.family == 'rms':
+        common_extra = ' -DBEZIER_PARSER_SCRATCH'
+        variants = (('reference', args.reference, common_extra),
+                    ('rms-off', args.candidate, common_extra),
+                    ('rms', args.candidate, common_extra + ' -DBEZIER_Z_RMS'))
+        candidate = 'rms'
+    else:
+        variants = (('reference', args.reference, ''), ('scratch-off', args.candidate, ''),
+                    ('scratch', args.candidate, ' -DBEZIER_PARSER_SCRATCH'))
+        candidate = 'scratch'
     for name, source, extra in variants:
         source = source.resolve()
         revision = success(['git', '-C', source, 'rev-parse', 'HEAD'], name + '-revision').strip()
@@ -118,7 +128,7 @@ def main():
                 text = success([emit, input_file], f'{name}-{corpus}-{mode}', seconds=45)
                 decoded[name] = checker.decode(text, commands, mode)
                 checker.identity(decoded[name], decoded['reference'])
-            current = decoded['scratch']
+            current = decoded[candidate]
             key = f'{corpus}/{mode}'
             result['corpora'][key] = {'curves': expected, 'targets': sum(len(c['raw']) for c in current),
                                       'identity': 'all five target words, start/net and all 12 summary words',
@@ -126,7 +136,7 @@ def main():
                                       'over_002': sum(c['z_mm'] > checker.SIGMA for c in current),
                                       'max_g93_relative': max((c['g93_relative'] or 0) for c in current),
                                       'input_sha256': hashlib.sha256(input_file.read_bytes()).hexdigest()}
-            print(f'{key}: {expected} curves, scratch and scratch-off full raw identity PASS', flush=True)
+            print(f'{key}: {expected} curves, {candidate} and {candidate}-off full raw identity PASS', flush=True)
 
     vectors = sorted((HERE.parent / 'host/vectors').glob('*.vec'))
     vector_reference = None
@@ -142,8 +152,8 @@ def main():
                                    'stdout_sha256': hashlib.sha256(process.stdout).hexdigest(),
                                    'stderr_sha256': hashlib.sha256(process.stderr).hexdigest()}
     (out / 'metrics.json').write_text(json.dumps(result, indent=2) + '\n', encoding='ascii')
-    print('Vector diagnostic identity PASS; ' + result['vectors']['scratch']['summary'], flush=True)
-    print('Native parser identity PASS; vector failures, if present, are retained, not waived as passing tests.', flush=True)
+    print('Vector diagnostic identity PASS; ' + result['vectors'][candidate]['summary'], flush=True)
+    print(f'Native {args.family} identity PASS; vector failures, if present, are retained, not waived as passing tests.', flush=True)
 
 
 if __name__ == '__main__':

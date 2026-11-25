@@ -7,6 +7,7 @@ family=${2:-selector}
 case "$family" in
   selector) sources='baseline refill select'; variants='baseline macro-off refill selector-off select' ;;
   parser) sources='select frame'; variants='reference scratch-off scratch' ;;
+  rms) sources='frame rms'; variants='reference rms-off rms' ;;
   *) exit 2 ;;
 esac
 root=$PWD
@@ -18,7 +19,9 @@ git rev-parse HEAD > "$out/harness.txt"
 for arm in $sources; do
   git -C "$arm" rev-parse HEAD > "$out/source-$arm.txt"
 done
-cc=$(make -s -C select --eval 'print-compile: ; @echo $(COMPILE)' print-compile)
+compiler_source=select
+[ "$family" != rms ] || compiler_source=frame
+cc=$(make -s -C "$compiler_source" --eval 'print-compile: ; @echo $(COMPILE)' print-compile)
 common='-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3 -DBEZIER_Z_LOOSE'
 [ "$mode" != g93 ] || common="$common -DBEZIER_EXACT_INVERSE_TIME"
 fixed='-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL'
@@ -33,7 +36,12 @@ for variant in $variants; do
     select|reference) extra="$fixed -DBEZIER_Z_SELECT" ;;
     scratch-off) source=frame; extra="$fixed -DBEZIER_Z_SELECT" ;;
     scratch) source=frame; extra="$fixed -DBEZIER_Z_SELECT -DBEZIER_PARSER_SCRATCH" ;;
+    rms-off) source=rms; extra="$fixed -DBEZIER_Z_SELECT -DBEZIER_PARSER_SCRATCH" ;;
+    rms) source=rms; extra="$fixed -DBEZIER_Z_SELECT -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_RMS" ;;
   esac
+  if [ "$family" = rms ] && [ "$variant" = reference ]; then
+    source=frame; extra="$fixed -DBEZIER_Z_SELECT -DBEZIER_PARSER_SCRATCH"
+  fi
   build="$root/build-$family/$mode/$variant"
   printf '%s\n' "$cc $common $extra" > "$out/$variant-compile.txt"
   # Never reuse artifacts from a different source or option set.
@@ -42,7 +50,7 @@ for variant in $variants; do
   normal=yes
   if ! make -s -j1 -C "$source" BUILDDIR="$build" COMPILE="$cc $common $extra" \
       "$build/main.elf" > "$out/$variant-normal.log" 2>&1; then
-    [ "$variant" = select ] || [ "$family" = parser ] || { cat "$out/$variant-normal.log"; exit 1; }
+    [ "$variant" = select ] || [ "$family" != selector ] || { cat "$out/$variant-normal.log"; exit 1; }
     normal=no
     # Link the same objects only to inspect size/disassembly; not a valid 328P image.
     make -s -j1 -C "$source" BUILDDIR="$build" \
@@ -52,7 +60,7 @@ for variant in $variants; do
   cp "$build/main.elf" "$out/$variant.elf"
   avr-size -B "$out/$variant.elf" > "$out/$variant-size.txt"
   avr-nm -n -S "$out/$variant.elf" > "$out/$variant-symbols.txt"
-  if [ "$variant" = select ] || [ "$family" = parser ]; then
+  if [ "$variant" = select ] || [ "$family" != selector ]; then
     avr-objdump -d "$out/$variant.elf" > "$out/$variant-disassembly.txt"
   else
     avr-objcopy -j .text -j .data -O ihex "$out/$variant.elf" "$out/$variant.hex"
@@ -75,9 +83,12 @@ if [ "$family" = selector ]; then
   printf '%s\n' 'macro-off: identical to frozen baseline' > "$out/identity.txt"
   cmp "$out/refill.hex" "$out/selector-off.hex"
   printf '%s\n' 'selector-off: identical to frozen refill' >> "$out/identity.txt"
-else
+elif [ "$family" = parser ]; then
   cmp "$out/reference.elf" "$out/scratch-off.elf"
   printf '%s\n' 'scratch-off: static ELF identical to frozen selector' > "$out/identity.txt"
+else
+  cmp "$out/reference.elf" "$out/rms-off.elf"
+  printf '%s\n' 'rms-off: static ELF identical to frozen parser scratch' > "$out/identity.txt"
 fi
 cat "$out/identity.txt" "$out/sizes.txt"
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
