@@ -421,6 +421,101 @@ with the full evidence suite. The cap/error/default choices remain open.
 
 ## Z by an estimate of the length ahead
 
+### Point cache: faster generation, failed stack and motion gates
+
+Frozen cache source 8dc5a6a stores the two XY axes' invariant Horner
+coefficients in the consumed parser workspace, replacing the original
+control points and net pointers. The workspace remains 36 bytes; target
+XYZ and modal state stay outside. Original maximum absolute XY coordinates
+are saved before the overlay for the unchanged coordinate-risk fallback.
+The estimator, segment policy, final endpoint and realtime sites are
+unchanged from workspace 15b7cb8.
+
+Coefficient formation is separate from Wang's squared-second-difference
+loop. Under fast-math, reusing an already rounded second difference for
+`e1 - e0` changed G5.1 points by one ULP. The corrected cache preserves
+the original operation tree on the tested native and AVR compilers;
+bit identity is verified, not inferred from algebraic equivalence.
+
+[CI 45594256814](https://github.com/kimstik/grbl/actions/runs/45594256814),
+harness fbe0098, finishes **failed, 13/16 jobs passing**. Compilation
+succeeds. The failing gates are cache production boot fit and both cache
+production-stack budgets, not compilation or raw-output identity. Native
+identity, both observations and raw AVR target identity pass.
+
+Independent data-only verification decodes 408 native curves and 82584
+targets across reference, cache-off and cache builds: all five raw target
+words, parsed start/control net and all twelve native summary words match,
+including actual G93 and constant Z. The 32 negative and two positive
+identity controls pass. General vectors remain **not passing**:
+`675 checks: 77 pass, 17 FAIL, 12 xfail, 0 XPASS`; their diagnostics are
+unchanged, not waived. The eighteen-curve AVR dumps retain full raw
+XYZ/feed/condition, estimator trace and output-summary identity to
+workspace in both modes. Runtime cycle fields may change and are not
+identity fields. Both retained POINT_CACHE-off HEX images independently
+match workspace production; all eight retained experiment-off images
+independently match baseline production.
+
+| Variant   | Flash G94/G93 | Boot margin G94/G93 | Static RAM | Stack G94/G93 | Stack margin G94/G93 |
+| --------- | ------------- | ------------------- | ---------- | ------------- | -------------------- |
+| Baseline  | 31850/31950   | 406/306             | 1670       | 334/334       | 44/44                |
+| Workspace | 32388/32506   | -132/-250           | 1670       | 360/362       | 18/16                |
+| Cache     | 32384/32526   | -128/-270           | 1670       | 384/384       | -6/-6                |
+
+Production images fit the full 32768 bytes, not the unchanged 32256-byte
+boot region. Cache saves four flash bytes in G94 but costs twenty in G93;
+the earlier provisional flash saving did not survive the identity fix.
+Static RAM is unchanged, yet measured stack grows by 24/22 bytes over
+workspace. The dynamic bench shrinks serial buffers to measure this
+usage: negative production margin is a budget failure, not evidence of
+bench SRAM corruption. These are workload watermarks, not worst-case
+stack proofs. Downloaded executables are never run locally.
+
+The host-only observer captures original control-point bits at the
+four-argument driver entry, before the overlay, and emits the existing
+curve record at the first seven-argument helper call. Default nine-argument
+and six-argument-net paths remain available. Observation never writes AVR
+state. Eight same-ELF observed/blind pairs match final cycles/state,
+UART bytes and per-byte timing hash; the simulator revision is pinned.
+All live commands are G94 in both compile modes.
+
+| G94 case / measurement                | Workspace | Cache   |
+| ------------------------------------- | --------- | ------- |
+| S10/Z-3 headless first, ms             | 23.457    | 19.458  |
+| Long S headless first, ms              | 22.698    | 18.996  |
+| Long S headless maximum gap, ms        | 0.494     | 0.383   |
+| Long S headless generator, ms          | 715.571   | 571.643 |
+| S10/Z-30/F5000 live maximum first, ms   | 46.225    | 37.741  |
+| S20/Z-10/F5000 live maximum first, ms   | 30.134    | 26.524  |
+| S60/Z-30/F5000 live maximum first, ms   | 37.936    | 31.126  |
+| S60/Z-30/F1000 live maximum first, ms   | 31.278    | 30.798  |
+
+Headless generation excludes a running stepper; it is not live startup.
+Cache improves first-target latency in these four live chains, but their
+maximum target gaps are 10.979, 7.702, 9.861 and 48.399 ms versus workspace
+10.948, 6.817, 9.850 and 48.415 ms. A target gap alone does not establish
+starvation; the largest cache gap is not classified here. Pure-Z headless
+first latency regresses from 0.805 to 0.956 ms.
+
+| Variant   | Ordinary stops G94/G93 | Queued stops G94/G93 |
+| --------- | --------------------- | -------------------- |
+| Baseline  | 4/9                   | 3/5                  |
+| Workspace | 17/18                 | 0/1                  |
+| Cache     | 19/21                 | 6/8                  |
+
+The ordinary sweep has 40 programs. Cache retains zero stops in all four
+steep programs and passes six hold/resume checks, but ordinary stops
+increase. Queued-stop count and queued entry feed are not consumed
+stepper endpoint velocity; they do not establish abrupt or smooth motion.
+
+Accuracy is identical to workspace: the twelve observed curves reach
+0.000197911415 mm Z error. The eighteen derived curves still reach
+0.011884512438 mm in G94 and 0.012220205797 mm in actual G93, with two above
+0.002 mm in each mode. Exact G93 remains unmet. The cache demonstrates a
+real generation/startup benefit, but fails production flash/stack and
+regresses ordinary stops. Preserve it as an experimental direction,
+not a production winner, default change or closure of motion objectives.
+
 ### Parser workspace: measured stack recovery, flash still over budget
 
 Frozen workspace source 15b7cb8 reuses the consumed parser-word prefix
