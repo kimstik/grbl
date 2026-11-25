@@ -768,6 +768,11 @@
   // staircases. The selected pass and the existing coordinate-risk fallback are still
   // heuristics, not a guarantee of BEZIER_Z_SIGMA. G93 retains the fixed-sixteen policy.
   // #define BEZIER_Z_SELECT
+  // Experimental parser frame reduction: reuse consumed I,J and P,Q words for planar
+  // control points and keep the spline driver out of the parser frame. Mode 3 passes
+  // one local control-point pointer array to its estimator. Arithmetic and saved offsets
+  // for implicit G5 are unchanged; nested frames still need a full stack measurement.
+  // #define BEZIER_PARSER_SCRATCH
   // Experimental mode 3 scheduling: service realtime after each intermediate target is
   // queued, before calculating the next one. The earlier realtime calls remain in place.
   // This changes foreground refill timing, not the path, and does not guarantee no stops.

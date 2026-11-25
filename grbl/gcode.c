@@ -1191,9 +1191,15 @@ uint8_t gc_execute_line(char *line)
               || (gc_state.modal.motion == MOTION_MODE_QUADRATIC_SPLINE)
 #endif
               ) {
+#ifdef BEZIER_PARSER_SCRATCH
+        // I,J and P,Q have been consumed, including the saved offsets for implicit G5.
+        // Reuse their storage for planar control points, not another sixteen stack bytes.
+        float *cp1 = gc_block.values.ijk, *cp2 = gc_block.values.spline_cp2;
+#else
         // One call for G5 and G5.1: the compiler then inlines mc_cubic_b_spline here, as it does
         // mc_arc, and its locals share this frame instead of stacking a frame of their own on it.
         float cp1[2], cp2[2]; // X and Y only, the curve is planar
+#endif
 
         if (gc_state.modal.motion == MOTION_MODE_CUBIC_SPLINE) {
           // Execute cubic B-spline (G5)

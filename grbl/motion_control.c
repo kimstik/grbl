@@ -403,9 +403,10 @@ void mc_reset()
   #define Z_TRACE(what)
 #endif
 
-// Z of the curve under way. Static, and the functions below not inlined: mc_cubic_b_spline ends
-// up inside gc_execute_line, whose frame is under the planner when the stack is deepest and costs
-// flash for every byte that pushes others out of short reach.
+// Z of the curve under way. Static, and the functions below not inlined: without
+// BEZIER_PARSER_SCRATCH, mc_cubic_b_spline ends up inside gc_execute_line. That frame stays
+// under the planner and costs flash when its locals move out of short displacement reach.
+// The experimental separate driver trades parser locals for nested frames, not free stack.
 typedef struct {
   float step;      // Of the curve parameter from one point of the polyline to the next
   float rest;      // Estimate of the length of the polyline from the point in hand to the end
@@ -507,6 +508,16 @@ static uint8_t mc_spline_select(spline_z_t *z, float **net, uint16_t segments)
 // With BEZIER_Z_LOOSE no more than those pieces are ever gone through ahead: a bracket that the
 // most of them leave too wide is used as it is, and the length is found again when half of the
 // segments are left.
+#ifdef BEZIER_PARSER_SCRATCH
+static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segments,
+                              float **net, plan_line_data_t *pl_data)
+                              __attribute__((noinline, noclone));
+static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segments,
+                              float **net, plan_line_data_t *pl_data)
+{
+  float *position = net[0], *first = net[1], *second = net[2], *target = net[3];
+  float q[4], r[4], a, b, *from;
+#else
 static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segments,
                               float *position, float *first, float *second, float *target,
                               plan_line_data_t *pl_data) __attribute__((noinline, noclone));
@@ -521,6 +532,7 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
 #else
   float q[4], r[4], a, b, *from;
   float *net[4] = { position, first, second, target };
+#endif
 #endif
   uint16_t m;
 #ifdef BEZIER_Z_FIXED
@@ -734,6 +746,11 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
 // This holds both ways (curve to segments and segments to curve) for any shape: inflections,
 // cusps and coincident control points need no special case. Points are evaluated by Horner's
 // rule relative to the start point; the last one is target itself, bit for bit.
+#ifdef BEZIER_PARSER_SCRATCH
+// Keep the spline's temporaries out of the parser's short-displacement frame.
+void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position,
+                       float *first, float *second) __attribute__((noinline, noclone));
+#endif
 void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position,
                        float *first, float *second)
 {
@@ -782,10 +799,17 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
   // first one is due at once, and finds out whether there is a Z word at all.
   spline_z.next = segments;
   spline_z.pieces = 0;
+#ifdef BEZIER_PARSER_SCRATCH
+  float *net[4] = { position, first, second, target };
+#endif
 #endif
   for (j = 1; j < segments; j++) {
 #if BEZIER_Z_LINEAR == 3
+#ifdef BEZIER_PARSER_SCRATCH
+    while (mc_spline_next(&spline_z, p, j, segments, net, pl_data)) {
+#else
     while (mc_spline_next(&spline_z, p, j, segments, position, first, second, target, pl_data)) {
+#endif
       // A piece of an estimate queues no block, so mc_line is not there to keep the stepper fed.
       protocol_execute_realtime();
       if (sys.abort) { return; }

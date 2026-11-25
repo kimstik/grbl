@@ -210,11 +210,18 @@ typedef struct {
   float ijk[3];    // I,J,K Axis arc offsets
   uint8_t l;       // G10 or canned cycles parameters
   int32_t n;       // Line number
+#if defined(ENABLE_CUBIC_SPLINES) && defined(BEZIER_PARSER_SCRATCH)
+  union {
+    struct { float p, q; }; // Parsed words, no longer needed when the spline is executed
+    float spline_cp2[2];   // Second control point; P,Q offsets are already in gc_state
+  };
+#else
   float p;         // G10 or dwell parameters
 #ifdef ENABLE_CUBIC_SPLINES
   float q;         // G5 cubic spline Q parameter
 #else
   // float q;      // G82 peck drilling (not implemented)
+#endif
 #endif
   float r;         // Arc radius
   float s;         // Spindle speed
