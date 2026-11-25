@@ -466,6 +466,14 @@ static void mc_spline_point(float *p, float t, float s, float **net)
   #define SPLINE_POINT(p,t,s) mc_spline_point(p,t,s,net)
 #endif
 
+#ifdef BEZIER_Z_NORM
+// Return the distance; fixed-pass callers keep only the sums they still need.
+static float mc_spline_dist(float *a, float *b) __attribute__((noinline));
+static float mc_spline_dist(float *a, float *b)
+{
+  return(hypot_f(a[X_AXIS] - b[X_AXIS], a[Y_AXIS] - b[Y_AXIS]));
+}
+#else
 // The distance between two points in the XY plane, which is also added to a sum.
 static float mc_spline_dist(float *sum, float *a, float *b) __attribute__((noinline));
 static float mc_spline_dist(float *sum, float *a, float *b)
@@ -474,6 +482,7 @@ static float mc_spline_dist(float *sum, float *a, float *b)
   *sum += d;
   return(d);
 }
+#endif
 
 #ifdef BEZIER_Z_SELECT
 // One decision before the coarse pass. Wang's integrated second-difference energy models
@@ -575,7 +584,11 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
 #endif
     SPLINE_POINT(q, j*z->step, 0.0f);
     if (z->u != 0.0f) {
+#ifdef BEZIER_Z_NORM
+      a = mc_spline_dist(q, p);
+#else
       a = mc_spline_dist(&z->poly, q, p); // The chord of the segment. The sum is not in use.
+#endif
       b = a/z->rest;
       if (b < 0.999999f) { z->rest -= a; z->u -= b*z->u; } else { z->u = 0.0f; Z_TRACE(ends++); }
       p[Z_AXIS] = target[Z_AXIS] - z->u;
@@ -656,7 +669,11 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     SPLINE_POINT(r, b, 0.0f);
     if (z->next == 1) { memcpy(r, target, 2*sizeof(float)); }
 #endif
+#ifdef BEZIER_Z_NORM
+    z->rest += mc_spline_dist(r, &z->chord);
+#else
     mc_spline_dist(&z->rest, r, &z->chord);
+#endif
     Z_TRACE(summed++);
   } else {
 #ifndef BEZIER_Z_SELECT
@@ -675,10 +692,17 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     }
     if (a < 0.0f || b < 0.0f) { z->todo = m/2; return(true); }
     a = b = 0.0f;
+#ifdef BEZIER_Z_NORM
+    a += mc_spline_dist(r, q);
+    b += mc_spline_dist(q + 2, q);
+    b += mc_spline_dist(r + 2, q + 2);
+    b += mc_spline_dist(r, r + 2);
+#else
     mc_spline_dist(&a, r, q);
     mc_spline_dist(&b, q + 2, q);
     mc_spline_dist(&b, r + 2, q + 2);
     mc_spline_dist(&b, r, r + 2);
+#endif
 #ifdef BEZIER_Z_CHORDS
 #ifdef BEZIER_EXACT_INVERSE_TIME
     if (!(pl_data->condition & PL_COND_FLAG_INVERSE_TIME))
@@ -785,7 +809,11 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
   if (pl_data->condition & PL_COND_FLAG_INVERSE_TIME) {
     Z_TRACE(time = bezier_z_trace.half);
     z->chord = z->poly = 0.0f;
+#ifdef BEZIER_Z_NORM
+    pl_data->feed_rate *= mc_spline_dist(&z->rest, &z->chord);
+#else
     pl_data->feed_rate *= mc_spline_dist(&z->chord, &z->rest, &z->chord);
+#endif
     bit_false(pl_data->condition,PL_COND_FLAG_INVERSE_TIME);
   }
 #endif

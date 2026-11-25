@@ -788,6 +788,9 @@
   // The current point's Z slot holds the original coordinate maximum until the initial
   // estimate finishes; restore its Z before emitting the first point. No extra static RAM.
   // #define BEZIER_POINT_CACHE
+  // Experimental FIXED distance helper: return the norm without a sum side effect.
+  // Estimation keeps the same sums and order; emission has no live sum to update.
+  // #define BEZIER_Z_NORM
   // Experimental mode 3 scheduling: service realtime after each intermediate target is
   // queued, before calculating the next one. The earlier realtime calls remain in place.
   // This changes foreground refill timing, not the path, and does not guarantee no stops.
@@ -842,6 +845,9 @@
 #endif
 #if defined(BEZIER_POINT_CACHE) && (!defined(BEZIER_PARSER_WORKSPACE) || !defined(BEZIER_Z_FIXED) || defined(BEZIER_Z_SELECT))
   #error "BEZIER_POINT_CACHE requires BEZIER_PARSER_WORKSPACE and BEZIER_Z_FIXED, without BEZIER_Z_SELECT"
+#endif
+#if defined(BEZIER_Z_NORM) && (BEZIER_Z_LINEAR != 3 || !defined(BEZIER_Z_FIXED) || defined(BEZIER_Z_SELECT))
+  #error "BEZIER_Z_NORM requires BEZIER_Z_LINEAR 3 and BEZIER_Z_FIXED, without BEZIER_Z_SELECT"
 #endif
 #if BEZIER_Z_LINEAR == 3
   #if BEZIER_Z_PIECES < 1 || BEZIER_Z_PIECES > BEZIER_Z_PIECES_MAX || BEZIER_Z_PIECES_MAX > 64 || (BEZIER_Z_PIECES & (BEZIER_Z_PIECES-1)) || (BEZIER_Z_PIECES_MAX & (BEZIER_Z_PIECES_MAX-1))
