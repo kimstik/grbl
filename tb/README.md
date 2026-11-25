@@ -421,6 +421,107 @@ with the full evidence suite. The cap/error/default choices remain open.
 
 ## Z by an estimate of the length ahead
 
+### One-pass selector: native policy checks pass, AVR fit fails
+
+[CI run 45517272539](https://github.com/kimstik/grbl/actions/runs/45517272539),
+harness ee5c7ec, is **failed**, not accepted: native identity passes,
+while both AVR jobs fail their boot-region fit gate. Frozen sources are
+baseline 1f19d74, refill 8672b8f, seed fbea6f2 and selector 452c70d.
+The common goal remains **$12 = 0.002 mm**. The legacy simulations and
+motion jobs are deliberately skipped in this bounded run.
+
+#### Policy and scope
+
+The selector enables `BEZIER_Z_FIXED`, `BEZIER_Z_REFILL` and
+`BEZIER_Z_SELECT`. It chooses approximately eight or sixteen initial
+pieces before estimating length; it does not perform the seed's
+trial-eight pass followed by a retry. Existing reversal splitting,
+actual sums for short pieces and coordinate-risk fallback remain.
+There is no mid-curve estimate. Realtime service remains in the caller,
+after each leaf returns.
+
+The choice uses the already computed Wang differences e0 and e1,
+E = |e0|^2 + |e1|^2 + e0 dot e1, Lstar = (endpoint chord + control
+polygon length)/2 and h8 = ceil(N/8)/N. It selects eight when
+h8^2 E (|dz| + 2 sigma) <= 2 sigma Lstar^2 and the control-edge
+projections onto the endpoint chord have signs positive, nonnegative,
+positive. Otherwise it selects sixteen. The energy model and coordinate
+fallback are **heuristics, not rounded-XY error bounds**.
+
+Actual inverse-time commands always retain the refill sixteen-piece
+policy, including constant Z: the retained length also determines G93
+feed. This repairs the seed's cross-policy feed regression by avoiding
+that policy change for G93; it does not make inverse-time conversion
+exact.
+
+#### Production size and macro-off identity
+
+Pinned avr-gcc 16.2.0, binutils 2.47 and avr-libc 2.3.2 build the actual
+production Makefile options for each compile mode. Both ordinary
+selector links fail in the normal 32768-byte flash region. The same
+objects are relinked with a larger region solely to inspect ELF size
+and disassembly. Those inspection ELFs are **not valid 328P firmware**;
+no selector HEX is produced and no downloaded or oversized executable
+is run.
+
+| Source   | Flash G94 | Flash G93 | G94 boot margin | G93 boot margin | Static RAM |
+| -------- | --------- | --------- | --------------- | --------------- | ---------- |
+| Baseline | 31850     | 31950     | 406             | 306             | 1670       |
+| Refill   | 32558     | 32700     | -302            | -444            | 1670       |
+| Selector | 33310     | 33450     | -1054           | -1194           | 1670       |
+
+Boot margins use 32256 bytes, leaving 512 bytes for the bootloader.
+Selector exceeds even the full 32768-byte flash by **542 / 682 bytes**
+for G94/G93. Relative to refill it adds 752 / 750 bytes, with no static
+RAM saving. Free RAM before stack is 378 bytes; selector stack high-water
+is not measured. Smaller local frames are not a full-stack certificate.
+
+All ten production/inspection ELF section sizes are independently
+verified. Both macro-off images match the frozen baseline, and both
+SELECT-off images match frozen refill, in HEX and ELF. These four
+identities do not imply that the enabled selector fits.
+
+#### Native parser outputs and accuracy
+
+The portable exporter captures actual parser-generated XYZ, feed,
+condition and all twelve summary words. Thirty-two negative controls
+and two identity-mode positive controls pass. An independent data-only
+reader checks all 408 curves: four sources, 33 ordinary/steep plus
+18 derived curves, each under actual G94 and G93. Executable/input
+hashes and frozen source revisions match the artifacts. Native runs
+are headless; they do not measure AVR latency, queue slack or stops.
+
+| G94 family | Curves | Chosen policy | Polygon / exact work | Maximum raw Z error, mm |
+| ---------- | ------ | ------------- | -------------------- | ----------------------- |
+| S2/Z-.2    | 12     | Eight         | 7 / 1                | 0.00009220102           |
+| S5/Z-.2    | 12     | Eight         | 7 / 1                | 0.00005230098           |
+| S10/Z-30   | 3      | Sixteen       | 16 / 0               | 0.00236027308           |
+| S20/Z-10   | 3      | Sixteen       | 14 / 1               | 0.00045710073           |
+| S60/Z-30   | 3      | Sixteen       | 15 / 0               | 0.00058521616           |
+
+For the 24 ordinary G94 curves, every target/feed/condition word and
+summary word except the final half-bracket diagnostic matches seed.
+Seed measures that diagnostic; selector leaves it zero. The checker
+explicitly requires selector half = 0 and finite nonnegative seed half;
+it never excludes coordinate, feed or condition words. The earlier
+scratch exporter omitted the three floating diagnostics, so its broad
+G94 summary-identity claim did not cover this difference. All nine
+steep G94 curves match refill in every target and summary word.
+
+Actual G93 matches refill in all raw XYZ/feed/condition and all twelve
+summary words for all 51 curves, including the no-Z case that failed
+seed's identity contract. Maximum relative nominal-time error is still
+0.000154632 for the 33 curves and 0.000153383 for the derived corpus,
+not zero. On the 18 derived curves, maximum raw Z error remains
+0.01222021 mm, with two above 0.002 mm. Three S10/Z-30 curves also
+remain above the common goal. These excesses are reported, not waived.
+
+**Result:** the one-pass choice works on the native controls and avoids
+the measured retry pattern there, but its AVR implementation does not
+fit. Startup, maximum non-backpressure gap and ordinary-motion recovery
+are unverified for this candidate; seed's or refill's timings cannot be
+assigned to it. No Pareto winner, production default or merge is chosen.
+
 ### Bounded initial seed: mixed motion results
 
 [CI run 45486002886](https://github.com/kimstik/grbl/actions/runs/45486002886),
