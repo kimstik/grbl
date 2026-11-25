@@ -68,12 +68,18 @@ jobs:
       - name: Pinned AVR tools
         run: |
           set -euo pipefail
-          pacman -Syu --noconfirm --needed git make diffutils bash python
+          pacman -Syu --noconfirm --needed git make diffutils bash python curl
           a=https://archive.archlinux.org/packages/a
-          pacman -U --noconfirm \
-            $a/avr-binutils/avr-binutils-2.47-1-x86_64.pkg.tar.zst \
-            $a/avr-gcc/avr-gcc-16.2.0-1-x86_64.pkg.tar.zst \
-            $a/avr-libc/avr-libc-2.3.2-4-any.pkg.tar.zst
+          mkdir -p "$RUNNER_TEMP/avr-packages"
+          for package in \
+            avr-binutils/avr-binutils-2.47-1-x86_64.pkg.tar.zst \
+            avr-gcc/avr-gcc-16.2.0-1-x86_64.pkg.tar.zst \
+            avr-libc/avr-libc-2.3.2-4-any.pkg.tar.zst; do
+            curl --fail --location --ipv4 --retry 2 --retry-delay 5 \
+              --connect-timeout 20 --max-time 120 \
+              --output "$RUNNER_TEMP/avr-packages/${package##*/}" "$a/$package"
+          done
+          pacman -U --noconfirm "$RUNNER_TEMP"/avr-packages/*.pkg.tar.zst
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
