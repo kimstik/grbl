@@ -421,6 +421,59 @@ with the full evidence suite. The cap/error/default choices remain open.
 
 ## Z by an estimate of the length ahead
 
+### RMS selector: fewer square roots, larger firmware
+
+[CI run 45542265482](https://github.com/kimstik/grbl/actions/runs/45542265482),
+harness a9cbea0, is **failed**: native identity passes, while both AVR
+jobs fail the boot-region fit gate. Frozen sources are parser scratch
+210e4a4 and RMS c1e462a. The earlier run 45541202330 failed twice while
+downloading the toolchain, before any AVR build. Bounded download retries
+resolved that infrastructure failure without changing the pinned versions.
+
+`BEZIER_Z_RMS`, together with `BEZIER_Z_SELECT` and parser scratch,
+changes only the initial G94 eight/sixteen-piece choice. With squared
+endpoint chord q and the existing Wang energy E, its model uses
+`sigma*(q + E + sqrt(q*(q + 2*E)))` instead of
+`sigma/2*(chord length + control polygon length)^2`. Two extreme chord
+projections and the remaining middle projection replace three dot products.
+The RMS polygon replacement is an upper value, so the test is more
+permissive, **not a sufficient error condition**. Actual G93 retains
+sixteen pieces, including constant Z. Turn splitting, exact short sums,
+endpoint copies, coordinate-risk fallback and realtime order are unchanged.
+
+Pinned avr-gcc 16.2.0 production builds give:
+
+| Compile mode | Scratch flash | RMS flash | Added | RMS boot margin | RMS full margin | Static RAM |
+| ------------ | ------------- | --------- | ----- | --------------- | --------------- | ---------- |
+| G94          | 32932         | 33110     | 178   | -854            | -342            | 1670       |
+| G93          | 33052         | 33230     | 178   | -974            | -462            | 1670       |
+
+Boot and full regions are 32256 and 32768 bytes. All six normal links
+fail; larger-region relinks are for static inspection only, with no HEX
+or AVR execution. Independent verification checks ELF section sizes,
+normal-link overflow messages and both complete reference/RMS-off ELF
+identities. Free RAM before stack remains 378 bytes. The selector grows
+from 514 to 692 bytes; the other named spline/parser functions keep their
+sizes. Replacing four calls to an already shared distance helper with
+one square root does not save flash here.
+
+Each native variant emits 136 curves and 27528 targets. Independent
+verification covers all 408 curves and 82584 targets, input/executable
+hashes, every raw XYZ/feed/condition word, parsed start/control net and
+all twelve summary words. RMS, RMS-off and reference are fully identical
+on these corpora, under both actual G94 and G93. Thirty-two negative and
+two positive identity controls pass. The raw Z maxima remain
+0.00236027308 mm for ordinary/steep, 0.01222020580 mm for derived and
+0.00009336692 mm for directed cases. The common **$12 = 0.002 mm** goal
+and exact G93 remain unmet. General vector diagnostics are also unchanged,
+not passing: `675 checks: 75 pass, 19 FAIL, 12 xfail, 0 XPASS`.
+
+**Result:** this RMS replacement is not a flash-saving solution. No AVR
+startup, stack or motion benefit was measured, and native identity is not
+a scheduling test. This candidate is retained as a negative result; the
+priority startup/non-backpressure-gap/motion problem remains open. No
+winner, default or merge is chosen.
+
 ### Parser scratch: identical native outputs, still too large
 
 [CI run 45530663881](https://github.com/kimstik/grbl/actions/runs/45530663881),
