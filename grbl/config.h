@@ -783,6 +783,11 @@
   // the current point and its control-net pointers. Target XYZ and modal state stay live.
   // AVR layout checks forbid added static RAM; full stack measurements are still required.
   // #define BEZIER_PARSER_WORKSPACE
+  // Experimental FIXED workspace alternative: cache the invariant control differences
+  // in the consumed parser words instead of retaining control points and net pointers.
+  // The current point's Z slot holds the original coordinate maximum until the initial
+  // estimate finishes; restore its Z before emitting the first point. No extra static RAM.
+  // #define BEZIER_POINT_CACHE
   // Experimental mode 3 scheduling: service realtime after each intermediate target is
   // queued, before calculating the next one. The earlier realtime calls remain in place.
   // This changes foreground refill timing, not the path, and does not guarantee no stops.
@@ -834,6 +839,9 @@
 #endif
 #if defined(BEZIER_PARSER_WORKSPACE) && (!defined(ENABLE_CUBIC_SPLINES) || !defined(BEZIER_PARSER_SCRATCH) || BEZIER_Z_LINEAR != 3)
   #error "BEZIER_PARSER_WORKSPACE requires ENABLE_CUBIC_SPLINES, BEZIER_PARSER_SCRATCH and BEZIER_Z_LINEAR 3"
+#endif
+#if defined(BEZIER_POINT_CACHE) && (!defined(BEZIER_PARSER_WORKSPACE) || !defined(BEZIER_Z_FIXED) || defined(BEZIER_Z_SELECT))
+  #error "BEZIER_POINT_CACHE requires BEZIER_PARSER_WORKSPACE and BEZIER_Z_FIXED, without BEZIER_Z_SELECT"
 #endif
 #if BEZIER_Z_LINEAR == 3
   #if BEZIER_Z_PIECES < 1 || BEZIER_Z_PIECES > BEZIER_Z_PIECES_MAX || BEZIER_Z_PIECES_MAX > 64 || (BEZIER_Z_PIECES & (BEZIER_Z_PIECES-1)) || (BEZIER_Z_PIECES_MAX & (BEZIER_Z_PIECES_MAX-1))

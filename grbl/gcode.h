@@ -208,8 +208,16 @@ typedef struct {
 #if defined(ENABLE_CUBIC_SPLINES) && defined(BEZIER_PARSER_WORKSPACE)
 // Reuse consumed words only; target XYZ and modal state stay outside this workspace.
 typedef struct {
+#ifdef BEZIER_POINT_CACHE
+  union {
+    struct { float first[2], second[2]; };
+    struct { float g[2], e0[2], d[2]; };
+  };
+  float point[N_AXIS];
+#else
   float first[2], second[2], point[N_AXIS];
   float *net[4];
+#endif
 } spline_scratch_t;
 #endif
 

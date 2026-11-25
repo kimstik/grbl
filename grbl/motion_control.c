@@ -432,20 +432,39 @@ static spline_z_t spline_z;
 // If s is not zero, p[2] and p[3] get the control point next to that point of the piece of the
 // curve that begins there and is s long in t, or ends there if s is negative: the point plus s
 // thirds of the derivative.
+#ifdef BEZIER_POINT_CACHE
+static void mc_spline_point(float *p, float t, float s, float *position, spline_scratch_t *scratch)
+                            __attribute__((noinline, noclone));
+static void mc_spline_point(float *p, float t, float s, float *position, spline_scratch_t *scratch)
+#else
 static void mc_spline_point(float *p, float t, float s, float **net)
                             __attribute__((noinline, noclone));
 static void mc_spline_point(float *p, float t, float s, float **net)
+#endif
 {
+#ifndef BEZIER_POINT_CACHE
   float *position = net[0], *first = net[1], *second = net[2], *target = net[3];
+#endif
   uint8_t i;
   for (i = 0; i < 2; i++) {
+#ifdef BEZIER_POINT_CACHE
+    float e0 = scratch->e0[i], d = scratch->d[i];
+    float g = scratch->g[i], w = t*d;
+#else
     float e0 = second[i] - 2.0f*first[i] + position[i];
     float e1 = target[i] - 2.0f*second[i] + first[i];
     float g = first[i] - position[i], w = t*(e1 - e0);
+#endif
     p[i] = position[i] + t*(3.0f*g + t*(3.0f*e0 + w));
     if (s != 0.0f) { p[i+2] = p[i] + s*(g + t*(2.0f*e0 + w)); }
   }
 }
+
+#ifdef BEZIER_POINT_CACHE
+  #define SPLINE_POINT(p,t,s) mc_spline_point(p,t,s,position,scratch)
+#else
+  #define SPLINE_POINT(p,t,s) mc_spline_point(p,t,s,net)
+#endif
 
 // The distance between two points in the XY plane, which is also added to a sum.
 static float mc_spline_dist(float *sum, float *a, float *b) __attribute__((noinline));
@@ -508,7 +527,16 @@ static uint8_t mc_spline_select(spline_z_t *z, float **net, uint16_t segments)
 // With BEZIER_Z_LOOSE no more than those pieces are ever gone through ahead: a bracket that the
 // most of them leave too wide is used as it is, and the length is found again when half of the
 // segments are left.
-#ifdef BEZIER_PARSER_SCRATCH
+#ifdef BEZIER_POINT_CACHE
+static uint8_t mc_spline_next(spline_z_t *z, float *target, uint16_t j, uint16_t segments,
+                              float *position, spline_scratch_t *scratch, plan_line_data_t *pl_data)
+                              __attribute__((noinline, noclone));
+static uint8_t mc_spline_next(spline_z_t *z, float *target, uint16_t j, uint16_t segments,
+                              float *position, spline_scratch_t *scratch, plan_line_data_t *pl_data)
+{
+  float *p = scratch->point;
+  float q[4], r[4], a, b;
+#elif defined(BEZIER_PARSER_SCRATCH)
 static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segments,
                               float **net, plan_line_data_t *pl_data)
                               __attribute__((noinline, noclone));
@@ -545,7 +573,7 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
   if (!z->next) { // The length is found, or not asked for
 #endif
 #endif
-    mc_spline_point(q, j*z->step, 0.0f, net);
+    SPLINE_POINT(q, j*z->step, 0.0f);
     if (z->u != 0.0f) {
       a = mc_spline_dist(&z->poly, q, p); // The chord of the segment. The sum is not in use.
       b = a/z->rest;
@@ -581,7 +609,12 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
 #ifdef BEZIER_EXACT_INVERSE_TIME
     if (!(pl_data->condition & PL_COND_FLAG_INVERSE_TIME))
 #endif
-    if (z->u == 0.0f) { z->next = 0; } // No Z word, no estimate
+    if (z->u == 0.0f) {
+      z->next = 0; // No Z word, no estimate
+#ifdef BEZIER_POINT_CACHE
+      p[Z_AXIS] = position[Z_AXIS];
+#endif
+    }
     return(true); // Realtime work first: the line has taken its time to parse.
   }
 #ifdef BEZIER_Z_FIXED
@@ -614,21 +647,21 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
   a = (segments - z->next)*z->step;
   b = (segments - z->next + m)*z->step;
 #ifdef BEZIER_Z_SELECT
-  if (m == 1) { a = b; } else { mc_spline_point(q, a, b - a, net); }
-  mc_spline_point(r, b, a - b, net);
+  if (m == 1) { a = b; } else { SPLINE_POINT(q, a, b - a); }
+  SPLINE_POINT(r, b, a - b);
   if (z->next == m) { memcpy(r, target, 2*sizeof(float)); }
 #endif
   if (m == 1) {
 #ifndef BEZIER_Z_SELECT
-    mc_spline_point(r, b, 0.0f, net);
+    SPLINE_POINT(r, b, 0.0f);
     if (z->next == 1) { memcpy(r, target, 2*sizeof(float)); }
 #endif
     mc_spline_dist(&z->rest, r, &z->chord);
     Z_TRACE(summed++);
   } else {
 #ifndef BEZIER_Z_SELECT
-    mc_spline_point(q, a, b - a, net);
-    mc_spline_point(r, b, a - b, net);
+    SPLINE_POINT(q, a, b - a);
+    SPLINE_POINT(r, b, a - b);
     if (z->next == m) { memcpy(r, target, 2*sizeof(float)); }
 #endif
     // The three control-polygon edge directions. Reject a piece that turns back.
@@ -666,11 +699,15 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
 #else
   if (z->pieces == 2) {
 #endif
+#ifdef BEZIER_POINT_CACHE
+    a = p[Z_AXIS]; // Original coordinate maximum, saved before the controls were overwritten.
+#else
     a = 0.0f;
     for (axis = 0; axis < 2; axis++) {
       a = max(a, max(fabsf(position[axis]), fabsf(target[axis])));
       a = max(a, max(fabsf(first[axis]), fabsf(second[axis])));
     }
+#endif
     // Smooth geometry cannot certify the rounded XY staircase. This risk heuristic
     // requests actual chord sums on sensitive coordinates; it is not a certificate.
     if (a*fabsf(z->u)*0.000001f > BEZIER_Z_SIGMA*z->rest) {
@@ -681,6 +718,9 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
       return(true);
     }
   }
+#ifdef BEZIER_POINT_CACHE
+  p[Z_AXIS] = position[Z_AXIS]; // Restore the un-emitted point, including the no-Z G93 case.
+#endif
 #else
   m = (z->next + z->pieces - 1)/z->pieces; // Segments to a piece
   if (m <= BEZIER_Z_PIECE_COST || z->pieces > BEZIER_Z_PIECES_MAX) { m = 1; } // The segments
@@ -693,8 +733,8 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
   a = (segments - z->todo)*z->step; // The piece is from a to b, by the same products as the
   z->todo -= min(m, z->todo);       // points of the polyline are at.
   b = (segments - z->todo)*z->step;
-  if (m == 1) { a = b; } else { mc_spline_point(q, a, b - a, net); } // Its first two control points
-  mc_spline_point(r, b, a - b, net); // and its last two, last first; no slope for a segment.
+  if (m == 1) { a = b; } else { SPLINE_POINT(q, a, b - a); } // Its first two control points
+  SPLINE_POINT(r, b, a - b); // and its last two, last first; no slope for a segment.
   // The last point of the polyline is target itself, which Horner's rule misses by a bit.
   if (!z->todo) { memcpy(r, target, 2*sizeof(float)); }
   if (m == 1) { // The segment itself, from the point before, which is in no use as sums.
@@ -785,6 +825,9 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
   float a = 0.0f, b = 0.0f;
   uint8_t i;
   memcpy(p, position, N_AXIS*sizeof(float));
+#ifdef BEZIER_POINT_CACHE
+  p[Z_AXIS] = 0.0f; // Free until emission: retain the original coordinate-risk input.
+#endif
 #ifdef BEZIER_Z_SELECT
   spline_z.poly = 0.0f;
 #endif
@@ -797,6 +840,21 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
     spline_z.poly += e0*e1;
 #endif
   }
+#ifdef BEZIER_POINT_CACHE
+  // Keep coefficient formation separate from Wang's squared second differences: fast-math
+  // must not reuse an already rounded e1 when forming the point evaluator's e1 - e0.
+  for (i = 0; i < 2; i++) {
+    float e0 = second[i] - 2.0f*first[i] + position[i];
+    float e1 = target[i] - 2.0f*second[i] + first[i];
+    float g = first[i] - position[i], d = e1 - e0;
+    // Read this axis before replacing its controls; the other axis is still untouched.
+    p[Z_AXIS] = max(p[Z_AXIS], max(fabsf(position[i]), fabsf(target[i])));
+    p[Z_AXIS] = max(p[Z_AXIS], max(fabsf(first[i]), fabsf(second[i])));
+    scratch->g[i] = g;
+    scratch->e0[i] = e0;
+    scratch->d[i] = d;
+  }
+#endif
 #ifdef BEZIER_Z_SELECT
   spline_z.poly += a + b; // Integrated second-difference energy for the initial selector.
 #endif
@@ -827,6 +885,7 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
   // first one is due at once, and finds out whether there is a Z word at all.
   spline_z.next = segments;
   spline_z.pieces = 0;
+#ifndef BEZIER_POINT_CACHE
 #ifdef BEZIER_PARSER_WORKSPACE
   float **net = scratch->net;
   net[0] = position; net[1] = first; net[2] = second; net[3] = target;
@@ -834,9 +893,12 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
   float *net[4] = { position, first, second, target };
 #endif
 #endif
+#endif
   for (j = 1; j < segments; j++) {
 #if BEZIER_Z_LINEAR == 3
-#ifdef BEZIER_PARSER_SCRATCH
+#ifdef BEZIER_POINT_CACHE
+    while (mc_spline_next(&spline_z, target, j, segments, position, scratch, pl_data)) {
+#elif defined(BEZIER_PARSER_SCRATCH)
     while (mc_spline_next(&spline_z, p, j, segments, net, pl_data)) {
 #else
     while (mc_spline_next(&spline_z, p, j, segments, position, first, second, target, pl_data)) {
