@@ -205,7 +205,19 @@ typedef struct {
   uint8_t override;        // {M56}
 } gc_modal_t;
 
+#if defined(ENABLE_CUBIC_SPLINES) && defined(BEZIER_PARSER_WORKSPACE)
+// Reuse consumed words only; target XYZ and modal state stay outside this workspace.
 typedef struct {
+  float first[2], second[2], point[N_AXIS];
+  float *net[4];
+} spline_scratch_t;
+#endif
+
+typedef struct {
+#if defined(ENABLE_CUBIC_SPLINES) && defined(BEZIER_PARSER_WORKSPACE)
+  union {
+    struct {
+#endif
   float f;         // Feed
   float ijk[3];    // I,J,K Axis arc offsets
   uint8_t l;       // G10 or canned cycles parameters
@@ -226,8 +238,21 @@ typedef struct {
   float r;         // Arc radius
   float s;         // Spindle speed
   uint8_t t;       // Tool selection
+#if defined(ENABLE_CUBIC_SPLINES) && defined(BEZIER_PARSER_WORKSPACE)
+    };
+    spline_scratch_t spline;
+  };
+#endif
   float xyz[3];    // X,Y,Z Translational axes
 } gc_values_t;
+
+#if defined(ENABLE_CUBIC_SPLINES) && defined(BEZIER_PARSER_WORKSPACE) && defined(__AVR__)
+// The parsed prefix is eight floats, a line number and two byte-sized words.
+// Wider host pointers may enlarge the native test layout, but not the AVR layout.
+typedef char spline_workspace_fits_prefix[
+  (sizeof(spline_scratch_t) <= 8*sizeof(float) + sizeof(int32_t) + 2*sizeof(uint8_t) &&
+   __builtin_offsetof(gc_values_t, xyz) == 8*sizeof(float) + sizeof(int32_t) + 2*sizeof(uint8_t)) ? 1 : -1];
+#endif
 
 
 typedef struct {

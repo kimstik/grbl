@@ -1191,7 +1191,11 @@ uint8_t gc_execute_line(char *line)
               || (gc_state.modal.motion == MOTION_MODE_QUADRATIC_SPLINE)
 #endif
               ) {
-#ifdef BEZIER_PARSER_SCRATCH
+#ifdef BEZIER_PARSER_WORKSPACE
+        // Construct both control points before point/net overwrite other consumed words.
+        // CP1 overlaps F,I and CP2 overlaps J,K: preserve the order below.
+        float *cp1 = gc_block.values.spline.first, *cp2 = gc_block.values.spline.second;
+#elif defined(BEZIER_PARSER_SCRATCH)
         // I,J and P,Q have been consumed, including the saved offsets for implicit G5.
         // Reuse their storage for planar control points, not another sixteen stack bytes.
         float *cp1 = gc_block.values.ijk, *cp2 = gc_block.values.spline_cp2;
@@ -1236,7 +1240,11 @@ uint8_t gc_execute_line(char *line)
         }
 
         // Execute the cubic Bezier spline
+#ifdef BEZIER_PARSER_WORKSPACE
+        mc_cubic_b_spline(gc_block.values.xyz, pl_data, gc_state.position, &gc_block.values.spline);
+#else
         mc_cubic_b_spline(gc_block.values.xyz, pl_data, gc_state.position, cp1, cp2);
+#endif
 #endif // ENABLE_CUBIC_SPLINES
 
       } else {

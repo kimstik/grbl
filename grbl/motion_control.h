@@ -50,7 +50,11 @@ void mc_arc(float *target, plan_line_data_t *pl_data, float *position, float *of
 // first == first control point xy, second == second control point xy.
 // Uses equal parameter steps, as many as Wang's bound needs for BEZIER_SIGMA.
 void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position,
+#ifdef BEZIER_PARSER_WORKSPACE
+                       spline_scratch_t *scratch);
+#else
                        float *first, float *second);
+#endif
 #endif
 
 // Dwell for a specific number of seconds

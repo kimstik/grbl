@@ -764,14 +764,27 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
 #ifdef BEZIER_PARSER_SCRATCH
 // Keep the spline's temporaries out of the parser's short-displacement frame.
 void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position,
+#ifdef BEZIER_PARSER_WORKSPACE
+                       spline_scratch_t *scratch) __attribute__((noinline, noclone));
+#else
                        float *first, float *second) __attribute__((noinline, noclone));
 #endif
+#endif
 void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position,
+#ifdef BEZIER_PARSER_WORKSPACE
+                       spline_scratch_t *scratch)
+#else
                        float *first, float *second)
+#endif
 {
-  float p[N_AXIS], a = 0.0f, b = 0.0f;
+#ifdef BEZIER_PARSER_WORKSPACE
+  float *first = scratch->first, *second = scratch->second, *p = scratch->point;
+#else
+  float p[N_AXIS];
+#endif
+  float a = 0.0f, b = 0.0f;
   uint8_t i;
-  memcpy(p, position, sizeof(p));
+  memcpy(p, position, N_AXIS*sizeof(float));
 #ifdef BEZIER_Z_SELECT
   spline_z.poly = 0.0f;
 #endif
@@ -814,7 +827,10 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
   // first one is due at once, and finds out whether there is a Z word at all.
   spline_z.next = segments;
   spline_z.pieces = 0;
-#ifdef BEZIER_PARSER_SCRATCH
+#ifdef BEZIER_PARSER_WORKSPACE
+  float **net = scratch->net;
+  net[0] = position; net[1] = first; net[2] = second; net[3] = target;
+#elif defined(BEZIER_PARSER_SCRATCH)
   float *net[4] = { position, first, second, target };
 #endif
 #endif

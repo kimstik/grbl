@@ -779,6 +779,10 @@
   // one local control-point pointer array to its estimator. Arithmetic and saved offsets
   // for implicit G5 are unchanged; nested frames still need a full stack measurement.
   // #define BEZIER_PARSER_SCRATCH
+  // Experimental mode 3 workspace: overlay consumed parser words with control points,
+  // the current point and its control-net pointers. Target XYZ and modal state stay live.
+  // AVR layout checks forbid added static RAM; full stack measurements are still required.
+  // #define BEZIER_PARSER_WORKSPACE
   // Experimental mode 3 scheduling: service realtime after each intermediate target is
   // queued, before calculating the next one. The earlier realtime calls remain in place.
   // This changes foreground refill timing, not the path, and does not guarantee no stops.
@@ -827,6 +831,9 @@
 #endif
 #if defined(BEZIER_Z_CHORDS) && (BEZIER_Z_LINEAR != 3 || !defined(BEZIER_Z_FIXED) || defined(BEZIER_Z_SELECT))
   #error "BEZIER_Z_CHORDS requires BEZIER_Z_LINEAR 3 and BEZIER_Z_FIXED, without BEZIER_Z_SELECT"
+#endif
+#if defined(BEZIER_PARSER_WORKSPACE) && (!defined(ENABLE_CUBIC_SPLINES) || !defined(BEZIER_PARSER_SCRATCH) || BEZIER_Z_LINEAR != 3)
+  #error "BEZIER_PARSER_WORKSPACE requires ENABLE_CUBIC_SPLINES, BEZIER_PARSER_SCRATCH and BEZIER_Z_LINEAR 3"
 #endif
 #if BEZIER_Z_LINEAR == 3
   #if BEZIER_Z_PIECES < 1 || BEZIER_Z_PIECES > BEZIER_Z_PIECES_MAX || BEZIER_Z_PIECES_MAX > 64 || (BEZIER_Z_PIECES & (BEZIER_Z_PIECES-1)) || (BEZIER_Z_PIECES_MAX & (BEZIER_Z_PIECES_MAX-1))
