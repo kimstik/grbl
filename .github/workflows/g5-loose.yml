@@ -50,10 +50,11 @@ on:
         type: boolean
         default: false
       cache_motion:
-        description: 'Frozen point cache native/AVR identity, startup, stack and motion against workspace'
+        description: 'Frozen cache-init or norm native/AVR identity, startup, stack and motion'
         required: false
-        type: boolean
-        default: false
+        type: choice
+        options: [none, cache-init, norm]
+        default: none
 
 defaults:
   run:
@@ -61,60 +62,61 @@ defaults:
 
 jobs:
   cache-native:
-    if: ${{ inputs.cache_motion }}
+    if: ${{ !inputs.raw_run_id && (inputs.cache_motion || 'none') != 'none' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    name: cache native full identity
+    name: ${{ inputs.cache_motion }} native full identity
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
-          ref: 15b7cb8e8c5de6d064e5c7d162b85c4c0efedd96
-          path: workspace
+          ref: ${{ inputs.cache_motion == 'norm' && '4cdfc54427933a1355197d2a179e77d1662b2bcf' || '15b7cb8e8c5de6d064e5c7d162b85c4c0efedd96' }}
+          path: reference
       - uses: actions/checkout@v4
         with:
-          ref: 4cdfc54427933a1355197d2a179e77d1662b2bcf
-          path: cache
+          ref: ${{ inputs.cache_motion == 'norm' && 'acc353d03e1e058383aa1ed39948a81e63f70906' || '4cdfc54427933a1355197d2a179e77d1662b2bcf' }}
+          path: candidate
       - name: Full outputs, flag-off and actual G93 identity, retained vector diagnostics
         run: |
           timeout 600 nice -n 19 python3 -I tb/compare/parser_native.py \
-            --family cache --reference workspace --candidate cache --output raw/native
+            --family '${{ inputs.cache_motion == 'norm' && 'norm' || 'cache' }}' \
+            --reference reference --candidate candidate --output raw/native
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: cache-native
+          name: ${{ inputs.cache_motion == 'norm' && 'norm-native' || 'cache-native' }}
           path: raw/native
 
   workspace:
-    if: ${{ inputs.workspace && !inputs.workspace_motion && !inputs.cache_motion }}
+    if: ${{ inputs.workspace && !inputs.workspace_motion && (inputs.cache_motion || 'none') == 'none' }}
     uses: ./.github/workflows/g5-parser.yml
     with:
       family: workspace
 
   square:
-    if: ${{ inputs.square && !inputs.square_motion && !inputs.workspace && !inputs.workspace_motion && !inputs.cache_motion }}
+    if: ${{ inputs.square && !inputs.square_motion && !inputs.workspace && !inputs.workspace_motion && (inputs.cache_motion || 'none') == 'none' }}
     uses: ./.github/workflows/g5-parser.yml
     with:
       family: square
 
   chords:
-    if: ${{ inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace && !inputs.workspace_motion && !inputs.cache_motion }}
+    if: ${{ inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace && !inputs.workspace_motion && (inputs.cache_motion || 'none') == 'none' }}
     uses: ./.github/workflows/g5-parser.yml
     with:
       family: chords
 
   rms:
-    if: ${{ inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace && !inputs.workspace_motion && !inputs.cache_motion }}
+    if: ${{ inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace && !inputs.workspace_motion && (inputs.cache_motion || 'none') == 'none' }}
     uses: ./.github/workflows/g5-parser.yml
     with:
       family: rms
 
   parser-scratch:
-    if: ${{ inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace && !inputs.workspace_motion && !inputs.cache_motion }}
+    if: ${{ inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace && !inputs.workspace_motion && (inputs.cache_motion || 'none') == 'none' }}
     uses: ./.github/workflows/g5-parser.yml
 
   avr:
-    if: ${{ inputs.cache_motion || (!inputs.workspace && (inputs.workspace_motion || inputs.square_motion || (!inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square))) }}
+    if: ${{ !inputs.raw_run_id && ((inputs.cache_motion || 'none') != 'none' || (!inputs.workspace && (inputs.workspace_motion || inputs.square_motion || (!inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)))) }}
     runs-on: ubuntu-24.04
     container: archlinux:latest
     strategy:
@@ -127,12 +129,12 @@ jobs:
           - arm: fixed
             ref: a9b415f1c120fa9e12156f8456984e0e32e38112
             extra: -DBEZIER_Z_FIXED
-          - arm: ${{ inputs.cache_motion && 'workspace' || inputs.workspace_motion && 'square' || 'refill' }}
-            ref: ${{ inputs.cache_motion && '15b7cb8e8c5de6d064e5c7d162b85c4c0efedd96' || inputs.workspace_motion && 'a783b670fb96484c8bcd6e7aea94adb8b5172bf0' || '8672b8f5091b0df7d0a8a34216d0cde8bb75d2ce' }}
-            extra: ${{ inputs.cache_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE' || inputs.workspace_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS' || '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL' }}
-          - arm: ${{ inputs.cache_motion && 'cache' || inputs.workspace_motion && 'workspace' || inputs.square_motion && 'square' || 'seed' }}
-            ref: ${{ inputs.cache_motion && '4cdfc54427933a1355197d2a179e77d1662b2bcf' || inputs.workspace_motion && '15b7cb8e8c5de6d064e5c7d162b85c4c0efedd96' || inputs.square_motion && 'a783b670fb96484c8bcd6e7aea94adb8b5172bf0' || 'fbea6f2456e48306d3bb8f6b5e49366b1ba94357' }}
-            extra: ${{ inputs.cache_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE -DBEZIER_POINT_CACHE' || inputs.workspace_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE' || inputs.square_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS' || '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_Z_SEED' }}
+          - arm: ${{ inputs.cache_motion == 'norm' && 'cache' || inputs.cache_motion == 'cache-init' && 'workspace' || inputs.workspace_motion && 'square' || 'refill' }}
+            ref: ${{ inputs.cache_motion == 'norm' && '4cdfc54427933a1355197d2a179e77d1662b2bcf' || inputs.cache_motion == 'cache-init' && '15b7cb8e8c5de6d064e5c7d162b85c4c0efedd96' || inputs.workspace_motion && 'a783b670fb96484c8bcd6e7aea94adb8b5172bf0' || '8672b8f5091b0df7d0a8a34216d0cde8bb75d2ce' }}
+            extra: ${{ inputs.cache_motion == 'norm' && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE -DBEZIER_POINT_CACHE' || inputs.cache_motion == 'cache-init' && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE' || inputs.workspace_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS' || '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL' }}
+          - arm: ${{ inputs.cache_motion == 'norm' && 'norm' || inputs.cache_motion == 'cache-init' && 'cache' || inputs.workspace_motion && 'workspace' || inputs.square_motion && 'square' || 'seed' }}
+            ref: ${{ inputs.cache_motion == 'norm' && 'acc353d03e1e058383aa1ed39948a81e63f70906' || inputs.cache_motion == 'cache-init' && '4cdfc54427933a1355197d2a179e77d1662b2bcf' || inputs.workspace_motion && '15b7cb8e8c5de6d064e5c7d162b85c4c0efedd96' || inputs.square_motion && 'a783b670fb96484c8bcd6e7aea94adb8b5172bf0' || 'fbea6f2456e48306d3bb8f6b5e49366b1ba94357' }}
+            extra: ${{ inputs.cache_motion == 'norm' && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE -DBEZIER_POINT_CACHE -DBEZIER_Z_NORM' || inputs.cache_motion == 'cache-init' && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE -DBEZIER_POINT_CACHE' || inputs.workspace_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE' || inputs.square_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS' || '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_Z_SEED' }}
     name: avr 16.2 ${{ matrix.arm }}
     steps:
       - name: Pinned AVR tools
@@ -159,7 +161,7 @@ jobs:
       - name: Matched production images and measurement binaries
         run: timeout 1200 nice -n 19 bash tb/compare/build_loose.sh '${{ matrix.arm }}' '${{ matrix.extra }}'
       - name: Require candidate boot-region fit separately from motion evidence
-        if: ${{ inputs.cache_motion && matrix.arm == 'cache' || inputs.workspace_motion && matrix.arm == 'workspace' || inputs.square_motion && matrix.arm == 'square' }}
+        if: ${{ inputs.cache_motion == 'norm' && matrix.arm == 'norm' || inputs.cache_motion == 'cache-init' && matrix.arm == 'cache' || inputs.workspace_motion && matrix.arm == 'workspace' || inputs.square_motion && matrix.arm == 'square' }}
         env:
           CANDIDATE: ${{ matrix.arm }}
         run: |
@@ -183,12 +185,12 @@ jobs:
 
   simavr:
     needs: avr
-    if: ${{ !cancelled() && (inputs.cache_motion || (!inputs.workspace && (inputs.workspace_motion || inputs.square_motion || (!inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)))) }}
+    if: ${{ !cancelled() && !inputs.raw_run_id && ((inputs.cache_motion || 'none') != 'none' || (!inputs.workspace && (inputs.workspace_motion || inputs.square_motion || (!inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)))) }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        arm: ${{ fromJSON(inputs.cache_motion && '["baseline","fixed","workspace","cache"]' || inputs.workspace_motion && '["baseline","fixed","square","workspace"]' || inputs.square_motion && '["baseline","fixed","refill","square"]' || '["baseline","fixed","refill","seed"]') }}
+        arm: ${{ fromJSON(inputs.cache_motion == 'norm' && '["baseline","fixed","cache","norm"]' || inputs.cache_motion == 'cache-init' && '["baseline","fixed","workspace","cache"]' || inputs.workspace_motion && '["baseline","fixed","square","workspace"]' || inputs.square_motion && '["baseline","fixed","refill","square"]' || '["baseline","fixed","refill","seed"]') }}
         mode: [g94, g93]
         include:
           - arm: baseline
@@ -197,12 +199,12 @@ jobs:
           - arm: fixed
             ref: a9b415f1c120fa9e12156f8456984e0e32e38112
             extra: -DBEZIER_Z_FIXED
-          - arm: ${{ inputs.cache_motion && 'workspace' || inputs.workspace_motion && 'square' || 'refill' }}
-            ref: ${{ inputs.cache_motion && '15b7cb8e8c5de6d064e5c7d162b85c4c0efedd96' || inputs.workspace_motion && 'a783b670fb96484c8bcd6e7aea94adb8b5172bf0' || '8672b8f5091b0df7d0a8a34216d0cde8bb75d2ce' }}
-            extra: ${{ inputs.cache_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE' || inputs.workspace_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS' || '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL' }}
-          - arm: ${{ inputs.cache_motion && 'cache' || inputs.workspace_motion && 'workspace' || inputs.square_motion && 'square' || 'seed' }}
-            ref: ${{ inputs.cache_motion && '4cdfc54427933a1355197d2a179e77d1662b2bcf' || inputs.workspace_motion && '15b7cb8e8c5de6d064e5c7d162b85c4c0efedd96' || inputs.square_motion && 'a783b670fb96484c8bcd6e7aea94adb8b5172bf0' || 'fbea6f2456e48306d3bb8f6b5e49366b1ba94357' }}
-            extra: ${{ inputs.cache_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE -DBEZIER_POINT_CACHE' || inputs.workspace_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE' || inputs.square_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS' || '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_Z_SEED' }}
+          - arm: ${{ inputs.cache_motion == 'norm' && 'cache' || inputs.cache_motion == 'cache-init' && 'workspace' || inputs.workspace_motion && 'square' || 'refill' }}
+            ref: ${{ inputs.cache_motion == 'norm' && '4cdfc54427933a1355197d2a179e77d1662b2bcf' || inputs.cache_motion == 'cache-init' && '15b7cb8e8c5de6d064e5c7d162b85c4c0efedd96' || inputs.workspace_motion && 'a783b670fb96484c8bcd6e7aea94adb8b5172bf0' || '8672b8f5091b0df7d0a8a34216d0cde8bb75d2ce' }}
+            extra: ${{ inputs.cache_motion == 'norm' && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE -DBEZIER_POINT_CACHE' || inputs.cache_motion == 'cache-init' && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE' || inputs.workspace_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS' || '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL' }}
+          - arm: ${{ inputs.cache_motion == 'norm' && 'norm' || inputs.cache_motion == 'cache-init' && 'cache' || inputs.workspace_motion && 'workspace' || inputs.square_motion && 'square' || 'seed' }}
+            ref: ${{ inputs.cache_motion == 'norm' && 'acc353d03e1e058383aa1ed39948a81e63f70906' || inputs.cache_motion == 'cache-init' && '4cdfc54427933a1355197d2a179e77d1662b2bcf' || inputs.workspace_motion && '15b7cb8e8c5de6d064e5c7d162b85c4c0efedd96' || inputs.square_motion && 'a783b670fb96484c8bcd6e7aea94adb8b5172bf0' || 'fbea6f2456e48306d3bb8f6b5e49366b1ba94357' }}
+            extra: ${{ inputs.cache_motion == 'norm' && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE -DBEZIER_POINT_CACHE -DBEZIER_Z_NORM' || inputs.cache_motion == 'cache-init' && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE -DBEZIER_POINT_CACHE' || inputs.workspace_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE' || inputs.square_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS' || '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_Z_SEED' }}
     name: simavr ${{ matrix.arm }} ${{ matrix.mode }}
     steps:
       - uses: actions/checkout@v4
@@ -229,7 +231,7 @@ jobs:
 
   identity:
     needs: simavr
-    if: ${{ !cancelled() && (inputs.cache_motion || (!inputs.workspace && (inputs.workspace_motion || inputs.square_motion || (!inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)))) }}
+    if: ${{ !cancelled() && ((inputs.cache_motion || 'none') != 'none' || (!inputs.workspace && (inputs.workspace_motion || inputs.square_motion || (!inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)))) }}
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -253,7 +255,8 @@ jobs:
           arms=(refill seed)
           if [ '${{ inputs.square_motion }}' = true ]; then arms=(refill square); fi
           if [ '${{ inputs.workspace_motion }}' = true ]; then arms=(square workspace); fi
-          if [ '${{ inputs.cache_motion }}' = true ]; then arms=(workspace cache); fi
+          if [ '${{ inputs.cache_motion }}' = cache-init ]; then arms=(workspace cache); fi
+          if [ '${{ inputs.cache_motion }}' = norm ]; then arms=(cache norm); fi
           for mode in g94 g93; do
             for arm in "${arms[@]}"; do
               reference=fixed
@@ -266,12 +269,19 @@ jobs:
               fi
               if [ "$arm" = workspace ]; then
                 reference=square
-                if [ '${{ inputs.cache_motion }}' = true ]; then
+                if [ '${{ inputs.cache_motion }}' = cache-init ]; then
                   reference=fixed
                   [ "$mode" != g94 ] || extra=(--xy-only)
                 fi
               fi
-              if [ "$arm" = cache ]; then reference=workspace; fi
+              if [ "$arm" = cache ]; then
+                reference=workspace
+                if [ '${{ inputs.cache_motion }}' = norm ]; then
+                  reference=fixed
+                  [ "$mode" != g94 ] || extra=(--xy-only)
+                fi
+              fi
+              if [ "$arm" = norm ]; then reference=cache; fi
               current="input/loose-simavr-$arm-$mode"
               previous="input/loose-simavr-$reference-$mode"
               log="raw/identity-$arm-$mode.txt"
@@ -294,7 +304,7 @@ jobs:
 
   observe:
     needs: avr
-    if: ${{ !cancelled() && (inputs.cache_motion || (!inputs.workspace && (inputs.workspace_motion || inputs.square_motion || (!inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)))) }}
+    if: ${{ !cancelled() && !inputs.raw_run_id && ((inputs.cache_motion || 'none') != 'none' || (!inputs.workspace && (inputs.workspace_motion || inputs.square_motion || (!inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)))) }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -318,19 +328,19 @@ jobs:
           path: input/fixed
       - uses: actions/download-artifact@v4
         with:
-          name: loose-avr-${{ inputs.cache_motion && 'workspace' || inputs.workspace_motion && 'square' || 'refill' }}
-          path: input/${{ inputs.cache_motion && 'workspace' || inputs.workspace_motion && 'square' || 'refill' }}
+          name: loose-avr-${{ inputs.cache_motion == 'norm' && 'cache' || inputs.cache_motion == 'cache-init' && 'workspace' || inputs.workspace_motion && 'square' || 'refill' }}
+          path: input/${{ inputs.cache_motion == 'norm' && 'cache' || inputs.cache_motion == 'cache-init' && 'workspace' || inputs.workspace_motion && 'square' || 'refill' }}
       - uses: actions/download-artifact@v4
         with:
-          name: loose-avr-${{ inputs.cache_motion && 'cache' || inputs.workspace_motion && 'workspace' || inputs.square_motion && 'square' || 'seed' }}
-          path: input/${{ inputs.cache_motion && 'cache' || inputs.workspace_motion && 'workspace' || inputs.square_motion && 'square' || 'seed' }}
+          name: loose-avr-${{ inputs.cache_motion == 'norm' && 'norm' || inputs.cache_motion == 'cache-init' && 'cache' || inputs.workspace_motion && 'workspace' || inputs.square_motion && 'square' || 'seed' }}
+          path: input/${{ inputs.cache_motion == 'norm' && 'norm' || inputs.cache_motion == 'cache-init' && 'cache' || inputs.workspace_motion && 'workspace' || inputs.square_motion && 'square' || 'seed' }}
       - name: Host observer dependencies
         run: |
           set -euo pipefail
           sudo apt-get update -q
           sudo apt-get install -y -q --no-install-recommends gcc make pkg-config libelf-dev gcc-avr avr-libc
       - name: Compare initial-pass policies and refill identity with blind controls
-        run: timeout 3000 nice -n 19 bash tb/compare/run_observe.sh '${{ matrix.mode }}' baseline fixed '${{ inputs.cache_motion && 'workspace' || inputs.workspace_motion && 'square' || 'refill' }}' '${{ inputs.cache_motion && 'cache' || inputs.workspace_motion && 'workspace' || inputs.square_motion && 'square' || 'seed' }}'
+        run: timeout 3000 nice -n 19 bash tb/compare/run_observe.sh '${{ matrix.mode }}' baseline fixed '${{ inputs.cache_motion == 'norm' && 'cache' || inputs.cache_motion == 'cache-init' && 'workspace' || inputs.workspace_motion && 'square' || 'refill' }}' '${{ inputs.cache_motion == 'norm' && 'norm' || inputs.cache_motion == 'cache-init' && 'cache' || inputs.workspace_motion && 'workspace' || inputs.square_motion && 'square' || 'seed' }}'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -338,7 +348,7 @@ jobs:
           path: raw
 
   selector-native:
-    if: ${{ inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace && !inputs.workspace_motion && !inputs.cache_motion }}
+    if: ${{ inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace && !inputs.workspace_motion && (inputs.cache_motion || 'none') == 'none' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     name: selector native identity
@@ -372,7 +382,7 @@ jobs:
           path: raw/native
 
   selector-avr:
-    if: ${{ inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace && !inputs.workspace_motion && !inputs.cache_motion }}
+    if: ${{ inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace && !inputs.workspace_motion && (inputs.cache_motion || 'none') == 'none' }}
     runs-on: ubuntu-24.04
     container: archlinux:latest
     timeout-minutes: 20

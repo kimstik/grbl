@@ -35,7 +35,7 @@ for arm in "${arms[@]}"; do
     args=()
     case $arm in
       square|workspace) args+=(--net-abi) ;;
-      cache) args+=(--cache-abi) ;;
+      cache|norm) args+=(--cache-abi) ;;
     esac
     [ "$control" != blind ] || args+=(--blind)
     timeout 360 nice -n 19 build/observe "$elf" "$dir/$control.txt" \
@@ -63,9 +63,17 @@ for arm in "${arms[@]}"; do
       fi
     fi
     if [ "$arm" = cache ]; then
-      reference=workspace
-      cmp "$root/input/cache/raw/cache-off-$mode.hex" "$root/input/workspace/raw/production-$mode.hex"
-      printf 'POINT_CACHE-off image identical to workspace %s\n' "$mode" > "$dir/cache-identity.txt"
+      reference=fixed
+      if [ -d "$root/input/workspace" ]; then
+        reference=workspace
+        cmp "$root/input/cache/raw/cache-off-$mode.hex" "$root/input/workspace/raw/production-$mode.hex"
+        printf 'POINT_CACHE-off image identical to workspace %s\n' "$mode" > "$dir/cache-identity.txt"
+      fi
+    fi
+    if [ "$arm" = norm ]; then
+      reference=cache
+      cmp "$root/input/norm/raw/norm-off-$mode.hex" "$root/input/cache/raw/production-$mode.hex"
+      printf 'NORM-off image identical to cache-init %s\n' "$mode" > "$dir/norm-identity.txt"
     fi
     baseline=(--baseline "$out/$reference/observed.txt" \
       --baseline-uart "$out/$reference/observed-uart.txt")
@@ -75,7 +83,10 @@ for arm in "${arms[@]}"; do
         # Without square in this run, fixed is only a policy reference.
         [ "$reference" = square ] || baseline+=(--xy-only)
         ;;
-      refill|cache) ;; # Scheduling/storage only: require full target identity.
+      cache)
+        [ "$reference" = workspace ] || baseline+=(--xy-only)
+        ;;
+      refill|norm) ;; # No policy change: require full target identity.
       *) baseline+=(--require-prefetch) ;;
     esac
   fi

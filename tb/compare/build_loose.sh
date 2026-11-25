@@ -57,6 +57,13 @@ for mode in g94 g93; do
     cp source/grbl.hex "raw/cache-off-$mode.hex"
   fi
 
+  if [ "$arm" = norm ]; then
+    # Disabling only NORM must retain the frozen cache-init image.
+    make -s -C source clean > "raw/norm-off-$mode.log" 2>&1
+    make -s -C source COMPILE="$cc $opts -DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE -DBEZIER_POINT_CACHE" >> "raw/norm-off-$mode.log" 2>&1
+    cp source/grbl.hex "raw/norm-off-$mode.hex"
+  fi
+
   make -s -C source clean > "raw/production-$mode.log" 2>&1
   if make -s -C source COMPILE="$cc $opts $extra" >> "raw/production-$mode.log" 2>&1; then
     cp source/build/main.elf "elf/$mode/firmware.elf"
