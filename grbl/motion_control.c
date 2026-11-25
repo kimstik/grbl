@@ -650,7 +650,7 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
 #ifdef BEZIER_EXACT_INVERSE_TIME
     if (!(pl_data->condition & PL_COND_FLAG_INVERSE_TIME))
 #endif
-    { b -= (b - a)/((float)m*m); } // Finite chords, not the smooth arc midpoint.
+    { b -= (b - a)/(uint32_t)(m*(uint32_t)m); } // Finite chords, not the smooth arc midpoint.
 #endif
     z->rest += 0.5f*(a + b);
     Z_TRACE(pieces++);
