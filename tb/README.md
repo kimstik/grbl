@@ -421,6 +421,81 @@ with the full evidence suite. The cap/error/default choices remain open.
 
 ## Z by an estimate of the length ahead
 
+### Return-only norms: smaller, continuity still unresolved
+
+Frozen source acc353d adds optional `BEZIER_Z_NORM`. The shared distance
+helper returns the norm instead of also updating a sum through a pointer.
+Required sums retain their original addition order; emission drops the
+unused polygon-sum update. There is no square-root approximation, segment
+policy, estimator, target or realtime-site change from cache-init 4cdfc54.
+
+[CI 45624751115](https://github.com/kimstik/grbl/actions/runs/45624751115),
+harness 9b4a28f, finishes **failed, 15/16 jobs passing**. Only the norm
+production boot-region gate fails. Compilation, native identity, both
+measured-stack gates, both observations and raw AVR identity pass.
+
+Independent decoding verifies 408 native curves and 82584 targets: all
+five target words, parsed start/control net and all twelve native summary
+words match cache-init, including actual G93 and constant Z. The native
+identity controls pass, but general vectors remain unchanged, **not
+passing**: `675 checks: 77 pass, 17 FAIL, 12 xfail, 0 XPASS`.
+Both NORM-off images independently match cache-init; all eight retained
+macro-off images match baseline. The eighteen AVR derived curves preserve
+full XYZ/feed/condition, estimate trace and output-integrity fields.
+Runtime cycle fields remain measurements, not identity fields. Eight
+same-ELF observed/blind pairs preserve final cycles/state, UART bytes and
+per-byte timing hash. Downloaded binaries are inspected, never run locally.
+
+| Variant    | Flash G94/G93 | Boot margin | Stack G94/G93 | Stack margin |
+|------------|--------------:|------------:|--------------:|-------------:|
+| Baseline   |   31850/31950 |     406/306 |       334/334 |        44/44 |
+| Cache init |   32414/32556 |   -158/-300 |       358/358 |        20/20 |
+| Norm       |   32322/32458 |    -66/-202 |       358/358 |        20/20 |
+
+Production static RAM is 1670 bytes, leaving 378 bytes. Norm saves 92/98
+flash bytes, but still exceeds the unchanged 32256-byte boot region by
+66/202 bytes. Both normal images fit the full 32768-byte device. The
+estimator's local frame shrinks by eight bytes in the inspected G93 build,
+but the full-sweep stack watermark does not improve. These measurements
+are workload watermarks, not worst-case stack or production-safety proofs.
+
+G94 timings below compare cache-init / norm. Live first-target and gap
+values are maxima over each chain's three curves; headless measurements
+do not include a running stepper.
+
+| Workload                | First ms      | Max gap ms    | Generator ms    |
+|-------------------------|--------------:|--------------:|----------------:|
+| Headless long S         | 19.002/18.651 |   0.382/0.373 | 571.442/559.943 |
+| Live S10/Z-30/F5000      | 37.740/37.161 | 10.979/10.954 |               - |
+| Live S20/Z-10/F5000      | 26.967/25.113 |   7.696/6.715 |               - |
+| Live S60/Z-30/F5000      | 31.123/30.603 |   9.861/9.857 |               - |
+| Live S60/Z-30/F1000      | 30.795/31.424 | 48.399/48.422 |               - |
+| Headless pure Z         |   0.965/0.965 |   0.000/0.000 |     1.058/1.058 |
+
+Long-S generation improves about 2%, but the slow live chain's startup
+regresses. The largest live target gap is unclassified, not starvation
+proof. A smaller helper or faster generator does not establish smoother
+motion.
+
+| Variant    | Ordinary time G94/G93 ms | Stops G94/G93 | Queued stops G94/G93 |
+|------------|-------------------------:|--------------:|---------------------:|
+| Baseline   |              95213/95360 |           4/9 |                  3/5 |
+| Cache init |              95106/95116 |         18/20 |                  1/4 |
+| Norm       |              94891/94873 |         19/20 |                  3/3 |
+
+These are sums over 40 ordinary programs. Norm retains zero stops in all
+four steep programs and passes six hold/resume checks, but ordinary stops
+remain worse than baseline. Queued count and entry feed are not consumed
+stepper endpoint velocity. All live commands use G94, including builds
+with the G93 option enabled; actual G93 identity is checked separately.
+
+Accuracy is unchanged: twelve observed curves reach 0.000197911415 mm
+Z error; eighteen derived curves reach 0.011884512438 mm in G94 and
+0.012220205797 mm in actual G93, with two above 0.002 mm in each mode.
+Exact G93 remains unmet. Preserve the measured code-size/generation gain,
+without claiming boot fit, ordinary-motion closure, common $12 accuracy,
+a production winner, merge or default change.
+
 ### Cache initialization split: stack recovered, boot fit still fails
 
 Frozen source 4cdfc54 extracts coefficient preparation into the returning
