@@ -14,14 +14,23 @@ on:
         required: false
         type: boolean
         default: false
+      parser_scratch:
+        description: 'Frozen parser scratch identity/static checks only; no AVR execution'
+        required: false
+        type: boolean
+        default: false
 
 defaults:
   run:
     shell: bash
 
 jobs:
+  parser-scratch:
+    if: ${{ inputs.parser_scratch }}
+    uses: ./.github/workflows/g5-parser.yml
+
   avr:
-    if: ${{ !inputs.raw_run_id && !inputs.selector }}
+    if: ${{ !inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch }}
     runs-on: ubuntu-24.04
     container: archlinux:latest
     strategy:
@@ -69,7 +78,7 @@ jobs:
 
   simavr:
     needs: avr
-    if: ${{ !cancelled() && !inputs.raw_run_id && !inputs.selector }}
+    if: ${{ !cancelled() && !inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -115,7 +124,7 @@ jobs:
 
   identity:
     needs: simavr
-    if: ${{ !cancelled() && !inputs.selector }}
+    if: ${{ !cancelled() && !inputs.selector && !inputs.parser_scratch }}
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -163,7 +172,7 @@ jobs:
 
   observe:
     needs: avr
-    if: ${{ !cancelled() && !inputs.raw_run_id && !inputs.selector }}
+    if: ${{ !cancelled() && !inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -207,7 +216,7 @@ jobs:
           path: raw
 
   selector-native:
-    if: ${{ inputs.selector }}
+    if: ${{ inputs.selector && !inputs.parser_scratch }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     name: selector native identity
@@ -241,7 +250,7 @@ jobs:
           path: raw/native
 
   selector-avr:
-    if: ${{ inputs.selector }}
+    if: ${{ inputs.selector && !inputs.parser_scratch }}
     runs-on: ubuntu-24.04
     container: archlinux:latest
     timeout-minutes: 20

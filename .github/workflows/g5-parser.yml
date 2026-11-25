@@ -1,0 +1,79 @@
+name: G5 parser scratch comparison
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    name: parser native identity
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: 452c70dc7809edb2e16e03a6707c197fc535fbbd
+          path: select
+      - uses: actions/checkout@v4
+        with:
+          ref: 210e4a4a3b529eaea927ff85fe79d91a74f9b1aa
+          path: frame
+      - name: Full raw identity, including flag-off builds and vector diagnostics
+        run: |
+          set -euo pipefail
+          timeout 600 nice -n 19 python3 -I tb/compare/parser_native.py \
+            --reference select --candidate frame --output raw/native
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: parser-native
+          path: raw/native
+
+  avr:
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [g94, g93]
+    name: parser AVR 16.2 ${{ matrix.mode }}
+    steps:
+      - name: Pinned AVR tools
+        run: |
+          set -euo pipefail
+          pacman -Syu --noconfirm --needed git make diffutils bash python
+          a=https://archive.archlinux.org/packages/a
+          pacman -U --noconfirm \
+            $a/avr-binutils/avr-binutils-2.47-1-x86_64.pkg.tar.zst \
+            $a/avr-gcc/avr-gcc-16.2.0-1-x86_64.pkg.tar.zst \
+            $a/avr-libc/avr-libc-2.3.2-4-any.pkg.tar.zst
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: 452c70dc7809edb2e16e03a6707c197fc535fbbd
+          path: select
+      - uses: actions/checkout@v4
+        with:
+          ref: 210e4a4a3b529eaea927ff85fe79d91a74f9b1aa
+          path: frame
+      - name: Normal production links, flag-off identity and static overflow evidence
+        run: timeout 900 nice -n 19 bash tb/compare/build_select.sh '${{ matrix.mode }}' parser
+      - name: Require boot-region fit; static inspection does not waive overflow
+        run: |
+          set -euo pipefail
+          python3 -I tb/compare/check_select_fit.py raw --mode '${{ matrix.mode }}' --family parser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: parser-avr-${{ matrix.mode }}
+          path: raw
