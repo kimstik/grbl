@@ -6,7 +6,7 @@ on:
       family:
         description: 'Frozen native/static comparison; no AVR execution'
         type: choice
-        options: [parser, rms, chords]
+        options: [parser, rms, chords, square]
         default: parser
   workflow_call:
     inputs:
@@ -33,12 +33,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
-          ref: ${{ (inputs.family == 'rms' || inputs.family == 'chords') && '210e4a4a3b529eaea927ff85fe79d91a74f9b1aa' || '452c70dc7809edb2e16e03a6707c197fc535fbbd' }}
-          path: ${{ (inputs.family == 'rms' || inputs.family == 'chords') && 'frame' || 'select' }}
+          ref: ${{ inputs.family == 'square' && 'ce43674a91d032926d16756e00acef8906a89eb3' || (inputs.family == 'rms' || inputs.family == 'chords') && '210e4a4a3b529eaea927ff85fe79d91a74f9b1aa' || '452c70dc7809edb2e16e03a6707c197fc535fbbd' }}
+          path: ${{ inputs.family == 'square' && 'chords' || (inputs.family == 'rms' || inputs.family == 'chords') && 'frame' || 'select' }}
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.family == 'chords' && 'ce43674a91d032926d16756e00acef8906a89eb3' || inputs.family == 'rms' && 'c1e462a4a83bb8e429b3b723bc26153ae30f5b5e' || '210e4a4a3b529eaea927ff85fe79d91a74f9b1aa' }}
-          path: ${{ inputs.family == 'chords' && 'chords' || inputs.family == 'rms' && 'rms' || 'frame' }}
+          ref: ${{ inputs.family == 'square' && 'a783b670fb96484c8bcd6e7aea94adb8b5172bf0' || inputs.family == 'chords' && 'ce43674a91d032926d16756e00acef8906a89eb3' || inputs.family == 'rms' && 'c1e462a4a83bb8e429b3b723bc26153ae30f5b5e' || '210e4a4a3b529eaea927ff85fe79d91a74f9b1aa' }}
+          path: ${{ inputs.family == 'square' && 'square' || inputs.family == 'chords' && 'chords' || inputs.family == 'rms' && 'rms' || 'frame' }}
       - name: Raw outputs, flag-off and actual G93 identity, vector diagnostics
         run: |
           set -euo pipefail
@@ -46,6 +46,7 @@ jobs:
             parser) reference=select; candidate=frame ;;
             rms) reference=frame; candidate=rms ;;
             chords) reference=frame; candidate=chords ;;
+            square) reference=chords; candidate=square ;;
             *) exit 2 ;;
           esac
           timeout 600 nice -n 19 python3 -I tb/compare/parser_native.py \
@@ -85,12 +86,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
-          ref: ${{ (inputs.family == 'rms' || inputs.family == 'chords') && '210e4a4a3b529eaea927ff85fe79d91a74f9b1aa' || '452c70dc7809edb2e16e03a6707c197fc535fbbd' }}
-          path: ${{ (inputs.family == 'rms' || inputs.family == 'chords') && 'frame' || 'select' }}
+          ref: ${{ inputs.family == 'square' && 'ce43674a91d032926d16756e00acef8906a89eb3' || (inputs.family == 'rms' || inputs.family == 'chords') && '210e4a4a3b529eaea927ff85fe79d91a74f9b1aa' || '452c70dc7809edb2e16e03a6707c197fc535fbbd' }}
+          path: ${{ inputs.family == 'square' && 'chords' || (inputs.family == 'rms' || inputs.family == 'chords') && 'frame' || 'select' }}
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.family == 'chords' && 'ce43674a91d032926d16756e00acef8906a89eb3' || inputs.family == 'rms' && 'c1e462a4a83bb8e429b3b723bc26153ae30f5b5e' || '210e4a4a3b529eaea927ff85fe79d91a74f9b1aa' }}
-          path: ${{ inputs.family == 'chords' && 'chords' || inputs.family == 'rms' && 'rms' || 'frame' }}
+          ref: ${{ inputs.family == 'square' && 'a783b670fb96484c8bcd6e7aea94adb8b5172bf0' || inputs.family == 'chords' && 'ce43674a91d032926d16756e00acef8906a89eb3' || inputs.family == 'rms' && 'c1e462a4a83bb8e429b3b723bc26153ae30f5b5e' || '210e4a4a3b529eaea927ff85fe79d91a74f9b1aa' }}
+          path: ${{ inputs.family == 'square' && 'square' || inputs.family == 'chords' && 'chords' || inputs.family == 'rms' && 'rms' || 'frame' }}
       - name: Normal production links, flag-off identity and static overflow evidence
         run: timeout 900 nice -n 19 bash tb/compare/build_select.sh '${{ matrix.mode }}' "$FAMILY"
       - name: Require boot-region fit; static inspection does not waive overflow

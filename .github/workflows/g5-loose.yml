@@ -29,30 +29,41 @@ on:
         required: false
         type: boolean
         default: false
+      square:
+        description: 'Frozen integer-square native/static checks only; no AVR execution'
+        required: false
+        type: boolean
+        default: false
 
 defaults:
   run:
     shell: bash
 
 jobs:
+  square:
+    if: ${{ inputs.square }}
+    uses: ./.github/workflows/g5-parser.yml
+    with:
+      family: square
+
   chords:
-    if: ${{ inputs.chords }}
+    if: ${{ inputs.chords && !inputs.square }}
     uses: ./.github/workflows/g5-parser.yml
     with:
       family: chords
 
   rms:
-    if: ${{ inputs.rms && !inputs.chords }}
+    if: ${{ inputs.rms && !inputs.chords && !inputs.square }}
     uses: ./.github/workflows/g5-parser.yml
     with:
       family: rms
 
   parser-scratch:
-    if: ${{ inputs.parser_scratch && !inputs.rms && !inputs.chords }}
+    if: ${{ inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square }}
     uses: ./.github/workflows/g5-parser.yml
 
   avr:
-    if: ${{ !inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords }}
+    if: ${{ !inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square }}
     runs-on: ubuntu-24.04
     container: archlinux:latest
     strategy:
@@ -100,7 +111,7 @@ jobs:
 
   simavr:
     needs: avr
-    if: ${{ !cancelled() && !inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords }}
+    if: ${{ !cancelled() && !inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -146,7 +157,7 @@ jobs:
 
   identity:
     needs: simavr
-    if: ${{ !cancelled() && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords }}
+    if: ${{ !cancelled() && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square }}
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -194,7 +205,7 @@ jobs:
 
   observe:
     needs: avr
-    if: ${{ !cancelled() && !inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords }}
+    if: ${{ !cancelled() && !inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -238,7 +249,7 @@ jobs:
           path: raw
 
   selector-native:
-    if: ${{ inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords }}
+    if: ${{ inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     name: selector native identity
@@ -272,7 +283,7 @@ jobs:
           path: raw/native
 
   selector-avr:
-    if: ${{ inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords }}
+    if: ${{ inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square }}
     runs-on: ubuntu-24.04
     container: archlinux:latest
     timeout-minutes: 20

@@ -53,7 +53,7 @@ def main():
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--make', default='make')
     parser.add_argument('--cc', default='gcc')
-    parser.add_argument('--family', choices=('parser', 'rms', 'chords'), default='parser')
+    parser.add_argument('--family', choices=('parser', 'rms', 'chords', 'square'), default='parser')
     args = parser.parse_args()
     checker.controls()
     out = args.output.resolve()
@@ -85,8 +85,12 @@ def main():
     success([args.cc, '--version'], 'compiler')
     success([args.make, '--version'], 'make')
     executables = {}
-    policy = 'refill' if args.family == 'chords' else 'select'
-    if args.family in ('rms', 'chords'):
+    policy = 'refill' if args.family in ('chords', 'square') else 'select'
+    if args.family == 'square':
+        candidate = 'square'
+        extra = ' -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS'
+        variants = (('reference', args.reference, extra), (candidate, args.candidate, extra))
+    elif args.family in ('rms', 'chords'):
         candidate = args.family
         common_extra = ' -DBEZIER_PARSER_SCRATCH'
         macro = 'BEZIER_Z_RMS' if candidate == 'rms' else 'BEZIER_Z_CHORDS'
@@ -148,7 +152,7 @@ def main():
                            'over_002': sum(c['z_mm'] > checker.SIGMA for c in curves),
                            'max_g93_relative': max((c['g93_relative'] or 0) for c in curves)}
                     for name, curves in decoded.items()}
-            print(f'{key}: {expected} curves, flag-off full identity PASS; {candidate} {identity} PASS', flush=True)
+            print(f'{key}: {expected} curves; {candidate} {identity} PASS', flush=True)
 
     vectors = sorted((HERE.parent / 'host/vectors').glob('*.vec'))
     vector_reference = None
