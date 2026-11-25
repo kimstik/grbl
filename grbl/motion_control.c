@@ -793,6 +793,31 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
 }
 #endif
 
+#ifdef BEZIER_POINT_CACHE
+// Finish coefficient preparation before the estimator, planner or realtime can extend the stack.
+static void mc_spline_cache_init(float *target, float *position, spline_scratch_t *scratch)
+  __attribute__((noinline, noclone));
+static void mc_spline_cache_init(float *target, float *position, spline_scratch_t *scratch)
+{
+  float *first = scratch->first, *second = scratch->second, *p = scratch->point;
+  uint8_t i;
+  p[Z_AXIS] = 0.0f; // Free until emission: retain the original coordinate-risk input.
+  // Keep coefficient formation separate from Wang's squared second differences: fast-math
+  // must not reuse an already rounded e1 when forming the point evaluator's e1 - e0.
+  for (i = 0; i < 2; i++) {
+    float e0 = second[i] - 2.0f*first[i] + position[i];
+    float e1 = target[i] - 2.0f*second[i] + first[i];
+    float g = first[i] - position[i], d = e1 - e0;
+    // Read this axis before replacing its controls; the other axis is still untouched.
+    p[Z_AXIS] = max(p[Z_AXIS], max(fabsf(position[i]), fabsf(target[i])));
+    p[Z_AXIS] = max(p[Z_AXIS], max(fabsf(first[i]), fabsf(second[i])));
+    scratch->g[i] = g;
+    scratch->e0[i] = e0;
+    scratch->d[i] = d;
+  }
+}
+#endif
+
 // Execute a cubic Bezier curve from position to target with control points first and second.
 // Only X and Y follow the curve; the other axes stay at position, as the parser allows no others.
 // The curve is cut into a number of segments of equal step in the curve parameter t, chosen in
@@ -825,9 +850,6 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
   float a = 0.0f, b = 0.0f;
   uint8_t i;
   memcpy(p, position, N_AXIS*sizeof(float));
-#ifdef BEZIER_POINT_CACHE
-  p[Z_AXIS] = 0.0f; // Free until emission: retain the original coordinate-risk input.
-#endif
 #ifdef BEZIER_Z_SELECT
   spline_z.poly = 0.0f;
 #endif
@@ -840,21 +862,6 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
     spline_z.poly += e0*e1;
 #endif
   }
-#ifdef BEZIER_POINT_CACHE
-  // Keep coefficient formation separate from Wang's squared second differences: fast-math
-  // must not reuse an already rounded e1 when forming the point evaluator's e1 - e0.
-  for (i = 0; i < 2; i++) {
-    float e0 = second[i] - 2.0f*first[i] + position[i];
-    float e1 = target[i] - 2.0f*second[i] + first[i];
-    float g = first[i] - position[i], d = e1 - e0;
-    // Read this axis before replacing its controls; the other axis is still untouched.
-    p[Z_AXIS] = max(p[Z_AXIS], max(fabsf(position[i]), fabsf(target[i])));
-    p[Z_AXIS] = max(p[Z_AXIS], max(fabsf(first[i]), fabsf(second[i])));
-    scratch->g[i] = g;
-    scratch->e0[i] = e0;
-    scratch->d[i] = d;
-  }
-#endif
 #ifdef BEZIER_Z_SELECT
   spline_z.poly += a + b; // Integrated second-difference energy for the initial selector.
 #endif
@@ -865,6 +872,9 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
   float n = sqrtf(sqrtf(max(a, b))*(0.8f/BEZIER_SIGMA));
   uint16_t segments = BEZIER_MAX_SEGMENTS;
   if (n < BEZIER_MAX_SEGMENTS) { segments = 1 + n; }
+#ifdef BEZIER_POINT_CACHE
+  mc_spline_cache_init(target, position, scratch);
+#endif
 #if BEZIER_Z_LINEAR != 3
   float step = 1.0f/segments;
 #endif
