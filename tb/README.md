@@ -421,6 +421,133 @@ with the full evidence suite. The cap/error/default choices remain open.
 
 ## Z by an estimate of the length ahead
 
+### Finite chords: better ordinary Z, failed production memory gates
+
+Frozen finite-chord source ce43674 and integer-square source a783b67
+retain the fixed initial pass and post-queue realtime service. In G94,
+the initial piece spans at least five segments, capped by the remaining
+count, rather than forcing short pieces into exact summation. Turn
+splitting, exact pieces of at most three segments, endpoint copies and
+the coordinate-risk full-sum fallback remain. Before averaging chord C
+and control polygon P, the finite-chord correction subtracts
+`(P-C)/m^2` from P. For exact uniform cubic chords the corresponding
+upper estimate is `C + (1-1/m^2)*(P-C)`; this is **not a certificate for
+the rounded XY staircase**. Actual G93 keeps the previous fixed-sixteen
+policy, including constant Z.
+
+The integer-square change computes `m*(uint32_t)m` before float
+conversion, replacing a float multiply without changing the policy.
+The widened product avoids a 16-bit square overflow with a larger
+segment-cap override. It saves 24 production flash bytes in each build.
+Native comparison of chords and square checks all raw XYZ/feed/condition
+words, parsed start/control net and all twelve summary words: all 272
+curves and 55056 targets match, including actual G93. The ordinary,
+derived and directed G94 raw Z maxima are respectively 0.00019791142,
+0.01188451244 and 0.00000874364 mm. General vector diagnostics remain
+**not passing**: `675 checks: 77 pass, 17 FAIL, 12 xfail, 0 XPASS`.
+The earlier finite-chord change introduces an exact-sum diagnostic
+failure on vector 34 (about 0.00151 mm), despite improving ordinary Z;
+that failure is retained, not waived.
+
+[Finite-chord CI 45551796938](https://github.com/kimstik/grbl/actions/runs/45551796938)
+fails changed vector diagnostics and both boot-fit gates.
+[Square CI 45555623953](https://github.com/kimstik/grbl/actions/runs/45555623953)
+passes full native identity but still fails both boot-fit gates.
+Neither is a complete acceptance result.
+
+#### Production size and measured stack
+
+[Motion CI 45559955635](https://github.com/kimstik/grbl/actions/runs/45559955635),
+harness 42ac9c1, compares baseline 1f19d74, fixed a9b415f, refill 8672b8f
+and square a783b67 with pinned avr-gcc 16.2.0. It finishes **failed,
+12/15 jobs passing**: square fails the production boot gate and both
+simulated production stack-margin gates. All builds link in the normal
+32768-byte region. Independent section checks cover all 48 retained
+production and bench ELF images; no downloaded executable is run locally.
+
+| Variant  | Flash G94/G93 | Boot margin G94/G93 | Static RAM | Stack G94/G93 | Stack margin G94/G93 |
+| -------- | ------------- | ------------------- | ---------- | ------------- | -------------------- |
+| Baseline | 31850/31950   | 406/306             | 1670       | 334/334       | 44/44                |
+| Fixed    | 32546/32688   | -290/-432           | 1670       | 344/350       | 34/28                |
+| Refill   | 32558/32700   | -302/-444           | 1670       | 344/348       | 34/30                |
+| Square   | 32320/32438   | -64/-182            | 1670       | 386/388       | -8/-10               |
+
+Boot capacity is 32256 bytes. Production free RAM before stack is 378
+bytes in every row. The dynamic bench removes RX and shrinks TX so it
+can measure stack beyond production free RAM; the negative margins are
+production-budget failures, **not evidence that the bench corrupted
+its own SRAM**. Separate parser/driver frames save flash but do not save
+total nested stack here. Square is not ready for a production 328P.
+The timing below describes this conditional prototype, not a memory-safe
+firmware recommendation. Build logs report macro-off comparisons, but
+the separate macro-off candidate HEX files are not retained, so those
+comparisons are not independently recomputed from downloaded files.
+
+#### Startup, motion and raw accuracy together
+
+All four variants complete 40 ordinary programs, four steep-Z programs
+and six hold cases, with exact XYZ endpoints. Ordinary stop counters
+and total ordinary-program time are:
+
+| Variant  | Stops G94/G93 | Queued-stop counters G94/G93 | Total ordinary ms G94/G93 |
+| -------- | ------------- | --------------------------- | ------------------------ |
+| Baseline | 4/9           | 3/5                         | 95213/95360              |
+| Fixed    | 50/46         | 16/15                       | 99975/99909              |
+| Refill   | 30/31         | 7/5                         | 100111/100136            |
+| Square   | 18/18         | 0/0                         | 97907/98023              |
+
+Square reduces refill's ordinary stops but remains worse than baseline.
+A zero queued-stop counter does not prove smooth consumed-segment
+velocity. In program 24, G94 time/stops improve from refill's 2003 ms/7
+to 1764 ms/0, versus baseline's 1722 ms/0. This does not classify all
+remaining stops. All four steep-Z programs have zero square stops;
+the 20 mm/F5000 program takes 2662 ms versus baseline's 3013 ms/4 stops
+and refill's 2655 ms/0 stops. Both live compile builds receive **G94
+commands**, not an actual-G93 motion workload.
+
+The read-only observer and blind run use the same ELF and pinned
+simulator revision 13d4ed32433ad7a37bb757b7e0f7dbb5373396c0. All eight
+pairs match final cycles/state and every UART byte with its timing
+hash. The six-argument parser-scratch ABI is checked separately; no AVR
+state is written. Each program below contains three curves. Entries
+are maximum first-target latency / maximum later target gap in ms,
+for the G94 build:
+
+| Observer program | Baseline        | Refill        | Square        |
+| ---------------- | --------------- | ------------- | ------------- |
+| S10 Z-30 F5000   | 87.260/11.023   | 43.793/10.954 | 46.227/10.948 |
+| S20 Z-10 F5000   | 96.877/7.805    | 29.347/6.812  | 30.136/6.804  |
+| S60 Z-30 F5000   | 115.280/144.258 | 36.640/9.876  | 37.938/9.850  |
+| S60 Z-30 F1000   | 92.502/110.378  | 31.391/48.435 | 31.280/48.415 |
+
+Square's steep live startup is not an improvement over refill in the
+first three programs. Raw target gaps are not starvation measurements;
+the earlier refill 48.435 ms gap was proven full-planner backpressure.
+The square gap has not been independently classified as starvation.
+
+Headless G94 long-S startup/gap improve from baseline's
+80.948/81.628 ms to 22.704/0.494 ms. The turn case improves from
+81.115/9.185 ms to 27.679/0.489 ms. In contrast, the far-axis case
+regresses from 8.524 to 26.245 ms first latency. These are headless
+generator measurements, not live startup or universal speed bounds.
+
+Independent actual-emitted-XY-length checks find square G94's maximum
+Z error over the 18 derived cases is **0.01188451244 mm**, with two
+cases above the common $12 = 0.002 mm goal: long S and S10 Z-30
+(0.002441996 mm). Across the twelve observed curves, max Z improves
+from refill's 0.00236027308 to 0.00019791142 mm, close to baseline's
+0.00020019393 mm. This is not an accuracy sweep of all 40 programs.
+G94 preserves raw XY/feed/condition versus refill while measuring changed
+Z, not exempting it from the goal. Actual G93 preserves all raw
+XYZ/feed/condition/trace over 18 commands, including constant Z; its
+approximate length/time errors are unchanged, **not exact G93**.
+
+**Result:** finite chords improve ordinary accuracy and some planned-stop
+behavior, but fail production memory, retain derived tolerance failures
+and do not beat baseline ordinary motion. The arithmetic square is a
+verified small saving, not a startup/motion solution. No winner, default
+or merge is chosen; the priority investigation remains open.
+
 ### RMS selector: fewer square roots, larger firmware
 
 [CI run 45542265482](https://github.com/kimstik/grbl/actions/runs/45542265482),
