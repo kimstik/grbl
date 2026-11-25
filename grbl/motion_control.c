@@ -465,6 +465,25 @@ static uint8_t mc_spline_select(spline_z_t *z, float **net, uint16_t segments)
 {
   float length = 0.0f, projection, h;
   uint8_t i, axis;
+#ifdef BEZIER_Z_RMS
+  for (axis = 0; axis < 2; axis++) {
+    projection = net[3][axis] - net[0][axis];
+    length += projection*projection;
+  }
+  h = length; // Squared chord; length then holds the middle-edge projection.
+  for (i = 0; i < 3; i += 2) {
+    projection = 0.0f;
+    for (axis = 0; axis < 2; axis++) {
+      projection += (net[3][axis] - net[0][axis])*(net[i+1][axis] - net[i][axis]);
+    }
+    if (!(projection > 0.0f && projection < 3.402823466e38f)) { return(16); }
+    length -= projection;
+  }
+  if (!(length >= 0.0f && h < 3.402823466e38f)) { return(16); }
+  // q + 2*E = 3*sum(edge^2). Its square root is an upper replacement for the
+  // polygon length: this RMS model is more permissive than the original, not a bound.
+  length = BEZIER_Z_SIGMA*(h + z->poly + sqrtf(h*(h + 2.0f*z->poly)));
+#else
   mc_spline_dist(&length, net[3], net[0]);
   for (i = 0; i < 3; i++) {
     projection = 0.0f;
@@ -476,11 +495,14 @@ static uint8_t mc_spline_select(spline_z_t *z, float **net, uint16_t segments)
         (i != 1 && projection == 0.0f)) { return(16); }
     mc_spline_dist(&length, net[i+1], net[i]);
   }
+#endif
   // poly temporarily holds (a + b) + c from the driver's Wang loop.
   h = ((segments + 7)/8)*z->step;
   projection = h*h*z->poly*(fabsf(z->u) + 2.0f*BEZIER_Z_SIGMA);
+#ifndef BEZIER_Z_RMS
   // length is twice Lstar, so this is 2*sigma*Lstar^2, without division.
   length *= length*(0.5f*BEZIER_Z_SIGMA);
+#endif
   if (projection >= 0.0f && projection <= length && length < 3.402823466e38f) { return(8); }
   return(16);
 }

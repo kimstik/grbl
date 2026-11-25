@@ -768,6 +768,10 @@
   // staircases. The selected pass and the existing coordinate-risk fallback are still
   // heuristics, not a guarantee of BEZIER_Z_SIGMA. G93 retains the fixed-sixteen policy.
   // #define BEZIER_Z_SELECT
+  // Experimental SELECT alternative: one RMS scale and two extreme chord projections,
+  // instead of four norms and three projections. The scale is more permissive than
+  // the original model, not an error bound. G93 keeps the same fixed-sixteen policy.
+  // #define BEZIER_Z_RMS
   // Experimental parser frame reduction: reuse consumed I,J and P,Q words for planar
   // control points and keep the spline driver out of the parser frame. Mode 3 passes
   // one local control-point pointer array to its estimator. Arithmetic and saved offsets
@@ -818,6 +822,9 @@
 #endif
 #if defined(BEZIER_Z_SELECT) && (BEZIER_Z_LINEAR != 3 || !defined(BEZIER_Z_FIXED))
   #error "BEZIER_Z_SELECT requires BEZIER_Z_LINEAR 3 and BEZIER_Z_FIXED"
+#endif
+#if defined(BEZIER_Z_RMS) && !defined(BEZIER_Z_SELECT)
+  #error "BEZIER_Z_RMS requires BEZIER_Z_SELECT"
 #endif
 #if BEZIER_Z_LINEAR == 3
   #if BEZIER_Z_PIECES < 1 || BEZIER_Z_PIECES > BEZIER_Z_PIECES_MAX || BEZIER_Z_PIECES_MAX > 64 || (BEZIER_Z_PIECES & (BEZIER_Z_PIECES-1)) || (BEZIER_Z_PIECES_MAX & (BEZIER_Z_PIECES_MAX-1))
