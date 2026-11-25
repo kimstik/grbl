@@ -174,16 +174,27 @@ typedef struct { double p[4][N_AXIS]; int ok; } curve_t;
    This link-time probe does not alter the firmware or its AVR code generation. */
 static curve_t parsed;
 #ifdef ENABLE_CUBIC_SPLINES
+#ifdef BEZIER_PARSER_WORKSPACE
+void __real_mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position, spline_scratch_t *scratch);
+void __wrap_mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position, spline_scratch_t *scratch)
+{
+  float *first = scratch->first, *second = scratch->second;
+#else
 void __real_mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position, float *first, float *second);
 void __wrap_mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position, float *first, float *second)
 {
+#endif
   for (int a = 0; a < N_AXIS; a++) {
     parsed.p[0][a] = position[a]; parsed.p[3][a] = target[a];
     parsed.p[1][a] = a < 2 ? first[a] : position[a];
     parsed.p[2][a] = a < 2 ? second[a] : target[a];
   }
   parsed.ok = 1;
+#ifdef BEZIER_PARSER_WORKSPACE
+  __real_mc_cubic_b_spline(target, pl_data, position, scratch);
+#else
   __real_mc_cubic_b_spline(target, pl_data, position, first, second);
+#endif
 }
 #endif
 

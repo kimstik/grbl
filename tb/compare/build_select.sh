@@ -10,6 +10,7 @@ case "$family" in
   rms) sources='frame rms'; variants='reference rms-off rms' ;;
   chords) sources='frame chords'; variants='reference chords-off chords' ;;
   square) sources='chords square'; variants='reference square' ;;
+  workspace) sources='square workspace'; variants='reference workspace-off workspace' ;;
   *) exit 2 ;;
 esac
 root=$PWD
@@ -22,7 +23,7 @@ for arm in $sources; do
   git -C "$arm" rev-parse HEAD > "$out/source-$arm.txt"
 done
 compiler_source=select
-case "$family" in rms|chords) compiler_source=frame ;; square) compiler_source=chords ;; esac
+case "$family" in rms|chords) compiler_source=frame ;; square) compiler_source=chords ;; workspace) compiler_source=square ;; esac
 cc=$(make -s -C "$compiler_source" --eval 'print-compile: ; @echo $(COMPILE)' print-compile)
 common='-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3 -DBEZIER_Z_LOOSE'
 [ "$mode" != g93 ] || common="$common -DBEZIER_EXACT_INVERSE_TIME"
@@ -43,6 +44,8 @@ for variant in $variants; do
     chords-off) source=chords; extra="$fixed -DBEZIER_PARSER_SCRATCH" ;;
     chords) source=chords; extra="$fixed -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS" ;;
     square) source=square; extra="$fixed -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS" ;;
+    workspace-off) source=workspace; extra="$fixed -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS" ;;
+    workspace) source=workspace; extra="$fixed -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE" ;;
   esac
   if [ "$family" = rms ] && [ "$variant" = reference ]; then
     source=frame; extra="$fixed -DBEZIER_Z_SELECT -DBEZIER_PARSER_SCRATCH"
@@ -50,6 +53,8 @@ for variant in $variants; do
     source=frame; extra="$fixed -DBEZIER_PARSER_SCRATCH"
   elif [ "$family" = square ] && [ "$variant" = reference ]; then
     source=chords; extra="$fixed -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS"
+  elif [ "$family" = workspace ] && [ "$variant" = reference ]; then
+    source=square; extra="$fixed -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS"
   fi
   build="$root/build-$family/$mode/$variant"
   printf '%s\n' "$cc $common $extra" > "$out/$variant-compile.txt"
@@ -97,6 +102,9 @@ elif [ "$family" = parser ]; then
   printf '%s\n' 'scratch-off: static ELF identical to frozen selector' > "$out/identity.txt"
 elif [ "$family" = square ]; then
   printf '%s\n' 'square: arithmetic change; complete output identity is checked by the native job' > "$out/identity.txt"
+elif [ "$family" = workspace ]; then
+  cmp "$out/reference.elf" "$out/workspace-off.elf"
+  printf '%s\n' 'workspace-off: static ELF identical to frozen square' > "$out/identity.txt"
 else
   cmp "$out/reference.elf" "$out/$family-off.elf"
   printf '%s\n' "$family-off: static ELF identical to frozen parser scratch" > "$out/identity.txt"

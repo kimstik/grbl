@@ -39,36 +39,47 @@ on:
         required: false
         type: boolean
         default: false
+      workspace:
+        description: 'Frozen parser workspace full identity/static checks; no AVR execution'
+        required: false
+        type: boolean
+        default: false
 
 defaults:
   run:
     shell: bash
 
 jobs:
+  workspace:
+    if: ${{ inputs.workspace }}
+    uses: ./.github/workflows/g5-parser.yml
+    with:
+      family: workspace
+
   square:
-    if: ${{ inputs.square && !inputs.square_motion }}
+    if: ${{ inputs.square && !inputs.square_motion && !inputs.workspace }}
     uses: ./.github/workflows/g5-parser.yml
     with:
       family: square
 
   chords:
-    if: ${{ inputs.chords && !inputs.square && !inputs.square_motion }}
+    if: ${{ inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace }}
     uses: ./.github/workflows/g5-parser.yml
     with:
       family: chords
 
   rms:
-    if: ${{ inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion }}
+    if: ${{ inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace }}
     uses: ./.github/workflows/g5-parser.yml
     with:
       family: rms
 
   parser-scratch:
-    if: ${{ inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion }}
+    if: ${{ inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace }}
     uses: ./.github/workflows/g5-parser.yml
 
   avr:
-    if: ${{ inputs.square_motion || (!inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square) }}
+    if: ${{ !inputs.workspace && (inputs.square_motion || (!inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)) }}
     runs-on: ubuntu-24.04
     container: archlinux:latest
     strategy:
@@ -133,7 +144,7 @@ jobs:
 
   simavr:
     needs: avr
-    if: ${{ !cancelled() && (inputs.square_motion || (!inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)) }}
+    if: ${{ !inputs.workspace && !cancelled() && (inputs.square_motion || (!inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)) }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -179,7 +190,7 @@ jobs:
 
   identity:
     needs: simavr
-    if: ${{ !cancelled() && (inputs.square_motion || (!inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)) }}
+    if: ${{ !inputs.workspace && !cancelled() && (inputs.square_motion || (!inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)) }}
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -233,7 +244,7 @@ jobs:
 
   observe:
     needs: avr
-    if: ${{ !cancelled() && (inputs.square_motion || (!inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)) }}
+    if: ${{ !inputs.workspace && !cancelled() && (inputs.square_motion || (!inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)) }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -277,7 +288,7 @@ jobs:
           path: raw
 
   selector-native:
-    if: ${{ inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion }}
+    if: ${{ inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     name: selector native identity
@@ -311,7 +322,7 @@ jobs:
           path: raw/native
 
   selector-avr:
-    if: ${{ inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion }}
+    if: ${{ inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace }}
     runs-on: ubuntu-24.04
     container: archlinux:latest
     timeout-minutes: 20

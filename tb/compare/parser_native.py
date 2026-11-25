@@ -53,7 +53,7 @@ def main():
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--make', default='make')
     parser.add_argument('--cc', default='gcc')
-    parser.add_argument('--family', choices=('parser', 'rms', 'chords', 'square'), default='parser')
+    parser.add_argument('--family', choices=('parser', 'rms', 'chords', 'square', 'workspace'), default='parser')
     args = parser.parse_args()
     checker.controls()
     out = args.output.resolve()
@@ -85,8 +85,14 @@ def main():
     success([args.cc, '--version'], 'compiler')
     success([args.make, '--version'], 'make')
     executables = {}
-    policy = 'refill' if args.family in ('chords', 'square') else 'select'
-    if args.family == 'square':
+    policy = 'refill' if args.family in ('chords', 'square', 'workspace') else 'select'
+    if args.family == 'workspace':
+        candidate = 'workspace'
+        extra = ' -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS'
+        variants = (('reference', args.reference, extra),
+                    ('workspace-off', args.candidate, extra),
+                    (candidate, args.candidate, extra + ' -DBEZIER_PARSER_WORKSPACE'))
+    elif args.family == 'square':
         candidate = 'square'
         extra = ' -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS'
         variants = (('reference', args.reference, extra), (candidate, args.candidate, extra))
