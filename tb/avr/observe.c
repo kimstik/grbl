@@ -2,6 +2,7 @@
  * The AVR ABI and spline state layout below must be checked against each build.
  * Run with --blind as a control: UART bytes, their cycles and final cycle must match.
  * --net-abi selects the six-argument parser-scratch ABI; nine arguments are the default.
+ * --cache-abi selects the seven-argument helper and four-argument workspace driver.
  * No SRAM, flash, register or peripheral state is written by the observer.
  */
 #include <inttypes.h>
@@ -81,12 +82,16 @@ static uint16_t pointer(const avr_t *avr, unsigned source, unsigned size)
   return address;
 }
 
+static uint32_t float_bits(const avr_t *avr, unsigned address)
+{
+  return word(avr, address) | (uint32_t)word(avr, address + 2) << 16;
+}
+
 static void raw_floats(const avr_t *avr, unsigned address, unsigned count)
 {
   if (address + 4*count > (uint32_t)avr->ramend + 1) { die("float outside SRAM"); }
   for (unsigned i = 0; i < count; i++, address += 4) {
-    uint32_t value = word(avr, address) | (uint32_t)word(avr, address + 2) << 16;
-    fprintf(events, " %" PRIu32, value);
+    fprintf(events, " %" PRIu32, float_bits(avr, address));
   }
 }
 
@@ -103,17 +108,28 @@ typedef struct {
   uint64_t cycle;
 } call_t;
 
+typedef struct {
+  uint8_t pending;
+  uint16_t target, pl, position, scratch;
+  uint32_t control[10];
+} cache_t;
+
 int main(int argc, char **argv)
 {
   if (argc < 5 || argc > 7) {
-    fprintf(stderr, "usage: observe dyn.elf events.txt uart.txt max_cycles [--blind] [--net-abi]\n");
+    fprintf(stderr, "usage: observe dyn.elf events.txt uart.txt max_cycles [--blind] [--net-abi | --cache-abi]\n");
     return 2;
   }
-  int blind = 0, net_abi = 0;
+  int blind = 0, net_abi = 0, cache_abi = 0;
   for (int i = 5; i < argc; i++) {
     if (!strcmp(argv[i], "--blind") && !blind) { blind = 1; }
     else if (!strcmp(argv[i], "--net-abi") && !net_abi) { net_abi = 1; }
+    else if (!strcmp(argv[i], "--cache-abi") && !cache_abi) { cache_abi = 1; }
     else { fprintf(stderr, "observe: unknown or duplicate flag %s\n", argv[i]); return 2; }
+  }
+  if (net_abi && cache_abi) {
+    fprintf(stderr, "observe: --net-abi and --cache-abi are mutually exclusive\n");
+    return 2;
   }
   char *end;
   uint64_t limit = strtoull(argv[4], &end, 10);
@@ -138,8 +154,10 @@ int main(int argc, char **argv)
 
   const avr_symbol_t *next = symbol(&fw, "mc_spline_next");
   const avr_symbol_t *plan = symbol(&fw, "plan_buffer_line");
+  const avr_symbol_t *driver = cache_abi ? symbol(&fw, "mc_cubic_b_spline") : NULL;
   const avr_symbol_t *z = symbol(&fw, "spline_z");
   if ((z->size != 25 && z->size != 26 && z->size != 29 && z->size != STATE_MAX) ||
+      (cache_abi && z->size != 25) || (driver && driver->addr > avr->flashend) ||
       next->addr > avr->flashend || plan->addr > avr->flashend) { die("unsupported spline layout or code address"); }
   uint16_t za = data_address(avr, z, z->size);
   uint16_t prog = data_address(avr, symbol(&fw, "prog"), 1);
@@ -147,6 +165,8 @@ int main(int argc, char **argv)
   fprintf(events, "meta 1 %lu %u %" PRIu32 " %" PRIu32 " %u %u %u %d\n",
           FREQUENCY, za, next->addr, plan->addr, z->size, prog, pi, blind);
   call_t call = {0};
+  cache_t cache = {0};
+  const unsigned count[4] = {3, 2, 2, 3};
   uint32_t curve = 0, point = 0;
   uint16_t segments = 0;
   uint64_t calls = 0, points = 0;
@@ -163,9 +183,32 @@ int main(int argc, char **argv)
         fputc('\n', events);
         call.active = 0;
       }
+      if (driver && avr->pc == driver->addr) {
+        if (cache.pending || in_curve || call.active) { die("new cache driver before prior curve finished"); }
+        cache.target = pointer(avr, 24, 12); cache.pl = pointer(avr, 22, 9);
+        cache.position = pointer(avr, 20, 12); cache.scratch = pointer(avr, 18, 36);
+        /* first[2] and second[2] are still at scratch +0/+8 here. The driver
+         * overlays them with g[2], e0[2], d[2]; point[3] follows at +24. */
+        const uint16_t control[4] = {cache.position, cache.scratch, cache.scratch + 8, cache.target};
+        unsigned out = 0;
+        for (unsigned i = 0; i < 4; i++) {
+          for (unsigned k = 0; k < count[i]; k++) {
+            cache.control[out++] = float_bits(avr, control[i] + 4*k);
+          }
+        }
+        cache.pending = 1;
+      }
       if (avr->pc == next->addr) {
         if (call.active) { die("recursive spline helper or missed return"); }
         if (pointer(avr, 24, z->size) != za) { die("spline argument differs from ELF state"); }
+        if (cache_abi) {
+          /* Seven arguments: z, target, j, segments, position, scratch, pl_data. */
+          if (!cache.pending && !in_curve) { die("cache helper before driver capture"); }
+          if (pointer(avr, 22, 12) != cache.target || pointer(avr, 16, 12) != cache.position ||
+              pointer(avr, 14, 36) != cache.scratch || pointer(avr, 12, 9) != cache.pl) {
+            die("cache helper arguments differ from driver");
+          }
+        }
         call.j = word(avr, 20); call.segments = word(avr, 18);
         if (call.segments < 2 || call.segments > 2000 || call.j >= call.segments) {
           die("invalid helper indices; check the ELF ABI");
@@ -175,16 +218,22 @@ int main(int argc, char **argv)
           in_curve = 1; curve++; point = 0; segments = call.segments;
           fprintf(events, "curve %" PRIu32 " %u %u %" PRIu64 " %u", curve,
                   avr->data[prog], word(avr, pi), (uint64_t)avr->cycle, segments);
-          /* position, first, second, target; AVR pointers are two bytes. */
-          const unsigned count[4] = {3, 2, 2, 3};
-          uint16_t control[4], net = net_abi ? pointer(avr, 16, 8) : 0;
-          for (unsigned i = 0; i < 4; i++) {
-            control[i] = pointer(avr, net_abi ? net + 2*i : 16 - 2*i, 4*count[i]);
+          /* position, first, second, target; retain first-helper record timing. */
+          if (cache_abi) {
+            if (!cache.pending) { die("new cache curve without driver capture"); }
+            for (unsigned i = 0; i < 10; i++) { fprintf(events, " %" PRIu32, cache.control[i]); }
+            cache.pending = 0;
+          } else {
+            /* AVR pointers are two bytes. */
+            uint16_t control[4], net = net_abi ? pointer(avr, 16, 8) : 0;
+            for (unsigned i = 0; i < 4; i++) {
+              control[i] = pointer(avr, net_abi ? net + 2*i : 16 - 2*i, 4*count[i]);
+            }
+            for (unsigned i = 0; i < 4; i++) { raw_floats(avr, control[i], count[i]); }
           }
-          for (unsigned i = 0; i < 4; i++) { raw_floats(avr, control[i], count[i]); }
           fputc('\n', events);
         }
-        if (!in_curve || call.segments != segments) { die("helper outside known curve"); }
+        if (!in_curve || call.segments != segments || cache.pending) { die("helper outside known curve"); }
         call.sp = sp; call.cycle = avr->cycle;
         call.return_pc = 2*((uint16_t)avr->data[sp + 1] << 8 | avr->data[sp + 2]);
         if (call.return_pc > avr->flashend) { die("invalid return PC; check the ELF ABI"); }
@@ -210,7 +259,7 @@ int main(int argc, char **argv)
   fprintf(events, "end %" PRIu64 " %d %" PRIu64 " %" PRIu32 " %" PRIu32
           " %" PRIu64 " %" PRIu64 " %d %d\n", (uint64_t)avr->cycle, avr->state,
           uart_bytes, uart_hash, curve, calls, points, in_curve, call.active);
-  int ok = avr->state == cpu_Done && (blind || (!in_curve && !call.active && curve && calls && points));
+  int ok = avr->state == cpu_Done && (blind || (!in_curve && !call.active && !cache.pending && curve && calls && points));
   if (ferror(events) || ferror(uart_out)) { die("output write failed"); }
   if (fclose(events) || fclose(uart_out)) { die("output close failed"); }
   avr_terminate(avr);

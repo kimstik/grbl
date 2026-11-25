@@ -53,7 +53,7 @@ def main():
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--make', default='make')
     parser.add_argument('--cc', default='gcc')
-    parser.add_argument('--family', choices=('parser', 'rms', 'chords', 'square', 'workspace'), default='parser')
+    parser.add_argument('--family', choices=('parser', 'rms', 'chords', 'square', 'workspace', 'cache'), default='parser')
     args = parser.parse_args()
     checker.controls()
     out = args.output.resolve()
@@ -85,8 +85,14 @@ def main():
     success([args.cc, '--version'], 'compiler')
     success([args.make, '--version'], 'make')
     executables = {}
-    policy = 'refill' if args.family in ('chords', 'square', 'workspace') else 'select'
-    if args.family == 'workspace':
+    policy = 'refill' if args.family in ('chords', 'square', 'workspace', 'cache') else 'select'
+    if args.family == 'cache':
+        candidate = 'cache'
+        extra = ' -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE'
+        variants = (('reference', args.reference, extra),
+                    ('cache-off', args.candidate, extra),
+                    (candidate, args.candidate, extra + ' -DBEZIER_POINT_CACHE'))
+    elif args.family == 'workspace':
         candidate = 'workspace'
         extra = ' -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS'
         variants = (('reference', args.reference, extra),

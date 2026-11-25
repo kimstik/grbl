@@ -26,6 +26,7 @@ for mode in g94 g93; do
   make -s -C source clean > "raw/identity-arm-$mode.log" 2>&1
   make -s -C source COMPILE="$cc $opts" >> "raw/identity-arm-$mode.log" 2>&1
   cmp "raw/baseline-$mode.hex" source/grbl.hex
+  cp source/grbl.hex "raw/macro-off-$mode.hex"
   printf '%s %s macro-off identical\n' "$arm" "$mode" >> raw/identity.txt
 
   if [ "$arm" = refill ]; then
@@ -47,6 +48,13 @@ for mode in g94 g93; do
     make -s -C source clean > "raw/workspace-off-$mode.log" 2>&1
     make -s -C source COMPILE="$cc $opts -DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS" >> "raw/workspace-off-$mode.log" 2>&1
     cp source/grbl.hex "raw/workspace-off-$mode.hex"
+  fi
+
+  if [ "$arm" = cache ]; then
+    # Disabling only POINT_CACHE must retain the frozen workspace image.
+    make -s -C source clean > "raw/cache-off-$mode.log" 2>&1
+    make -s -C source COMPILE="$cc $opts -DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE" >> "raw/cache-off-$mode.log" 2>&1
+    cp source/grbl.hex "raw/cache-off-$mode.hex"
   fi
 
   make -s -C source clean > "raw/production-$mode.log" 2>&1

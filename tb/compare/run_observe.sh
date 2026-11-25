@@ -33,7 +33,10 @@ for arm in "${arms[@]}"; do
   sha256sum "$elf" > "$dir/elf-sha256.txt"
   for control in observed blind; do
     args=()
-    case $arm in square|workspace) args+=(--net-abi) ;; esac
+    case $arm in
+      square|workspace) args+=(--net-abi) ;;
+      cache) args+=(--cache-abi) ;;
+    esac
     [ "$control" != blind ] || args+=(--blind)
     timeout 360 nice -n 19 build/observe "$elf" "$dir/$control.txt" \
       "$dir/$control-uart.txt" 600000000 "${args[@]}" > "$dir/$control-run.txt" 2>&1
@@ -52,15 +55,27 @@ for arm in "${arms[@]}"; do
       printf 'SEED-off image identical to refill %s\n' "$mode" > "$dir/seed-identity.txt"
     fi
     if [ "$arm" = workspace ]; then
-      reference=square
-      cmp "$root/input/workspace/raw/workspace-off-$mode.hex" "$root/input/square/raw/production-$mode.hex"
-      printf 'WORKSPACE-off image identical to square %s\n' "$mode" > "$dir/workspace-identity.txt"
+      reference=fixed
+      if [ -d "$root/input/square" ]; then
+        reference=square
+        cmp "$root/input/workspace/raw/workspace-off-$mode.hex" "$root/input/square/raw/production-$mode.hex"
+        printf 'WORKSPACE-off image identical to square %s\n' "$mode" > "$dir/workspace-identity.txt"
+      fi
+    fi
+    if [ "$arm" = cache ]; then
+      reference=workspace
+      cmp "$root/input/cache/raw/cache-off-$mode.hex" "$root/input/workspace/raw/production-$mode.hex"
+      printf 'POINT_CACHE-off image identical to workspace %s\n' "$mode" > "$dir/cache-identity.txt"
     fi
     baseline=(--baseline "$out/$reference/observed.txt" \
       --baseline-uart "$out/$reference/observed-uart.txt")
     case $arm in
       quadrature|fixed|seed|square) baseline+=(--xy-only) ;;
-      refill|workspace) ;; # Scheduling/storage only: require full target identity.
+      workspace)
+        # Without square in this run, fixed is only a policy reference.
+        [ "$reference" = square ] || baseline+=(--xy-only)
+        ;;
+      refill|cache) ;; # Scheduling/storage only: require full target identity.
       *) baseline+=(--require-prefetch) ;;
     esac
   fi
