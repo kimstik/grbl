@@ -421,6 +421,85 @@ with the full evidence suite. The cap/error/default choices remain open.
 
 ## Z by an estimate of the length ahead
 
+### Cache initialization split: stack recovered, boot fit still fails
+
+Frozen source 4cdfc54 extracts coefficient preparation into the returning
+`mc_spline_cache_init` helper. Its temporaries no longer remain in the spline
+driver during estimation, planning and realtime servicing. The coefficient
+operation tree, parser overlay, estimator, segment policy and realtime
+sites are unchanged from cache 8dc5a6a. No persistent RAM is added.
+
+[CI 45609181104](https://github.com/kimstik/grbl/actions/runs/45609181104),
+harness 15bc573, finishes **failed, 15/16 jobs passing**. Compilation,
+native identity, both measured-stack gates, both observations and raw AVR
+identity pass. Only the cache production boot-region gate fails.
+
+Independent verification decodes 408 native curves and 82584 targets.
+All five raw target words, parsed start/control net and all twelve native
+summary words match workspace, including actual G93 and constant Z.
+The 32 negative and two positive identity controls pass. General vectors
+remain unchanged, **not passing**:
+`675 checks: 77 pass, 17 FAIL, 12 xfail, 0 XPASS`.
+
+Both retained POINT_CACHE-off images independently match workspace;
+all eight retained macro-off images match baseline. AVR derived targets
+preserve full XYZ/feed/condition, estimate trace, status, count, endpoint,
+nonfinite count and hash. Runtime cycle fields are measurements, not
+identity fields. Eight same-ELF observed/blind pairs preserve final cycles,
+state, UART bytes and per-byte timing hash. Downloaded binaries are read
+as data, never executed locally.
+
+| Variant    | Flash G94/G93 | Boot margin G94/G93 | Static RAM | Stack G94/G93 | Stack margin G94/G93 |
+| ---------- | ------------- | ------------------- | ---------- | ------------- | -------------------- |
+| Baseline   | 31850/31950   | +406/+306           | 1670       | 334/334       | +44/+44              |
+| Workspace  | 32388/32506   | -132/-250           | 1670       | 360/362       | +18/+16              |
+| Cache      | 32384/32526   | -128/-270           | 1670       | 384/384       | -6/-6                |
+| Cache init | 32414/32556   | -158/-300           | 1670       | 358/358       | +20/+20              |
+
+Sizes use avr-gcc 16.2 and production buffers. Stack is the measured
+full-sweep maximum, not a worst-case proof. Static RAM leaves 378 bytes;
+the split recovers 26 measured stack bytes for 30 additional flash bytes
+in each build. Both images fit the full 32768-byte device, but neither
+fits its separate 32256-byte boot-region limit. Bench serial buffers are
+smaller; budget measurements do not establish production safety.
+
+| G94 measurement                      | Workspace | Cache   | Cache init |
+| ------------------------------------ | --------- | ------- | ---------- |
+| Long S first, ms                      | 22.698    | 18.996  | 19.002     |
+| Long S maximum headless gap, ms       | 0.494     | 0.383   | 0.382      |
+| Long S generator, ms                  | 715.571   | 571.643 | 571.442    |
+| S10/Z-30/F5000 live maximum first, ms | 46.225    | 37.741  | 37.740     |
+| S20/Z-10/F5000 live maximum first, ms | 30.134    | 26.524  | 26.967     |
+| S60/Z-30/F5000 live maximum first, ms | 37.936    | 31.126  | 31.123     |
+| S60/Z-30/F1000 live maximum first, ms | 31.278    | 30.798  | 30.795     |
+
+The split retains the cache's generation benefit, not a new startup win.
+Headless generation excludes a running stepper. The four live chains'
+maximum target gaps are 10.979, 7.696, 9.861 and 48.399 ms; the largest is
+unclassified here, not evidence of starvation. Pure-Z headless first
+latency is 0.965 ms versus cache 0.956 and workspace 0.805 ms.
+
+| Variant    | Ordinary time G94/G93, ms | Stops G94/G93 | Queued stops G94/G93 |
+| ---------- | ------------------------ | ------------- | ------------------- |
+| Baseline   | 95213/95360              | 4/9           | 3/5                 |
+| Workspace  | 97953/97943              | 17/18         | 0/1                 |
+| Cache      | 95079/95159              | 19/21         | 6/8                 |
+| Cache init | 95106/95116              | 18/20         | 1/4                 |
+
+These are sums over 40 ordinary programs. All four steep programs retain
+zero stops and all six hold/resume checks pass. The smaller ordinary
+stop count does not close the regression against baseline. Queued count
+and entry feed are not consumed stepper endpoint velocity. All live
+commands use G94, including builds with the G93 option enabled.
+
+Accuracy is unchanged: the twelve observed curves reach 0.000197911415 mm
+Z error; the eighteen derived curves reach 0.011884512438 mm in G94 and
+0.012220205797 mm in actual G93, with two above 0.002 mm in each mode.
+Exact G93 remains unmet. The stack extraction works, but boot fit,
+ordinary motion, common $12 accuracy and exact G93 remain open. Preserve
+this candidate and the original cache evidence below; no production
+winner, merge or default change is established.
+
 ### Point cache: faster generation, failed stack and motion gates
 
 Frozen cache source 8dc5a6a stores the two XY axes' invariant Horner
