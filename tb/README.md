@@ -421,6 +421,82 @@ with the full evidence suite. The cap/error/default choices remain open.
 
 ## Z by an estimate of the length ahead
 
+### Parser workspace: measured stack recovery, flash still over budget
+
+Frozen workspace source 15b7cb8 reuses the consumed parser-word prefix
+for control points, the emitted point and the four control-net pointers.
+The parsed prefix is 38 bytes on AVR; the typed workspace needs 36.
+Target XYZ and modal state remain outside the overlay. Compile-time
+size/offset checks prevent static RAM growth. G5 retains the original
+control-point expression order; G5.1 computes both quadratic controls
+before overwriting any source word. The estimator, segment policy and
+realtime call sites are unchanged from square a783b67.
+
+[Static CI 45572792486](https://github.com/kimstik/grbl/actions/runs/45572792486),
+harness dddb71d, passes native identity and fails both boot-fit gates.
+All 408 native curves and 82584 targets across reference, flag-off and
+workspace builds retain all five XYZ/feed/condition words, parsed
+start/control net and twelve native summary words. General vector
+results remain **not passing**: `675 checks: 77 pass, 17 FAIL, 12 xfail, 0 XPASS`.
+The finite-chord vector 34 diagnostic failure is not waived.
+
+[Motion CI 45576090534](https://github.com/kimstik/grbl/actions/runs/45576090534),
+harness 2763280, finishes **failed, 12/15 jobs passing**. The workspace
+production boot gate and both square stack-margin gates fail. Both
+workspace motion/stack jobs, both observation jobs and raw identity pass.
+All images used for simulation link within 32768 bytes; the unchanged
+boot capacity is 32256 bytes. Downloaded executables are inspected as
+data only, never run locally.
+
+| Variant   | Flash G94/G93 | Boot margin G94/G93 | Static RAM | Stack G94/G93 | Stack margin G94/G93 |
+| --------- | ------------- | ------------------- | ---------- | ------------- | -------------------- |
+| Baseline  | 31850/31950   | 406/306             | 1670       | 334/334       | 44/44                |
+| Square    | 32320/32438   | -64/-182            | 1670       | 386/388       | -8/-10               |
+| Workspace | 32388/32506   | -132/-250           | 1670       | 360/362       | 18/16                |
+
+Workspace costs 68 flash bytes and recovers 26 measured stack bytes in
+each build. Production free RAM before stack remains 378 bytes. These
+are measured margins on the retained workloads, not a worst-case stack
+proof. The dynamic bench has smaller serial buffers; square's negative
+production margin does not imply corruption of the bench itself.
+
+Independent runtime comparison retains all raw XYZ/feed/condition,
+estimator trace, status, count, exact endpoint, nonfinite count and hash
+against square, including actual G93 and constant Z. Runtime summaries
+also contain measured total/planner/generator/first/gap cycles: those
+may change with storage topology and are not output identity fields.
+Native twelve-word summary identity remains unchanged. Both retained
+WORKSPACE-off HEX images independently match square production HEX.
+Eight same-ELF observed/blind pairs retain identical final cycles,
+state, UART bytes and per-byte timing hash. Cross-variant timing need
+not match. The read-only observer uses the checked six-argument net ABI.
+
+| Variant   | Ordinary ms G94/G93 | Stops G94/G93 | Queued stops G94/G93 | Program 24 ms G94/G93 |
+| --------- | ------------------- | ------------- | -------------------- | --------------------- |
+| Baseline  | 95213/95360         | 4/9           | 3/5                  | 1722/1724             |
+| Square    | 97907/98023         | 18/18         | 0/0                  | 1764/1753             |
+| Workspace | 97953/97943         | 17/18         | 0/1                  | 1744/1752             |
+
+The ordinary sweep has 40 programs; all three variants have zero stops
+in program 24. Workspace also passes four steep programs with zero
+stops and six hold/resume checks. A queued-stop counter or queued entry
+feed is not the consumed stepper endpoint speed; these counts do not
+prove universal smoothness. Live commands are G94 in both compile modes.
+
+Workspace is not a startup improvement over square: G94 live maximum
+first-point delays for the four observed chains are 46.225, 30.134,
+37.936 and 31.278 ms, versus 46.227, 30.136, 37.938 and 31.280 ms.
+The largest observed target gap is 48.415 ms; it is not classified here
+as starvation. The previously classified refill gap was backpressure.
+
+Accuracy is unchanged: the twelve observed G94 curves have maximum Z
+error 0.000197911415 mm. The eighteen derived curves still reach
+0.011884512438 mm in G94 and 0.012220205797 mm in actual G93, two above
+0.002 mm in each mode. Exact G93 remains unmet. Workspace recovers the
+measured stack budget but still misses boot flash by 132/250 bytes and
+has more ordinary stops than baseline. It is not a production winner,
+a default change or closure of the startup/motion objectives.
+
 ### Finite chords: better ordinary Z, failed production memory gates
 
 Frozen finite-chord source ce43674 and integer-square source a783b67
