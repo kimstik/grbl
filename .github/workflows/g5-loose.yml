@@ -9,6 +9,11 @@ on:
         description: 'Check identity using existing raw artifacts only; empty runs the full comparison'
         required: false
         type: string
+      selector:
+        description: 'Frozen selector native/static checks only; no AVR execution'
+        required: false
+        type: boolean
+        default: false
 
 defaults:
   run:
@@ -16,7 +21,7 @@ defaults:
 
 jobs:
   avr:
-    if: ${{ !inputs.raw_run_id }}
+    if: ${{ !inputs.raw_run_id && !inputs.selector }}
     runs-on: ubuntu-24.04
     container: archlinux:latest
     strategy:
@@ -64,7 +69,7 @@ jobs:
 
   simavr:
     needs: avr
-    if: ${{ !cancelled() && !inputs.raw_run_id }}
+    if: ${{ !cancelled() && !inputs.raw_run_id && !inputs.selector }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -110,7 +115,7 @@ jobs:
 
   identity:
     needs: simavr
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && !inputs.selector }}
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -158,7 +163,7 @@ jobs:
 
   observe:
     needs: avr
-    if: ${{ !cancelled() && !inputs.raw_run_id }}
+    if: ${{ !cancelled() && !inputs.raw_run_id && !inputs.selector }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -199,4 +204,84 @@ jobs:
         if: always()
         with:
           name: loose-observe-${{ matrix.mode }}
+          path: raw
+
+  selector-native:
+    if: ${{ inputs.selector }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    name: selector native identity
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: 1f19d74940551ecfaa0c38c17a318aeda931d795
+          path: baseline
+      - uses: actions/checkout@v4
+        with:
+          ref: 8672b8f5091b0df7d0a8a34216d0cde8bb75d2ce
+          path: refill
+      - uses: actions/checkout@v4
+        with:
+          ref: fbea6f2456e48306d3bb8f6b5e49366b1ba94357
+          path: seed
+      - uses: actions/checkout@v4
+        with:
+          ref: 452c70dc7809edb2e16e03a6707c197fc535fbbd
+          path: select
+      - name: Raw parser outputs, selected policies and actual G93 identity
+        run: |
+          set -euo pipefail
+          timeout 600 nice -n 19 python3 -I tb/compare/select_native.py \
+            --baseline baseline --refill refill --seed seed --select select --output raw/native
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selector-native
+          path: raw/native
+
+  selector-avr:
+    if: ${{ inputs.selector }}
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [g94, g93]
+    name: selector AVR 16.2 ${{ matrix.mode }}
+    steps:
+      - name: Pinned AVR tools
+        run: |
+          set -euo pipefail
+          pacman -Syu --noconfirm --needed git make diffutils bash python
+          a=https://archive.archlinux.org/packages/a
+          pacman -U --noconfirm \
+            $a/avr-binutils/avr-binutils-2.47-1-x86_64.pkg.tar.zst \
+            $a/avr-gcc/avr-gcc-16.2.0-1-x86_64.pkg.tar.zst \
+            $a/avr-libc/avr-libc-2.3.2-4-any.pkg.tar.zst
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: 1f19d74940551ecfaa0c38c17a318aeda931d795
+          path: baseline
+      - uses: actions/checkout@v4
+        with:
+          ref: 8672b8f5091b0df7d0a8a34216d0cde8bb75d2ce
+          path: refill
+      - uses: actions/checkout@v4
+        with:
+          ref: 452c70dc7809edb2e16e03a6707c197fc535fbbd
+          path: select
+      - name: Normal production link, macro-off identity and static overflow evidence
+        run: timeout 900 nice -n 19 bash tb/compare/build_select.sh '${{ matrix.mode }}'
+      - name: Require boot-region fit; static inspection does not waive overflow
+        run: |
+          set -euo pipefail
+          python3 -I tb/compare/check_select_fit.py raw --mode '${{ matrix.mode }}'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selector-avr-${{ matrix.mode }}
           path: raw

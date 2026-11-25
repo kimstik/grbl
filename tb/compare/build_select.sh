@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Static production comparison only. No simulator or firmware execution.
+set -euo pipefail
+mode=$1
+case "$mode" in g94|g93) ;; *) exit 2 ;; esac
+root=$PWD
+out="$root/raw/selector-$mode"
+mkdir -p "$out"
+avr-gcc --version > "$out/compiler.txt"
+avr-ld --version > "$out/linker.txt"
+git rev-parse HEAD > "$out/harness.txt"
+for arm in baseline refill select; do
+  git -C "$arm" rev-parse HEAD > "$out/source-$arm.txt"
+done
+cc=$(make -s -C select --eval 'print-compile: ; @echo $(COMPILE)' print-compile)
+common='-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3 -DBEZIER_Z_LOOSE'
+[ "$mode" != g93 ] || common="$common -DBEZIER_EXACT_INVERSE_TIME"
+fixed='-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL'
+printf '%s\n' "$cc $common" > "$out/compile.txt"
+printf 'variant mode flash ram free_ram boot_margin full_margin normal_link\n' > "$out/sizes.txt"
+for variant in baseline macro-off refill selector-off select; do
+  source=select; extra=''
+  case "$variant" in
+    baseline) source=baseline ;;
+    refill) source=refill; extra=$fixed ;;
+    selector-off) extra=$fixed ;;
+    select) extra="$fixed -DBEZIER_Z_SELECT" ;;
+  esac
+  build="$root/build-selector/$mode/$variant"
+  # Never reuse artifacts from a different source or option set.
+  test ! -e "$build"
+  mkdir -p "$build"
+  normal=yes
+  if ! make -s -j1 -C "$source" BUILDDIR="$build" COMPILE="$cc $common $extra" \
+      "$build/main.elf" > "$out/$variant-normal.log" 2>&1; then
+    [ "$variant" = select ] || { cat "$out/$variant-normal.log"; exit 1; }
+    normal=no
+    # Link the same objects only to inspect size/disassembly; not a valid 328P image.
+    make -s -j1 -C "$source" BUILDDIR="$build" \
+      COMPILE="$cc $common $extra -Wl,--defsym=__TEXT_REGION_LENGTH__=65536" \
+      "$build/main.elf" > "$out/$variant-inspection.log" 2>&1
+  fi
+  cp "$build/main.elf" "$out/$variant.elf"
+  avr-size -B "$out/$variant.elf" > "$out/$variant-size.txt"
+  avr-nm -n -S "$out/$variant.elf" > "$out/$variant-symbols.txt"
+  if [ "$variant" = select ]; then
+    avr-objdump -d "$out/$variant.elf" > "$out/select-disassembly.txt"
+  else
+    avr-objcopy -j .text -j .data -O ihex "$out/$variant.elf" "$out/$variant.hex"
+  fi
+  python3 -I - "$out" "$variant" "$mode" "$normal" <<'PY' >> "$out/sizes.txt"
+from pathlib import Path
+import sys
+out, variant, mode, normal = Path(sys.argv[1]), *sys.argv[2:]
+text, data, bss = map(int, (out / (variant + '-size.txt')).read_text().splitlines()[1].split()[:3])
+flash, ram = text + data, data + bss
+assert (flash <= 32768) == (normal == 'yes'), 'normal link and static size disagree'
+if normal == 'no':
+    log = (out / (variant + '-normal.log')).read_text()
+    assert 'text' in log and ('will not fit' in log or 'overflowed by' in log), log
+print(variant, mode, flash, ram, 2048 - ram, 32256 - flash, 32768 - flash, normal)
+PY
+done
+cmp "$out/baseline.hex" "$out/macro-off.hex"
+printf '%s\n' 'macro-off: identical to frozen baseline' > "$out/identity.txt"
+cmp "$out/refill.hex" "$out/selector-off.hex"
+printf '%s\n' 'selector-off: identical to frozen refill' >> "$out/identity.txt"
+cat "$out/identity.txt" "$out/sizes.txt"
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+  cat "$out/identity.txt" "$out/sizes.txt" >> "$GITHUB_STEP_SUMMARY"
+fi

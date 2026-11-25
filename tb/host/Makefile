@@ -24,6 +24,13 @@ all: $(BUILD)/tb
 $(BUILD)/tb: $(OBJECTS)
 	$(CC) -o $@ $^ -Wl,--wrap=plan_buffer_line -Wl,--wrap=mc_cubic_b_spline -lm
 
+# Same parser and capture wrappers; export raw words for cross-policy identity.
+$(BUILD)/select-emit: $(filter-out $(BUILD)/tb.o,$(OBJECTS)) $(BUILD)/select_emit.o
+	$(CC) -o $@ $^ -Wl,--wrap=plan_buffer_line -Wl,--wrap=mc_cubic_b_spline -lm
+
+$(BUILD)/select_emit.o: ../compare/select_emit.c tb.c prelude.h | $(BUILD)
+	$(CC) $(CFLAGS) $(TBFLAGS) -c $< -o $@
+
 $(BUILD)/%.o: $(GRBL)/%.c prelude.h | $(BUILD)
 	$(CC) $(CFLAGS) $(FWFLAGS) -c $< -o $@
 
