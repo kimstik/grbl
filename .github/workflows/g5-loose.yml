@@ -44,6 +44,11 @@ on:
         required: false
         type: boolean
         default: false
+      workspace_motion:
+        description: 'Frozen workspace stack and motion against baseline/fixed/square; full square identity'
+        required: false
+        type: boolean
+        default: false
 
 defaults:
   run:
@@ -51,35 +56,35 @@ defaults:
 
 jobs:
   workspace:
-    if: ${{ inputs.workspace }}
+    if: ${{ inputs.workspace && !inputs.workspace_motion }}
     uses: ./.github/workflows/g5-parser.yml
     with:
       family: workspace
 
   square:
-    if: ${{ inputs.square && !inputs.square_motion && !inputs.workspace }}
+    if: ${{ inputs.square && !inputs.square_motion && !inputs.workspace && !inputs.workspace_motion }}
     uses: ./.github/workflows/g5-parser.yml
     with:
       family: square
 
   chords:
-    if: ${{ inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace }}
+    if: ${{ inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace && !inputs.workspace_motion }}
     uses: ./.github/workflows/g5-parser.yml
     with:
       family: chords
 
   rms:
-    if: ${{ inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace }}
+    if: ${{ inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace && !inputs.workspace_motion }}
     uses: ./.github/workflows/g5-parser.yml
     with:
       family: rms
 
   parser-scratch:
-    if: ${{ inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace }}
+    if: ${{ inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace && !inputs.workspace_motion }}
     uses: ./.github/workflows/g5-parser.yml
 
   avr:
-    if: ${{ !inputs.workspace && (inputs.square_motion || (!inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)) }}
+    if: ${{ !inputs.workspace && (inputs.workspace_motion || inputs.square_motion || (!inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)) }}
     runs-on: ubuntu-24.04
     container: archlinux:latest
     strategy:
@@ -92,12 +97,12 @@ jobs:
           - arm: fixed
             ref: a9b415f1c120fa9e12156f8456984e0e32e38112
             extra: -DBEZIER_Z_FIXED
-          - arm: refill
-            ref: 8672b8f5091b0df7d0a8a34216d0cde8bb75d2ce
-            extra: -DBEZIER_Z_FIXED -DBEZIER_Z_REFILL
-          - arm: ${{ inputs.square_motion && 'square' || 'seed' }}
-            ref: ${{ inputs.square_motion && 'a783b670fb96484c8bcd6e7aea94adb8b5172bf0' || 'fbea6f2456e48306d3bb8f6b5e49366b1ba94357' }}
-            extra: ${{ inputs.square_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS' || '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_Z_SEED' }}
+          - arm: ${{ inputs.workspace_motion && 'square' || 'refill' }}
+            ref: ${{ inputs.workspace_motion && 'a783b670fb96484c8bcd6e7aea94adb8b5172bf0' || '8672b8f5091b0df7d0a8a34216d0cde8bb75d2ce' }}
+            extra: ${{ inputs.workspace_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS' || '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL' }}
+          - arm: ${{ inputs.workspace_motion && 'workspace' || inputs.square_motion && 'square' || 'seed' }}
+            ref: ${{ inputs.workspace_motion && '15b7cb8e8c5de6d064e5c7d162b85c4c0efedd96' || inputs.square_motion && 'a783b670fb96484c8bcd6e7aea94adb8b5172bf0' || 'fbea6f2456e48306d3bb8f6b5e49366b1ba94357' }}
+            extra: ${{ inputs.workspace_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE' || inputs.square_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS' || '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_Z_SEED' }}
     name: avr 16.2 ${{ matrix.arm }}
     steps:
       - name: Pinned AVR tools
@@ -123,16 +128,20 @@ jobs:
           path: source
       - name: Matched production images and measurement binaries
         run: timeout 1200 nice -n 19 bash tb/compare/build_loose.sh '${{ matrix.arm }}' '${{ matrix.extra }}'
-      - name: Require square boot-region fit separately from motion evidence
-        if: ${{ inputs.square_motion && matrix.arm == 'square' }}
+      - name: Require candidate boot-region fit separately from motion evidence
+        if: ${{ inputs.workspace_motion && matrix.arm == 'workspace' || inputs.square_motion && matrix.arm == 'square' }}
+        env:
+          CANDIDATE: ${{ matrix.arm }}
         run: |
           python3 -I - <<'PY'
+          import os
           from pathlib import Path
+          candidate = os.environ['CANDIDATE']
           rows = [line.split() for line in Path('raw/sizes.txt').read_text().splitlines()[1:]]
           assert len(rows) == 2 and {row[1] for row in rows} == {'g94', 'g93'}
           for row in rows:
               print(f'{row[1]}: flash={row[2]}, boot margin={row[5]}, full fit={row[6]}, boot fit={row[7]}', flush=True)
-          assert all(row[0] == 'square' and int(row[2]) <= 32256 and row[6:] == ['yes', 'yes'] for row in rows), 'square exceeds ATmega328P boot flash region'
+          assert all(row[0] == candidate and int(row[2]) <= 32256 and row[6:] == ['yes', 'yes'] for row in rows), f'{candidate} exceeds ATmega328P boot flash region'
           PY
       - uses: actions/upload-artifact@v4
         if: always()
@@ -144,12 +153,12 @@ jobs:
 
   simavr:
     needs: avr
-    if: ${{ !inputs.workspace && !cancelled() && (inputs.square_motion || (!inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)) }}
+    if: ${{ !inputs.workspace && !cancelled() && (inputs.workspace_motion || inputs.square_motion || (!inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)) }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        arm: ${{ fromJSON(inputs.square_motion && '["baseline","fixed","refill","square"]' || '["baseline","fixed","refill","seed"]') }}
+        arm: ${{ fromJSON(inputs.workspace_motion && '["baseline","fixed","square","workspace"]' || inputs.square_motion && '["baseline","fixed","refill","square"]' || '["baseline","fixed","refill","seed"]') }}
         mode: [g94, g93]
         include:
           - arm: baseline
@@ -158,12 +167,12 @@ jobs:
           - arm: fixed
             ref: a9b415f1c120fa9e12156f8456984e0e32e38112
             extra: -DBEZIER_Z_FIXED
-          - arm: refill
-            ref: 8672b8f5091b0df7d0a8a34216d0cde8bb75d2ce
-            extra: -DBEZIER_Z_FIXED -DBEZIER_Z_REFILL
-          - arm: ${{ inputs.square_motion && 'square' || 'seed' }}
-            ref: ${{ inputs.square_motion && 'a783b670fb96484c8bcd6e7aea94adb8b5172bf0' || 'fbea6f2456e48306d3bb8f6b5e49366b1ba94357' }}
-            extra: ${{ inputs.square_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS' || '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_Z_SEED' }}
+          - arm: ${{ inputs.workspace_motion && 'square' || 'refill' }}
+            ref: ${{ inputs.workspace_motion && 'a783b670fb96484c8bcd6e7aea94adb8b5172bf0' || '8672b8f5091b0df7d0a8a34216d0cde8bb75d2ce' }}
+            extra: ${{ inputs.workspace_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS' || '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL' }}
+          - arm: ${{ inputs.workspace_motion && 'workspace' || inputs.square_motion && 'square' || 'seed' }}
+            ref: ${{ inputs.workspace_motion && '15b7cb8e8c5de6d064e5c7d162b85c4c0efedd96' || inputs.square_motion && 'a783b670fb96484c8bcd6e7aea94adb8b5172bf0' || 'fbea6f2456e48306d3bb8f6b5e49366b1ba94357' }}
+            extra: ${{ inputs.workspace_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE' || inputs.square_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS' || '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_Z_SEED' }}
     name: simavr ${{ matrix.arm }} ${{ matrix.mode }}
     steps:
       - uses: actions/checkout@v4
@@ -190,7 +199,7 @@ jobs:
 
   identity:
     needs: simavr
-    if: ${{ !inputs.workspace && !cancelled() && (inputs.square_motion || (!inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)) }}
+    if: ${{ !inputs.workspace && !cancelled() && (inputs.workspace_motion || inputs.square_motion || (!inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)) }}
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -213,6 +222,7 @@ jobs:
           failed=0
           arms=(refill seed)
           if [ '${{ inputs.square_motion }}' = true ]; then arms=(refill square); fi
+          if [ '${{ inputs.workspace_motion }}' = true ]; then arms=(square workspace); fi
           for mode in g94 g93; do
             for arm in "${arms[@]}"; do
               reference=fixed
@@ -220,8 +230,10 @@ jobs:
               if [ "$arm" = seed ]; then reference=refill; extra=(--xy-only); fi
               if [ "$arm" = square ]; then
                 reference=refill
+                [ '${{ inputs.workspace_motion }}' != true ] || reference=fixed
                 [ "$mode" != g94 ] || extra=(--xy-only)
               fi
+              if [ "$arm" = workspace ]; then reference=square; fi
               current="input/loose-simavr-$arm-$mode"
               previous="input/loose-simavr-$reference-$mode"
               log="raw/identity-$arm-$mode.txt"
@@ -244,7 +256,7 @@ jobs:
 
   observe:
     needs: avr
-    if: ${{ !inputs.workspace && !cancelled() && (inputs.square_motion || (!inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)) }}
+    if: ${{ !inputs.workspace && !cancelled() && (inputs.workspace_motion || inputs.square_motion || (!inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square)) }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -268,19 +280,19 @@ jobs:
           path: input/fixed
       - uses: actions/download-artifact@v4
         with:
-          name: loose-avr-refill
-          path: input/refill
+          name: loose-avr-${{ inputs.workspace_motion && 'square' || 'refill' }}
+          path: input/${{ inputs.workspace_motion && 'square' || 'refill' }}
       - uses: actions/download-artifact@v4
         with:
-          name: loose-avr-${{ inputs.square_motion && 'square' || 'seed' }}
-          path: input/${{ inputs.square_motion && 'square' || 'seed' }}
+          name: loose-avr-${{ inputs.workspace_motion && 'workspace' || inputs.square_motion && 'square' || 'seed' }}
+          path: input/${{ inputs.workspace_motion && 'workspace' || inputs.square_motion && 'square' || 'seed' }}
       - name: Host observer dependencies
         run: |
           set -euo pipefail
           sudo apt-get update -q
           sudo apt-get install -y -q --no-install-recommends gcc make pkg-config libelf-dev gcc-avr avr-libc
       - name: Compare initial-pass policies and refill identity with blind controls
-        run: timeout 3000 nice -n 19 bash tb/compare/run_observe.sh '${{ matrix.mode }}' baseline fixed refill '${{ inputs.square_motion && 'square' || 'seed' }}'
+        run: timeout 3000 nice -n 19 bash tb/compare/run_observe.sh '${{ matrix.mode }}' baseline fixed '${{ inputs.workspace_motion && 'square' || 'refill' }}' '${{ inputs.workspace_motion && 'workspace' || inputs.square_motion && 'square' || 'seed' }}'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -288,7 +300,7 @@ jobs:
           path: raw
 
   selector-native:
-    if: ${{ inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace }}
+    if: ${{ inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace && !inputs.workspace_motion }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     name: selector native identity
@@ -322,7 +334,7 @@ jobs:
           path: raw/native
 
   selector-avr:
-    if: ${{ inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace }}
+    if: ${{ inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords && !inputs.square && !inputs.square_motion && !inputs.workspace && !inputs.workspace_motion }}
     runs-on: ubuntu-24.04
     container: archlinux:latest
     timeout-minutes: 20

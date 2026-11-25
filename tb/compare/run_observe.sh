@@ -33,7 +33,7 @@ for arm in "${arms[@]}"; do
   sha256sum "$elf" > "$dir/elf-sha256.txt"
   for control in observed blind; do
     args=()
-    [ "$arm" != square ] || args+=(--net-abi)
+    case $arm in square|workspace) args+=(--net-abi) ;; esac
     [ "$control" != blind ] || args+=(--blind)
     timeout 360 nice -n 19 build/observe "$elf" "$dir/$control.txt" \
       "$dir/$control-uart.txt" 600000000 "${args[@]}" > "$dir/$control-run.txt" 2>&1
@@ -51,11 +51,16 @@ for arm in "${arms[@]}"; do
       cmp "$root/input/seed/raw/seed-off-$mode.hex" "$root/input/refill/raw/production-$mode.hex"
       printf 'SEED-off image identical to refill %s\n' "$mode" > "$dir/seed-identity.txt"
     fi
+    if [ "$arm" = workspace ]; then
+      reference=square
+      cmp "$root/input/workspace/raw/workspace-off-$mode.hex" "$root/input/square/raw/production-$mode.hex"
+      printf 'WORKSPACE-off image identical to square %s\n' "$mode" > "$dir/workspace-identity.txt"
+    fi
     baseline=(--baseline "$out/$reference/observed.txt" \
       --baseline-uart "$out/$reference/observed-uart.txt")
     case $arm in
       quadrature|fixed|seed|square) baseline+=(--xy-only) ;;
-      refill) ;; # Scheduling only: require the fixed arm's full target identity.
+      refill|workspace) ;; # Scheduling/storage only: require full target identity.
       *) baseline+=(--require-prefetch) ;;
     esac
   fi
