@@ -817,9 +817,66 @@ curve's initial estimate still permits a normal stop, and program 24
 retains late-block queued empties with consumed end speed zero. This
 classifies only the targeted events, not the complete motion sweep.
 
+#### Initial estimates and already-published stops
+
+A data-only classification of the existing ordinary-motion recordings
+separates another cause from the earlier moving-queued empty. The locally
+built baseline and refill G94 ELFs are byte-identical to their CI images;
+each observed/blind pair has identical final cycle, UART bytes and
+per-byte cycle hash. The baseline recording reaches program 27, and the
+refill recording completes it and enters program 28. Neither recording
+covers all 40 programs; the local simulator revision remains unverified.
+
+Program 24 uses 2 mm curves, F2000, acceleration 2000 and 16 ms serial
+latency. Each curve has 36 segments. Baseline needs 10 helper calls before
+the first target, while refill needs 38: `ceil(36/16) = 3` triggers the
+existing exact-short-piece path, so fixed evaluates all 36 chords. The
+other two calls initialize the estimate and emit the first target.
+Program time changes from 1722 to 2003 ms and counted stops from 0 to 7.
+The trace finds eight intercurve ISR empties, plus the final program end;
+these are not the same counter as the benchmark's next-target samples.
+
+All nine empties in this program have **saved consumed end speed zero**.
+For each intercurve empty, the stopping descriptor was published before
+the first target of the next curve. Selected intervals below are elapsed
+wall time in milliseconds, not pure estimator CPU cost. A negative last
+column means the ring emptied before that first target arrived.
+
+| Next curve | Previous last to next first | Before helper | Initial helper to first | Stop published before first | Empty after first |
+| ---------- | --------------------------- | ------------- | ----------------------- | --------------------------- | ----------------- |
+| 3          | 44.983                      | 23.411        | 21.572                  | 18.200                      | 0.612             |
+| 5          | 44.956                      | 23.223        | 21.733                  | 17.782                      | 0.916             |
+| 6          | 68.215                      | 24.265        | 43.950                  | 58.185                      | -25.531           |
+| 7          | 42.508                      | 23.449        | 19.059                  | 24.221                      | 1.504             |
+| 8          | 67.868                      | 23.854        | 44.013                  | 57.888                      | -25.205           |
+| 10         | 45.435                      | 23.626        | 21.810                  | 18.380                      | 0.098             |
+| 11         | 42.582                      | 23.412        | 19.170                  | 24.455                      | 1.286             |
+| 12         | 67.830                      | 23.710        | 44.120                  | 57.833                      | -25.185           |
+
+At the boundary into curve 3, the zero-end descriptor is published at
+cycle 921188967 and loaded at 921346743. The first next-curve target
+arrives at 921480160, and the ISR finds the ring empty at 921489944.
+Arriving 0.6115 ms before the empty event cannot undo the stopping
+trajectory that was already published 18.1995625 ms before the target.
+`plan_get_exec_block_exit_speed_sqr()` returns zero without a successor
+planner block; published segment descriptors are no longer replanned.
+Servicing realtime during the estimate therefore keeps existing work
+moving, but cannot provide the missing next-curve lookahead. Serial and
+parser work before the estimate also contributes to this interval.
+
+Over the recorded refill interval, all 36 ISR empties have saved end
+speed zero, including three with a newly queued planner block. Baseline
+has 26 zero-end empties and the previously classified moving-queued
+empty. This does not prove the absence of every abrupt stop in the full
+sweep. In particular, `st_go_idle()` can delay an interrupted helper by
+the configured 25 ms idle-lock interval; the 44 ms helper intervals must
+not be treated as 44 ms of floating-point work.
+
 **Result:** earlier refill is a small, path-preserving partial improvement.
 It does not close ordinary-motion regression, boot fit, loose Z error or
-exact G93. Fixed and refill remain comparison candidates, not selected
+exact G93. Initial-estimate latency must be reduced without discarding
+accuracy; another postqueue refill cannot cancel an already-published
+stop. Fixed and refill remain comparison candidates, not selected
 defaults; no merge is made.
 
 ### Fixed coarse pass: faster start, worse ordinary motion
