@@ -73,7 +73,7 @@ jobs:
           path: workspace
       - uses: actions/checkout@v4
         with:
-          ref: 8dc5a6a72fb5cb63c643aa1bfd84b8510a9b5937
+          ref: 4cdfc54427933a1355197d2a179e77d1662b2bcf
           path: cache
       - name: Full outputs, flag-off and actual G93 identity, retained vector diagnostics
         run: |
@@ -131,7 +131,7 @@ jobs:
             ref: ${{ inputs.cache_motion && '15b7cb8e8c5de6d064e5c7d162b85c4c0efedd96' || inputs.workspace_motion && 'a783b670fb96484c8bcd6e7aea94adb8b5172bf0' || '8672b8f5091b0df7d0a8a34216d0cde8bb75d2ce' }}
             extra: ${{ inputs.cache_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE' || inputs.workspace_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS' || '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL' }}
           - arm: ${{ inputs.cache_motion && 'cache' || inputs.workspace_motion && 'workspace' || inputs.square_motion && 'square' || 'seed' }}
-            ref: ${{ inputs.cache_motion && '8dc5a6a72fb5cb63c643aa1bfd84b8510a9b5937' || inputs.workspace_motion && '15b7cb8e8c5de6d064e5c7d162b85c4c0efedd96' || inputs.square_motion && 'a783b670fb96484c8bcd6e7aea94adb8b5172bf0' || 'fbea6f2456e48306d3bb8f6b5e49366b1ba94357' }}
+            ref: ${{ inputs.cache_motion && '4cdfc54427933a1355197d2a179e77d1662b2bcf' || inputs.workspace_motion && '15b7cb8e8c5de6d064e5c7d162b85c4c0efedd96' || inputs.square_motion && 'a783b670fb96484c8bcd6e7aea94adb8b5172bf0' || 'fbea6f2456e48306d3bb8f6b5e49366b1ba94357' }}
             extra: ${{ inputs.cache_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE -DBEZIER_POINT_CACHE' || inputs.workspace_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE' || inputs.square_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS' || '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_Z_SEED' }}
     name: avr 16.2 ${{ matrix.arm }}
     steps:
@@ -201,7 +201,7 @@ jobs:
             ref: ${{ inputs.cache_motion && '15b7cb8e8c5de6d064e5c7d162b85c4c0efedd96' || inputs.workspace_motion && 'a783b670fb96484c8bcd6e7aea94adb8b5172bf0' || '8672b8f5091b0df7d0a8a34216d0cde8bb75d2ce' }}
             extra: ${{ inputs.cache_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE' || inputs.workspace_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS' || '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL' }}
           - arm: ${{ inputs.cache_motion && 'cache' || inputs.workspace_motion && 'workspace' || inputs.square_motion && 'square' || 'seed' }}
-            ref: ${{ inputs.cache_motion && '8dc5a6a72fb5cb63c643aa1bfd84b8510a9b5937' || inputs.workspace_motion && '15b7cb8e8c5de6d064e5c7d162b85c4c0efedd96' || inputs.square_motion && 'a783b670fb96484c8bcd6e7aea94adb8b5172bf0' || 'fbea6f2456e48306d3bb8f6b5e49366b1ba94357' }}
+            ref: ${{ inputs.cache_motion && '4cdfc54427933a1355197d2a179e77d1662b2bcf' || inputs.workspace_motion && '15b7cb8e8c5de6d064e5c7d162b85c4c0efedd96' || inputs.square_motion && 'a783b670fb96484c8bcd6e7aea94adb8b5172bf0' || 'fbea6f2456e48306d3bb8f6b5e49366b1ba94357' }}
             extra: ${{ inputs.cache_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE -DBEZIER_POINT_CACHE' || inputs.workspace_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE' || inputs.square_motion && '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS' || '-DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_Z_SEED' }}
     name: simavr ${{ matrix.arm }} ${{ matrix.mode }}
     steps:
