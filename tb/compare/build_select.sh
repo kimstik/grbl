@@ -8,6 +8,7 @@ case "$family" in
   selector) sources='baseline refill select'; variants='baseline macro-off refill selector-off select' ;;
   parser) sources='select frame'; variants='reference scratch-off scratch' ;;
   rms) sources='frame rms'; variants='reference rms-off rms' ;;
+  chords) sources='frame chords'; variants='reference chords-off chords' ;;
   *) exit 2 ;;
 esac
 root=$PWD
@@ -20,7 +21,7 @@ for arm in $sources; do
   git -C "$arm" rev-parse HEAD > "$out/source-$arm.txt"
 done
 compiler_source=select
-[ "$family" != rms ] || compiler_source=frame
+case "$family" in rms|chords) compiler_source=frame ;; esac
 cc=$(make -s -C "$compiler_source" --eval 'print-compile: ; @echo $(COMPILE)' print-compile)
 common='-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3 -DBEZIER_Z_LOOSE'
 [ "$mode" != g93 ] || common="$common -DBEZIER_EXACT_INVERSE_TIME"
@@ -38,9 +39,13 @@ for variant in $variants; do
     scratch) source=frame; extra="$fixed -DBEZIER_Z_SELECT -DBEZIER_PARSER_SCRATCH" ;;
     rms-off) source=rms; extra="$fixed -DBEZIER_Z_SELECT -DBEZIER_PARSER_SCRATCH" ;;
     rms) source=rms; extra="$fixed -DBEZIER_Z_SELECT -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_RMS" ;;
+    chords-off) source=chords; extra="$fixed -DBEZIER_PARSER_SCRATCH" ;;
+    chords) source=chords; extra="$fixed -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS" ;;
   esac
   if [ "$family" = rms ] && [ "$variant" = reference ]; then
     source=frame; extra="$fixed -DBEZIER_Z_SELECT -DBEZIER_PARSER_SCRATCH"
+  elif [ "$family" = chords ] && [ "$variant" = reference ]; then
+    source=frame; extra="$fixed -DBEZIER_PARSER_SCRATCH"
   fi
   build="$root/build-$family/$mode/$variant"
   printf '%s\n' "$cc $common $extra" > "$out/$variant-compile.txt"
@@ -87,8 +92,8 @@ elif [ "$family" = parser ]; then
   cmp "$out/reference.elf" "$out/scratch-off.elf"
   printf '%s\n' 'scratch-off: static ELF identical to frozen selector' > "$out/identity.txt"
 else
-  cmp "$out/reference.elf" "$out/rms-off.elf"
-  printf '%s\n' 'rms-off: static ELF identical to frozen parser scratch' > "$out/identity.txt"
+  cmp "$out/reference.elf" "$out/$family-off.elf"
+  printf '%s\n' "$family-off: static ELF identical to frozen parser scratch" > "$out/identity.txt"
 fi
 cat "$out/identity.txt" "$out/sizes.txt"
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then

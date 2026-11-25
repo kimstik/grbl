@@ -24,24 +24,35 @@ on:
         required: false
         type: boolean
         default: false
+      chords:
+        description: 'Frozen finite-chord native/static checks only; no AVR execution'
+        required: false
+        type: boolean
+        default: false
 
 defaults:
   run:
     shell: bash
 
 jobs:
+  chords:
+    if: ${{ inputs.chords }}
+    uses: ./.github/workflows/g5-parser.yml
+    with:
+      family: chords
+
   rms:
-    if: ${{ inputs.rms }}
+    if: ${{ inputs.rms && !inputs.chords }}
     uses: ./.github/workflows/g5-parser.yml
     with:
       family: rms
 
   parser-scratch:
-    if: ${{ inputs.parser_scratch && !inputs.rms }}
+    if: ${{ inputs.parser_scratch && !inputs.rms && !inputs.chords }}
     uses: ./.github/workflows/g5-parser.yml
 
   avr:
-    if: ${{ !inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms }}
+    if: ${{ !inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords }}
     runs-on: ubuntu-24.04
     container: archlinux:latest
     strategy:
@@ -89,7 +100,7 @@ jobs:
 
   simavr:
     needs: avr
-    if: ${{ !cancelled() && !inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms }}
+    if: ${{ !cancelled() && !inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -135,7 +146,7 @@ jobs:
 
   identity:
     needs: simavr
-    if: ${{ !cancelled() && !inputs.selector && !inputs.parser_scratch && !inputs.rms }}
+    if: ${{ !cancelled() && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords }}
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -183,7 +194,7 @@ jobs:
 
   observe:
     needs: avr
-    if: ${{ !cancelled() && !inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms }}
+    if: ${{ !cancelled() && !inputs.raw_run_id && !inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -227,7 +238,7 @@ jobs:
           path: raw
 
   selector-native:
-    if: ${{ inputs.selector && !inputs.parser_scratch && !inputs.rms }}
+    if: ${{ inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     name: selector native identity
@@ -261,7 +272,7 @@ jobs:
           path: raw/native
 
   selector-avr:
-    if: ${{ inputs.selector && !inputs.parser_scratch && !inputs.rms }}
+    if: ${{ inputs.selector && !inputs.parser_scratch && !inputs.rms && !inputs.chords }}
     runs-on: ubuntu-24.04
     container: archlinux:latest
     timeout-minutes: 20

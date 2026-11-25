@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Full corpus identity for parser scratch or RMS; not AVR timing or certification."""
+"""Native parser controls and measured Z policies; not AVR timing or certification."""
 import argparse
 import hashlib
 import importlib.util
@@ -53,7 +53,7 @@ def main():
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--make', default='make')
     parser.add_argument('--cc', default='gcc')
-    parser.add_argument('--family', choices=('parser', 'rms'), default='parser')
+    parser.add_argument('--family', choices=('parser', 'rms', 'chords'), default='parser')
     args = parser.parse_args()
     checker.controls()
     out = args.output.resolve()
@@ -77,7 +77,7 @@ def main():
         checker.require(process.returncode == 0, f'{label}: exit {process.returncode}')
         return process.stdout.decode('ascii')
 
-    result = {'notice': 'Native raw identity only; no AVR timing, stack or tolerance certificate.',
+    result = {'notice': 'Native outputs and measured Z errors only; no AVR timing, stack or tolerance certificate.',
               'family': args.family,
               'controls': '32 negative and two positive controls passed', 'sigma_mm': checker.SIGMA,
               'source': {}, 'corpora': {}, 'vectors': {}}
@@ -85,12 +85,14 @@ def main():
     success([args.cc, '--version'], 'compiler')
     success([args.make, '--version'], 'make')
     executables = {}
-    if args.family == 'rms':
+    policy = 'refill' if args.family == 'chords' else 'select'
+    if args.family in ('rms', 'chords'):
+        candidate = args.family
         common_extra = ' -DBEZIER_PARSER_SCRATCH'
+        macro = 'BEZIER_Z_RMS' if candidate == 'rms' else 'BEZIER_Z_CHORDS'
         variants = (('reference', args.reference, common_extra),
-                    ('rms-off', args.candidate, common_extra),
-                    ('rms', args.candidate, common_extra + ' -DBEZIER_Z_RMS'))
-        candidate = 'rms'
+                    (candidate + '-off', args.candidate, common_extra),
+                    (candidate, args.candidate, common_extra + ' -D' + macro))
     else:
         variants = (('reference', args.reference, ''), ('scratch-off', args.candidate, ''),
                     ('scratch', args.candidate, ' -DBEZIER_PARSER_SCRATCH'))
@@ -98,7 +100,7 @@ def main():
     for name, source, extra in variants:
         source = source.resolve()
         revision = success(['git', '-C', source, 'rev-parse', 'HEAD'], name + '-revision').strip()
-        options = checker.OPTIONS + ' ' + checker.EXTRA['select'] + extra
+        options = checker.OPTIONS + ' ' + checker.EXTRA[policy] + extra
         (out / (name + '-options.txt')).write_text(options + '\n', encoding='ascii')
         build = out / name
         success([args.make, '-s', '-j1', 'GRBL=' + (source / 'grbl').as_posix(),
@@ -124,34 +126,50 @@ def main():
             commands = [line[1:] for line in lines if line.startswith('*')]
             checker.require(len(commands) == expected, 'corpus count')
             decoded = {}
+            policy_change = args.family == 'chords' and mode == 'G94'
             for name, (emit, _) in executables.items():
                 text = success([emit, input_file], f'{name}-{corpus}-{mode}', seconds=45)
                 decoded[name] = checker.decode(text, commands, mode)
-                checker.identity(decoded[name], decoded['reference'])
+                checker.identity(decoded[name], decoded['reference'],
+                                 xy_only=policy_change and name == candidate)
             current = decoded[candidate]
+            identity = ('XY/feed/condition; Z policy measured' if policy_change else
+                        'all five target words, start/net and all 12 summary words')
             key = f'{corpus}/{mode}'
             result['corpora'][key] = {'curves': expected, 'targets': sum(len(c['raw']) for c in current),
-                                      'identity': 'all five target words, start/net and all 12 summary words',
+                                      'identity': identity,
                                       'max_z_mm': max(c['z_mm'] for c in current),
                                       'over_002': sum(c['z_mm'] > checker.SIGMA for c in current),
                                       'max_g93_relative': max((c['g93_relative'] or 0) for c in current),
                                       'input_sha256': hashlib.sha256(input_file.read_bytes()).hexdigest()}
-            print(f'{key}: {expected} curves, {candidate} and {candidate}-off full raw identity PASS', flush=True)
+            if args.family == 'chords':
+                result['corpora'][key]['variants'] = {
+                    name: {'max_z_mm': max(c['z_mm'] for c in curves),
+                           'over_002': sum(c['z_mm'] > checker.SIGMA for c in curves),
+                           'max_g93_relative': max((c['g93_relative'] or 0) for c in curves)}
+                    for name, curves in decoded.items()}
+            print(f'{key}: {expected} curves, flag-off full identity PASS; {candidate} {identity} PASS', flush=True)
 
     vectors = sorted((HERE.parent / 'host/vectors').glob('*.vec'))
     vector_reference = None
+    changed = []
     for name, (_, bench) in executables.items():
         process = run([bench, *vectors], name + '-vectors', HERE.parent / 'host', 90)
         diagnostics = (process.returncode, process.stdout, process.stderr)
         if vector_reference is None:
             vector_reference = diagnostics
-        checker.require(diagnostics == vector_reference, name + ': vector diagnostics changed')
+        if diagnostics != vector_reference:
+            changed.append(name)
         checker.require(process.returncode in (0, 1), name + ': unexpected vector exit')
         result['vectors'][name] = {'exit': process.returncode,
                                    'summary': process.stdout.decode('ascii').splitlines()[-1],
+                                   'identical_to_reference': diagnostics == vector_reference,
                                    'stdout_sha256': hashlib.sha256(process.stdout).hexdigest(),
                                    'stderr_sha256': hashlib.sha256(process.stderr).hexdigest()}
     (out / 'metrics.json').write_text(json.dumps(result, indent=2) + '\n', encoding='ascii')
+    for name in changed:
+        print(name + ': vector diagnostics changed; ' + result['vectors'][name]['summary'], flush=True)
+    checker.require(not changed, 'vector diagnostics changed: ' + ', '.join(changed))
     print('Vector diagnostic identity PASS; ' + result['vectors'][candidate]['summary'], flush=True)
     print(f'Native {args.family} identity PASS; vector failures, if present, are retained, not waived as passing tests.', flush=True)
 
