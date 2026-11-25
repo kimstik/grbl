@@ -598,7 +598,16 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
   m = (z->pieces == 8) ? (segments + 7)/8 : (segments + 15)/16;
   m = min(m, z->next);
 #else
+#ifdef BEZIER_Z_CHORDS
+  m = (segments + 15)/16;
+#ifdef BEZIER_EXACT_INVERSE_TIME
+  if (!(pl_data->condition & PL_COND_FLAG_INVERSE_TIME))
+#endif
+  { m = max(m, 5); } // Four norms per piece, rather than five or more individual chords.
+  m = min(m, z->next);
+#else
   m = min((segments + 15)/16, z->next);
+#endif
 #endif
   if (z->todo) { m = z->todo; }
   if (z->pieces == 1 || m <= BEZIER_Z_PIECE_COST) { m = 1; }
@@ -637,6 +646,12 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     mc_spline_dist(&b, q + 2, q);
     mc_spline_dist(&b, r + 2, q + 2);
     mc_spline_dist(&b, r, r + 2);
+#ifdef BEZIER_Z_CHORDS
+#ifdef BEZIER_EXACT_INVERSE_TIME
+    if (!(pl_data->condition & PL_COND_FLAG_INVERSE_TIME))
+#endif
+    { b -= (b - a)/((float)m*m); } // Finite chords, not the smooth arc midpoint.
+#endif
     z->rest += 0.5f*(a + b);
     Z_TRACE(pieces++);
   }

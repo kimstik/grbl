@@ -768,6 +768,12 @@
   // staircases. The selected pass and the existing coordinate-risk fallback are still
   // heuristics, not a guarantee of BEZIER_Z_SIGMA. G93 retains the fixed-sixteen policy.
   // #define BEZIER_Z_SELECT
+  // Experimental FIXED alternative for G94: at most sixteen initial pieces, each spanning
+  // at least five chords except the tail. Halve pieces at reversals as before. For m uniform
+  // chords, exact geometry gives C <= L <= C + (1 - 1/m^2)*(P-C); use its midpoint instead
+  // of the arc midpoint (C+P)/2. Rounded XY and the coordinate-risk fallback remain heuristic.
+  // No selector, retry or mid-curve estimate. Actual G93 keeps the original fixed-sixteen pass.
+  // #define BEZIER_Z_CHORDS
   // Experimental parser frame reduction: reuse consumed I,J and P,Q words for planar
   // control points and keep the spline driver out of the parser frame. Mode 3 passes
   // one local control-point pointer array to its estimator. Arithmetic and saved offsets
@@ -818,6 +824,9 @@
 #endif
 #if defined(BEZIER_Z_SELECT) && (BEZIER_Z_LINEAR != 3 || !defined(BEZIER_Z_FIXED))
   #error "BEZIER_Z_SELECT requires BEZIER_Z_LINEAR 3 and BEZIER_Z_FIXED"
+#endif
+#if defined(BEZIER_Z_CHORDS) && (BEZIER_Z_LINEAR != 3 || !defined(BEZIER_Z_FIXED) || defined(BEZIER_Z_SELECT))
+  #error "BEZIER_Z_CHORDS requires BEZIER_Z_LINEAR 3 and BEZIER_Z_FIXED, without BEZIER_Z_SELECT"
 #endif
 #if BEZIER_Z_LINEAR == 3
   #if BEZIER_Z_PIECES < 1 || BEZIER_Z_PIECES > BEZIER_Z_PIECES_MAX || BEZIER_Z_PIECES_MAX > 64 || (BEZIER_Z_PIECES & (BEZIER_Z_PIECES-1)) || (BEZIER_Z_PIECES_MAX & (BEZIER_Z_PIECES_MAX-1))
