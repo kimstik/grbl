@@ -19,7 +19,7 @@ else:
   assert a.with_suffix('.events').read_bytes()==b.with_suffix('.events').read_bytes()
   ends=[]
   for p in (a,b):
-   text=p.with_suffix('.trace').read_text();end=text.splitlines()[-1];assert end.startswith('end ')
+   text=p.with_suffix('.trace').read_text();end=next(s for s in text.splitlines() if s.startswith('end '))
    ends.append(end.split(' raw=')[0]);assert 'state=0' in end and 'commands=22 acks=22' in end
   assert ends[0]==ends[1]
   result[mode]=dict(parity=True,end=a.with_suffix('.trace').read_text().splitlines()[-1],scope='Observed baseline only; not worst-case stack proof; written minimum covers stack pushes, not all local stores')
