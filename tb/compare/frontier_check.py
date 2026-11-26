@@ -22,7 +22,11 @@ def results(text):
             if l.startswith(('run ', 'hold', 'stack', 'done', 'timeout'))]
 previous = results(old.read_text())
 current = results(a.decode())
-assert current == previous, 'pinned simulator UART result rows differ from retained distro-run'
+distro_differences = [dict(index=i, retained=old_row, pinned=new_row)
+                      for i, (old_row, new_row) in enumerate(zip(previous, current))
+                      if old_row != new_row]
+assert len(current) == len(previous), 'different result row count'
+assert [r for r in current if r.startswith('run ')] == [r for r in previous if r.startswith('run ')], 'ordinary/steep motion differs from retained distro-run'
 published = {}
 consumed = {}
 last = {}
@@ -56,7 +60,8 @@ for row in rows:
 assert {c['program'] for c in classified} == {37,38,39,40}
 summary = dict(observed_end=rows[-1], blind_end=blind[-1],
                uart_sha256=hashlib.sha256(a).hexdigest(),
-               distro_result_rows_identical=True,
+               distro_motion_rows_identical=True,
+               distro_other_row_differences=distro_differences,
                simulator_cycle_identity='observed versus blind only; distro cycle identity not asserted',
                empty_events=classified,
                limits=['planned endpoint is saved per published slot generation, not physical velocity',

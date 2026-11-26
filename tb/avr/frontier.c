@@ -27,7 +27,8 @@ static void receive(struct avr_irq_t *irq,uint32_t value,void *param) {
 static const avr_symbol_t *sym(elf_firmware_t *f,const char *name,unsigned size) {
   const avr_symbol_t *s=NULL;
   for(unsigned i=0;i<f->symbolcount;i++) if(!strcmp(f->symbol[i]->symbol,name)) {
-    if(s) fail("ambiguous symbol"); s=f->symbol[i];
+    if(s) fail("ambiguous symbol");
+    s=f->symbol[i];
   }
   if(!s || (size && s->size!=size)) { fprintf(stderr,"symbol %s expected size %u\n",name,size); fail("symbol layout"); }
   return s;
@@ -116,12 +117,14 @@ int main(int argc,char **argv) {
           fprintf(events,"prep_end %" PRIu64 " %u %" PRIu64 " %u %u %u\n",(uint64_t)a->cycle,p,(uint64_t)a->cycle-prep_start,h,t,q); prep_active=0;
         }
         if(pc==helper) {
-          if(helper_active) fail("recursive helper"); helper_active=1; helper_start=a->cycle; helper_sp=sp;
+          if(helper_active) fail("recursive helper");
+          helper_active=1; helper_start=a->cycle; helper_sp=sp;
           helper_ret=2*((unsigned)a->data[sp+1]<<8|a->data[sp+2]);
           fprintf(events,"helper %" PRIu64 " %u %u %u\n",helper_start,p,word(a,pi),q);
         }
         if(pc==prepf) {
-          if(prep_active) fail("recursive prep"); prep_active=1; prep_start=a->cycle; prep_sp=sp;
+          if(prep_active) fail("recursive prep");
+          prep_active=1; prep_start=a->cycle; prep_sp=sp;
           prep_ret=2*((unsigned)a->data[sp+1]<<8|a->data[sp+2]);
           fprintf(events,"prep %" PRIu64 " %u %u %u %u\n",prep_start,p,h,t,q);
         }
