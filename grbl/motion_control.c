@@ -868,9 +868,11 @@ static void mc_spline_cache_init(float *target, float *position, spline_scratch_
     float e0 = second[i] - 2.0f*first[i] + position[i];
     float e1 = target[i] - 2.0f*second[i] + first[i];
     float g = first[i] - position[i], d = e1 - e0;
-    // Read this axis before replacing its controls; the other axis is still untouched.
+#ifndef BEZIER_LOCAL_LENGTH
+    // Only absolute-length mode consumes this risk input, before controls are replaced.
     p[Z_AXIS] = max(p[Z_AXIS], max(fabsf(position[i]), fabsf(target[i])));
     p[Z_AXIS] = max(p[Z_AXIS], max(fabsf(first[i]), fabsf(second[i])));
+#endif
     scratch->g[i] = g;
     scratch->e0[i] = e0;
     scratch->d[i] = d;

@@ -1,7 +1,7 @@
 name: G5 fixed24 local
 on:
   push:
-    branches: [wip/g5-fixed24-local]
+    branches: [wip/g5-local-riskmax]
   workflow_dispatch:
 permissions:
   contents: read
@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
-          ref: 500513d26e14e5a16bcdaa6c7976107d6a5f888c
+          ref: 4eb683aade6a1250620e322ce36bd93f1416cb5c
           path: control
       - name: Build matched control and candidate
         run: |

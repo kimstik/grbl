@@ -17,7 +17,7 @@ if [ "$stage" = build ]; then
   python3 -I tb/compare/render.py tb/compare/local.in raw/corpus.txt --mode "${mode^^}"
   for arm in control candidate; do
     source=$root; extra=-DBEZIER_LOCAL_LENGTH
-    if [ "$arm" = control ]; then source=$root/control; extra=''; fi
+    if [ "$arm" = control ]; then source=$root/control; fi
     out=$root/raw/$arm
     mkdir -p "$out/production"
     git -C "$source" rev-parse HEAD > "$out/source.txt"
@@ -36,10 +36,14 @@ if [ "$stage" = build ]; then
     done
   done
   # The default-off firmware must remain byte-identical to the frozen control.
-  mkdir -p "build/local-off-$mode"
-  cc=$(make -s --eval 'print-compile: ; @echo $(COMPILE)' print-compile)
-  nice -n 19 make -s BUILDDIR="$root/build/local-off-$mode" COMPILE="$cc $opts" > raw/off-build.txt 2>&1
-  cmp "build/local-off-$mode/main.elf" raw/control/production.elf
+  for arm in control candidate; do
+    source=$root; [ "$arm" != control ] || source=$root/control
+    out=$root/raw/$arm/off
+    mkdir -p "$out"
+    cc=$(make -s -C "$source" --eval 'print-compile: ; @echo $(COMPILE)' print-compile)
+    nice -n 19 make -s -C "$source" BUILDDIR="$out" COMPILE="$cc $opts" > "raw/$arm/off-build.txt" 2>&1
+  done
+  cmp raw/candidate/off/main.elf raw/control/off/main.elf
   printf 'default-off ELF identical\n' > raw/off-identity.txt
   exit 0
 fi

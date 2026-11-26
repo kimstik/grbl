@@ -34,13 +34,7 @@ for arm in ('control', 'candidate'):
         results[arm].append(m)
 for i, (a, b) in enumerate(zip(groups['control'], groups['candidate'])):
     assert a['command'] == b['command'] and a['start'] == b['start']
-    assert len(a['words']) == len(b['words'])
-    assert all(x[:2] == y[:2] and x[4] == y[4] for x, y in zip(a['words'], b['words'])), names[i]
-    assert a['words'][-1][:3] == b['words'][-1][:3]
-    if mode == 'g94':
-        assert all(x[3] == y[3] for x, y in zip(a['words'], b['words']))
-        if names[i] == 'no_z':
-            assert a['words'] == b['words']
-            assert a['summary'][:2]+a['summary'][7:] == b['summary'][:2]+b['summary'][7:]
+    assert a['words'] == b['words'], (names[i], 'XYZ/feed/condition changed')
+    assert a['summary'][:2]+a['summary'][7:] == b['summary'][:2]+b['summary'][7:], (names[i], 'summary/trace changed')
 print(json.dumps(dict(mode=mode, xy_identity=True, results=results,
     semantics='chord_z uses emitted absolute XY chords; true_line_3d uses exact intended straight geometry; G93 time uses emitted 3D segments and raw converted feeds; no general smooth-3D S certificate'), indent=2))
