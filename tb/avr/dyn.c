@@ -20,12 +20,18 @@
   and latency 2. These are the curves that BEZIER_Z_LINEAR 3 cannot vouch
   for from a few pieces: it sums their segments before the first target.
 
+  TB_DYN_OBSERVE selects four short, three-curve programs for the external
+  observer: those 10/20 mm steep curves, then a 60 mm curve with Z-30 at
+  F5000 and F1000. The longer curve can leave a later mandatory estimate,
+  unlike the short curves whose initial segment sum needs no refinement.
+  This separate workload is not a replacement for the full motion sweep.
+
   Timer2 keeps the setup of spindle_init() (fast PWM, prescaler 64), its
   overflow is a 1.024 ms clock, and the spindle stays off. Its ISR paces the
   host, injects feed hold and cycle start, and stops a program that hangs.
 
   Output lines (simavr prints UART lines to stderr, mixed with grbl's "ok"):
-    run    kind size_um F accel lat_ms seg len_um t_ms feed peak min min_full low stops cut cut_F dx dy stack
+    run    kind size_um F accel lat_ms seg len_um t_ms feed peak min min_full low stops cut cut_F dx dy dz stack
       kind      G5 cubic S-curves, G1 the same curves as straight segments
                 (same block count), G2 alternating G2/G3 half circles
       seg       blocks queued, len_um the programmed path length
@@ -35,12 +41,11 @@
       min_full  the same, counted only after the buffer was first full (- if never)
       low       times the planner fell to 0 or 1 block (same window as min)
       stops     times the machine went idle mid-program
-      cut       stops with blocks still queued: the main loop was too busy to
-                refill the step segment buffer, and the stepper stopped with
-                no deceleration
-      cut_F     the highest feed it was cut at, mm/min (entry speed of the
-                block in progress)
-      dx dy     final sys_position minus the parser target, in steps
+      cut       stops with planner blocks still queued; this probe does not
+                observe the last consumed step segment or prove its exit speed
+      cut_F     highest entry speed of the queued current block at such a stop,
+                mm/min, not the instantaneous stepper speed
+      dx dy dz  final sys_position minus the parser target, in steps
       stack     most stack used, in bytes below RAMEND, ISRs included
     hold   delay_ms state@hold x@hold state@resume suspend@resume dx dy dz t_ms stack
       x@hold    steps from the program start; 1250 steps per 5 mm curve
@@ -88,7 +93,10 @@ static void __attribute__((naked, used, section(".init3"))) paint(void)
 
 // Program parameters.
 enum { G5, G1, G2 };
-static uint8_t kind, k, lat, prog;
+static uint8_t kind, lat, prog;
+#ifndef TB_DYN_SPLINES_ONLY
+static uint8_t k;
+#endif
 static uint16_t pi, lines;
 static uint16_t size, feed, accel, hold_ms;
 static uint32_t len;
@@ -252,7 +260,12 @@ static void make_line(void)
   if (pi == lines - 1) { sampling = 0; }
 }
 
+#if defined(TB_DYN_OBSERVE) && (!defined(TB_DYN_SPLINES_ONLY) || !defined(BEZIER_Z_LINEAR))
+#error "TB_DYN_OBSERVE requires the spline-only driver with Z"
+#endif
+
 // Program list.
+#ifndef TB_DYN_OBSERVE
 static const uint16_t feeds[] PROGMEM = { 1000, 2000, 3000, 4000, 5000 };
 static const uint16_t sizes[] PROGMEM = { 2000, 5000 };
 static const uint16_t accels[] PROGMEM = { 500, 2000 };
@@ -267,6 +280,7 @@ static const uint16_t holds[] PROGMEM = { 60, 150, 333, 500, 777, 1000 };
   #define KINDS 3
 #endif
 #define SWEEP (KINDS * N(lats) * N(feeds) * N(sizes) * N(accels))
+#endif // TB_DYN_OBSERVE
 #if defined(TB_DYN_SPLINES_ONLY) && defined(BEZIER_Z_LINEAR)
   #define STEEP 4
 #else
@@ -281,6 +295,13 @@ static uint8_t setup(void)
 #ifdef TB_DYN_SPLINES_ONLY
   curves = CURVES; zstep = -200;
 #endif
+#ifdef TB_DYN_OBSERVE
+  if (p >= 4) { return 0; }
+  kind = G5; lat = 2; accel = 2000; curves = 3;
+  feed = p == 3 ? 1000 : 5000;
+  size = p == 0 ? 10000 : (p == 1 ? 20000 : 60000);
+  zstep = p == 1 ? -10000 : -30000;
+#else
   if (p < SWEEP) {
     kind = p % KINDS; p /= KINDS;
     lat = pgm_read_byte(lats + p % N(lats)); p /= N(lats);
@@ -301,6 +322,7 @@ static uint8_t setup(void)
   } else {
     return 0;
   }
+#endif // TB_DYN_OBSERVE
 #ifdef TB_DYN_SPLINES_ONLY
   lines = 1 + curves;
   len = (uint32_t)curves * size; // Projected X travel, not path length.
@@ -420,6 +442,10 @@ uint8_t __attribute__((noinline)) serial_read(void) // Keeps its frame out of ma
       if (plan_get_block_buffer_count() || sys.state != STATE_IDLE) { return SERIAL_NO_DATA; }
       if (prog) { report(); }
       prog++;
+#ifdef TB_DYN_FRONTIER_ONLY
+      if (prog == 1) { prog = 37; }
+      if (prog == 41) { finish(); }
+#endif
       if (!setup()) { finish(); }
     }
     make_line();

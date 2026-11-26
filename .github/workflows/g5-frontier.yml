@@ -1,0 +1,46 @@
+name: G5 fixed24 motion frontier
+on:
+  workflow_dispatch:
+  push:
+    branches: [wip/g5-fixed24-frontier]
+    paths:
+      - .github/workflows/g5-frontier.yml
+      - tb/avr/frontier.c
+      - tb/avr/dyn.c
+      - tb/compare/frontier_*.py
+      - tb/compare/frontier_run.sh
+permissions:
+  contents: read
+jobs:
+  frontier:
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    timeout-minutes: 35
+    steps:
+      - name: Pinned AVR tools and host dependencies
+        run: |
+          set -eu
+          pacman -Syu --noconfirm --needed git make diffutils bash python curl gcc pkgconf libelf which
+          mkdir -p "$RUNNER_TEMP/avr-packages"
+          for package in avr-binutils/avr-binutils-2.47-1-x86_64.pkg.tar.zst avr-gcc/avr-gcc-16.2.0-1-x86_64.pkg.tar.zst avr-libc/avr-libc-2.3.2-4-any.pkg.tar.zst; do
+            curl --fail --location --retry 2 --connect-timeout 20 --max-time 120 --output "$RUNNER_TEMP/avr-packages/${package##*/}" "https://archive.archlinux.org/packages/a/$package"
+          done
+          pacman -U --noconfirm "$RUNNER_TEMP"/avr-packages/*.pkg.tar.zst
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: 500513d26e14e5a16bcdaa6c7976107d6a5f888c
+          path: source
+      - uses: actions/checkout@v4
+        with:
+          repository: buserror/simavr
+          ref: 13d4ed32433ad7a37bb757b7e0f7dbb5373396c0
+          path: simulator
+      - name: Matched fixed16 and fixed24 causal observation
+        run: timeout 1800 nice -n 19 bash tb/compare/frontier_run.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fixed24-frontier
+          path: raw
