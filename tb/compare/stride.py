@@ -23,8 +23,11 @@ def read(path, dump):
             rows.append(current)
             if len(words) > 1:
                 current['summary'] = list(map(int, words[1:]))
+        elif words[0].startswith('G'):
+            current = None
         elif words[0] == 'p':
-            assert current is not None
+            if current is None:  # Unmeasured positioning moves also emit targets.
+                continue
             point = list(map(int, words[1:]))
             assert len(point) == 5
             current['points'].append(point)
