@@ -55,13 +55,22 @@ static void enter(call_t *c,avr_t *a,unsigned sp,unsigned p,unsigned line) {
   c->start=a->cycle; c->program=p; c->line=line;
 }
 
+static int wanted(unsigned p,unsigned n) { return p==38 && ((n>=23 && n<=28)||(n>=57 && n<=60)); }
+static void probe(FILE *f,const char *kind,avr_t *a,unsigned p,unsigned slot,unsigned gen,unsigned point,
+                  unsigned blocks,unsigned bh,unsigned bt,unsigned planned,unsigned prep,unsigned pointer) {
+  unsigned addr=blocks+50*slot;
+  fprintf(f,"probe_%s %" PRIu64 " %u %u %u %u %u %u %u %u %u %.9g %.9g %.9g %.9g\n",
+          kind,(uint64_t)a->cycle,p,slot,gen,point,a->data[bh],a->data[bt],a->data[planned],pointer,
+          a->data[prep+1],number(a,addr+18),number(a,addr+22),number(a,prep+23),number(a,prep+31));
+}
+
 int main(int argc,char **argv) {
   if(argc!=5 && argc!=6) fail("usage: frontier ELF map events UART [--blind]");
   int blind=argc==6;
   if(blind && strcmp(argv[5],"--blind")) fail("unknown option");
-  unsigned empty_pc;
+  unsigned empty_pc,acquire_pc,exit_enter_pc,exit_arg_pc,exit_result_pc;
   FILE *map=fopen(argv[2],"rb");
-  if(!map || fscanf(map,"%x",&empty_pc)!=1) fail("PC map");
+  if(!map || fscanf(map,"%x %x %x %x %x",&empty_pc,&acquire_pc,&exit_enter_pc,&exit_arg_pc,&exit_result_pc)!=5) fail("PC map");
   fclose(map);
   elf_firmware_t fw={0};
   if(elf_read_firmware(argv[1],&fw)) fail("ELF load");
@@ -83,6 +92,11 @@ int main(int argc,char **argv) {
   unsigned plan=sym(&fw,"plan_buffer_line",0)->addr, serial=sym(&fw,"serial_read",0)->addr;
   unsigned lp=data(&fw,"lp",2),isr=sym(&fw,"__vector_11",0)->addr;
   unsigned settings=data(&fw,"settings",0);
+  unsigned blocks=data(&fw,"block_buffer",800),planned=data(&fw,"block_buffer_planned",1);
+  unsigned pl=data(&fw,"pl_block",2),update=sym(&fw,"st_update_plan_block_parameters",0)->addr;
+  unsigned generation[16]={0},target_point[16]={0},old_bh=a->data[bh],pending_point=0;
+  unsigned exit_slot=0,exit_gen=0,exit_point=0,exit_active=0;
+  unsigned insert_slot=0,insert_gen=0,insert_point=0;
   call_t calls[4]={{.pc=serial,.name="serial"},{.pc=sym(&fw,"st_go_idle",0)->addr,.name="idle"},
                    {.pc=plan,.name="plan"},{.pc=sym(&fw,"st_wake_up",0)->addr,.name="wake"}};
   call_t interrupt={0}; unsigned interrupt_empty=0;
@@ -105,12 +119,47 @@ int main(int argc,char **argv) {
         points=0; oldprog=p;
         fprintf(events,"program %u %" PRIu64 "\n",p,(uint64_t)a->cycle);
       }
+      if(a->data[bh]!=old_bh) {
+        unsigned next=a->data[bh];
+        if(next!=(old_bh+1)%16) fail("planner insertion head transition");
+        generation[old_bh]++; target_point[old_bh]=pending_point;
+        insert_slot=old_bh; insert_gen=generation[old_bh]; insert_point=pending_point;
+        if(wanted(p,pending_point)) probe(events,"insert",a,p,old_bh,generation[old_bh],pending_point,blocks,bh,bt,planned,prep,word(a,pl));
+        old_bh=next;
+      }
+      unsigned ptr=word(a,pl),bs=a->data[bt];
+      if(ptr && (pc==acquire_pc || pc==update || h!=oh)) {
+        if(ptr<blocks || ptr>=blocks+800 || (ptr-blocks)%50) fail("planner pointer");
+        bs=(ptr-blocks)/50;
+      }
+      if(pc==acquire_pc && ptr) {
+        unsigned bi=a->data[prep];
+        /* On new-block acquisition the st-block index is updated later; capture
+           the live planner generation again at publication below. */
+        (void)bi;
+        if(wanted(p,target_point[bs])) probe(events,"acquire",a,p,bs,generation[bs],target_point[bs],blocks,bh,bt,planned,prep,ptr);
+      }
+      if(pc==update && wanted(p,target_point[bs])) probe(events,"update",a,p,bs,generation[bs],target_point[bs],blocks,bh,bt,planned,prep,ptr);
+      if(pc==exit_enter_pc) {
+        exit_slot=a->data[bt]; exit_gen=generation[exit_slot]; exit_point=target_point[exit_slot]; exit_active=1;
+        if(wanted(p,exit_point)) probe(events,"exit_enter",a,p,exit_slot,exit_gen,exit_point,blocks,bh,bt,planned,prep,ptr);
+      }
+      if((pc==exit_arg_pc || pc==exit_result_pc) && exit_active) {
+        if(wanted(p,exit_point)) fprintf(events,"probe_exit_%s %" PRIu64 " %u %u %u %u %.9g %u %u\n",
+          pc==exit_arg_pc?"value":"sqrt",(uint64_t)a->cycle,p,exit_slot,exit_gen,exit_point,number(a,22),a->data[bh],a->data[bt]);
+        if(pc==exit_result_pc) exit_active=0;
+      }
       if(h!=oh) {
         if(h>=6 || h!=(oh+1)%6 || slots[oh].live) fail("publish generation collision");
         unsigned addr=buf+7*oh;
         slot_t s={(uint64_t)a->cycle,slots[oh].gen+1,1,word(a,addr),word(a,addr+2),a->data[addr+5],number(a,prep+23),number(a,prep+31)};
         if(!isfinite(s.speed)||s.speed<0||!isfinite(s.exit)) fail("publication speed");
         slots[oh]=s; pubs++;
+        if(!ptr) fail("publication without planner block");
+        if(wanted(p,target_point[bs])) {
+          probe(events,"publish",a,p,bs,generation[bs],target_point[bs],blocks,bh,bt,planned,prep,ptr);
+          fprintf(events,"probe_segment %" PRIu64 " %u %u %u %u %u %u %u %u\n",s.cycle,p,oh,s.gen,bs,generation[bs],target_point[bs],a->data[addr+4],a->data[prep]);
+        }
         if(detail) fprintf(events,"publish %" PRIu64 " %u %u %u %u %.9g %.9g %u %u %u %u\n",s.cycle,p,oh,s.gen,word(a,pi),s.speed,s.exit,s.steps,s.ticks,s.amass,q);
         oh=h;
       }
@@ -138,6 +187,10 @@ int main(int argc,char **argv) {
           call_t *c=&calls[k];
           if(c->active && pc==c->ret && sp==c->sp+2) {
             fprintf(events,"boundary_return %" PRIu64 " %u %u %s %" PRIu64 " %u %u\n",(uint64_t)a->cycle,c->program,c->line,c->name,(uint64_t)a->cycle-c->start,a->data[24],word(a,pi));
+            if(k==2 && wanted(p,insert_point)) {
+              if(a->data[24]!=1) fail("planner insertion return status");
+              probe(events,"insert_return",a,p,insert_slot,insert_gen,insert_point,blocks,bh,bt,planned,prep,word(a,pl));
+            }
             c->active=0;
           }
           if(pc==c->pc) {
@@ -167,6 +220,7 @@ int main(int argc,char **argv) {
       }
       if(pc==plan) {
         points++;
+        pending_point=points;
         if(detail) {
           fprintf(events,"point %" PRIu64 " %u %u %u %u\n",(uint64_t)a->cycle,p,word(a,pi),points,q);
           /* AVR pointer arguments: target=r24:r25, plan data=r22:r23. */

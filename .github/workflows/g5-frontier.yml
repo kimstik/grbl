@@ -2,7 +2,7 @@ name: G5 boot-fitting motion frontier
 on:
   workflow_dispatch:
   push:
-    branches: [wip/g5-size-frontier]
+    branches: [wip/g5-block58-probe]
     paths:
       - .github/workflows/g5-frontier.yml
       - tb/avr/frontier.c
@@ -46,5 +46,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: size-frontier
+          name: block58-probe
           path: raw

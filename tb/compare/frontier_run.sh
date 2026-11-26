@@ -50,6 +50,11 @@ for arm in combined candidate; do
 #include <stddef.h>
 _Static_assert(offsetof(settings_t,stepper_idle_lock_time)==0x33,"idle setting offset");
 _Static_assert(sizeof(segment_t)==7,"segment layout");
+_Static_assert(sizeof(plan_block_t)==50,"planner block size");
+_Static_assert(offsetof(plan_block_t,entry_speed_sqr)==18,"planner entry offset");
+_Static_assert(offsetof(plan_block_t,max_entry_speed_sqr)==22,"planner max entry offset");
+_Static_assert(offsetof(st_prep_t,recalculate_flag)==1,"prep flag offset");
+_Static_assert(offsetof(segment_t,st_block_index)==4,"segment block index");
 _Static_assert(sizeof(st)==35,"stepper layout");
 _Static_assert(offsetof(stepper_t,exec_segment)==33,"exec segment offset");
 _Static_assert(sizeof(prep)==48,"prep layout");

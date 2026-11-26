@@ -43,7 +43,28 @@ head = symbols['segment_buffer_head'][0] - 0x800000
 stores = [x for x in insns if x[1] == 'sts' and
           re.match(rf'0x0*{head:x},', x[2], re.I)]
 assert len([x for x in stores if prep_start <= x[0] < prep_start+prep_size]) == 1, stores
-output.write_text(f'{pc:x}\n')
+# The exit-speed helper is inlined by LTO. Map its normal-motion successor test
+# and the ABI argument/result of the immediately following sqrtf, fail closed.
+body = [x for x in insns if prep_start <= x[0] < prep_start+prep_size]
+loads = [i for i,x in enumerate(body) if x[1] == 'ldd' and re.match(r'r4, Z\+18\b', x[2])]
+assert len(loads) == 1, loads
+i = loads[0]
+assert [(x[1], x[2].split(';')[0].strip()) for x in body[i:i+6]] == [
+    ('ldd','r4, Z+18'),('ldd','r5, Z+19'),('ldd','r6, Z+20'),('ldd','r7, Z+21'),
+    ('movw','r22, r4'),('movw','r24, r6')]
+assert body[i+6][1] in ('call','rcall') and '<sqrtf>' in body[i+6][2]
+exit_arg, exit_result = body[i+6][0], body[i+7][0]
+tail_address = symbols['block_buffer_tail'][0] - 0x800000
+entry = [x for x in body[max(0,i-16):i] if x[1]=='lds' and
+         re.match(rf'r24, 0x0*{tail_address:x}\b',x[2],re.I)]
+assert len(entry)==1, entry
+acquire = [x for x in body if x[1]=='lds' and re.match(
+    rf'r16, 0x0*{symbols["prep"][0]-0x800000+1:x}\b',x[2],re.I)]
+assert len(acquire)==1, acquire
+output.write_text(f'{pc:x} {acquire[0][0]:x} {entry[0][0]:x} {exit_arg:x} {exit_result:x}\n')
+output.with_suffix('.probe-map.json').write_text(json.dumps(dict(acquire=acquire[0][3],
+    inlined_exit_window=[x[3] for x in body[max(0,i-16):i+8]],
+    abi='inlined exit value reaches sqrtf argument r22-r25; sqrtf result r22-r25'),indent=2))
 output.with_suffix('.mapping.json').write_text(json.dumps(dict(
     empty_call=pc, idle_entry=idle, isr=[start, size],
     publication_stores=[x[3] for x in stores],
