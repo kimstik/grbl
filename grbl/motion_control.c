@@ -645,7 +645,16 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
   m = min(m, z->next);
 #else
 #ifdef BEZIER_Z_CHORDS
+#ifdef TB_Z_EXACT_CHORDS
+  z->pieces = 1; // Diagnostic only: sum every emitted chord.
+  m = 1;
+#else
+#ifdef TB_Z_FIXED_32
+  m = (segments + 31)/32;
+#else
   m = (segments + 15)/16;
+#endif
+#endif
 #ifdef BEZIER_EXACT_INVERSE_TIME
   if (!(pl_data->condition & PL_COND_FLAG_INVERSE_TIME))
 #endif

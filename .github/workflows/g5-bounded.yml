@@ -1,0 +1,48 @@
+name: G5 bounded accuracy
+on:
+  push:
+    branches: [wip/g5-bounded-accuracy]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bounded:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        arm: [fixed16, fixed32, exact]
+        mode: [g94, g93]
+    steps:
+      - name: Install frozen AVR toolchain and simulator
+        shell: bash
+        run: |
+          pacman -Syu --noconfirm --needed git make diffutils bash python gcc simavr
+          a=https://archive.archlinux.org/packages/a
+          pacman -U --noconfirm \
+            $a/avr-binutils/avr-binutils-2.47-1-x86_64.pkg.tar.zst \
+            $a/avr-gcc/avr-gcc-16.2.0-1-x86_64.pkg.tar.zst \
+            $a/avr-libc/avr-libc-2.3.2-4-any.pkg.tar.zst
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE/harness"
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: 3d29650a1e1c121717cbedfbccc8fcdb8c0ea2dc
+          path: harness
+      - name: Validate oracle and syntax
+        shell: bash
+        run: |
+          bash -n tb/compare/bounded.sh
+          python3 -I tb/compare/bounded.py --control
+      - name: Run four cases
+        shell: bash
+        run: bash tb/compare/bounded.sh '${{ matrix.arm }}' '${{ matrix.mode }}'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bounded-${{ matrix.arm }}-${{ matrix.mode }}
+          path: raw/
