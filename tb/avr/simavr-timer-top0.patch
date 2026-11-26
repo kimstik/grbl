@@ -1,0 +1,13 @@
+--- a/simavr/sim/avr_timer.c
++++ b/simavr/sim/avr_timer.c
+@@ -529,7 +529,9 @@
+ 	}
+ 
+ 	if (!use_ext_clock || virt_ext_clock) {
+-		if (p->tov_cycles > 1) {
++		// TOP 0 at prescaler 1 matches on every clock. The internal clock has no
++		// fractional correction, so each callback still advances by one cycle.
++		if (p->tov_cycles > 1 || (p->tov_cycles == 1 && !use_ext_clock)) {
+ 			if (reset) {
+ 				avr_cycle_timer_register(avr, p->tov_cycles, avr_timer_tov, p);
+ 				// calling it once, with when == 0 tells it to arm the A/B/C timers if needed

@@ -1,0 +1,60 @@
+name: Timer1 TOP 0 fixture
+on:
+  push:
+    branches: [wip/g5-production-sp]
+    paths: [tb/avr/timer_fixture.c, tb/avr/timer_fixture_host.c, tb/avr/simavr-timer-top0.patch, tb/compare/timer_fixture.py, .github/workflows/g5-timer-fixture.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fixture:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: buserror/simavr
+          ref: 13d4ed32433ad7a37bb757b7e0f7dbb5373396c0
+          path: pristine
+      - uses: actions/checkout@v4
+        with:
+          repository: buserror/simavr
+          ref: 13d4ed32433ad7a37bb757b7e0f7dbb5373396c0
+          path: patched
+      - name: Tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gcc make libelf-dev pkg-config gcc-avr avr-libc binutils-avr
+      - name: Build simulators, host and fixtures
+        run: |
+          mkdir -p raw build
+          git -C patched apply ../tb/avr/simavr-timer-top0.patch
+          git -C pristine rev-parse HEAD > raw/simulator.txt
+          sha256sum tb/avr/simavr-timer-top0.patch pristine/simavr/sim/avr_timer.c patched/simavr/sim/avr_timer.c > raw/hashes.txt
+          git -C patched diff > raw/applied.patch
+          avr-gcc --version > raw/avr-gcc.txt
+          for sim in pristine patched; do
+            nice -n 19 make -s -j1 -C $sim/simavr libsimavr RELEASE=1
+            nice -n 19 gcc -std=c99 -Wall -Wextra -O2 -I$sim/simavr/sim tb/avr/timer_fixture_host.c $sim/simavr/obj-x86_64-linux-gnu/libsimavr.a -lelf -lm -o build/host-$sim
+          done
+          build() { avr-gcc -Os -mmcu=atmega328p -DSTART_TOP=$2 -DNEXT_TOP=$3 $4 tb/avr/timer_fixture.c -o build/$1.elf; }
+          build top0 0 99
+          build top0-poll 0 99 -DPOLL
+          build top1 1 1
+          build top99 99 99
+          build top99-poll 99 99 -DPOLL
+          sha256sum build/*.elf >> raw/hashes.txt
+      - name: Run and check
+        run: |
+          for case in top0 top0-poll top1 top99 top99-poll; do
+            for sim in pristine patched; do
+              timeout 120 nice -n 19 build/host-$sim build/$case.elf > raw/$case-$sim.txt
+            done
+          done
+          python3 -I tb/compare/timer_fixture.py raw | tee raw/report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: timer-fixture
+          path: raw
