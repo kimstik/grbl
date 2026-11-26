@@ -8,17 +8,20 @@ git -C simulator rev-parse HEAD > raw/simulator.txt
 test "$(<raw/simulator.txt)" = 13d4ed32433ad7a37bb757b7e0f7dbb5373396c0
 sim=$root/simulator/simavr
 make -s -C "$sim" CC=gcc obj config > raw/simulator-build.txt 2>&1
-make -s -j2 -C "$sim" CC=gcc libsimavr >> raw/simulator-build.txt 2>&1
+make -s -j1 -C "$sim" CC=gcc libsimavr >> raw/simulator-build.txt 2>&1
 gcc -std=c99 -Wall -Wextra -O2 -I"$sim/sim" $(pkg-config --cflags libelf) \
   tb/avr/frontier.c "$sim/obj-$(gcc -dumpmachine)/libsimavr.a" $(pkg-config --libs libelf) -lm -o build/frontier > raw/observer-build.txt 2>&1
 common='-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3 -DBEZIER_Z_LOOSE -DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE -DBEZIER_POINT_CACHE -DBEZIER_Z_NORM'
 pacman -Q avr-gcc avr-binutils avr-libc > raw/toolchain-packages.txt
 git rev-parse HEAD > raw/harness.txt
-for arm in fixed24; do
+for arm in fixed24 combined; do
   mkdir -p "raw/$arm"
-  extra=''
-  if [ "$arm" = fixed24 ]; then extra=-DTB_Z_FIXED_24; fi
+  extra=-DTB_Z_FIXED_24
   source=$root/source
+  if [ "$arm" = combined ]; then
+    source=$root/combined
+    extra="$extra -DBEZIER_LOCAL_LENGTH"
+  fi
   git -C "$source" rev-parse HEAD > "raw/$arm/source.txt"
   cc=$(make -s --no-print-directory -C "$source" --eval 'print-compile: ; @echo $(COMPILE)' print-compile)
   mkdir -p "$source/build/$arm"
@@ -26,6 +29,8 @@ for arm in fixed24; do
   make -s -C "$source" BUILDDIR="build/$arm" COMPILE="$cc $common $extra" "build/$arm/main.elf" > "raw/$arm/production-build.txt" 2>&1
   cp "$source/build/$arm/main.elf" "raw/$arm/production.elf"
   avr-size "raw/$arm/production.elf" > "raw/$arm/production-size.txt"
+  set -- $(avr-size "raw/$arm/production.elf" | tail -1)
+  test $(($1 + $2)) -le 32768
   make -s -C tb/avr ROOT="$source" BUILD="build/frontier-$arm" DEFS="$common $extra -DTB_ARC_TOLERANCE=.002f -DTB_DYN_SPLINES_ONLY -DTB_DYN_FRONTIER_ONLY" dyn > "raw/$arm/build.txt" 2>&1
   elf="tb/avr/build/frontier-$arm/dyn.elf"
   cp "$elf" "raw/$arm/dyn.elf"

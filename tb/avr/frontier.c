@@ -165,7 +165,21 @@ int main(int argc,char **argv) {
         }
         if(pc==serial) fprintf(events,"serial %" PRIu64 " %u %u %u\n",(uint64_t)a->cycle,p,word(a,pi),a->data[word(a,lp)]);
       }
-      if(pc==plan) { points++; if(detail) fprintf(events,"point %" PRIu64 " %u %u %u %u\n",(uint64_t)a->cycle,p,word(a,pi),points,q); }
+      if(pc==plan) {
+        points++;
+        if(detail) {
+          fprintf(events,"point %" PRIu64 " %u %u %u %u\n",(uint64_t)a->cycle,p,word(a,pi),points,q);
+          /* AVR pointer arguments: target=r24:r25, plan data=r22:r23. */
+          unsigned target=word(a,24);
+          if(target<0x100 || target+12>0x900) fail("target pointer range");
+          fprintf(events,"xyz %" PRIu64 " %u %u %u",(uint64_t)a->cycle,p,word(a,pi),points);
+          for(unsigned i=0;i<3;i++) {
+            unsigned addr=target+4*i;
+            fprintf(events," %" PRIu32,(uint32_t)word(a,addr)|((uint32_t)word(a,addr+2)<<16));
+          }
+          fputc('\n',events);
+        }
+      }
     }
     avr_run(a);
   }

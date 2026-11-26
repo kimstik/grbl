@@ -2,7 +2,7 @@ name: G5 Z aim prototype
 
 on:
   push:
-    branches-ignore: [wip/g5-fixed24, wip/g5-fixed24-frontier, wip/g5-boundary-observer]
+    branches-ignore: [wip/g5-fixed24, wip/g5-fixed24-frontier, wip/g5-boundary-observer, wip/g5-local-frontier]
   pull_request:
 
 defaults:

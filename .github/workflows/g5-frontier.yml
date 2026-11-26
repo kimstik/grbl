@@ -1,8 +1,8 @@
-name: G5 fixed24 motion frontier
+name: G5 combined local motion frontier
 on:
   workflow_dispatch:
   push:
-    branches: [wip/g5-boundary-observer]
+    branches: [wip/g5-local-frontier]
     paths:
       - .github/workflows/g5-frontier.yml
       - tb/avr/frontier.c
@@ -34,13 +34,17 @@ jobs:
           path: source
       - uses: actions/checkout@v4
         with:
+          ref: 4eb683aade6a1250620e322ce36bd93f1416cb5c
+          path: combined
+      - uses: actions/checkout@v4
+        with:
           repository: buserror/simavr
           ref: 13d4ed32433ad7a37bb757b7e0f7dbb5373396c0
           path: simulator
-      - name: Matched fixed16 and fixed24 causal observation
+      - name: Matched fixed24 and combined causal observation
         run: timeout 1800 nice -n 19 bash tb/compare/frontier_run.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: fixed24-frontier
+          name: local-frontier
           path: raw
