@@ -1,0 +1,53 @@
+name: Production G94 status phase A
+on:
+  push:
+    branches: [wip/g5-production-sp]
+    paths: [tb/avr/production_phase_a.c, tb/avr/phase_a_trace.h, tb/compare/phase_a.py, .github/workflows/g5-phase-a.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  phase-a:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: buserror/simavr
+          ref: 13d4ed32433ad7a37bb757b7e0f7dbb5373396c0
+          path: simulator
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 45878477195
+          pattern: local-build-*
+          path: input
+      - name: Host tools only
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gcc make libelf-dev pkg-config binutils-avr
+      - name: Build bounded host and assert exact G94 map
+        run: |
+          mkdir -p raw build
+          git rev-parse HEAD > raw/harness.txt
+          git -C simulator rev-parse HEAD > raw/simulator.txt
+          git -C simulator apply ../tb/avr/simavr-timer-top0.patch
+          git -C simulator apply ../tb/avr/simavr-timer-mask.patch
+          sha256sum tb/avr/simavr-timer-top0.patch tb/avr/simavr-timer-mask.patch simulator/simavr/sim/avr_timer.c tb/avr/production_phase_a.c tb/avr/phase_a_trace.h > raw/hashes.txt
+          nice -n 19 make -s -j1 -C simulator/simavr libsimavr RELEASE=1
+          nice -n 19 gcc -std=c99 -Wall -Wextra -Werror -O2 -Isimulator/simavr/sim tb/avr/production_phase_a.c simulator/simavr/obj-x86_64-linux-gnu/libsimavr.a -lelf -lm -o build/phase-a
+          python3 -I tb/compare/production_sp.py prepare input raw
+          avr-objdump -d raw/g94.elf > raw/g94-disassembly.txt
+          python3 -I tb/compare/phase_a.py map raw/g94.elf
+      - name: One fixed-cycle question, matched observed and blind
+        run: |
+          timeout 700 nice -n 19 build/phase-a raw/g94.elf g94 raw/g94-observed observed > raw/g94-observed.log 2>&1
+          timeout 700 nice -n 19 build/phase-a raw/g94.elf g94 raw/g94-blind blind > raw/g94-blind.log 2>&1
+          python3 -I tb/compare/phase_a.py verify raw
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: production-phase-a
+          path: raw
