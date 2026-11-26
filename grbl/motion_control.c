@@ -485,18 +485,7 @@ static float mc_spline_dist(float *sum, float *a, float *b)
 #endif
 
 #ifdef BEZIER_Z_GAUSS
-// One third of the discrete chord velocity, using the existing coefficient cache.
-static float mc_spline_speed(float t, float h, spline_scratch_t *s) __attribute__((noinline));
-static float mc_spline_speed(float t, float h, spline_scratch_t *s)
-{
-  float v[2];
-  uint8_t axis;
-  for (axis = 0; axis < 2; axis++) {
-    v[axis] = s->g[axis] + 2.0f*t*s->e0[axis] + (t*t + h*h/12.0f)*s->d[axis];
-  }
-  return(hypot_f(v[X_AXIS], v[Y_AXIS]));
-}
-
+// Reuse the center chord polynomial to evaluate both symmetric nodes.
 static float mc_spline_gauss(spline_z_t *z, uint16_t start, uint16_t count,
                               spline_scratch_t *s) __attribute__((noinline, noclone));
 static float mc_spline_gauss(spline_z_t *z, uint16_t start, uint16_t count, spline_scratch_t *s)
@@ -505,8 +494,18 @@ static float mc_spline_gauss(spline_z_t *z, uint16_t start, uint16_t count, spli
   float square = m*m, moment = 3.0f*square - 7.0f;
   float delta = h*sqrtf(moment*0.05f);
   float side = (5.0f/6.0f)*(square - 1.0f)/moment;
-  return(3.0f*m*h*(side*(mc_spline_speed(t - delta, h, s) + mc_spline_speed(t + delta, h, s))
-                    + (1.0f - 2.0f*side)*mc_spline_speed(t, h, s)));
+  float v[2], minus[2], plus[2];
+  uint8_t axis;
+  for (axis = 0; axis < 2; axis++) {
+    float d = s->d[axis], e = s->e0[axis];
+    v[axis] = s->g[axis] + 2.0f*t*e + (t*t + h*h/12.0f)*d;
+    float base = v[axis] + delta*delta*d;
+    float offset = 2.0f*delta*(e + t*d);
+    minus[axis] = base - offset;
+    plus[axis] = base + offset;
+  }
+  return(3.0f*m*h*(side*(hypot_f(minus[0], minus[1]) + hypot_f(plus[0], plus[1]))
+                    + (1.0f - 2.0f*side)*hypot_f(v[0], v[1])));
 }
 #endif
 
