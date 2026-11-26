@@ -1,0 +1,65 @@
+name: G5 fixed24 stride
+on:
+  push:
+    branches: [wip/g5-fixed24-stride]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [g94, g93]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: 500513d26e14e5a16bcdaa6c7976107d6a5f888c
+          path: control
+      - name: Install frozen AVR tools
+        run: |
+          pacman -Syu --noconfirm --needed git make diffutils bash python
+          a=https://archive.archlinux.org/packages/a
+          pacman -U --noconfirm \
+            $a/avr-binutils/avr-binutils-2.47-1-x86_64.pkg.tar.zst \
+            $a/avr-gcc/avr-gcc-16.2.0-1-x86_64.pkg.tar.zst \
+            $a/avr-libc/avr-libc-2.3.2-4-any.pkg.tar.zst
+          git config --global --add safe.directory '*'
+      - name: Build matched control and candidate
+        run: |
+          bash -n tb/compare/stride.sh
+          bash tb/compare/stride.sh '${{ matrix.mode }}' build
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stride-build-${{ matrix.mode }}
+          path: raw/
+  run:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [g94, g93]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: stride-build-${{ matrix.mode }}
+          path: raw
+      - name: Install simulator
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends simavr
+      - name: Compare raw identity and isolated startup cycles
+        run: bash tb/compare/stride.sh '${{ matrix.mode }}' run
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stride-${{ matrix.mode }}
+          path: raw/

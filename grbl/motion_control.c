@@ -603,6 +603,9 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     z->u = (target[Z_AXIS] - position[Z_AXIS])*0.9999999f;
 #ifdef BEZIER_Z_FIXED
     z->pieces = 2; // One fixed coarse pass; 1 requests actual segment lengths.
+#ifdef TB_Z_STRIDE_CACHE
+    scratch->stride = (segments + 23)/24;
+#endif
 #ifdef BEZIER_Z_SELECT
     z->pieces = 16;
 #ifdef BEZIER_EXACT_INVERSE_TIME
@@ -646,7 +649,11 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
 #else
 #ifdef BEZIER_Z_CHORDS
 #ifdef TB_Z_FIXED_24
+#ifdef TB_Z_STRIDE_CACHE
+  m = scratch->stride;
+#else
   m = (segments + 23)/24; // Bounded intermediate-density experiment.
+#endif
 #else
   m = (segments + 15)/16;
 #endif

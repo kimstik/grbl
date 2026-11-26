@@ -214,6 +214,9 @@ typedef struct {
     struct { float g[2], e0[2], d[2]; };
   };
   float point[N_AXIS];
+#ifdef TB_Z_STRIDE_CACHE
+  uint16_t stride; // Unclamped fixed24 stride in the consumed parser prefix's last two bytes.
+#endif
 #else
   float first[2], second[2], point[N_AXIS];
   float *net[4];
@@ -260,6 +263,14 @@ typedef struct {
 typedef char spline_workspace_fits_prefix[
   (sizeof(spline_scratch_t) <= 8*sizeof(float) + sizeof(int32_t) + 2*sizeof(uint8_t) &&
    __builtin_offsetof(gc_values_t, xyz) == 8*sizeof(float) + sizeof(int32_t) + 2*sizeof(uint8_t)) ? 1 : -1];
+#ifdef TB_Z_STRIDE_CACHE
+typedef char spline_stride_layout[
+  (sizeof(spline_scratch_t) == 38 && sizeof(gc_values_t) == 50 &&
+   __builtin_offsetof(spline_scratch_t, point) == 24 &&
+   __builtin_offsetof(spline_scratch_t, stride) == 36 &&
+   __builtin_offsetof(gc_values_t, spline) == 0 &&
+   __builtin_offsetof(gc_values_t, xyz) == 38) ? 1 : -1];
+#endif
 #endif
 
 

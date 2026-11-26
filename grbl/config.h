@@ -827,6 +827,14 @@
   // #define BEZIER_EXACT_INVERSE_TIME
 #endif
 
+// Default-off fixed24 experiment: cache the unclamped stride in consumed parser bytes.
+#if defined(TB_Z_STRIDE_CACHE) && (!defined(TB_Z_FIXED_24) || !defined(BEZIER_Z_CHORDS) || \
+    !defined(BEZIER_POINT_CACHE) || !defined(BEZIER_PARSER_WORKSPACE) || \
+    !defined(BEZIER_PARSER_SCRATCH) || !defined(BEZIER_Z_FIXED) || \
+    !defined(ENABLE_CUBIC_SPLINES) || BEZIER_Z_LINEAR != 3 || defined(BEZIER_Z_SELECT))
+  #error "TB_Z_STRIDE_CACHE requires the fixed24 cached parser-workspace configuration"
+#endif
+
 // Dependency check: ENABLE_QUADRATIC_SPLINES requires ENABLE_CUBIC_SPLINES
 #if defined(ENABLE_QUADRATIC_SPLINES) && !defined(ENABLE_CUBIC_SPLINES)
   #error "ENABLE_QUADRATIC_SPLINES requires ENABLE_CUBIC_SPLINES to be enabled first"
