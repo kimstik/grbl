@@ -1,0 +1,31 @@
+name: G5 reversal leaf static
+on:
+  push:
+    branches: [wip/g5-reversal-leaf]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    timeout-minutes: 15
+    steps:
+      - name: Frozen AVR tools
+        run: |
+          pacman -Syu --noconfirm --needed git make diffutils bash python
+          a=https://archive.archlinux.org/packages/a
+          pacman -U --noconfirm $a/avr-binutils/avr-binutils-2.47-1-x86_64.pkg.tar.zst $a/avr-gcc/avr-gcc-16.2.0-1-x86_64.pkg.tar.zst $a/avr-libc/avr-libc-2.3.2-4-any.pkg.tar.zst
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: 500513d26e14e5a16bcdaa6c7976107d6a5f888c
+          path: control
+      - name: Matched static comparison only
+        run: timeout 600 nice -n 19 bash tb/compare/reversal_static.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reversal-static
+          path: raw

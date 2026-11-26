@@ -484,6 +484,23 @@ static float mc_spline_dist(float *sum, float *a, float *b)
 }
 #endif
 
+#ifdef BEZIER_Z_FIXED
+static uint8_t mc_spline_reversal(float *q, float *r) __attribute__((noinline, noclone));
+static uint8_t mc_spline_reversal(float *q, float *r)
+{
+  float a = 0.0f, b = 0.0f;
+  uint8_t axis;
+  for (axis = 0; axis < 2; axis++) {
+    float e0 = q[axis + 2] - q[axis];
+    float e1 = r[axis + 2] - q[axis + 2];
+    float e2 = r[axis] - r[axis + 2];
+    a += e0*e2;
+    b += e1*(e0 + e2);
+  }
+  return(a < 0.0f || b < 0.0f);
+}
+#endif
+
 #ifdef BEZIER_Z_SELECT
 // One decision before the coarse pass. Wang's integrated second-difference energy models
 // the polygon/chord width; a global mean speed replaces the varying speed. This is not a bound.
@@ -686,15 +703,7 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     if (z->next == m) { memcpy(r, target, 2*sizeof(float)); }
 #endif
     // The three control-polygon edge directions. Reject a piece that turns back.
-    a = b = 0.0f;
-    for (axis = 0; axis < 2; axis++) {
-      float e0 = q[axis + 2] - q[axis];
-      float e1 = r[axis + 2] - q[axis + 2];
-      float e2 = r[axis] - r[axis + 2];
-      a += e0*e2;
-      b += e1*(e0 + e2);
-    }
-    if (a < 0.0f || b < 0.0f) { z->todo = m/2; return(true); }
+    if (mc_spline_reversal(q, r)) { z->todo = m/2; return(true); }
     a = b = 0.0f;
 #ifdef BEZIER_Z_NORM
     a += mc_spline_dist(r, q);
