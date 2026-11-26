@@ -1,0 +1,48 @@
+name: G5 fresh compiler audit
+on:
+  push:
+    branches: [wip/g5-fresh-audit]
+    paths:
+      - '.github/workflows/g5-fresh-audit.yml'
+      - 'tb/compare/audit_flags.sh'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  flags:
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    timeout-minutes: 20
+    steps:
+      - name: Pinned AVR tools
+        run: |
+          set -euo pipefail
+          pacman -Syu --noconfirm --needed git make diffutils bash python curl
+          a=https://archive.archlinux.org/packages/a
+          mkdir -p "$RUNNER_TEMP/avr-packages"
+          for package in \
+            avr-binutils/avr-binutils-2.47-1-x86_64.pkg.tar.zst \
+            avr-gcc/avr-gcc-16.2.0-1-x86_64.pkg.tar.zst \
+            avr-libc/avr-libc-2.3.2-4-any.pkg.tar.zst; do
+            curl --fail --location --ipv4 --http1.1 --retry 2 --retry-delay 5 \
+              --connect-timeout 20 --max-time 120 \
+              --output "$RUNNER_TEMP/avr-packages/${package##*/}" "$a/$package"
+          done
+          pacman -U --noconfirm "$RUNNER_TEMP"/avr-packages/*.pkg.tar.zst
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: 1f19d74940551ecfaa0c38c17a318aeda931d795
+          path: baseline
+      - uses: actions/checkout@v4
+        with:
+          ref: acc353d03e1e058383aa1ed39948a81e63f70906
+          path: norm
+      - name: One-factor static comparisons
+        run: timeout 900 nice -n 19 bash tb/compare/audit_flags.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fresh-compiler-audit
+          path: raw
