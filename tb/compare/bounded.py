@@ -118,7 +118,11 @@ def report(root, mode):
     dump = (root/'dump.txt').read_text()
     require(dump.splitlines().count('done') == 1, 'dump completion')
     groups = decode(root/'dump.txt')
+    exact = 'TB_Z_EXACT_CHORDS' in (root/'options.txt').read_text()
     require(len(groups) == 4, 'four dump cases')
+    if exact:
+        require(all(g['summary'][14] == 0 and g['summary'][15] == len(g['points'])
+                    for g in groups), 'exact arm sums every emitted chord, no coarse pieces')
     results = []
     for g, case in zip(groups, CASES):
         t = rows[g['command']]

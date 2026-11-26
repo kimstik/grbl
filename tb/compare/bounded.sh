@@ -3,10 +3,9 @@
 set -euo pipefail
 arm=$1
 mode=$2
+stage=$3
 mkdir -p raw build
 raw=$(realpath raw)
-avr-gcc --version > raw/compiler.txt
-git rev-parse HEAD > raw/source.txt
 common='-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3 -DBEZIER_Z_LOOSE -DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE -DBEZIER_POINT_CACHE -DBEZIER_Z_NORM'
 case $arm in
   fixed16) extra='' ;;
@@ -20,6 +19,10 @@ case $mode in
   *) exit 2 ;;
 esac
 opts="$common $extra $inverse"
+if [ "$stage" = build ]; then
+avr-gcc --version > raw/compiler.txt
+pacman -Q avr-gcc avr-binutils avr-libc > raw/toolchain-packages.txt
+git rev-parse HEAD > raw/source.txt
 printf '%s\n' "$opts" > raw/options.txt
 cc=$(make -s --eval 'print-compile: ; @echo $(COMPILE)' print-compile)
 nice -n 19 make -s COMPILE="$cc $opts" > raw/production-build.txt 2>&1
@@ -34,6 +37,12 @@ for image in bench dump; do
   cp "tb/avr/$dir/$image.elf" "raw/$image.elf"
   avr-nm -n "raw/$image.elf" > "raw/$image-symbols.txt"
   avr-size "raw/$image.elf" > "raw/$image-size.txt"
+done
+exit 0
+fi
+[ "$stage" = run ] || exit 2
+dpkg-query -W simavr > raw/simulator-package.txt
+for image in bench dump; do
   timeout 600 nice -n 19 simavr -m atmega328p -f 16000000 "raw/$image.elf" > "raw/$image-simavr.txt" 2>&1
   sed 's/\x1b\[[0-9;]*m//g; s/\.*$//' "raw/$image-simavr.txt" > "raw/$image.txt"
 done
