@@ -1,0 +1,5 @@
+# Separate zero-Z inverse-time control.
+G21G17G90G94
+G0X0Y0Z0
+@MODE@
+*G5X10Y0Z0I3J12P3Q-12F@F@

@@ -645,7 +645,11 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
   m = min(m, z->next);
 #else
 #ifdef BEZIER_Z_CHORDS
+#ifdef TB_Z_FIXED_24
+  m = (segments + 23)/24; // Bounded intermediate-density experiment.
+#else
   m = (segments + 15)/16;
+#endif
 #ifdef BEZIER_EXACT_INVERSE_TIME
   if (!(pl_data->condition & PL_COND_FLAG_INVERSE_TIME))
 #endif
