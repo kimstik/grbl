@@ -857,6 +857,11 @@
 #if defined(BEZIER_LOCAL_LENGTH) && (!defined(BEZIER_POINT_CACHE) || !defined(BEZIER_Z_NORM))
   #error "BEZIER_LOCAL_LENGTH requires BEZIER_POINT_CACHE and BEZIER_Z_NORM"
 #endif
+// Experimental returning Wang-count helper; leaves the default driver unchanged.
+// #define BEZIER_WANG_RETURN
+#if defined(BEZIER_WANG_RETURN) && (BEZIER_Z_LINEAR != 3 || !defined(BEZIER_PARSER_WORKSPACE) || !defined(BEZIER_POINT_CACHE) || !defined(BEZIER_Z_NORM) || !defined(BEZIER_LOCAL_LENGTH))
+  #error "BEZIER_WANG_RETURN requires cached mode 3, parser workspace, norm and local length"
+#endif
 #if BEZIER_Z_LINEAR == 3
   #if BEZIER_Z_PIECES < 1 || BEZIER_Z_PIECES > BEZIER_Z_PIECES_MAX || BEZIER_Z_PIECES_MAX > 64 || (BEZIER_Z_PIECES & (BEZIER_Z_PIECES-1)) || (BEZIER_Z_PIECES_MAX & (BEZIER_Z_PIECES_MAX-1))
     #error "BEZIER_Z_PIECES and BEZIER_Z_PIECES_MAX must be powers of two, 1 <= pieces <= max <= 64"

@@ -16,8 +16,8 @@ if [ "$stage" = build ]; then
   pacman -Q avr-gcc avr-binutils avr-libc > raw/packages.txt
   python3 -I tb/compare/render.py tb/compare/local.in raw/corpus.txt --mode "${mode^^}"
   for arm in control candidate; do
-    source=$root; extra=-DBEZIER_LOCAL_LENGTH
-    if [ "$arm" = control ]; then source=$root/control; fi
+    source=$root; extra='-DBEZIER_LOCAL_LENGTH -DBEZIER_WANG_RETURN'
+    if [ "$arm" = control ]; then source=$root/control; extra=-DBEZIER_LOCAL_LENGTH; fi
     out=$root/raw/$arm
     mkdir -p "$out/production"
     git -C "$source" rev-parse HEAD > "$out/source.txt"
@@ -41,13 +41,16 @@ if [ "$stage" = build ]; then
     out=$root/raw/$arm/off
     mkdir -p "$out"
     cc=$(make -s -C "$source" --eval 'print-compile: ; @echo $(COMPILE)' print-compile)
-    nice -n 19 make -s -C "$source" BUILDDIR="$out" COMPILE="$cc $opts" > "raw/$arm/off-build.txt" 2>&1
+    nice -n 19 make -s -C "$source" BUILDDIR="$out" COMPILE="$cc $opts -DBEZIER_LOCAL_LENGTH" > "raw/$arm/off-build.txt" 2>&1
   done
   cmp raw/candidate/off/main.elf raw/control/off/main.elf
   printf 'default-off ELF identical\n' > raw/off-identity.txt
+  python3 -I tb/compare/wang_gate.py raw "$mode" > raw/pre-execution-gates.json
   exit 0
 fi
 [ "$stage" = run ] || exit 2
+python3 -I tb/compare/wang_gate.py raw "$mode" > raw/runtime-gates.json
+dpkg-query -W simavr > raw/simulator-package.txt
 for arm in control candidate; do
   for image in bench dump; do
     timeout 600 nice -n 19 simavr -m atmega328p -f 16000000 "raw/$arm/$image.elf" > "raw/$arm/$image-simavr.txt" 2>&1

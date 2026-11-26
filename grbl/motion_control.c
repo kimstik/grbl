@@ -883,6 +883,28 @@ static void mc_spline_cache_init(float *target, float *position, spline_scratch_
 }
 #endif
 
+#ifdef BEZIER_WANG_RETURN
+// Return before the driver starts estimating, planning or servicing realtime.
+static uint16_t mc_spline_segments(float *target, float *position, spline_scratch_t *scratch)
+  __attribute__((noinline, noclone));
+static uint16_t mc_spline_segments(float *target, float *position, spline_scratch_t *scratch)
+{
+  float *first = scratch->first, *second = scratch->second;
+  float a = 0.0f, b = 0.0f;
+  uint8_t i;
+  for (i = 0; i < 2; i++) {
+    float e0 = second[i] - 2.0f*first[i] + position[i];
+    float e1 = target[i] - 2.0f*second[i] + first[i];
+    a += e0*e0;
+    b += e1*e1;
+  }
+  float n = sqrtf(sqrtf(max(a, b))*(0.8f/BEZIER_SIGMA));
+  uint16_t segments = BEZIER_MAX_SEGMENTS;
+  if (n < BEZIER_MAX_SEGMENTS) { segments = 1 + n; }
+  return(segments);
+}
+#endif
+
 // Execute a cubic Bezier curve from position to target with control points first and second.
 // Only X and Y follow the curve; the other axes stay at position, as the parser allows no others.
 // The curve is cut into a number of segments of equal step in the curve parameter t, chosen in
@@ -907,11 +929,17 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
                        float *first, float *second)
 #endif
 {
-#ifdef BEZIER_PARSER_WORKSPACE
+#ifdef BEZIER_WANG_RETURN
+  float *p = scratch->point;
+#elif defined(BEZIER_PARSER_WORKSPACE)
   float *first = scratch->first, *second = scratch->second, *p = scratch->point;
 #else
   float p[N_AXIS];
 #endif
+#ifdef BEZIER_WANG_RETURN
+  memcpy(p, position, N_AXIS*sizeof(float));
+  uint16_t segments = mc_spline_segments(target, position, scratch);
+#else
   float a = 0.0f, b = 0.0f;
   uint8_t i;
   memcpy(p, position, N_AXIS*sizeof(float));
@@ -937,6 +965,7 @@ void mc_cubic_b_spline(float *target, plan_line_data_t *pl_data, float *position
   float n = sqrtf(sqrtf(max(a, b))*(0.8f/BEZIER_SIGMA));
   uint16_t segments = BEZIER_MAX_SEGMENTS;
   if (n < BEZIER_MAX_SEGMENTS) { segments = 1 + n; }
+#endif
 #ifdef BEZIER_POINT_CACHE
   mc_spline_cache_init(target, position, scratch);
 #endif

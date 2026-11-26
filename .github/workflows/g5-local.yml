@@ -1,7 +1,7 @@
-name: G5 fixed24 local
+name: G5 Wang return bounded
 on:
   push:
-    branches: [wip/g5-local-restore]
+    branches: [wip/g5-wang-return]
   workflow_dispatch:
 permissions:
   contents: read
@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
-          ref: 2347f8d359c7ec64cb5722763fecbe7ab68a9a66
+          ref: 33da70b6d5667e9581c240d6dba6ef5b435c94a9
           path: control
       - name: Build matched control and candidate
         run: |
