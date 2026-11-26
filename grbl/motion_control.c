@@ -647,7 +647,7 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
 #endif
     if (z->u == 0.0f) {
       z->next = 0; // No Z word, no estimate
-#ifdef BEZIER_POINT_CACHE
+#if defined(BEZIER_POINT_CACHE) && !defined(BEZIER_LOCAL_LENGTH)
       p[Z_AXIS] = position[Z_AXIS];
 #endif
     }
@@ -771,7 +771,7 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     }
   }
 #endif // !BEZIER_LOCAL_LENGTH
-#ifdef BEZIER_POINT_CACHE
+#if defined(BEZIER_POINT_CACHE) && !defined(BEZIER_LOCAL_LENGTH)
   p[Z_AXIS] = position[Z_AXIS]; // Restore the un-emitted point, including the no-Z G93 case.
 #endif
 #else
