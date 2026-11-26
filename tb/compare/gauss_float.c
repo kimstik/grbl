@@ -9,7 +9,7 @@ static float speed(float t, float h, float scale)
   return sqrtf(x*x + y*y);
 }
 
-static void check(int n, float scale, float dz)
+static int check(int n, float scale, float dz)
 {
   float h = 1.0f/n, estimate = 1e-30f;
   double exact = 0.0, cumulative = 0.0, worst = 0.0;
@@ -22,10 +22,9 @@ static void check(int n, float scale, float dz)
     if (count < 3) {
       for (int k = 0; k < count; k++) estimate += 3.0f*h*speed((j+k+.5f)*h,h,scale);
     } else {
-      float square=m*m, moment=3.0f*square-7.0f;
-      float delta=h*sqrtf(moment*.05f), side=(5.0f/6.0f)*(square-1.0f)/moment;
-      estimate += 3.0f*m*h*(side*(speed(t-delta,h,scale)+speed(t+delta,h,scale))
-                            +(1.0f-2.0f*side)*speed(t,h,scale));
+      float delta=h*sqrtf(.15f*(m*m-1.0f));
+      estimate += 3.0f*m*h*((5.0f/18.0f)*(speed(t-delta,h,scale)+speed(t+delta,h,scale))
+                            +(4.0f/9.0f)*speed(t,h,scale));
     }
   }
   float rest=estimate, u=dz*.9999999f;
@@ -37,5 +36,6 @@ static void check(int n, float scale, float dz)
     if(error>worst) worst=error;
   }
   printf("n=%d estimate=%.9g local_chords=%.12g max_local_Z_error=%.9g\n",n,estimate,exact,worst);
+  return !(worst <= .002);
 }
-int main(void) { check(124,1,30); check(1238,100,500); return 0; }
+int main(void) { int failed = check(124,1,30); failed |= check(1238,100,500); return failed; }

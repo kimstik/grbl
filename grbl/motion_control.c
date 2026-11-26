@@ -502,11 +502,10 @@ static float mc_spline_gauss(spline_z_t *z, uint16_t start, uint16_t count,
 static float mc_spline_gauss(spline_z_t *z, uint16_t start, uint16_t count, spline_scratch_t *s)
 {
   float m = count, h = z->step, t = (start + 0.5f*m)*h;
-  float square = m*m, moment = 3.0f*square - 7.0f;
-  float delta = h*sqrtf(moment*0.05f);
-  float side = (5.0f/6.0f)*(square - 1.0f)/moment;
-  return(3.0f*m*h*(side*(mc_spline_speed(t - delta, h, s) + mc_spline_speed(t + delta, h, s))
-                    + (1.0f - 2.0f*side)*mc_spline_speed(t, h, s)));
+  // Constant weights with nodes chosen to retain the discrete second moment.
+  float delta = h*sqrtf(0.15f*(m*m - 1.0f));
+  return(3.0f*m*h*((5.0f/18.0f)*(mc_spline_speed(t - delta, h, s) + mc_spline_speed(t + delta, h, s))
+                    + (4.0f/9.0f)*mc_spline_speed(t, h, s)));
 }
 #endif
 

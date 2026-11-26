@@ -1,7 +1,7 @@
 name: G5 bounded accuracy
 on:
   push:
-    branches: [wip/g5-cached-gauss]
+    branches: [wip/g5-cached-gauss-weights]
   workflow_dispatch:
 permissions:
   contents: read
