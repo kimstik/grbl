@@ -1,6 +1,13 @@
 name: G5 ordinary motion frontier
 on:
   workflow_dispatch:
+  push:
+    branches: [wip/g5-motion-frontier]
+    paths:
+      - .github/workflows/g5-frontier.yml
+      - tb/avr/frontier.c
+      - tb/compare/frontier_*.py
+      - tb/compare/frontier_run.sh
 permissions:
   contents: read
   actions: read
