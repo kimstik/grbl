@@ -10,6 +10,7 @@
 #include "avr_uart.h"
 #include "avr_eeprom.h"
 #include "avr_ioport.h"
+#include "avr_timer.h"
 static FILE *uart,*trace,*events;
 static uint32_t hash=2166136261u;
 static unsigned bytes,acks,ready,off=1,work,rawmin=0x8ff,effmin=0x8ff,pushmin=0x900;
@@ -34,11 +35,15 @@ int main(int argc,char**argv){
  const char*g94[]={"G94G5X10Y0Z-30I3J12P3Q-12F2000\n","G5X20Y0Z-30I3J12P3Q-12F2000\n","G5X30Y0Z-30I3J12P3Q-12F2000\n","G5X40Y0Z-30I3J12P3Q-12F2000\n"};
  const char*g93[]={"G93G5X10Y0Z-30I3J12P3Q-12F120\n","G5X20Y0Z-30I3J12P3Q-12F120\n","G5X30Y0Z-30I3J12P3Q-12F120\n","G5X40Y0Z-30I3J12P3Q-12F120\n"};
  unsigned nsetup=sizeof(setup)/sizeof(*setup),cmd=0,index=0,wait=0;uint64_t next=0,stable=0;int pair=0;unsigned pairpc=0;
- /* Read-only check that no OCR1A store lands at or below the count elapsed since the
-    last compare match, where the simulator fires at once instead of modelling the CTC
-    wrap through 0xffff. The match is the OCF1A rising edge seen after an instruction,
-    up to one instruction late, hence the margin. */
- uint64_t match=0,late=0;unsigned topw=0,topmin=65535,topdec=0,old=word(a,0x88);
+ /* Read-only Timer1 audit. Before each OCR1A low-byte store (the write that makes the
+    simulator reschedule CTC) the counter is taken from the simulator's own timer state,
+    not through the TCNT1 read accessor. On hardware a new TOP below the counter misses
+    the match and wraps through 0xffff; the simulator does not model that wrap, so such
+    a store would make the run unfaithful. The count is taken at the end of the two-cycle
+    store, the latest moment the write can land. Prescaler changes are counted because
+    the simulator restarts the counter on them and hardware does not. */
+ avr_timer_t*t1=0;for(avr_io_t*io=a->io_port;io;io=io->next)if(!strcmp(io->kind,"timer")&&((avr_timer_t*)io)->name=='1')t1=(avr_timer_t*)io;if(!t1)die("timer 1");
+ unsigned topw=0,missed=0,near=0,cschanges=0,oldcs=a->data[0x81]&7;long minslack=65536;
  while(a->cycle<640000000ULL && a->state!=cpu_Crashed){
   if(ready && !off && a->cycle>=next && (!wait || acks>=wait)){
    if(cmd<nsetup+4){if(cmd==nsetup&&!index&&!work){work=1;fprintf(trace,"work %"PRIu64"\n",(uint64_t)a->cycle);}
@@ -58,11 +63,14 @@ int main(int argc,char**argv){
   }
   unsigned pushes=(op&0xfe0f)==0x920f?1:((op&0xf000)==0xd000 || (op&0xfe0e)==0x940e)?2:0;
   int ocrstore=(op&0xfe0f)==0x9200&&(a->flash[pc+2]|a->flash[pc+3]<<8)==0x88;
-  unsigned flag=a->data[0x36]&2;
+  long count=-1;unsigned oldtop=t1->tov_top;uint64_t at=a->cycle;
+  if(ocrstore&&t1->tov_cycles)count=(long)(((at+2-t1->tov_base)*((uint64_t)t1->tov_top+1))/t1->tov_cycles);
   avr_run(a);unsigned ns=word(a,0x5d);
-  if(!flag&&(a->data[0x36]&2))match=a->cycle;
-  if(ocrstore){unsigned o=word(a,0x88),cs=a->data[0x81]&7,div=cs==1?1:cs==2?8:cs==3?64:cs==4?256:1024;uint64_t since=a->cycle-match;
-   topw++;if(o<topmin)topmin=o;if(o<old)topdec++;if(since>late)late=since;if((uint64_t)(o+1)*div<=since+8)die("OCR1A store at or below elapsed count");old=o;}
+  if(ocrstore){unsigned o=word(a,0x88);long slack=(long)o-count;topw++;
+   if(count<0)fprintf(trace,"ocr1a stopped cycle=%"PRIu64" pc=%x new=%u\n",at,pc,o);
+   else{if(slack<minslack)minslack=slack;if(slack<0)missed++;else if(slack<64)near++;
+    if(slack<64)fprintf(trace,"ocr1a cycle=%"PRIu64" pc=%x old_top=%u count=%ld new=%u slack=%ld\n",at,pc,oldtop,count,o,slack);}}
+  if((a->data[0x81]&7)!=oldcs){cschanges++;fprintf(trace,"prescaler cycle=%"PRIu64" pc=%x cs=%u->%u\n",at,pc,oldcs,a->data[0x81]&7);oldcs=a->data[0x81]&7;}
   if(!blind){
    if(ns<rawmin){rawmin=ns;low(a,"raw",ns,pc,busy);}if(work&&ns<wr)wr=ns;
    if(pushes){unsigned lowaddr=sp-pushes+1;if(lowaddr<pushmin)pushmin=lowaddr;if(work&&lowaddr<wp)wp=lowaddr;}
@@ -76,7 +84,7 @@ int main(int argc,char**argv){
   int drained=cmd==nsetup+4&&acks>=wait&&a->data[sys]==0&&a->data[bh]==a->data[bt]&&a->data[sh]==a->data[st]&&!word(a,state+33)&&!(a->data[0x6f]&2)&&xyz[0]==10000&&xyz[1]==0&&xyz[2]==-7500;
   if(drained){if(!stable)stable=a->cycle;if(a->cycle-stable>=1600000)break;}else stable=0;
  }
- fprintf(trace,"timer stores=%u min=%u decreases=%u max_since_match=%"PRIu64"\n",topw,topmin,topdec,late);
+ fprintf(trace,"timer stores=%u missed=%u near=%u min_slack=%ld prescaler_changes=%u\n",topw,missed,near,minslack,cschanges);
  fprintf(trace,"end %"PRIu64" state=%u pc=%x bytes=%u hash=%u commands=%u acks=%u stable=%"PRIu64" raw=%x effective=%x push=%x work_raw=%x work_effective=%x work_push=%x\n",(uint64_t)a->cycle,a->data[sys],a->pc,bytes,hash,cmd,acks,stable,rawmin,effmin,pushmin,wr,we,wp);
  fprintf(trace,"diagnostic frequency=%u cpu=%d I=%u irqstate=%d busy=%u timer=%u/%u counter=%u compare=%u mask=%u flags=%u queues=%u/%u %u/%u exec=%u pos=%u/%u/%u rt=%u\n",a->frequency,a->state,a->sreg[7],a->interrupt_state,a->data[busy],a->data[0x80],a->data[0x81],word(a,0x84),word(a,0x88),a->data[0x6f],a->data[0x36],a->data[bh],a->data[bt],a->data[sh],a->data[st],word(a,state+33),word(a,pos),word(a,pos+4),word(a,pos+8),a->data[addr(&fw,"sys_rt_exec_state")]);
  int ok=stable&&a->cycle<640000000ULL;fclose(uart);fclose(trace);fclose(events);avr_terminate(a);return ok?0:3;

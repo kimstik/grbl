@@ -23,6 +23,10 @@ else:
    assert len(found)==1;end=found[0];full.append(end)
    ends.append(end.split(' raw=')[0]);assert 'state=0' in end and 'commands=22 acks=22' in end
   assert ends[0]==ends[1]
-  timer=[s for s in a.with_suffix('.trace').read_text().splitlines() if s.startswith('timer ')]
-  result[mode]=dict(parity=True,end=full[0],timer=timer,scope='Observed baseline only; not worst-case stack proof; written minimum covers stack pushes, not all local stores')
+  lines=a.with_suffix('.trace').read_text().splitlines()
+  timer=[s for s in lines if s.startswith('timer ')];assert len(timer)==1
+  # Fidelity gate: no OCR1A store below the running count, no counter restart by a prescaler change.
+  faithful=' missed=0 ' in timer[0] and timer[0].endswith(' prescaler_changes=0') and not any(s.startswith('ocr1a stopped') for s in lines)
+  result[mode]=dict(parity=True,timer_faithful=faithful,end=full[0],timer=timer,near=[s for s in lines if s.startswith('ocr1a ')][:20],scope='Observed baseline only; not worst-case stack proof; written minimum covers stack pushes, not all local stores')
  (root/'result.json').write_text(json.dumps(result,indent=2));print(json.dumps(result,indent=2))
+ assert all(r['timer_faithful'] for r in result.values()),'Timer1 store outside the simulator model'
