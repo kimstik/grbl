@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
-          ref: 9b4a28f
+          ref: 9b4a28f19137ef3cc2b9fca4dc464469483562e4
           path: frozen-harness
       - uses: actions/checkout@v4
         with:

@@ -6,10 +6,11 @@ mkdir -p raw build
 avr-gcc --version > raw/compiler.txt
 git -C simulator rev-parse HEAD > raw/simulator.txt
 test "$(<raw/simulator.txt)" = 13d4ed32433ad7a37bb757b7e0f7dbb5373396c0
-make -s -C simulator/simavr RELEASE=1 -j2 > raw/simulator-build.txt 2>&1
 sim=$root/simulator/simavr
+make -s -C "$sim" CC=gcc obj config > raw/simulator-build.txt 2>&1
+make -s -j2 -C "$sim" CC=gcc libsimavr >> raw/simulator-build.txt 2>&1
 gcc -std=c99 -Wall -Wextra -O2 -I"$sim/sim" $(pkg-config --cflags libelf) \
-  tb/avr/frontier.c "$sim/obj-x86_64-linux-gnu/libsimavr.a" $(pkg-config --libs libelf) -lm -o build/frontier > raw/observer-build.txt 2>&1
+  tb/avr/frontier.c "$sim/obj-$(gcc -dumpmachine)/libsimavr.a" $(pkg-config --libs libelf) -lm -o build/frontier > raw/observer-build.txt 2>&1
 common='-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3 -DBEZIER_Z_LOOSE -DTB_ARC_TOLERANCE=.002f -DTB_DYN_SPLINES_ONLY'
 for arm in baseline norm; do
   mkdir -p "raw/$arm"
