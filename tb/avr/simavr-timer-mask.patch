@@ -1,0 +1,44 @@
+--- a/simavr/sim/avr_timer.c
++++ b/simavr/sim/avr_timer.c
+@@ -742,6 +742,32 @@
+ }
+ 
+ /*
++ * Write to the TIMSK register. A flag that is already set requests its
++ * interrupt as soon as the matching enable bit is set.
++ */
++static void
++avr_timer_write_mask(
++		struct avr_t * avr,
++		avr_io_addr_t addr,
++		uint8_t v,
++		void * param)
++{
++	avr_timer_t * p = (avr_timer_t *)param;
++	avr_int_vector_t * vectors[2 + AVR_TIMER_COMP_COUNT] = { &p->overflow, &p->icr };
++
++	avr_core_watch_write(avr, addr, v);
++	for (int compi = 0; compi < AVR_TIMER_COMP_COUNT; compi++)
++		vectors[2 + compi] = &p->comp[compi].interrupt;
++	for (int i = 0; i < 2 + AVR_TIMER_COMP_COUNT; i++) {
++		avr_int_vector_t * vector = vectors[i];
++		if (vector->vector && vector->enable.reg == addr && vector->raised.reg &&
++				!vector->pending && avr_regbit_get(avr, vector->enable) &&
++				avr_regbit_get(avr, vector->raised))
++			avr_raise_interrupt(avr, vector);
++	}
++}
++
++/*
+  * write to the TIFR register. Watch for code that writes "1" to clear
+  * pending interrupts.
+  */
+@@ -964,6 +990,8 @@
+ 	// this assumes all the "pending" interrupt bits are in the same
+ 	// register. Might not be true on all devices ?
+ 	avr_register_io_write(avr, p->overflow.raised.reg, avr_timer_write_pending, p);
++	if (p->overflow.enable.reg)
++		avr_register_io_write(avr, p->overflow.enable.reg, avr_timer_write_mask, p);
+ 
+ 	/*
+ 	 * Even if the timer is 16 bits, we don't care to have watches on the

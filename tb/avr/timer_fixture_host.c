@@ -30,11 +30,15 @@ int main(int argc, char **argv)
   uint32_t isr = sym(&fw, "__vector_11")->addr;
   unsigned hits = sym(&fw, "hits")->addr - AVR_SEGMENT_OFFSET_DATA;
   unsigned flagged = sym(&fw, "flagged")->addr - AVR_SEGMENT_OFFSET_DATA;
-  unsigned ocr = a->data[0x88] | a->data[0x89] << 8, flag = 0;
+  unsigned ocr = a->data[0x88] | a->data[0x89] << 8, flag = 0, mask = a->data[0x6f];
   uint32_t pc = a->pc;
   while (a->cycle < 2000000 && a->state != cpu_Done && a->state != cpu_Crashed) {
     uint64_t before = a->cycle;
+    unsigned tifr = a->data[0x36];
     avr_run(a);
+    /* TIFR1 is sampled before the instruction, so it shows the flag the enable saw. */
+    if (a->data[0x6f] != mask) printf("mask %" PRIu64 " %" PRIu64 " %u %u\n", before, a->cycle, a->data[0x6f], tifr & 2);
+    mask = a->data[0x6f];
     if (a->pc == isr && pc != isr) printf("isr %" PRIu64 "\n", a->cycle);
     pc = a->pc;
     unsigned o = a->data[0x88] | a->data[0x89] << 8;

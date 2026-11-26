@@ -8,7 +8,15 @@ volatile uint8_t hits, flagged;
 ISR(TIMER1_COMPA_vect)
 {
   OCR1A = NEXT_TOP;
-  if (++hits == 4) { TIMSK1 = 0; }
+  ++hits;
+#ifdef WAKE
+  if (hits == 2) {
+    /* Same order as st_go_idle(): mask, then rewrite the prescaler bits. */
+    TIMSK1 &= ~(1<<OCIE1A);
+    TCCR1B = (TCCR1B & ~((1<<CS12) | (1<<CS11))) | (1<<CS10);
+  }
+#endif
+  if (hits == 4) { TIMSK1 = 0; }
 }
 
 int main(void)
@@ -26,6 +34,13 @@ int main(void)
 #endif
   TIMSK1 = 1<<OCIE1A;
   sei();
+#ifdef WAKE
+  /* Idle with a masked match pending, then enable as st_wake_up() does. */
+  while (hits < 2) {}
+  while (!(TIFR1 & (1<<OCF1A))) {}
+  flagged = 1;
+  TIMSK1 |= 1<<OCIE1A;
+#endif
   while (hits < 4) {}
   cli();
   sleep_cpu(); /* simavr stops here: sleep with interrupts disabled */

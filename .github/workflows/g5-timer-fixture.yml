@@ -2,7 +2,7 @@ name: Timer1 TOP 0 fixture
 on:
   push:
     branches: [wip/g5-production-sp]
-    paths: [tb/avr/timer_fixture.c, tb/avr/timer_fixture_host.c, tb/avr/simavr-timer-top0.patch, tb/compare/timer_fixture.py, .github/workflows/g5-timer-fixture.yml]
+    paths: [tb/avr/timer_fixture.c, tb/avr/timer_fixture_host.c, tb/avr/simavr-timer-top0.patch, tb/avr/simavr-timer-mask.patch, tb/compare/timer_fixture.py, .github/workflows/g5-timer-fixture.yml]
   workflow_dispatch:
 permissions:
   contents: read
@@ -30,8 +30,9 @@ jobs:
         run: |
           mkdir -p raw build
           git -C patched apply ../tb/avr/simavr-timer-top0.patch
+          git -C patched apply ../tb/avr/simavr-timer-mask.patch
           git -C pristine rev-parse HEAD > raw/simulator.txt
-          sha256sum tb/avr/simavr-timer-top0.patch pristine/simavr/sim/avr_timer.c patched/simavr/sim/avr_timer.c > raw/hashes.txt
+          sha256sum tb/avr/simavr-timer-top0.patch tb/avr/simavr-timer-mask.patch pristine/simavr/sim/avr_timer.c patched/simavr/sim/avr_timer.c > raw/hashes.txt
           git -C patched diff > raw/applied.patch
           avr-gcc --version > raw/avr-gcc.txt
           for sim in pristine patched; do
@@ -44,10 +45,11 @@ jobs:
           build top1 1 1
           build top99 99 99
           build top99-poll 99 99 -DPOLL
+          build wake 999 999 -DWAKE
           sha256sum build/*.elf >> raw/hashes.txt
       - name: Run and check
         run: |
-          for case in top0 top0-poll top1 top99 top99-poll; do
+          for case in top0 top0-poll top1 top99 top99-poll wake; do
             for sim in pristine patched; do
               timeout 120 nice -n 19 build/host-$sim build/$case.elf > raw/$case-$sim.txt
             done
