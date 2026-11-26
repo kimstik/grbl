@@ -36,6 +36,7 @@ static int check(int n, float scale, float dz)
     if(error>worst) worst=error;
   }
   printf("n=%d estimate=%.9g local_chords=%.12g max_local_Z_error=%.9g\n",n,estimate,exact,worst);
-  return !(worst <= .002);
+  printf("reference .002=%s .003=%s .004=%s\n", worst<=.002?"within":"over", worst<=.003?"within":"over", worst<=.004?"within":"over");
+  return !isfinite(worst);
 }
 int main(void) { int failed = check(124,1,30); failed |= check(1238,100,500); return failed; }

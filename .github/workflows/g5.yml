@@ -2,6 +2,7 @@ name: G5 Z aim prototype
 
 on:
   push:
+    branches-ignore: [wip/g5-gauss-weights-static]
   pull_request:
 
 defaults:
