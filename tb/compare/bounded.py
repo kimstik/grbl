@@ -40,7 +40,7 @@ def decode(path):
     return [g for g in groups if g['command'].startswith('G5')]
 
 
-def timed(path):
+def timed(path, expected=4):
     text = path.read_text()
     require(text.splitlines().count('done') == 1, 'bench completion')
     calib = re.search(r'^calib (\d+)$', text, re.M)
@@ -51,7 +51,7 @@ def timed(path):
         if line.startswith('G5'):
             require(len(words) == 11, 'timed fields')
             rows[words[0]] = tuple(map(int, words[1:]))
-    require(len(rows) == 4, 'four timed cases')
+    require(len(rows) == expected, 'timed case count')
     stack = re.search(r'^stack (\d+)$', text, re.M)
     require(stack is not None, 'stack watermark')
     return rows, int(stack[1])

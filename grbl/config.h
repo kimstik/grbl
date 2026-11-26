@@ -791,6 +791,11 @@
   // Experimental FIXED distance helper: return the norm without a sum side effect.
   // Estimation keeps the same sums and order; emission has no live sum to update.
   // #define BEZIER_Z_NORM
+  // Experimental local geometry for length and Z. Emitted XY still adds the start.
+  // Uses chord/poly as the previous local point; no persistent workspace growth.
+  // The absolute-coordinate risk fallback is disabled: it measures a different path.
+  // Rounded output still need not meet the smooth spatial tolerance.
+  // #define BEZIER_LOCAL_LENGTH
   // Experimental mode 3 scheduling: service realtime after each intermediate target is
   // queued, before calculating the next one. The earlier realtime calls remain in place.
   // This changes foreground refill timing, not the path, and does not guarantee no stops.
@@ -848,6 +853,9 @@
 #endif
 #if defined(BEZIER_Z_NORM) && (BEZIER_Z_LINEAR != 3 || !defined(BEZIER_Z_FIXED) || defined(BEZIER_Z_SELECT))
   #error "BEZIER_Z_NORM requires BEZIER_Z_LINEAR 3 and BEZIER_Z_FIXED, without BEZIER_Z_SELECT"
+#endif
+#if defined(BEZIER_LOCAL_LENGTH) && (!defined(BEZIER_POINT_CACHE) || !defined(BEZIER_Z_NORM))
+  #error "BEZIER_LOCAL_LENGTH requires BEZIER_POINT_CACHE and BEZIER_Z_NORM"
 #endif
 #if BEZIER_Z_LINEAR == 3
   #if BEZIER_Z_PIECES < 1 || BEZIER_Z_PIECES > BEZIER_Z_PIECES_MAX || BEZIER_Z_PIECES_MAX > 64 || (BEZIER_Z_PIECES & (BEZIER_Z_PIECES-1)) || (BEZIER_Z_PIECES_MAX & (BEZIER_Z_PIECES_MAX-1))
