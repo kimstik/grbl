@@ -14,13 +14,15 @@ gcc -std=c99 -Wall -Wextra -O2 -I"$sim/sim" $(pkg-config --cflags libelf) \
 common='-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3 -DBEZIER_Z_LOOSE -DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE -DBEZIER_POINT_CACHE -DBEZIER_Z_NORM'
 pacman -Q avr-gcc avr-binutils avr-libc > raw/toolchain-packages.txt
 git rev-parse HEAD > raw/harness.txt
-for arm in fixed24 combined; do
+for arm in fixed24 fixed32; do
   mkdir -p "raw/$arm"
   extra=-DTB_Z_FIXED_24
   source=$root/source
-  if [ "$arm" = combined ]; then
-    source=$root/combined
-    extra="$extra -DBEZIER_LOCAL_LENGTH"
+  expected=d93935e3905e921e08fbcba16539ae062564e1b0a9e44ae97e7e1c7fa84d9278
+  if [ "$arm" = fixed32 ]; then
+    source=$root/fixed32
+    extra=-DTB_Z_FIXED_32
+    expected=2b46172047ba4089144fd90e905c15e01c4b948210f0ffe62b4a98fdbb8554f2
   fi
   git -C "$source" rev-parse HEAD > "raw/$arm/source.txt"
   cc=$(make -s --no-print-directory -C "$source" --eval 'print-compile: ; @echo $(COMPILE)' print-compile)
@@ -31,6 +33,9 @@ for arm in fixed24 combined; do
   avr-size "raw/$arm/production.elf" > "raw/$arm/production-size.txt"
   set -- $(avr-size "raw/$arm/production.elf" | tail -1)
   test $(($1 + $2)) -le 32768
+  printf 'flash %s boot_margin %s\n' "$(($1 + $2))" "$((32256 - $1 - $2))" > "raw/$arm/flash-gate.txt"
+  # Exact bytes from the saved bounded production image, checked before simulation.
+  printf '%s  %s\n' "$expected" "raw/$arm/production.elf" | sha256sum --check > "raw/$arm/production-identity.txt"
   make -s -C tb/avr ROOT="$source" BUILD="build/frontier-$arm" DEFS="$common $extra -DTB_ARC_TOLERANCE=.002f -DTB_DYN_SPLINES_ONLY -DTB_DYN_FRONTIER_ONLY" dyn > "raw/$arm/build.txt" 2>&1
   elf="tb/avr/build/frontier-$arm/dyn.elf"
   cp "$elf" "raw/$arm/dyn.elf"
