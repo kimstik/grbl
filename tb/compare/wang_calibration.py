@@ -18,19 +18,23 @@ else:
  root=Path(sys.argv[2]);tr=[]
  for arm in ('observed','blind'):tr.append((root/f'g94-{arm}.trace').read_text().splitlines())
  for suffix in ('uart','events'):assert (root/f'g94-observed.{suffix}').read_bytes()==(root/f'g94-blind.{suffix}').read_bytes()
- assert not any(line.split()[1]=='63' for line in (root/'g94-observed.events').read_text().splitlines())
+ assert [line for line in (root/'g94-observed.events').read_text().splitlines() if line.split()[1]=='63']==['3887691 63']
  def one(lines,prefix):
   v=[x for x in lines if x.startswith(prefix)];assert len(v)==1,(prefix,len(v));return v[0]
  ends=[one(t,'end ') for t in tr];assert ends[0].split(' raw=')[0]==ends[1].split(' raw=')[0];assert 'state=0' in ends[0] and 'commands=22 acks=22' in ends[0]
  cal=[fields(one(t,'calibration ')) for t in tr]
  for k in ('selected','generations','returns','active','unknown','udr','status','prep_entries'):assert cal[0][k]==cal[1][k]
- assert cal[0]['generations']==cal[0]['returns']=='4' and all(cal[0][k]=='0' for k in ('active','unknown','udr','status'))
+ assert cal[0]['generations']==cal[0]['returns']=='4' and all(cal[0][k]=='0' for k in ('active','unknown'))
+ assert cal[0]['udr']==cal[0]['status']=='1'
+ trial=[one(t,'trial ') for t in tr];assert trial[0]==trial[1]=='trial sent=1 ready=3889187'
+ statuses=[s for s in (root/'g94-observed.uart').read_text().splitlines() if s.startswith('<')];assert len(statuses)==1
  anchors=[[s for s in t if s.startswith('anchor ')] for t in tr];assert anchors[0]==anchors[1]
  history=[[s for s in t if s.startswith('input-state ')] for t in tr];assert history[0]==history[1]
  timer=fields(one(tr[0],'timer '));assert one(tr[0],'timer ')==one(tr[1],'timer ')
  known=all(timer[k]=='0' for k in ('missed','near','equal','boundary','prescaler_changes')) and timer['initial_start']=='1' and not any(s.startswith('ocr1a stopped') for s in tr[0])
  eligible=len(anchors[0])==1 and fields(anchors[0][0])['eligible']=='1'
- result=dict(parity=True,end=ends[0],calibration=cal[0],anchor=anchors[0],eligible=eligible,timer=timer,known_hazards_not_observed=known,scope='One baseline, no question byte; model-specific, not production safety')
+ result=dict(parity=True,end=ends[0],calibration=cal[0],anchor=anchors[0],eligible=eligible,timer=timer,known_hazards_not_observed=known,trial=trial[0],status=statuses,scope='One fixed-cycle question; model-specific diagnostic, not production safety')
  (root/'calibration-result.json').write_text(json.dumps(result,indent=2));print(json.dumps(result,indent=2))
  assert known,'known timer hazard or ambiguity observed'
- assert eligible,'no eligible first anchor; do not retarget'
+ # Baseline eligibility is frozen externally; the injected byte changes this history.
+ # A different observed overlap is a diagnostic miss, never a reason to retarget.

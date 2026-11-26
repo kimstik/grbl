@@ -46,13 +46,21 @@ int main(int argc,char**argv){
     the simulator restarts the counter on them and hardware does not. */
  avr_timer_t*t1=0;for(avr_io_t*io=a->io_port;io;io=io->next)if(!strcmp(io->kind,"timer")&&((avr_timer_t*)io)->name=='1')t1=(avr_timer_t*)io;if(!t1)die("timer 1");
  unsigned topw=0,missed=0,near=0,cschanges=0,initialstart=0,boundary=0,equal=0,oldcs=a->data[0x81]&7;long minslack=65536;
+ unsigned sent=0;uint64_t ready_cycle=0;
  extended=!blind;phase_map(a);
  avr_uart_t*u0=0;for(avr_io_t*io=a->io_port;io;io=io->next)if(!strcmp(io->kind,"uart")&&((avr_uart_t*)io)->name=='0')u0=(avr_uart_t*)io;if(!u0)die("uart0");
  if(strcmp(argv[2],"g94"))die("phase A is G94 only");
  while(a->cycle<640000000ULL && a->state!=cpu_Crashed){
   trace_before(a);
   input_history(a,u0,next,cmd,index,wait);
-  select_anchor(a,u0);
+  select_anchor(a,u0); /* Diagnostic only; it cannot change the fixed input time. */
+  if(!sent&&a->cycle>=3887691){
+   if(a->cycle!=3887691)die("fixed send boundary missed");
+   if(u0->input.read!=u0->input.write||u0->cycles_per_byte!=1496||word(a,0xc4)!=16||!(a->data[0xc0]&2)||a->data[0xc2]!=6)die("fixed send UART guard");
+   if(!ready||off||!wait||acks>=wait||wang_active||unknown)die("fixed send schedule or chain guard");
+   snapshot(a,"question-send");fprintf(events,"%"PRIu64" 63\n",(uint64_t)a->cycle);
+   avr_raise_irq(input,'?');sent=1;last_send=a->cycle;next=a->cycle+1600;
+  }
   if(ready && !off && a->cycle>=next && (!wait || acks>=wait)){
    if(cmd<nsetup+4){if(cmd==nsetup&&!index&&!work){work=1;fprintf(trace,"work %"PRIu64"\n",(uint64_t)a->cycle);}
     const char*s=cmd<nsetup?setup[cmd]:(!strcmp(argv[2],"g93")?g93:g94)[cmd-nsetup];unsigned c=(unsigned char)s[index++];fprintf(events,"%"PRIu64" %u\n",(uint64_t)a->cycle,c);avr_raise_irq(input,c);last_send=a->cycle;next=a->cycle+1600;if(!s[index]){index=0;cmd++;wait=acks+1;}
@@ -79,7 +87,10 @@ int main(int argc,char**argv){
   unsigned oldrx=a->data[0xc0]&0x80;
   avr_run(a);unsigned ns=word(a,0x5d);
   trace_after(a,pc,op,sp,following,z,rd,saved_return);
-  if(selected&&!oldrx&&(a->data[0xc0]&0x80))snapshot(a,"rx-ready");
+  if(sent&&!ready_cycle&&!oldrx&&(a->data[0xc0]&0x80)){
+   ready_cycle=a->cycle;snapshot(a,"rx-ready");
+   if(ready_cycle!=3889187)die("fixed readiness boundary missed");
+  }
   if(ocrstore){unsigned o=word(a,0x88);long slack=(long)o-count;topw++;
    if(count<0)fprintf(trace,"ocr1a stopped cycle=%"PRIu64" pc=%x new=%u\n",at,pc,o);
    else{if(slack<minslack)minslack=slack;
@@ -101,6 +112,7 @@ int main(int argc,char**argv){
   int drained=cmd==nsetup+4&&acks>=wait&&a->data[sys]==0&&a->data[bh]==a->data[bt]&&a->data[sh]==a->data[st]&&!word(a,state+33)&&!(a->data[0x6f]&2)&&xyz[0]==10000&&xyz[1]==0&&xyz[2]==-7500;
   if(drained){if(!stable)stable=a->cycle;if(a->cycle-stable>=1600000)break;}else stable=0;
  }
+ fprintf(trace,"trial sent=%u ready=%"PRIu64"\n",sent,ready_cycle);
  fprintf(trace,"calibration selected=%"PRIu64" generations=%u returns=%u active=%u unknown=%u udr=%u status=%u prep_entries=%u startup_min=%x prep_min=%x\n",selected,generation,wang_returns,wang_active,unknown,rx_question,status_hits,prep_entries,startup_min,prep_min);
  fprintf(trace,"timer stores=%u missed=%u near=%u equal=%u boundary=%u min_slack=%ld prescaler_changes=%u initial_start=%u\n",topw,missed,near,equal,boundary,minslack,cschanges,initialstart);
  fprintf(trace,"end %"PRIu64" state=%u pc=%x bytes=%u hash=%u commands=%u acks=%u stable=%"PRIu64" raw=%x effective=%x push=%x work_raw=%x work_effective=%x work_push=%x\n",(uint64_t)a->cycle,a->data[sys],a->pc,bytes,hash,cmd,acks,stable,rawmin,effmin,pushmin,wr,we,wp);

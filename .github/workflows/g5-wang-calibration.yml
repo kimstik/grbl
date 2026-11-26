@@ -1,7 +1,7 @@
-name: Wang production calibration
+name: Wang single RX trial
 on:
   push:
-    branches: [wip/g5-wang-calibration]
+    branches: [wip/g5-wang-rx]
   workflow_dispatch:
 permissions:
   contents: read
@@ -38,7 +38,7 @@ jobs:
           nice -n 19 make -s -j1 -C simulator/simavr libsimavr RELEASE=1
           nice -n 19 gcc -std=c99 -Wall -Wextra -Werror -O2 -Isimulator/simavr/sim tb/avr/wang_calibration.c simulator/simavr/obj-x86_64-linux-gnu/libsimavr.a -lelf -lm -o build/calibration
           python3 -I tb/compare/wang_calibration.py prepare input raw
-      - name: One baseline observed and blind, no question
+      - name: One fixed-cycle question, observed and blind
         run: |
           timeout 700 nice -n 19 build/calibration raw/g94.elf g94 raw/g94-observed observed > raw/g94-observed.log 2>&1
           timeout 700 nice -n 19 build/calibration raw/g94.elf g94 raw/g94-blind blind > raw/g94-blind.log 2>&1
@@ -46,5 +46,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: wang-calibration
+          name: wang-rx
           path: raw
