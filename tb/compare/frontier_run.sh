@@ -14,15 +14,14 @@ gcc -std=c99 -Wall -Wextra -O2 -I"$sim/sim" $(pkg-config --cflags libelf) \
 common='-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3 -DBEZIER_Z_LOOSE -DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE -DBEZIER_POINT_CACHE -DBEZIER_Z_NORM'
 pacman -Q avr-gcc avr-binutils avr-libc > raw/toolchain-packages.txt
 git rev-parse HEAD > raw/harness.txt
-for arm in fixed24 fixed32; do
+for arm in combined candidate; do
   mkdir -p "raw/$arm"
-  extra=-DTB_Z_FIXED_24
+  extra='-DTB_Z_FIXED_24 -DBEZIER_LOCAL_LENGTH'
   source=$root/source
-  expected=d93935e3905e921e08fbcba16539ae062564e1b0a9e44ae97e7e1c7fa84d9278
-  if [ "$arm" = fixed32 ]; then
-    source=$root/fixed32
-    extra=-DTB_Z_FIXED_32
-    expected=2b46172047ba4089144fd90e905c15e01c4b948210f0ffe62b4a98fdbb8554f2
+  expected=623b1e8d5019a4f0d7fdd749a086cce61eeaeeb716b4cf5cde9a917c6ea9ee62
+  if [ "$arm" = candidate ]; then
+    source=$root/candidate
+    expected=482c6d098adeeaf4db536b959296b5da3a08a49b2a95ae3fa2f05c1415a00e29
   fi
   git -C "$source" rev-parse HEAD > "raw/$arm/source.txt"
   cc=$(make -s --no-print-directory -C "$source" --eval 'print-compile: ; @echo $(COMPILE)' print-compile)
@@ -33,6 +32,7 @@ for arm in fixed24 fixed32; do
   avr-size "raw/$arm/production.elf" > "raw/$arm/production-size.txt"
   set -- $(avr-size "raw/$arm/production.elf" | tail -1)
   test $(($1 + $2)) -le 32768
+  if [ "$arm" = candidate ]; then test $(($1 + $2)) -le 32256; fi
   printf 'flash %s boot_margin %s\n' "$(($1 + $2))" "$((32256 - $1 - $2))" > "raw/$arm/flash-gate.txt"
   # Exact bytes from the saved bounded production image, checked before simulation.
   printf '%s  %s\n' "$expected" "raw/$arm/production.elf" | sha256sum --check > "raw/$arm/production-identity.txt"

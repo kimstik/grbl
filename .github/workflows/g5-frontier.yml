@@ -1,8 +1,8 @@
-name: G5 fixed32 motion frontier
+name: G5 boot-fitting motion frontier
 on:
   workflow_dispatch:
   push:
-    branches: [wip/g5-fixed32-frontier]
+    branches: [wip/g5-size-frontier]
     paths:
       - .github/workflows/g5-frontier.yml
       - tb/avr/frontier.c
@@ -30,21 +30,21 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
-          ref: 500513d26e14e5a16bcdaa6c7976107d6a5f888c
+          ref: 4eb683aade6a1250620e322ce36bd93f1416cb5c
           path: source
       - uses: actions/checkout@v4
         with:
-          ref: b1d07643db957ea33e64c6986b9322fb2d06b4b2
-          path: fixed32
+          ref: 33da70b6d5667e9581c240d6dba6ef5b435c94a9
+          path: candidate
       - uses: actions/checkout@v4
         with:
           repository: buserror/simavr
           ref: 13d4ed32433ad7a37bb757b7e0f7dbb5373396c0
           path: simulator
-      - name: Matched fixed24 and fixed32 causal observation
+      - name: Matched combined and boot-fitting candidate observation
         run: timeout 1800 nice -n 19 bash tb/compare/frontier_run.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: fixed32-frontier
+          name: size-frontier
           path: raw
