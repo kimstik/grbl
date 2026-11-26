@@ -76,7 +76,9 @@ int main(int argc,char **argv) {
   uint64_t helper_start=0,prep_start=0;
   fprintf(events,"meta 16000000 %d %x\n",blind,empty_pc);
   while(a->cycle<10000000000ULL && a->state!=cpu_Done && a->state!=cpu_Crashed) {
-    unsigned pc=a->pc,p=a->data[prog],h=a->data[head],t=a->data[tail];
+    unsigned pc=a->pc,p=a->data[prog],h=a->data[head],raw_tail=a->data[tail];
+    /* avr-gcc exposes the incremented sentinel 6 before its wrap-to-zero store. */
+    unsigned t=raw_tail==6 ? 0 : raw_tail;
     unsigned sp=word(a,0x5d),q=(a->data[bh]+16-a->data[bt])%16;
     if(!blind && a->state==cpu_Running) {
       int detail=p>=37 && p<=40;
