@@ -46,14 +46,16 @@ jobs:
           build top99 99 99
           build top99-poll 99 99 -DPOLL
           build wake 999 999 -DWAKE
+          build seq 9999 9999 -DSEQ
           sha256sum build/*.elf >> raw/hashes.txt
       - name: Run and check
         run: |
-          for case in top0 top0-poll top1 top99 top99-poll wake; do
+          for case in top0 top0-poll top1 top99 top99-poll wake seq; do
             for sim in pristine patched; do
               timeout 120 nice -n 19 build/host-$sim build/$case.elf > raw/$case-$sim.txt
             done
           done
+          set -o pipefail
           python3 -I tb/compare/timer_fixture.py raw | tee raw/report.json
       - uses: actions/upload-artifact@v4
         if: always()

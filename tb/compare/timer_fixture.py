@@ -9,6 +9,14 @@ Datasheet behavior, prescaler 1, CTC with OCR1A as TOP:
   without waiting for a new period.
 - Periods are TOP+1 clocks; observed entries jitter by the instruction in
   progress, so periods are checked to ENTRY clocks.
+- Periods are measured between match-driven entries only: an entry caused by
+  enabling a mask with the flag already set is not a period boundary. TOP 1
+  has a 2-clock period shorter than the ISR, so its entries are paced by the
+  ISR, not the timer; TOP 1 is only an identity and completion control.
+- seq: a write-one clear before the enable gives no entry; enabling twice
+  with I clear gives exactly one entry right after sei; a pending request
+  masked again before sei is dropped and a later enable still interrupts,
+  because OCF1A stays set.
 Runs whose every enable saw OCF1A clear must be byte-identical between
 pristine and patched simulators.
 """
@@ -53,6 +61,38 @@ def first_after(isr, cycle):
     return next((c for c in isr if c > cycle), None)
 
 
+def matched(e):
+    """Entries not caused by enabling the mask with the flag already set."""
+    woken = [first_after(e['isr'], c) for c, flag in enables(e) if flag]
+    return [c for c in e['isr'] if c not in woken]
+
+
+def sequence(e, top):
+    """Return failures of the seq rules, and the windows for the report."""
+    f = {v: c for c, v in e['flagged']}
+    if sorted(f) != list(range(1, 9)):
+        return ['seq: phase markers ' + str(sorted(f))], {}
+    within = lambda a, b: [c for c in e['isr'] if f[a] < c <= f[b]]
+    late = [c for c, flag in enables(e) if f[7] < c <= f[8]]
+    w = {k: within(*k) for k in ((1, 2), (3, 4), (4, 5), (6, 7), (7, 8))}
+    out = []
+    if [c for c in e['isr'] if c <= f[1] or c > f[8]] or len(e['isr']) != 2:
+        out.append('seq: entries outside the expected windows ' + str(e['isr']))
+    if w[1, 2]:
+        out.append('seq: entry after write-one clear and enable')
+    if w[3, 4]:
+        out.append('seq: entry while I clear')
+    if len(w[4, 5]) != 1 or w[4, 5][0] - f[4] > PROMPT:
+        out.append('seq: not one prompt entry after sei')
+    if w[6, 7]:
+        out.append('seq: masked request executed')
+    if len(w[7, 8]) != 1 or len(late) != 1 or w[7, 8][0] - late[0] > PROMPT:
+        out.append('seq: no prompt entry after re-enable with flag still set')
+    if max(f[2] - f[1], f[5] - f[3], f[8] - f[6]) >= top:
+        out.append('seq: a phase spans a new match')
+    return out, {f'{a}-{b}': v for (a, b), v in w.items()}
+
+
 def main(root):
     root = Path(root)
     failures, report = [], {}
@@ -87,10 +127,14 @@ def main(root):
                 require(d is not None and d <= PROMPT, f'{case}: entry {d} cycles after enable with flag set')
         report[case] = r
 
-    q = parse(root/'top1-patched.txt')
-    report['top1']['periods'] = periods(q['isr'], 1, 'top1')
     for case in ('top99', 'top99-poll'):
-        report[case]['periods'] = periods(parse(root/f'{case}-patched.txt')['isr'], 99, case)
+        report[case]['periods'] = periods(matched(parse(root/f'{case}-patched.txt')), 99, case)
+
+    e = parse(root/'seq-patched.txt')
+    bad, report['seq'] = sequence(e, 9999)
+    failures.extend(bad)
+    require(e['end'][2] == 'hits=2', 'seq: patched incomplete')
+    _, report['seq-pristine'] = sequence(parse(root/'seq-pristine.txt'), 9999)
 
     for case in ('top0', 'top0-poll'):
         p = parse(root/f'{case}-pristine.txt')
