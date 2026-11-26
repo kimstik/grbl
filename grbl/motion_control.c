@@ -455,7 +455,11 @@ static void mc_spline_point(float *p, float t, float s, float **net)
     float e1 = target[i] - 2.0f*second[i] + first[i];
     float g = first[i] - position[i], w = t*(e1 - e0);
 #endif
+#ifdef BEZIER_LOCAL_LENGTH
+    p[i] = t*(3.0f*g + t*(3.0f*e0 + w));
+#else
     p[i] = position[i] + t*(3.0f*g + t*(3.0f*e0 + w));
+#endif
     if (s != 0.0f) { p[i+2] = p[i] + s*(g + t*(2.0f*e0 + w)); }
   }
 }
@@ -464,6 +468,12 @@ static void mc_spline_point(float *p, float t, float s, float **net)
   #define SPLINE_POINT(p,t,s) mc_spline_point(p,t,s,position,scratch)
 #else
   #define SPLINE_POINT(p,t,s) mc_spline_point(p,t,s,net)
+#endif
+
+#ifdef BEZIER_LOCAL_LENGTH
+  #define SPLINE_END(p) do { (p)[0] = target[0] - position[0]; (p)[1] = target[1] - position[1]; } while (0)
+#else
+  #define SPLINE_END(p) memcpy(p, target, 2*sizeof(float))
 #endif
 
 #ifdef BEZIER_Z_NORM
@@ -585,7 +595,11 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     SPLINE_POINT(q, j*z->step, 0.0f);
     if (z->u != 0.0f) {
 #ifdef BEZIER_Z_NORM
+#ifdef BEZIER_LOCAL_LENGTH
+      a = mc_spline_dist(q, &z->chord);
+#else
       a = mc_spline_dist(q, p);
+#endif
 #else
       a = mc_spline_dist(&z->poly, q, p); // The chord of the segment. The sum is not in use.
 #endif
@@ -593,6 +607,11 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
       if (b < 0.999999f) { z->rest -= a; z->u -= b*z->u; } else { z->u = 0.0f; Z_TRACE(ends++); }
       p[Z_AXIS] = target[Z_AXIS] - z->u;
     }
+#ifdef BEZIER_LOCAL_LENGTH
+    memcpy(&z->chord, q, 2*sizeof(float));
+    q[0] += position[0];
+    q[1] += position[1];
+#endif
     memcpy(p, q, 2*sizeof(float));
     return(false);
   }
@@ -617,7 +636,11 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     // Preserve the driver's energy in poly until selection; chord/poly then hold XY.
     if (z->pieces != 4)
 #endif
+#ifdef BEZIER_LOCAL_LENGTH
+    z->chord = z->poly = 0.0f;
+#else
     memcpy(&z->chord, p, 2*sizeof(float));
+#endif
 #endif
 #ifdef BEZIER_EXACT_INVERSE_TIME
     if (!(pl_data->condition & PL_COND_FLAG_INVERSE_TIME))
@@ -662,12 +685,12 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
 #ifdef BEZIER_Z_SELECT
   if (m == 1) { a = b; } else { SPLINE_POINT(q, a, b - a); }
   SPLINE_POINT(r, b, a - b);
-  if (z->next == m) { memcpy(r, target, 2*sizeof(float)); }
+  if (z->next == m) { SPLINE_END(r); }
 #endif
   if (m == 1) {
 #ifndef BEZIER_Z_SELECT
     SPLINE_POINT(r, b, 0.0f);
-    if (z->next == 1) { memcpy(r, target, 2*sizeof(float)); }
+    if (z->next == 1) { SPLINE_END(r); }
 #endif
 #ifdef BEZIER_Z_NORM
     z->rest += mc_spline_dist(r, &z->chord);
@@ -679,7 +702,7 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
 #ifndef BEZIER_Z_SELECT
     SPLINE_POINT(q, a, b - a);
     SPLINE_POINT(r, b, a - b);
-    if (z->next == m) { memcpy(r, target, 2*sizeof(float)); }
+    if (z->next == m) { SPLINE_END(r); }
 #endif
     // The three control-polygon edge directions. Reject a piece that turns back.
     a = b = 0.0f;
@@ -718,6 +741,7 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
   if (z->next) { return(true); }
   Z_TRACE(estimates++);
   Z_TRACE(half = 0.0f);
+#ifndef BEZIER_LOCAL_LENGTH
 #ifdef BEZIER_Z_SELECT
   if (z->pieces != 1) {
 #else
@@ -742,6 +766,7 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
       return(true);
     }
   }
+#endif // !BEZIER_LOCAL_LENGTH
 #ifdef BEZIER_POINT_CACHE
   p[Z_AXIS] = position[Z_AXIS]; // Restore the un-emitted point, including the no-Z G93 case.
 #endif
@@ -760,7 +785,7 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
   if (m == 1) { a = b; } else { SPLINE_POINT(q, a, b - a); } // Its first two control points
   SPLINE_POINT(r, b, a - b); // and its last two, last first; no slope for a segment.
   // The last point of the polyline is target itself, which Horner's rule misses by a bit.
-  if (!z->todo) { memcpy(r, target, 2*sizeof(float)); }
+  if (!z->todo) { SPLINE_END(r); }
   if (m == 1) { // The segment itself, from the point before, which is in no use as sums.
     mc_spline_dist(&z->rest, r, from);
     memcpy(&z->chord, r, 2*sizeof(float));
@@ -816,6 +841,9 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
 #endif
     bit_false(pl_data->condition,PL_COND_FLAG_INVERSE_TIME);
   }
+#endif
+#ifdef BEZIER_LOCAL_LENGTH
+  z->chord = z->poly = 0.0f; // Previous local point for emission, after the initial estimate.
 #endif
   return(true);
 }
