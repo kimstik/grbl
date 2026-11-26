@@ -15,11 +15,6 @@ jobs:
       matrix:
         mode: [g94, g93]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          ref: 500513d26e14e5a16bcdaa6c7976107d6a5f888c
-          path: control
       - name: Install frozen AVR tools
         run: |
           pacman -Syu --noconfirm --needed git make diffutils bash python
@@ -29,6 +24,11 @@ jobs:
             $a/avr-gcc/avr-gcc-16.2.0-1-x86_64.pkg.tar.zst \
             $a/avr-libc/avr-libc-2.3.2-4-any.pkg.tar.zst
           git config --global --add safe.directory '*'
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: 500513d26e14e5a16bcdaa6c7976107d6a5f888c
+          path: control
       - name: Build matched control and candidate
         run: |
           bash -n tb/compare/stride.sh
