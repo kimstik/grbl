@@ -17,10 +17,12 @@ else:
   a=root/f'{mode}-observed';b=root/f'{mode}-blind'
   assert a.with_suffix('.uart').read_bytes()==b.with_suffix('.uart').read_bytes()
   assert a.with_suffix('.events').read_bytes()==b.with_suffix('.events').read_bytes()
-  ends=[]
+  ends,full=[],[]
   for p in (a,b):
-   text=p.with_suffix('.trace').read_text();end=next(s for s in text.splitlines() if s.startswith('end '))
+   lines=p.with_suffix('.trace').read_text().splitlines();found=[s for s in lines if s.startswith('end ')]
+   assert len(found)==1;end=found[0];full.append(end)
    ends.append(end.split(' raw=')[0]);assert 'state=0' in end and 'commands=22 acks=22' in end
   assert ends[0]==ends[1]
-  result[mode]=dict(parity=True,end=a.with_suffix('.trace').read_text().splitlines()[-1],scope='Observed baseline only; not worst-case stack proof; written minimum covers stack pushes, not all local stores')
+  timer=[s for s in a.with_suffix('.trace').read_text().splitlines() if s.startswith('timer ')]
+  result[mode]=dict(parity=True,end=full[0],timer=timer,scope='Observed baseline only; not worst-case stack proof; written minimum covers stack pushes, not all local stores')
  (root/'result.json').write_text(json.dumps(result,indent=2));print(json.dumps(result,indent=2))

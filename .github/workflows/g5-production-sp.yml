@@ -2,7 +2,7 @@ name: Production SP baseline
 on:
   push:
     branches: [wip/g5-production-sp]
-    paths: [tb/avr/production_sp.c, .github/workflows/g5-production-sp.yml, tb/compare/production_sp.py]
+    paths: [tb/avr/production_sp.c, tb/avr/simavr-timer-top0.patch, tb/avr/simavr-timer-mask.patch, .github/workflows/g5-production-sp.yml, tb/compare/production_sp.py]
   workflow_dispatch:
 permissions:
   contents: read
@@ -32,6 +32,9 @@ jobs:
         run: |
           mkdir -p raw build
           git -C simulator rev-parse HEAD > raw/simulator.txt
+          git -C simulator apply ../tb/avr/simavr-timer-top0.patch
+          git -C simulator apply ../tb/avr/simavr-timer-mask.patch
+          sha256sum tb/avr/simavr-timer-top0.patch tb/avr/simavr-timer-mask.patch simulator/simavr/sim/avr_timer.c tb/avr/production_sp.c > raw/hashes.txt
           nice -n 19 make -s -j1 -C simulator/simavr libsimavr RELEASE=1
           nice -n 19 gcc -std=c99 -Wall -Wextra -O2 -Isimulator/simavr/sim tb/avr/production_sp.c simulator/simavr/obj-x86_64-linux-gnu/libsimavr.a -lelf -lm -o build/production-sp
           python3 -I tb/compare/production_sp.py prepare input raw
