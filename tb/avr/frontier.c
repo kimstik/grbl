@@ -16,6 +16,9 @@
 static FILE *events,*uart;
 static uint64_t bytes;
 static uint32_t hash=2166136261u;
+static unsigned program_addr, line_addr, observe;
+static uint32_t uart_last;
+
 static void fail(const char *s) { fprintf(stderr,"frontier: %s\n",s); exit(2); }
 static void receive(struct avr_irq_t *irq,uint32_t value,void *param) {
   avr_t *a=param; (void)irq;
@@ -23,6 +26,8 @@ static void receive(struct avr_irq_t *irq,uint32_t value,void *param) {
   hash=(hash^(value&255))*16777619u;
   for(unsigned i=0;i<8;i++) hash=(hash^((uint64_t)a->cycle>>(8*i)&255))*16777619u;
   bytes++;
+  uart_last=(uart_last<<8)|(value&255);
+  if(observe && uart_last==0x6f6b0d0a) fprintf(events,"uart_ok %" PRIu64 " %u %u\n",(uint64_t)a->cycle,a->data[program_addr],a->data[line_addr]|a->data[line_addr+1]<<8);
 }
 static const avr_symbol_t *sym(elf_firmware_t *f,const char *name,unsigned size) {
   const avr_symbol_t *s=NULL;
@@ -43,6 +48,13 @@ static float number(avr_t *a,unsigned p) {
   uint32_t b=word(a,p)|(uint32_t)word(a,p+2)<<16; float v; memcpy(&v,&b,4); return v;
 }
 typedef struct { uint64_t cycle; unsigned gen,live,steps,ticks,amass; float speed,exit; } slot_t;
+typedef struct { unsigned pc,ret,sp,active,program,line; uint64_t start; const char *name; } call_t;
+static void enter(call_t *c,avr_t *a,unsigned sp,unsigned p,unsigned line) {
+  if(c->active) fail("recursive boundary call");
+  c->active=1; c->sp=sp; c->ret=2*((unsigned)a->data[sp+1]<<8|a->data[sp+2]);
+  c->start=a->cycle; c->program=p; c->line=line;
+}
+
 int main(int argc,char **argv) {
   if(argc!=5 && argc!=6) fail("usage: frontier ELF map events UART [--blind]");
   int blind=argc==6;
@@ -70,6 +82,11 @@ int main(int argc,char **argv) {
   unsigned helper=sym(&fw,"mc_spline_next",0)->addr, prepf=sym(&fw,"st_prep_buffer",0)->addr;
   unsigned plan=sym(&fw,"plan_buffer_line",0)->addr, serial=sym(&fw,"serial_read",0)->addr;
   unsigned lp=data(&fw,"lp",2),isr=sym(&fw,"__vector_11",0)->addr;
+  unsigned settings=data(&fw,"settings",0);
+  call_t calls[4]={{.pc=serial,.name="serial"},{.pc=sym(&fw,"st_go_idle",0)->addr,.name="idle"},
+                   {.pc=plan,.name="plan"},{.pc=sym(&fw,"st_wake_up",0)->addr,.name="wake"}};
+  call_t interrupt={0}; unsigned interrupt_empty=0;
+  program_addr=prog; line_addr=pi; observe=!blind;
   slot_t slots[6]={{0}},last={0};
   unsigned oldprog=0,points=0,pubs=0,consumed=0,empties=0,oh=0,ot=0;
   unsigned interrupted=0,helper_active=0,prep_active=0;
@@ -106,10 +123,28 @@ int main(int argc,char **argv) {
       if(pc==empty_pc) {
         if(h!=t || word(a,st+33)||!last.gen) fail("empty frontier mismatch");
         empties++;
+        if(!interrupt.active) fail("empty outside tracked ISR");
+        interrupt_empty=1;
         if(detail) fprintf(events,"empty %" PRIu64 " %u %u %u %u %u %u %.9g %.9g %" PRIu64 " %u %u %u %x\n",(uint64_t)a->cycle,p,word(a,pi),points,q,h,t,last.speed,last.exit,last.cycle,a->data[sys],a->data[sys+2],a->data[rt],interrupted);
       }
-      if(pc==isr) interrupted=2*((unsigned)a->data[sp+1]<<8|a->data[sp+2]);
+      if(interrupt.active && pc==interrupt.ret && sp==interrupt.sp+2) {
+        if(interrupt_empty) fprintf(events,"empty_isr_return %" PRIu64 " %u %u %" PRIu64 "\n",(uint64_t)a->cycle,p,word(a,pi),(uint64_t)a->cycle-interrupt.start);
+        interrupt.active=0; interrupt_empty=0;
+      }
+      // A nested busy ISR returns without consuming segments; retain the outer return/SP.
+      if(pc==isr && !interrupt.active) { enter(&interrupt,a,sp,p,word(a,pi)); interrupted=interrupt.ret; }
       if(detail) {
+        for(unsigned k=0;k<4;k++) {
+          call_t *c=&calls[k];
+          if(c->active && pc==c->ret && sp==c->sp+2) {
+            fprintf(events,"boundary_return %" PRIu64 " %u %u %s %" PRIu64 " %u %u\n",(uint64_t)a->cycle,c->program,c->line,c->name,(uint64_t)a->cycle-c->start,a->data[24],word(a,pi));
+            c->active=0;
+          }
+          if(pc==c->pc) {
+            enter(c,a,sp,p,word(a,pi));
+            fprintf(events,"boundary_enter %" PRIu64 " %u %u %s %u %u %u\n",(uint64_t)a->cycle,p,word(a,pi),c->name,a->data[settings+0x33],interrupt.active,sp);
+          }
+        }
         if(helper_active && pc==helper_ret && sp==helper_sp+2) {
           fprintf(events,"helper_end %" PRIu64 " %u %" PRIu64 " %u\n",(uint64_t)a->cycle,p,(uint64_t)a->cycle-helper_start,a->data[24]); helper_active=0;
         }

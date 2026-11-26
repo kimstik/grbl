@@ -14,7 +14,7 @@ gcc -std=c99 -Wall -Wextra -O2 -I"$sim/sim" $(pkg-config --cflags libelf) \
 common='-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3 -DBEZIER_Z_LOOSE -DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE -DBEZIER_POINT_CACHE -DBEZIER_Z_NORM'
 pacman -Q avr-gcc avr-binutils avr-libc > raw/toolchain-packages.txt
 git rev-parse HEAD > raw/harness.txt
-for arm in fixed16 fixed24; do
+for arm in fixed24; do
   mkdir -p "raw/$arm"
   extra=''
   if [ "$arm" = fixed24 ]; then extra=-DTB_Z_FIXED_24; fi
@@ -38,6 +38,7 @@ for arm in fixed16 fixed24; do
   cp "$source/grbl/stepper.c" "raw/$arm/layout.c"
   cat >> "raw/$arm/layout.c" <<'C'
 #include <stddef.h>
+_Static_assert(offsetof(settings_t,stepper_idle_lock_time)==0x33,"idle setting offset");
 _Static_assert(sizeof(segment_t)==7,"segment layout");
 _Static_assert(sizeof(st)==35,"stepper layout");
 _Static_assert(offsetof(stepper_t,exec_segment)==33,"exec segment offset");

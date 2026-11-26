@@ -2,7 +2,7 @@ name: G5 fixed24 motion frontier
 on:
   workflow_dispatch:
   push:
-    branches: [wip/g5-fixed24-frontier]
+    branches: [wip/g5-boundary-observer]
     paths:
       - .github/workflows/g5-frontier.yml
       - tb/avr/frontier.c
