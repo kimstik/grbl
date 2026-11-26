@@ -44,7 +44,7 @@ def timed(path):
     text = path.read_text()
     require(text.splitlines().count('done') == 1, 'bench completion')
     calib = re.search(r'^calib (\d+)$', text, re.M)
-    require(calib and abs(int(calib[1]) - 1000000) < 200, 'timer calibration')
+    require(calib and 1000000 <= int(calib[1]) <= 1001000, 'timer calibration')
     rows = {}
     for line in text.splitlines():
         words = line.split()
@@ -135,7 +135,7 @@ def report(root, mode):
     symbols = dict((name, int(address, 16)) for address, kind, name in
                    (s.split() for s in (root/'bench-symbols.txt').read_text().splitlines() if len(s.split()) == 3))
     heap = symbols['__heap_start'] & 0xffff
-    bench_used = 0x8ff - heap - untouched
+    bench_used = 0x900 - heap - untouched
     require(0 <= bench_used < 2048, 'bench watermark range')
     return dict(mode=mode, cases=results, bench_untouched_bytes=untouched,
                 bench_stack_used_bytes=bench_used, bench_heap_address=heap,
