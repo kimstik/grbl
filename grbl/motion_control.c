@@ -859,9 +859,12 @@ static void mc_spline_cache_init(float *target, float *position, spline_scratch_
   __attribute__((noinline, noclone));
 static void mc_spline_cache_init(float *target, float *position, spline_scratch_t *scratch)
 {
-  float *first = scratch->first, *second = scratch->second, *p = scratch->point;
+  float *first = scratch->first, *second = scratch->second;
   uint8_t i;
+#ifndef BEZIER_LOCAL_LENGTH
+  float *p = scratch->point;
   p[Z_AXIS] = 0.0f; // Free until emission: retain the original coordinate-risk input.
+#endif
   // Keep coefficient formation separate from Wang's squared second differences: fast-math
   // must not reuse an already rounded e1 when forming the point evaluator's e1 - e0.
   for (i = 0; i < 2; i++) {
