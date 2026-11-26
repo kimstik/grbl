@@ -796,6 +796,11 @@
   // This changes foreground refill timing, not the path, and does not guarantee no stops.
   // #define BEZIER_Z_REFILL
 
+  // Fixed-pass experiment: three-node discrete Gauss quadrature of cached local chords.
+  // Retains reversal subdivision and the coordinate-risk fallback, neither a float bound.
+  // The estimated lengths differ from rounded absolute XY chords; G93 stays approximate.
+  // #define BEZIER_Z_GAUSS
+
   #ifndef BEZIER_Z_SIGMA
     // Mode 3: how far off the line an estimate may leave Z, mm. By default the tolerance of
     // XY. A wider one lets fewer pieces vouch, and fewer curves need their segments summed.
@@ -848,6 +853,9 @@
 #endif
 #if defined(BEZIER_Z_NORM) && (BEZIER_Z_LINEAR != 3 || !defined(BEZIER_Z_FIXED) || defined(BEZIER_Z_SELECT))
   #error "BEZIER_Z_NORM requires BEZIER_Z_LINEAR 3 and BEZIER_Z_FIXED, without BEZIER_Z_SELECT"
+#endif
+#if defined(BEZIER_Z_GAUSS) && (!defined(BEZIER_POINT_CACHE) || !defined(BEZIER_Z_NORM))
+  #error "BEZIER_Z_GAUSS requires BEZIER_POINT_CACHE and BEZIER_Z_NORM"
 #endif
 #if BEZIER_Z_LINEAR == 3
   #if BEZIER_Z_PIECES < 1 || BEZIER_Z_PIECES > BEZIER_Z_PIECES_MAX || BEZIER_Z_PIECES_MAX > 64 || (BEZIER_Z_PIECES & (BEZIER_Z_PIECES-1)) || (BEZIER_Z_PIECES_MAX & (BEZIER_Z_PIECES_MAX-1))

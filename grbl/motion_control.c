@@ -484,6 +484,32 @@ static float mc_spline_dist(float *sum, float *a, float *b)
 }
 #endif
 
+#ifdef BEZIER_Z_GAUSS
+// One third of the discrete chord velocity, using the existing coefficient cache.
+static float mc_spline_speed(float t, float h, spline_scratch_t *s) __attribute__((noinline));
+static float mc_spline_speed(float t, float h, spline_scratch_t *s)
+{
+  float v[2];
+  uint8_t axis;
+  for (axis = 0; axis < 2; axis++) {
+    v[axis] = s->g[axis] + 2.0f*t*s->e0[axis] + (t*t + h*h/12.0f)*s->d[axis];
+  }
+  return(hypot_f(v[X_AXIS], v[Y_AXIS]));
+}
+
+static float mc_spline_gauss(spline_z_t *z, uint16_t start, uint16_t count,
+                              spline_scratch_t *s) __attribute__((noinline, noclone));
+static float mc_spline_gauss(spline_z_t *z, uint16_t start, uint16_t count, spline_scratch_t *s)
+{
+  float m = count, h = z->step, t = (start + 0.5f*m)*h;
+  float square = m*m, moment = 3.0f*square - 7.0f;
+  float delta = h*sqrtf(moment*0.05f);
+  float side = (5.0f/6.0f)*(square - 1.0f)/moment;
+  return(3.0f*m*h*(side*(mc_spline_speed(t - delta, h, s) + mc_spline_speed(t + delta, h, s))
+                    + (1.0f - 2.0f*side)*mc_spline_speed(t, h, s)));
+}
+#endif
+
 #ifdef BEZIER_Z_SELECT
 // One decision before the coarse pass. Wang's integrated second-difference energy models
 // the polygon/chord width; a global mean speed replaces the varying speed. This is not a bound.
@@ -657,6 +683,9 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
 #endif
   if (z->todo) { m = z->todo; }
   if (z->pieces == 1 || m <= BEZIER_Z_PIECE_COST) { m = 1; }
+#ifdef BEZIER_Z_GAUSS
+  if (m < 3) { m = 1; } // One or two samples: sum their actual chords, one call at a time.
+#endif
   a = (segments - z->next)*z->step;
   b = (segments - z->next + m)*z->step;
 #ifdef BEZIER_Z_SELECT
@@ -691,6 +720,9 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
       b += e1*(e0 + e2);
     }
     if (a < 0.0f || b < 0.0f) { z->todo = m/2; return(true); }
+#ifdef BEZIER_Z_GAUSS
+    z->rest += mc_spline_gauss(z, segments - z->next, m, scratch);
+#else
     a = b = 0.0f;
 #ifdef BEZIER_Z_NORM
     a += mc_spline_dist(r, q);
@@ -710,6 +742,7 @@ static uint8_t mc_spline_next(spline_z_t *z, float *p, uint16_t j, uint16_t segm
     { b -= (b - a)/(uint32_t)(m*(uint32_t)m); } // Finite chords, not the smooth arc midpoint.
 #endif
     z->rest += 0.5f*(a + b);
+#endif
     Z_TRACE(pieces++);
   }
   memcpy(&z->chord, r, 2*sizeof(float));
