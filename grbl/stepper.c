@@ -471,6 +471,9 @@ ISR(TIMER1_COMPA_vect)
   #ifdef ENABLE_DUAL_AXIS
     st.step_outbits_dual ^= step_port_invert_mask_dual;
   #endif
+  #ifdef TIMER1_EPILOGUE_CLI
+    cli(); // Keep the normal ISR frame protected until RETI after clearing busy.
+  #endif
   busy = false;
 }
 
