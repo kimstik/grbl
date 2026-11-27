@@ -1,17 +1,22 @@
 /* Host-only edge and interrupt measurements. No simulated state writes. */
-typedef struct { avr_t *a; unsigned axis,level,seen; uint64_t rise,count,minimum,maximum; int64_t signed_steps; unsigned hist[4096],wide; } pulse_t;
+typedef struct { avr_t *a; unsigned axis,level,seen,bootstrap_high; uint64_t rise,count,minimum,maximum; int64_t signed_steps; unsigned hist[4096],wide; } pulse_t;
 static pulse_t pulse[3];
 static FILE *metrics;
+static unsigned settings_metric;
+static void pin_seed(pulse_t*p,unsigned level){p->seen=1;p->level=level;p->bootstrap_high=level;}
 static uint64_t pending_at[26],last_t1,interval_min=UINT64_MAX,interval_max;
 static unsigned pending_valid[26],irq_active[26],max_t1,t1_entries,t1_busy_entries,pending_serial[26];
 static uint64_t anchor_end;
 static unsigned rt_addr,control_flag,control_clear,status_flag,status_clear;
 static void pin_edge(struct avr_irq_t*q,uint32_t v,void*x){
  (void)q;pulse_t*p=x;avr_t*a=p->a;unsigned level=v&1;
- if(!p->seen){p->seen=1;p->level=level;return;}
+ if(!p->seen)die("pin observer not seeded");
  if(level==p->level)return;
- p->level=level;if(!work)return;
- fprintf(metrics,"pin %"PRIu64" axis=%u level=%u dir=%u\n",(uint64_t)a->cycle,p->axis,level,a->data[0x2b]&0xe0);
+ p->level=level;
+ if(p->bootstrap_high){if(level)die("bootstrap high transition");fprintf(metrics,"bootstrap-incomplete %"PRIu64" axis=%u\n",(uint64_t)a->cycle,p->axis);p->bootstrap_high=0;if(work)die("initial high pulse crosses workload");return;}
+ if(!work)return;
+ if((a->data[0x2a]&0x1c)!=0x1c||a->data[settings_metric+0x31]!=0)die("step DDR/inversion edge guard");
+ fprintf(metrics,"pin%"PRIu64" axis=%u level=%u dir=%u\n",(uint64_t)a->cycle,p->axis,level,a->data[0x2b]&0xe0);
  if(level){if(p->rise)die("unpaired pulse rise");p->rise=a->cycle;p->count++;p->signed_steps+=(a->data[0x2b]&(1u<<(p->axis+5)))?-1:1;}
  else{if(!p->rise)die("unpaired pulse fall");uint64_t width=a->cycle-p->rise;p->rise=0;if(width<p->minimum)p->minimum=width;if(width>p->maximum)p->maximum=width;if(width<4096)p->hist[width]++;else p->wide++;
   fprintf(metrics,"width %"PRIu64" axis=%u cycles=%"PRIu64"\n",(uint64_t)a->cycle,p->axis,width);
@@ -37,7 +42,12 @@ static void running_edge(struct avr_irq_t*q,uint32_t v,void*x){
 }
 static void metrics_init(avr_t*a,const char*prefix){
  char path[512];snprintf(path,sizeof(path),"%s.metrics",prefix);metrics=fopen(path,"w");if(!metrics)die("metrics file");
+ /* Single-threaded pre-execution subscription, then read-only seed. No cycle or
+    pin write occurs between subscription and GETSTATE; no notification is forced. */
  for(unsigned i=0;i<3;i++){pulse[i].a=a;pulse[i].axis=i;pulse[i].minimum=UINT64_MAX;avr_irq_register_notify(avr_io_getirq(a,AVR_IOCTL_IOPORT_GETIRQ('D'),IOPORT_IRQ_PIN2+i),pin_edge,&pulse[i]);}
+ avr_ioport_state_t pins={0};if(avr_ioctl(a,AVR_IOCTL_IOPORT_GETSTATE('D'),&pins)<0)die("initial pin read");
+ for(unsigned i=0;i<3;i++)pin_seed(&pulse[i],(pins.pin>>(i+2))&1);
+ fprintf(metrics,"bootstrap cycle=%"PRIu64" pin=%u port=%u ddr=%u\n",(uint64_t)a->cycle,pins.pin,pins.port,pins.ddr);
  for(unsigned i=1;i<=25;i++){avr_irq_t*q=avr_get_interrupt_irq(a,i);if(q){avr_irq_register_notify(q+AVR_INT_IRQ_PENDING,pending_edge,a);avr_irq_register_notify(q+AVR_INT_IRQ_RUNNING,running_edge,a);}}
 }
 static void metrics_after(avr_t*a,unsigned pc,unsigned oldrt){

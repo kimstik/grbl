@@ -38,7 +38,7 @@ int main(int argc,char**argv){
  uint32_t flags=0;avr_ioctl(a,AVR_IOCTL_UART_SET_FLAGS('0'),&flags);avr_irq_t*input=avr_io_getirq(a,AVR_IOCTL_UART_GETIRQ('0'),UART_IRQ_INPUT);static unsigned on=0,stop=1;
  avr_irq_register_notify(avr_io_getirq(a,AVR_IOCTL_UART_GETIRQ('0'),UART_IRQ_OUTPUT),output,a);avr_irq_register_notify(avr_io_getirq(a,AVR_IOCTL_UART_GETIRQ('0'),UART_IRQ_OUT_XON),flow,&on);avr_irq_register_notify(avr_io_getirq(a,AVR_IOCTL_UART_GETIRQ('0'),UART_IRQ_OUT_XOFF),flow,&stop);
  unsigned sys=addr(&fw,"sys"),pos=addr(&fw,"sys_position"),bh=addr(&fw,"block_buffer_head"),bt=addr(&fw,"block_buffer_tail"),sh=addr(&fw,"segment_buffer_head"),st=addr(&fw,"segment_buffer_tail"),state=addr(&fw,"st"),busy=addr(&fw,"busy");
- sys_addr=sys;busy_addr=busy;rt_addr=addr(&fw,"sys_rt_exec_state");metrics_init(a,argv[3]);
+ sys_addr=sys;busy_addr=busy;rt_addr=addr(&fw,"sys_rt_exec_state");settings_metric=addr(&fw,"settings");metrics_init(a,argv[3]);
  avr_irq_t*pc2=avr_io_getirq(a,AVR_IOCTL_IOPORT_GETIRQ('C'),IOPORT_IRQ_PIN2);unsigned released=0;
  const char*setup[]={"$X\n","$20=0\n","$21=0\n","$22=0\n","$1=25\n","$12=0.002\n","$100=250\n","$101=250\n","$102=250\n","$110=5000\n","$111=5000\n","$112=5000\n","$120=4000\n","$121=4000\n","$122=4000\n","$$\n","G21G90G94\n","M3S500\n"};
  const char*g94[]={"G94G5X10Y0Z-30I3J12P3Q-12F2000\n","G5X20Y0Z-30I3J12P3Q-12F2000\n","G5X30Y0Z-30I3J12P3Q-12F2000\n","G5X40Y0Z-30I3J12P3Q-12F2000\n"};

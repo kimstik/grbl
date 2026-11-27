@@ -55,6 +55,12 @@ else:
         metrics = [(root / f'{arm}-{mode}.metrics').read_text().splitlines() for mode in ('observed', 'blind')]
         parity = all((root / f'{arm}-observed.{s}').read_bytes() == (root / f'{arm}-blind.{s}').read_bytes()
                      for s in ('events', 'uart', 'metrics'))
+        if any(not any(s.startswith('end ') for s in t) for t in traces):
+            results[arm] = {'classification': 'aborted harness; no completed firmware verdict',
+                            'prefix_parity': parity,
+                            'logs': [(root / f'{arm}-{mode}.log').read_text() for mode in ('observed', 'blind')]}
+            errors.append(arm + ': harness aborted before completion')
+            continue
         end = [one(t, 'end ') for t in traces]
         parity = parity and end[0].split(' raw=')[0] == end[1].split(' raw=')[0]
         timer = fields(one(traces[0], 'timer '))
