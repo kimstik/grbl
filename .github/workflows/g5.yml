@@ -2,7 +2,7 @@ name: G5 Z aim prototype
 
 on:
   push:
-    branches-ignore: [wip/g5-fixed24, wip/g5-fixed24-local, wip/g5-local-riskmax, wip/g5-local-zero, wip/g5-local-restore, wip/g5-wang-return]
+    branches-ignore: [wip/g5-fixed24, wip/g5-fixed24-local, wip/g5-local-riskmax, wip/g5-local-zero, wip/g5-local-restore, wip/g5-wang-return, wip/g5-timer1-epilogue]
   pull_request:
 
 defaults:

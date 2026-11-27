@@ -1,0 +1,87 @@
+name: Timer1 single ordinary-rate matched trial
+on:
+  push:
+    branches: [wip/g5-timer1-epilogue]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    timeout-minutes: 20
+    steps:
+      - name: Install frozen AVR toolchain
+        run: |
+          pacman -Syu --noconfirm --needed git make bash python
+          a=https://archive.archlinux.org/packages/a
+          pacman -U --noconfirm $a/avr-binutils/avr-binutils-2.47-1-x86_64.pkg.tar.zst $a/avr-gcc/avr-gcc-16.2.0-1-x86_64.pkg.tar.zst $a/avr-libc/avr-libc-2.3.2-4-any.pkg.tar.zst
+          git config --global --add safe.directory '*'
+      - uses: actions/checkout@v4
+      - name: Build exact off and on G94 images serially
+        run: |
+          mkdir -p images raw
+          git rev-parse HEAD > raw/source.txt
+          pacman -Q avr-gcc avr-binutils avr-libc > raw/packages.txt
+          opts='-DENABLE_CUBIC_SPLINES -DENABLE_QUADRATIC_SPLINES -DBEZIER_SIGMA=settings.arc_tolerance -DBEZIER_Z_LINEAR=3 -DBEZIER_Z_LOOSE -DBEZIER_Z_FIXED -DBEZIER_Z_REFILL -DBEZIER_PARSER_SCRATCH -DBEZIER_Z_CHORDS -DBEZIER_PARSER_WORKSPACE -DBEZIER_POINT_CACHE -DBEZIER_Z_NORM -DTB_Z_FIXED_24 -DBEZIER_LOCAL_LENGTH -DBEZIER_WANG_RETURN'
+          cc=$(make -s --eval 'print-compile: ; @echo $(COMPILE)' print-compile)
+          for arm in off on; do
+            extra=''; [ "$arm" != on ] || extra=-DTIMER1_EPILOGUE_CLI
+            mkdir -p "images/$arm"
+            nice -n 19 make -s BUILDDIR="$PWD/images/$arm" COMPILE="$cc $opts $extra" "$PWD/images/$arm/main.elf" > "raw/$arm-build.log" 2>&1
+          done
+          python3 -I tb/compare/timer1_tail.py prepare images raw
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: timer1-build
+          path: raw/
+  trial:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: buserror/simavr
+          ref: 13d4ed32433ad7a37bb757b7e0f7dbb5373396c0
+          path: simulator
+      - uses: actions/download-artifact@v4
+        with:
+          name: timer1-build
+          path: raw
+      - name: Install host tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gcc make libelf-dev pkg-config binutils-avr
+      - name: Build unchanged simulator patches and observer
+        run: |
+          mkdir -p build
+          git -C simulator rev-parse HEAD > raw/simulator.txt
+          git -C simulator apply ../tb/avr/simavr-timer-top0.patch
+          git -C simulator apply ../tb/avr/simavr-timer-mask.patch
+          sha256sum tb/avr/simavr-timer-{top0,mask}.patch simulator/simavr/sim/avr_timer.c tb/avr/timer1_{tail.c,trace.h,metrics.h} > raw/host-hashes.txt
+          nice -n 19 make -s -j1 -C simulator/simavr libsimavr RELEASE=1
+          nice -n 19 gcc -std=c99 -Wall -Wextra -Werror -O2 -Isimulator/simavr/sim tb/avr/timer1_tail.c simulator/simavr/obj-x86_64-linux-gnu/libsimavr.a -lelf -lm -o build/timer1-tail
+          nice -n 19 gcc -std=c99 -Wall -Wextra -Werror -O2 -Isimulator/simavr/sim tb/avr/timer1_smoke.c simulator/simavr/obj-x86_64-linux-gnu/libsimavr.a -lelf -lm -o build/smoke
+          build/smoke
+          mkdir -p build/check/off build/check/on
+          cp raw/off.elf build/check/off/main.elf
+          cp raw/on.elf build/check/on/main.elf
+          python3 -I tb/compare/timer1_tail.py prepare build/check raw
+      - name: One matched configuration, observed and blind, serially
+        run: |
+          rc=0
+          for arm in off on; do
+            for observation in observed blind; do
+              timeout 700 nice -n 19 build/timer1-tail "raw/$arm.elf" g94 "raw/$arm-$observation" "$observation" "$arm" > "raw/$arm-$observation.log" 2>&1 || rc=1
+            done
+          done
+          python3 -I tb/compare/timer1_tail.py verify raw || rc=1
+          exit "$rc"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: timer1-trial
+          path: raw/
